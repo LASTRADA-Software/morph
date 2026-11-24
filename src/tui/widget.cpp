@@ -10,6 +10,7 @@
 #include <core/tui/Modifier.hpp>
 #include <core/tui/Screen.hpp>
 #include <core/tui/Unicode.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <iterator>
 #include <limits>
@@ -1178,6 +1179,35 @@ void attach(Context& context, ui::ContainerWidget* parent, WidgetBase& widget) {
             .y = area.y + std::max(0, (area.height - size.height) / 2)};
 }
 
+namespace {
+
+// Reports the ranges of @p tables, skipping one a handler destroyed meanwhile. The watches are removed on every exit,
+// a throwing handler's included.
+void reportWindowRanges(Context& context, std::vector<TableImpl*> const& tables) {
+    std::vector<WidgetBase*> alive(tables.begin(), tables.end());
+    for (auto& each : alive) {
+        context.watches.push_back(&each);
+    }
+    auto const unwatch = [&context, &alive] {
+        for (auto& each : alive) {
+            std::erase(context.watches, &each);
+        }
+    };
+    try {
+        for (std::size_t i = 0; i < tables.size(); ++i) {
+            if (alive[i] != nullptr) {
+                tables[i]->reportRanges();
+            }
+        }
+    } catch (...) {
+        unwatch();
+        throw;
+    }
+    unwatch();
+}
+
+}  // namespace
+
 // A root view's own bounds are enough: hit-testing descends only into a view whose bounds hold the point, and a
 // root that is drawn empties those of its descendants itself (see View). A frame is no widget's view, so its
 // descendants are emptied here.
@@ -1188,10 +1218,9 @@ void fit(Context& context) {
     }
     // The rows and columns a table's last frame found in view, reported before any size is asked: the mount realizes
     // them here, outside a frame's drawing. The list is taken first, so a report that asks for another frame adds
-    // its table for that frame.
-    for (auto* const table : std::exchange(context.windowTables, {})) {
-        table->reportRanges();
-    }
+    // its table for that frame. Each table taken is watched: a report's handler may destroy another one still to come,
+    // which is then skipped.
+    reportWindowRanges(context, std::exchange(context.windowTables, {}));
     // Before any size is asked: what a span lifts or covers decides its table's rows' heights. Planning may drop the
     // table from the list, so the loop walks a copy.
     for (auto* const table : std::vector<TableImpl*>{context.spanTables}) {

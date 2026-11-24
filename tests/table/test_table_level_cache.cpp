@@ -211,7 +211,7 @@ TEST_CASE("level cache: a key wanted while it is queued is loaded once", "[table
 }
 
 // Mutation: no in-flight set (every thread's want loads the 60 keys again).
-TEST_CASE("level cache: concurrent wants share one load", "[table][levels]") {
+TEST_CASE("level cache: concurrent wants share one load", "[table][levels][threads]") {
     morph::exec::ThreadPoolExecutor pool{1};
     std::latch open{1};
     Rig rig{[&pool](LevelCacheOptions& options) { options.loads = &pool; },
@@ -436,7 +436,7 @@ TEST_CASE("level cache: size is deep", "[table][levels]") {
 }
 
 // Mutation: a snapshot holding a shared lock (the stores wait for the reader and time out).
-TEST_CASE("level cache: a held snapshot blocks no store", "[table][levels]") {
+TEST_CASE("level cache: a held snapshot blocks no store", "[table][levels][threads]") {
     Rig rig{[](LevelCacheOptions& options) { options.invalidatedBy = {"T.rows", "Recipe"}; }};
     REQUIRE(rig.cache.want(keys(10), LevelUse::Display));
     rig.drain();
@@ -679,7 +679,7 @@ TEST_CASE("level cache: the wait queue holds a key once", "[table][levels]") {
 }
 
 // Mutation: the eviction scan run under the writer mutex (the invalidation waits for the paused store).
-TEST_CASE("level cache: an invalidation does not wait for a store's eviction", "[table][levels]") {
+TEST_CASE("level cache: an invalidation does not wait for a store's eviction", "[table][levels][threads]") {
     morph::exec::ThreadPoolExecutor pool{1};
     Rig rig{[&pool](LevelCacheOptions& options) {
         options.loads = &pool;
@@ -776,7 +776,7 @@ TEST_CASE("level cache: an invalidation between a store's preparation and its pu
 }
 
 // Mutation: one chunk spanning the whole want (the want never stops between chunks, so the hook never pauses it).
-TEST_CASE("level cache: an invalidation waits for one chunk of a large want at most", "[table][levels]") {
+TEST_CASE("level cache: an invalidation waits for one chunk of a large want at most", "[table][levels][threads]") {
     Rig rig;
     std::atomic<bool> paused{false};
     std::atomic<std::size_t> queuedAtPause{0};
@@ -878,7 +878,7 @@ TEST_CASE("level cache: a repeated order want keeps its lease when another holde
 }
 
 // Mutation: no single flight for a set (the second want takes every key while the first is paused).
-TEST_CASE("level cache: concurrent repeats of an order set are fitted once", "[table][levels]") {
+TEST_CASE("level cache: concurrent repeats of an order set are fitted once", "[table][levels][threads]") {
     auto const value = smallValueBytes();
     Rig rig{[value](LevelCacheOptions& options) {
         options.maxBytes = 150 * value + setKeyBytes(100);  // the set's keys count in the bound
@@ -985,7 +985,7 @@ struct HeldSet {
 
 // Mutation: a set's last-but-one holder leaving ending the set's protection (the two refusals unprotect the keys the
 // third query still orders by).
-TEST_CASE("level cache: two refusals of one set leave a third holder's lease", "[table][levels]") {
+TEST_CASE("level cache: two refusals of one set leave a third holder's lease", "[table][levels][threads]") {
     HeldSet held;  // query A
     REQUIRE(held.rig.cache.wantSet(held.set, LevelUse::Order));  // query B
     REQUIRE(held.rig.cache.wantSet(held.set, LevelUse::Order));  // query C
@@ -1016,7 +1016,8 @@ TEST_CASE("level cache: two refusals of one set leave a third holder's lease", "
 
 // Mutation: a set's last-but-one holder leaving ending the set's protection (A's unwant unprotects the keys B's
 // repeat holds).
-TEST_CASE("level cache: a repeat interleaved with another holder's unwant keeps every key leased", "[table][levels]") {
+TEST_CASE("level cache: a repeat interleaved with another holder's unwant keeps every key leased",
+          "[table][levels][threads]") {
     HeldSet held;  // query A
     std::atomic<bool> paused{false};
     std::atomic<bool> first{true};

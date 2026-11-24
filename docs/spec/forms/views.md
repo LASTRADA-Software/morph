@@ -163,7 +163,10 @@ type it is instantiated on. Each derived column carries:
   `morph::table::ColumnKind` reads: `custom` for an `x-comparator` member;
   `measure` for an `x-measure` member, an amount with its unit's id
   (`table::MeasureValue`), tested before the exact-value rule since its object
-  has `num` and `den` too;
+  has `num` and `den` too (a forms collection refuses such a column with a
+  `SchemaError` on it: its table has no unit registry to read the cells'
+  units through, so it could neither order them nor show them in their units;
+  rows with measures are served as a model's table);
   `quantity` for an exact value (`num`/`den`) with `ExtUnits`, `decimal`
   without; `date` / `dateTime` for an integer with `x-widget` `epochDays` /
   `epochSeconds`, or a string with `format` `date` / `date-time`; `integer`,

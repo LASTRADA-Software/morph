@@ -27,6 +27,7 @@
 
 #include "../attributes.hpp"
 #include "../core/backend.hpp"
+#include "../forms/derive.hpp"
 #include "../forms/forms.hpp"
 #include "../session/session.hpp"
 #include "callback_scope.hpp"
@@ -621,6 +622,7 @@ void localTaskOp(::morph::model::detail::IModelHolder& holder, std::shared_ptr<v
     Action& actionRef = *static_cast<Action*>(actionOwner.get());
     Handler task;
     try {
+        ::morph::forms::clearDerived(actionRef);
         ::morph::forms::recomputeAll(actionRef);
         if (!::morph::model::ActionValidator<Action>::ready(actionRef)) {
             throw ::morph::model::ValidationError{::morph::model::ModelTraits<Model>::typeId(),
@@ -2396,6 +2398,9 @@ private:
                 // inspecting a computed field sees the authoritative value, not
                 // whatever the caller constructed the action with. No-op for actions
                 // with no computedFields. See docs/spec/forms/forms.md.
+                // Derived members are cleared first, as on every execution path, so the model and the computed fields
+                // read the same values in-process as over a server.
+                ::morph::forms::clearDerived(actionRef);
                 ::morph::forms::recomputeAll(actionRef);
                 if (!::morph::model::ActionValidator<Action>::ready(actionRef)) {
                     throw ::morph::model::ValidationError{::morph::model::ModelTraits<Model>::typeId(),
@@ -3165,6 +3170,9 @@ inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std:
                 // Overwrite any computed fields from their declared inputs -- a
                 // computed field is never trusted from the client, on any path.
                 // No-op for actions with no computedFields. See docs/spec/forms/forms.md.
+                // A derived member is the model's to set: what the caller sent for it is cleared first, so neither the
+                // model nor a computed field over it reads a forged value.
+                ::morph::forms::clearDerived(action);
                 ::morph::forms::recomputeAll(action);
                 // Enforce the action's validator on the request/reply dispatch path,
                 // just as the reactive `set<>` path does in

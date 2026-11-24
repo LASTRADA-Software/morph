@@ -1076,7 +1076,7 @@ morph::effects::Changes keyedChange(std::string record, std::int64_t count) {
 }  // namespace
 
 // Mutation: a snapshot holding a shared lock that stores take exclusively (the calls return after the reader).
-TEST_CASE("level cache: invalidation does not wait for a reader", "[table][levels]") {
+TEST_CASE("level cache: invalidation does not wait for a reader", "[table][levels][threads]") {
     auto const cache = benchCache(nullptr);
     morph::table::detail::LevelCacheAccess::store(*cache, recipeLikeValues(0, 5'000));
     // The reader holds its snapshot until the calls have returned, or for ten seconds when they wait for it.

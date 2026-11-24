@@ -73,8 +73,8 @@ template <auto MemberPtr>
 
 /// @brief Value-initialises every derived member of @p action (`FieldMeta::derived` in its type's `fieldMetadata`),
 ///        and of every nested aggregate of it (each element of a `std::vector` member, a nested struct member, either
-///        inside an engaged `std::optional`, recursively: `detail::forEachNested`): what the server dispatch path runs
-///        before the model, so a derived value a client sent is never the one kept.
+///        inside an engaged `std::optional`, recursively: `detail::forEachNested`): what every execution path runs
+///        before the model, so a derived value a caller sent is never the one kept.
 /// @tparam A The action or row type.
 /// @param action The value cleared in place.
 template <typename A>
@@ -89,8 +89,10 @@ void clearDerived(A& action) {
                 // A `glz::meta` entry that computes its value yields a value: there is no stored member to clear.
                 [[maybe_unused]] decltype(auto) member = morph::detail::reflectedMember<Idx>(action);
                 using Member = std::remove_cvref_t<decltype(member)>;
+                // Assignability of the reference itself: a const member, or a const accessor, is never cleared.
                 if constexpr (std::is_lvalue_reference_v<decltype(member)> &&
-                              std::is_default_constructible_v<Member> && std::is_move_assignable_v<Member>) {
+                              std::is_default_constructible_v<Member> &&
+                              std::is_assignable_v<decltype(member), Member>) {
                     // Only a type with field metadata can mark a member derived; the names are read only then, since
                     // reading them needs the type to have linkage.
                     if constexpr (detail::HasFieldMetadata<Plain>) {

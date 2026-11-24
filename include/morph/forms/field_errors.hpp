@@ -57,7 +57,9 @@ template <typename A, typename Member>
 [[nodiscard]] bool outOfBounds(std::string_view name, Member const& member) {
     if constexpr (detail::HasFieldMetadata<A>) {
         FieldMeta const* const meta = detail::findFieldMeta<A>(name);
-        if (meta == nullptr || !detail::declaresAnyBound(*meta)) {
+        // A derived member is cleared before the model sets it, so a bound on it judges the model's value, not the
+        // caller's.
+        if (meta == nullptr || meta->derived || !detail::declaresAnyBound(*meta)) {
             return false;
         }
         if constexpr (units::isQuantity<Member>) {

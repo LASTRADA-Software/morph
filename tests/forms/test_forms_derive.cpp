@@ -8,13 +8,17 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <glaze/glaze.hpp>
-#include <optional>
+#include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/forms/derive.hpp>
+#include <morph/forms/field_errors.hpp>
 #include <morph/forms/forms.hpp>
+#include <optional>
 #include <string_view>
 #include <vector>
+
+#include "../test_support.hpp"
 
 struct DeriveBox {
     std::int64_t count = 0;
@@ -66,6 +70,34 @@ struct DeriveCrateModel {
 };
 BRIDGE_REGISTER_MODEL(DeriveCrateModel, "T_DeriveCrates")
 BRIDGE_REGISTER_ACTION(DeriveCrateModel, RecordCrate, "T_RecordCrate")
+
+// A derived member with a floor, under a validator that checks declared bounds: the floor is the model's value's.
+struct BoundedPick {
+    std::int64_t count = 0;
+    std::int64_t limit = 0;  // derived, at least 1 once the model sets it
+    static const std::array<morph::forms::FieldMeta, 1> fieldMetadata;
+    [[nodiscard]] bool validate() const { return morph::forms::allFieldBoundsSatisfied(*this); }
+};
+inline const std::array<morph::forms::FieldMeta, 1> BoundedPick::fieldMetadata{
+    morph::forms::derived<&BoundedPick::limit>().withMinimum(morph::math::Rational{1, morph::math::DecimalPlaces{0}})};
+struct BoundedPickModel {
+    static inline BoundedPick last{};
+    bool execute(BoundedPick const& pick) {
+        last = pick;
+        return true;
+    }
+};
+BRIDGE_REGISTER_MODEL(BoundedPickModel, "T_BoundedPicks")
+BRIDGE_REGISTER_ACTION(BoundedPickModel, BoundedPick, "T_BoundedPick")
+
+// A const member beside a derived one: clearing reaches only what can be assigned.
+struct ConstTagged {
+    std::int64_t const kind = 7;
+    std::int64_t limit = 0;  // derived
+    static const std::array<morph::forms::FieldMeta, 1> fieldMetadata;
+};
+inline const std::array<morph::forms::FieldMeta, 1> ConstTagged::fieldMetadata{
+    morph::forms::derived<&ConstTagged::limit>()};
 
 namespace {
 
@@ -127,6 +159,49 @@ TEST_CASE("derive: a derive action's input and reply read and write as specified
     morph::forms::clearDerived(record);
     CHECK(record.boxes.at(0).limit == 0);
     CHECK(record.boxes.at(0).total == 1);
+}
+
+/// A LocalBackend bridge, as tests/test_action_validation.cpp builds it.
+struct LocalDeriveRig {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+};
+
+// Mutations: clearDerived removed from localOp (limit stays 555 through execute); removed from the executeJson gate
+// and from localOp both (limit stays 555 through executeJson).
+TEST_CASE("derive: the in-process paths clear a derived member as the server does", "[forms][derive]") {
+    LocalDeriveRig rig;
+    morph::bridge::BridgeHandler<DeriveBoxModel> boxes{rig.bridge, &rig.owner};
+    DeriveBoxModel::last = {};
+    RecordBoxes forged{.boxes = {DeriveBox{.count = 2, .perBox = 3, .total = 999, .limit = 555}}, .sum = 999};
+    static_cast<void>(morph::testing::awaitValueOn(rig.owner, boxes.execute(forged)));
+    CHECK(DeriveBoxModel::last.boxes.at(0).total == 6);
+    CHECK(DeriveBoxModel::last.boxes.at(0).limit == 0);
+    DeriveBoxModel::last = {};
+    static_cast<void>(morph::testing::awaitValueOn(rig.owner, boxes.executeJson("T_RecordBoxes", kForged)));
+    CHECK(DeriveBoxModel::last.boxes.at(0).total == 6);
+    CHECK(DeriveBoxModel::last.boxes.at(0).limit == 0);
+}
+
+// Mutations: the `meta->derived` skip removed from allFieldBoundsSatisfied (the dispatch is refused); removed from
+// field_errors' outOfBounds (limit is reported out of bounds).
+TEST_CASE("derive: a derived member's bound does not refuse the action before the model sets it", "[forms][derive]") {
+    BoundedPickModel::last = {};
+    auto holder = morph::model::detail::defaultRegistry().create("T_BoundedPicks");
+    morph::model::detail::defaultDispatcher().dispatch("T_BoundedPicks", "T_BoundedPick", *holder,
+                                                       R"({"count":3,"limit":5})");
+    CHECK(BoundedPickModel::last.count == 3);
+    CHECK(BoundedPickModel::last.limit == 0);
+    CHECK(morph::forms::fieldErrors(BoundedPick{.count = 3, .limit = 0}).empty());
+}
+
+// Compiles only while clearDerived tests the member reference's own assignability.
+TEST_CASE("derive: clearing skips a const member and clears the derived one", "[forms][derive]") {
+    ConstTagged tagged{.kind = 7, .limit = 4};
+    morph::forms::clearDerived(tagged);
+    CHECK(tagged.kind == 7);
+    CHECK(tagged.limit == 0);
 }
 
 }  // namespace

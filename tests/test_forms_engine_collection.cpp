@@ -123,6 +123,11 @@ TEST_CASE("CollectionModel: the v-* document reads into columns, the row action 
     CHECK(CollectionModel::fromSchema(R"({"v-query":"Q","v-kind":"grid"})").error().path == "v-kind");
     CHECK(CollectionModel::fromSchema(R"({"v-query":"Q","v-columns":[{"field":"a","kind":"colour"}]})").error().path ==
           "v-columns.a");
+    // A measure column needs a unit registry, which a collection has none of. Mutation: the refusal removed.
+    auto const measure =
+        CollectionModel::fromSchema(R"({"v-query":"Q","v-columns":[{"field":"m","kind":"measure"}]})");
+    REQUIRE_FALSE(measure.has_value());
+    CHECK(measure.error().path == "v-columns.m");
     auto const defaults = CollectionModel::fromSchema(R"({"v-query":"Q"})");
     REQUIRE(defaults.has_value());
     CHECK(defaults->title() == "Q");

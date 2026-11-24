@@ -351,8 +351,9 @@ struct FieldMeta {
     std::string_view labelField{};
     /// @brief A derived member when `true`: a value the model sets when it executes the action, from the domain's
     ///        data, which no pure function of the record can compute. Emits `x-derived` (read-only in a form) and
-    ///        leaves the member out of `required`; `recomputeAll` does not touch it, and the server dispatch path
-    ///        clears it before the model runs (`clearDerived`), so the value a client sends is never kept.
+    ///        leaves the member out of `required`; `recomputeAll` and the bound checks do not touch it, and every
+    ///        execution path clears it before the model runs (`clearDerived`), so the value a caller sends is never
+    ///        kept.
     bool derived{false};
 
     /// @brief The version this field first ships in, a dotted numeric version such as `"6.11.0"` (`FieldVersion`);
@@ -4002,6 +4003,10 @@ template <typename A>
 /// be filled at all is `required`/`allRequiredEngaged`'s question. A field
 /// with no empty state is always checked.
 ///
+/// **A derived member is not checked** (`FieldMeta::derived`): every execution
+/// path clears it before the validator runs, and the model sets it afterwards,
+/// so a bound on it describes the model's value, which this check never sees.
+///
 /// Bounds are read from these member kinds and no others: `Quantity` (its
 /// engaged `math::Rational`, in the canonical unit), a bare `math::Rational`,
 /// and an integral member satisfying `detail::BoundCheckableInteger`. A
@@ -4021,7 +4026,7 @@ template <typename A>
         detail::forEachNamedMember(action, [&]<std::size_t I>(std::string_view name, const auto& member) {
             using Member = std::remove_cvref_t<decltype(member)>;
             const FieldMeta* meta = detail::findFieldMeta<A>(name);
-            if (meta == nullptr || !detail::declaresAnyBound(*meta)) {
+            if (meta == nullptr || meta->derived || !detail::declaresAnyBound(*meta)) {
                 return;
             }
             if constexpr (units::isQuantity<Member>) {

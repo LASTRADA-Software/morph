@@ -771,10 +771,16 @@ std::size_t processBytes() noexcept {
 
 namespace {
 
-// Where the recipe loader runs. Never destroyed: a loader held by a gate at exit must not be joined.
-morph::exec::ThreadPoolExecutor& recipeLoads() {
+// Where the recipe loader runs: a worker of its own, or, on a WebAssembly build without threads, the caller of
+// `want` (a null executor), so the fixture still serves the single-threaded path there. Never destroyed: a loader
+// held by a gate at exit must not be joined.
+morph::exec::IExecutor* recipeLoads() {
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+    return nullptr;
+#else
     static auto* const pool = new morph::exec::ThreadPoolExecutor(1);  // NOLINT(cppcoreguidelines-owning-memory)
-    return *pool;
+    return pool;
+#endif
 }
 
 // The model's process-wide state: the options, each table's source once a call has built it, and the recipe
@@ -854,7 +860,7 @@ std::shared_ptr<morph::table::CellLevelCache> makeRecipeCache(WideModelState& st
     options.records = {"WideTableModel.wide", "WideTableModel.small"};
     options.level = "recipe";
     options.columns = recipeColumns();
-    options.loads = &recipeLoads();
+    options.loads = recipeLoads();
     options.batch = settings.batch;
     auto log = std::make_shared<WideModelState::CallLog>();
     auto loader = [&state, settings, log](std::span<morph::table::RowId const> keys) {

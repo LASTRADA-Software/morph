@@ -994,7 +994,7 @@ TEST_CASE("columns by session: two principals get two descriptions", "[table][re
     // Mutation: answerQuery validating against the source's columns instead of the description's.
 }
 
-TEST_CASE("typed: a typed table writes the page the generic source writes", "[table][registration]") {
+TEST_CASE("typed: a typed table writes the page the generic source writes", "[table][registration][threads]") {
     morph::session::Context const session{};
     TableContext const context{.session = session};
     tabledesc::TypedModel model;
@@ -1090,7 +1090,7 @@ TEST_CASE("scoped: a scope's source reads the shared rows of its keys", "[table]
 }
 
 TEST_CASE("table action: a failing table function is an error reply and the model stays usable",
-          "[table][registration]") {
+          "[table][registration][threads]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor owner;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
@@ -1123,7 +1123,7 @@ TEST_CASE("table action: a failing table function is an error reply and the mode
     // Mutation: answerQuery writing the page column by column without checking the source first (a partial page).
 }
 
-TEST_CASE("table action: a server builds a table's reply on tableWork", "[table][registration]") {
+TEST_CASE("table action: a server builds a table's reply on tableWork", "[table][registration][threads]") {
     auto const tableWork = std::make_shared<RecordingPool>();
     morph::exec::ThreadPoolExecutor pool{2};
     morph::backend::ServerConfig config;
@@ -1561,7 +1561,7 @@ TEST_CASE("table: an order use the level refuses refuses the query", "[table][le
 
 // Mutation: find not joining a running computation (each request computes; the first holds the gate until all have
 // asked, so the others compute too).
-TEST_CASE("view cache: concurrent requests through a server compute one view", "[table][views]") {
+TEST_CASE("view cache: concurrent requests through a server compute one view", "[table][views][threads]") {
     bench::WideTableModel::recipeGate().release();
     bench::WideTableModel::configure({.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}},
                                      {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}});
@@ -2143,7 +2143,7 @@ morph::table::ServedTable tabledesc::BoundModel::rows(morph::table::TableContext
 }
 
 // Mutation: DescribeTable describing served.description as the model gave it (the bound stays 8).
-TEST_CASE("served description: the describe action answers the served description", "[table][description]") {
+TEST_CASE("served description: the describe action answers the served description", "[table][description][threads]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor owner;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
@@ -2440,7 +2440,7 @@ TEST_CASE("description: a served table with a bad companion is refused", "[table
 }
 
 // Mutation: the validateDisplay call removed from DescribeTable::invoke, which describes the table.
-TEST_CASE("description: the describe action refuses a bad companion", "[table][description][display]") {
+TEST_CASE("description: the describe action refuses a bad companion", "[table][description][display][threads]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor owner;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
@@ -2722,7 +2722,7 @@ morph::table::ChangedRows<&EditsModel::misfits> EditsModel::execute(MisfitsEdit 
 
 // Mutation: DescribeTable not calling checkEdits (the misfitting description is served).
 TEST_CASE("description: a server refuses to describe a table whose edit does not fit its column",
-          "[table][description][edits]") {
+          "[table][description][edits][threads]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto const server = std::make_shared<morph::backend::RemoteServer>(pool, morph::backend::ServerConfig{});
     auto const registered =

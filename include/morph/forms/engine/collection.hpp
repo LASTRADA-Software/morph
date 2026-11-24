@@ -197,6 +197,14 @@ private:
             }
             column.kind = parsed;
         }
+        // A measure's cells name their units, and a collection's table has no registry to read them through: its
+        // sort and filters would be refused and its cells shown without their units.
+        if (column.kind == table::ColumnKind::Measure) {
+            return std::unexpected(SchemaError{
+                .path = "v-columns." + column.field,
+                .message = "a collection cannot show a measure column, having no unit registry; serve the rows as a "
+                           "model's table"});
+        }
         Json const* const hidden = detail::engine::member(entry, "v-hidden");
         column.hidden = hidden != nullptr && hidden->is_boolean() && hidden->get<bool>();
         if (auto const places =

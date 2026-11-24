@@ -232,7 +232,7 @@ TEST_CASE("view cache: an arrival on an order level computes again; on a display
 }
 
 // Mutation: single flight joined on the key alone, which hands B the view over S1.
-TEST_CASE("view cache: a request on a newer snapshot does not join an older computation", "[table][views]") {
+TEST_CASE("view cache: a request on a newer snapshot does not join an older computation", "[table][views][threads]") {
     auto const source =
         tabletest::makeSource({tabletest::col("a", ColumnKind::Integer)},
                               {{Cell{std::int64_t{3}}}, {Cell{std::int64_t{1}}}, {Cell{std::int64_t{2}}}});
@@ -296,7 +296,7 @@ TEST_CASE("view cache: a request on a newer snapshot does not join an older comp
 }
 
 // Mutation: no single flight (fifty computations).
-TEST_CASE("view cache: fifty requests compute once", "[table][views]") {
+TEST_CASE("view cache: fifty requests compute once", "[table][views][threads]") {
     auto const source = tabletest::makeSource({tabletest::col("a", ColumnKind::Integer)}, {{Cell{std::int64_t{1}}}});
     auto const snapshot = source->snapshot();
     ViewCache views;
@@ -461,7 +461,7 @@ std::expected<ViewComputation, TableError> oneRowView() {
 }  // namespace
 
 // Mutation: drop() destroying the entry under the mutex (the hit on another key waits for the snapshot's release).
-TEST_CASE("view cache: an evicted entry is released outside the mutex", "[table][views]") {
+TEST_CASE("view cache: an evicted entry is released outside the mutex", "[table][views][threads]") {
     ViewCache views{ViewCacheOptions{.maxBytes = 4, .onCompute = {}}};  // one one-row view
     std::atomic<bool> entered{false};
     std::promise<void> release;

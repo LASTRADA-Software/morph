@@ -13,8 +13,13 @@ Item {
     // Item's.
     property var table: null
 
+    // The last translation of the drag under way: the handler resets its own before it reports the drag ended.
+    property real dragged: 0
+
     visible: edge.table !== null && edge.table.resizable
     objectName: "edge" + edge.column
+    // Above the header's filter button, which sits at the same edge and would otherwise take the strip's input.
+    z: 1
     anchors.right: parent ? parent.right : undefined
     anchors.top: parent ? parent.top : undefined
     anchors.bottom: parent ? parent.bottom : undefined
@@ -27,10 +32,17 @@ Item {
         id: drag
         yAxis.enabled: false
         target: null
+        onActiveTranslationChanged: {
+            if (drag.active)
+                edge.dragged = drag.activeTranslation.x
+        }
         onActiveChanged: {
-            if (!active && edge.parent)
+            if (drag.active) {
+                edge.dragged = 0
+            } else if (edge.parent) {
                 edge.table.fire("columnResize", {"column": edge.column,
-                                                 "width": Math.max(1, edge.parent.width + drag.activeTranslation.x)})
+                                                 "width": Math.max(1, edge.parent.width + edge.dragged)})
+            }
         }
     }
     TapHandler {

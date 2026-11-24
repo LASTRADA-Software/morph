@@ -2437,11 +2437,15 @@ inline const std::array<morph::forms::FieldMeta, 1> Specimen::fieldMetadata{
 
 The schema writes `x-derived: true` and `x-readonly: true` on its property and
 leaves it out of `required`. `recomputeAll` does not touch it: the model sets
-it when it executes the action. Every server dispatch path clears it first
+it when it executes the action. Every execution path clears it first
 (`forms::clearDerived`, `forms/derive.hpp`: every derived member of the action
 and of every nested aggregate (each element of a `std::vector` member, a nested struct member, either inside an engaged `std::optional`), recursively, value-initialised)
 before `recomputeAll`, so neither the model nor a computed field over it reads
-a value the client sent. A form asks for derived values while the user is
+a value the client sent — the in-process path included, so an action reads
+the same in a local topology as over a server. `allFieldBoundsSatisfied` and
+`fieldErrors` skip a derived member's declared `minimum`, `maximum` and
+`multipleOf`: the validator runs on the cleared value, before the model sets
+it. A form asks for derived values while the user is
 entering through its derive action (`DeriveOf<A>` in, `Derived` out;
 [../table/editing.md](../table/editing.md#derived-values)).
 

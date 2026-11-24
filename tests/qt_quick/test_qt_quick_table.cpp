@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -1231,11 +1232,17 @@ TEST_CASE("qt_quick table: the sorted column's header shows and states its direc
     CHECK(name.property("text").toString() == QStringLiteral("Name"));
 }
 
-// Control: report the edge drag's width in pixels instead of units.
+// Controls: report the edge drag's width in pixels instead of units; read the drag's translation once it has ended
+// (no change of width); leave the filter button above the edge (the filterable header's drag reaches no edge).
 TEST_CASE("qt_quick table: dragging a header's trailing edge reports units, a double click on it none", "[qt_quick][table]") {
+    bool const filterable = GENERATE(false, true);
+    CAPTURE(filterable);
     Scene scene;
     Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
-    table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(12)}, {.label = "Mass"}});
+    table.table->setColumns(
+        {{.label = "Name", .width = ui::Sizing::fixed(12), .filterable = filterable}, {.label = "Mass"}});
+    int filters = 0;
+    table.table->setOnFilter([&filters](std::size_t /*column*/) { ++filters; });
     std::vector<std::pair<std::size_t, std::optional<int>>> resized;
     table.table->setOnColumnResize(
         [&resized](std::size_t column, std::optional<int> units) { resized.emplace_back(column, units); });
@@ -1265,6 +1272,7 @@ TEST_CASE("qt_quick table: dragging a header's trailing edge reports units, a do
     scene.doubleClick(*edge);
     REQUIRE_FALSE(resized.empty());
     CHECK(resized.back() == std::pair<std::size_t, std::optional<int>>{0, std::nullopt});
+    CHECK(filters == 0);
 }
 
 // Control: ignore a drag that ends on another header.
