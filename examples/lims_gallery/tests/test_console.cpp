@@ -30,7 +30,7 @@ TEST_CASE("console, expanded: navigation, alert, figures, chart, instruments and
     CHECK(screen.backend().find("Text", "text", "% LC").has_value());
     // The Test column takes its text whole and Status, last, takes what is left, so the table does not scroll.
     CHECK(screen.prop("Table", "worklist", "columns").value_or("none") ==
-          "[Sample:fixed(11),Test:content;wrap=false,Priority:content,Due:fixed(12);wrap=false,Status:stretch(1);"
+          "[Sample:fixed(11);filterable=true,Test:content;filterable=true;wrap=false,Priority:content;filterable=true,Due:fixed(12);filterable=true;wrap=false,Status:stretch(1);filterable=true;"
           "shrink=true]");
     // The operator stays with its number when the label wraps: the space between them does not break.
     CHECK(screen.backend().find("Text", "text", "Impurity A · ≤\u00a00.10").has_value());

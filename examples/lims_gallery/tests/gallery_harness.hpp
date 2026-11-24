@@ -37,7 +37,9 @@ public:
     ///                 screen as `{"env": "widthClass"}`.
     GalleryScreen(std::string_view screenId, std::string_view width)
         : ScreenHarness{localApp(), std::string{screenId}, morph::examples::testing::RigMode::Local, {},
-                        {},         std::string{width}} {}
+                        {},         std::string{width}} {
+        settle();
+    }
 
     /// @brief Whether a widget of @p kind with @p testId is mounted and not hidden itself.
     /// @param kind   The widget kind, as `RecordingBackend` names it.

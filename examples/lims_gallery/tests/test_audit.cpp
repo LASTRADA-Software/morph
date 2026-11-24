@@ -36,10 +36,10 @@ TEST_CASE("audit, expanded: facets beside the trail, with the active filters as 
     CHECK(screen.prop("Checkbox", "type-result", "checked") == "true");
     CHECK(screen.prop("Checkbox", "type-specification", "checked") == "false");
     CHECK(screen.shows("Table", "trail"));
-    CHECK(screen.prop("Table", "trail", "columns") ==
-          "[When:fixed(10);valign=start;wrap=false,User:fixed(6);valign=start,Record:fixed(12);valign=start,"
-          "Field:fixed(8);valign=start,Old value:fixed(7);valign=start,New value:fixed(8);valign=start,"
-          "Reason:stretch(1);valign=start]");
+    CHECK(screen.prop("Table", "trail", "columns").value_or("none") ==
+          "[When:fixed(10);valign=start;filterable=true;wrap=false,User:fixed(6);valign=start;filterable=true,Record:fixed(12);valign=start;filterable=true,"
+          "Field:fixed(8);valign=start;filterable=true,Old value:fixed(7);valign=start;filterable=true,New value:fixed(8);valign=start;filterable=true,"
+          "Reason:stretch(1);valign=start;filterable=true]");
     CHECK(showsText(screen, "WS-2026-0412"));
     CHECK(showsText(screen, "Transcription error: peak 7 integrated with the wrong baseline."));
     CHECK(screen.shows("Badge", "chip-type-result"));

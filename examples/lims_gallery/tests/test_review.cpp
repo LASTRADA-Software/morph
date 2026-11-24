@@ -29,6 +29,15 @@ bool pageInset(GalleryScreen& screen) {
     return screen.backend().prop(screen.backend().children(page).at(0), "visible") != "false";
 }
 
+// How many dialogs are open: a table mounts closed ones of its own, which a count of the Dialog widgets includes.
+std::size_t openDialogs(GalleryScreen& screen) {
+    std::size_t open = 0;
+    for (int const dialog : screen.screenWidgets("Dialog")) {
+        open += screen.backend().prop(dialog, "open") == "true" ? 1U : 0U;
+    }
+    return open;
+}
+
 }  // namespace
 
 TEST_CASE("review, expanded: the queue beside the worksheet, its flagged results", "[lims-gallery]") {
@@ -48,10 +57,10 @@ TEST_CASE("review, expanded: the queue beside the worksheet, its flagged results
     CHECK(screen.isActionRow("Row", "footer-actions"));
     // The Result column is as wide as its widest value, "99.4 % LC", so the value is not split from its unit.
     CHECK(screen.prop("Table", "results", "columns").value_or("none") ==
-          "[Sample:fixed(11),Analyte:stretch(1);wrap=false;shrink=true,Result:content;align=end;wrap=false,"
-          "Spec.:content;wrap=false,Prior "
-          "lot:content;align=end;wrap=false,Evaluation:stretch(1);wrap=false,"
-          "Change:stretch(1);wrap=false;shrink=true]");
+          "[Sample:fixed(11);filterable=true,Analyte:stretch(1);filterable=true;wrap=false;shrink=true,Result:content;align=end;filterable=true;wrap=false,"
+          "Spec.:content;filterable=true;wrap=false,Prior "
+          "lot:content;align=end;filterable=true;wrap=false,Evaluation:stretch(1);filterable=true;wrap=false,"
+          "Change:stretch(1);filterable=true;wrap=false;shrink=true]");
 }
 
 TEST_CASE("review: self-review is blocked with its reason", "[lims-gallery]") {
@@ -108,13 +117,16 @@ TEST_CASE("review: approve and sign opens the e-signature over the review, and i
     screen.click("approve");
     CHECK(screen.waitFor(
         [&screen] { return screen.backend().find("Dialog", "title", "Sign to approve results").has_value(); }));
+    CHECK(openDialogs(screen) == 1);
     CHECK(workspaceTabs(screen) == "[Review and approval]");
     CHECK(screen.mounted().size() == 1);
     CHECK(screen.find("Column", "fields").has_value());
     CHECK(screen.prop("Button", "overlay_action_sign", "enabled") == "true");
     screen.edit("password", "meyer-2026");
     screen.click("overlay_action_sign");
-    CHECK(screen.waitFor([&screen] { return screen.screenWidgets("Dialog").size() == 1; }));
+    // The table mounts dialogs of its own, closed; the signature's is the only one open, and it closes when the
+    // signature answers.
+    CHECK(screen.waitFor([&screen] { return openDialogs(screen) == 0; }));
     CHECK(screen.waitFor([&screen] { return screen.shows("Banner", "signed"); }));
     CHECK(screen.prop("Banner", "signed", "text") == "WS-2026-0412 signed: approved.");
     screen.requireNoProblems();
