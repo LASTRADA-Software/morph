@@ -18,6 +18,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "qt_quick/keys.hpp"
 #include "qt_quick/relay.hpp"
@@ -27,6 +28,11 @@
 namespace morph::qt_quick::detail {
 
 namespace {
+
+std::vector<Context*>& contexts() {
+    static std::vector<Context*> live;
+    return live;
+}
 
 /// The `Theme` singleton's object property @p name in @p engine, or null.
 QObject* themeObjectOf(QQmlEngine& engine, char const* name) {
@@ -65,6 +71,63 @@ QString errorsOf(QQmlComponent const& component) {
 
 }  // namespace
 
+std::vector<Context*> const& Context::all() noexcept { return contexts(); }
+
+void WidgetIndex::add(ItemBase& widget) { _widgets.push_back(&widget); }
+
+void WidgetIndex::remove(ItemBase const& widget) {
+    std::erase(_widgets, &widget);
+    if (_tags.erase(&widget) != 0) {
+        changed();
+    }
+}
+
+void WidgetIndex::retag(ItemBase const& widget, QString const& testId) {
+    _tags.insert_or_assign(&widget, testId);
+    changed();
+}
+
+std::vector<ItemBase*> WidgetIndex::carrying(QString const& testId) const {
+    std::vector<ItemBase*> out;
+    // NOLINTNEXTLINE(misc-const-correctness): the item goes into a vector of non-const items, so its pointee stays non-const.
+    for (ItemBase* const widget : _widgets) {
+        if (auto const found = _tags.find(widget); found != _tags.end() && found->second == testId) {
+            out.push_back(widget);
+        }
+    }
+    return out;
+}
+
+int WidgetIndex::listen(std::function<void()> listener) {
+    int const key = ++_nextListener;
+    _listeners.insert_or_assign(key, std::move(listener));
+    return key;
+}
+
+void WidgetIndex::changed() {
+    if (_telling) {
+        _again = true;
+        return;
+    }
+    _telling = true;
+    _again = true;
+    while (_again) {
+        _again = false;
+        std::vector<int> keys;
+        for (auto const& [key, listener] : _listeners) {
+            static_cast<void>(listener);
+            keys.push_back(key);
+        }
+        for (int const key : keys) {
+            if (auto const found = _listeners.find(key); found != _listeners.end()) {
+                auto const listener = found->second;
+                listener();
+            }
+        }
+    }
+    _telling = false;
+}
+
 Context::Context(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
     : _engine{&engine}, _options{std::move(options)} {
     QQmlComponent& roots = component(QStringLiteral("MorphRoots"));
@@ -99,9 +162,11 @@ Context::Context(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
     _rootsRelay->on(QStringLiteral("overflow"), &reportOverflow);
     _rootsRelay->on(QStringLiteral("widthUnits"), [this](QVariant const& units) { widthChanged(units.toDouble()); });
     widthChanged(_holder->property("widthUnits").toDouble());
+    contexts().push_back(this);
 }
 
 Context::~Context() {
+    std::erase(contexts(), this);
     // The theme belongs to the engine and may outlive this context: it must not keep a measure that is gone.
     if (auto* const theme = _engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"))) {
         if (theme->property("textMeasure").value<QObject*>() == _textMeasure.get()) {

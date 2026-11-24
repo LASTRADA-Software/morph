@@ -33,6 +33,7 @@
 #include <vector>
 
 #include "tui/chord.hpp"
+#include "tui/container_widgets.hpp"
 #include "tui/display_widgets.hpp"
 #include "tui/field_widgets.hpp"
 #include "tui/list_widgets.hpp"
@@ -348,6 +349,14 @@ public:
                                          .height = static_cast<double>(bounds.height)};
     }
 
+    // The widget the spotlight rings now, as the terminal widget reports it.
+    ui::Widget const* targetOf(ui::SpotlightWidget const& spotlight) override {
+        settle();
+        auto const* const impl = dynamic_cast<morph::tui::detail::SpotlightImpl const*>(&spotlight);
+        WidgetBase const* const ringed = impl == nullptr ? nullptr : impl->ringed();
+        return ringed == nullptr ? nullptr : &ringed->asWidget();
+    }
+
     // In cells: the box around the non-blank cells the widget drew, read from the last frame.
     std::optional<ui::testing::WidgetBounds> textExtentOf(ui::Widget const& widget) override {
         settle();
@@ -463,6 +472,15 @@ TEST_CASE("tui conformance: the terminal backend passes every case", "[tui][conf
 
 TEST_CASE("tui conformance: the terminal backend passes every layout case", "[tui][conformance]") {
     for (auto const& testCase : ui::testing::layoutConformanceCases()) {
+        TuiProbe probe;
+        std::optional<std::string> const failure = testCase.run(probe);
+        INFO(std::string{testCase.name} + ": " + failure.value_or("passed"));
+        CHECK_FALSE(failure.has_value());
+    }
+}
+
+TEST_CASE("tui conformance: the terminal backend passes every spotlight case", "[tui][conformance][tours]") {
+    for (auto const& testCase : ui::testing::spotlightConformanceCases()) {
         TuiProbe probe;
         std::optional<std::string> const failure = testCase.run(probe);
         INFO(std::string{testCase.name} + ": " + failure.value_or("passed"));

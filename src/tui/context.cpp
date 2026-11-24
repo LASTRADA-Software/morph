@@ -2,6 +2,7 @@
 
 #include "tui/context.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -23,6 +24,10 @@ WidgetBase* Context::ownerOf(::core::tui::Component const* view) const {
 void Context::forget(WidgetBase& widget) {
     std::erase(roots, &widget);
     std::erase(popups, &widget);
+    std::erase(spotlights, &widget);
+    if (spotlit == &widget) {
+        spotlit = nullptr;
+    }
     std::erase_if(spanTables,
                   [&widget](TableImpl const* table) { return static_cast<WidgetBase const*>(table) == &widget; });
     if (pressed == &widget) {
@@ -34,6 +39,17 @@ void Context::forget(WidgetBase& widget) {
         }
     }
     drag->forget(widget);
+    targetsChanged();
+}
+
+bool Context::spotlightMisplaced() const {
+    return std::ranges::any_of(spotlights, [](WidgetBase const* spotlight) { return spotlight->placementStale(); });
+}
+
+void Context::targetsChanged() const {
+    for (WidgetBase* const spotlight : std::vector<WidgetBase*>{spotlights}) {
+        spotlight->targetsChanged();
+    }
 }
 
 void Context::endPress() {

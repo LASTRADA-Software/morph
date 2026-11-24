@@ -321,6 +321,13 @@ public:
             static_cast<void>(_backend.dropFiles(_backend.idOf(zone), paths));
         }
     }
+    [[nodiscard]] ui::Widget const* targetOf(ui::SpotlightWidget const& spotlight) override {
+        std::string const ringed = _backend.prop(_backend.idOf(spotlight), "ringed");
+        int widgetId = 0;
+        char const* const first = ringed.data();
+        static_cast<void>(std::from_chars(first, std::next(first, std::ssize(ringed)), widgetId));
+        return widgetId == 0 || !_backend.exists(widgetId) ? nullptr : _backend.widget(widgetId);
+    }
 
 private:
     // The label of the option whose key `selected` shows, from `options`' `key:label` elements.
@@ -657,4 +664,26 @@ TEST_CASE("ui conformance: the stretch cases flag a wrong width, a missing child
         CHECK(flagged);
     }
     CHECK(cases == names.size());
+}
+
+// Mutation: in `FakeSpotlight::setTarget`, keep `_target` empty (every case that rings a target fails).
+TEST_CASE("ui conformance: RecordingBackend passes every spotlight case", "[ui][conformance][tours]") {
+    auto const cases = ui::testing::spotlightConformanceCases();
+    REQUIRE(cases.size() == 5);
+    for (auto const& testCase : cases) {
+        RecordingProbe probe;
+        std::optional<std::string> const failure = testCase.run(probe);
+        INFO(std::string{testCase.name} + ": " + failure.value_or("passed"));
+        CHECK_FALSE(failure.has_value());
+    }
+}
+
+// A spotlight case that a probe driving and reading nothing passes measures nothing.
+TEST_CASE("ui conformance: a probe that drives and reads nothing fails every spotlight case",
+          "[ui][conformance][tours]") {
+    for (auto const& testCase : ui::testing::spotlightConformanceCases()) {
+        InertProbe probe;
+        INFO(testCase.name);
+        CHECK(testCase.run(probe).has_value());
+    }
 }

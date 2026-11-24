@@ -136,6 +136,10 @@ public:
         created();
         return _recording.createPopover(parent);
     }
+    std::unique_ptr<::morph::ui::SpotlightWidget> createSpotlight(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createSpotlight(parent);
+    }
     std::unique_ptr<::morph::ui::BusyWidget> createBusy(::morph::ui::ContainerWidget* parent) override {
         created();
         return _recording.createBusy(parent);

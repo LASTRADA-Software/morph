@@ -6,6 +6,7 @@
 
 add_executable(morph_client_tests
     probe_app.cpp
+    tours_app.cpp
     test_client_args.cpp
     test_custom_screens.cpp
     test_mcp.cpp
@@ -13,6 +14,7 @@ add_executable(morph_client_tests
     test_shell_locale.cpp
     test_sign_in.cpp
     test_sources.cpp
+    test_tours.cpp
     test_wait.cpp
 )
 target_include_directories(morph_client_tests PRIVATE ${PROJECT_SOURCE_DIR}/examples/common)

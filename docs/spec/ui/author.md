@@ -371,8 +371,9 @@ is reviewed like code.
 
 ## Out of scope
 
-- **The app document** (spec 6 §5): `Scope` writes a screen with a view; a builder for the app
-  document, which has none, follows the app shell's work; until then it is written as JSON, whose `principalPlacement`
+- **The app document** (spec 6 §5): `Scope` writes a screen with a view, and the app document, which has none, is
+  written as JSON; `withTours(text, tours)` writes `author::Tour`s (`id`, `screen`, `title`, `summary`, `steps` of
+  `author::TourStep`) into it as its `tours` member. Its `principalPlacement`
   (`"sidebar"`, the default, or `"head"`) puts the principal in the top bar.
 - **Bundles**: the `restyle` map, the manifest and message catalogues are the UI service's.
 - **Spec 6 §11's reference screen** (`lims.sample`): the lims example does not carry it or the

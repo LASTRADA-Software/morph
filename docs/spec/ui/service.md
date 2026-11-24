@@ -206,6 +206,28 @@ server, never a surprise on a client.
   index whose icon set names a file that is not an `icon` file of the bundle ([`theme.md`](theme.md#icons)), and a
   bundle over the bounds. `addFile` refuses an `icon` that is not SVG text or is larger than `kMaxIconBytes`. It returns a `std::shared_ptr<ServedBundle const>`: the manifest, the digest, every file
   by hash, the screens with their top-level queries and named actions, and the facts.
+- **Tours are checked against the bundle.** `build()` refuses, with the tour and the step in the reason
+  (`the tour `getting-started`, step 3 rings `samples_tabel`, ...`), a tour's `screen`, a step's `screen` or
+  `advanceOn.screen` that is not a registered screen, and a `target` that nothing the window can show carries. A step's
+  *effective screen* is the screen the active tab shows when the step shows: its own `screen`, else the latest of an
+  earlier step's `screen` and an earlier step's `advanceOn.screen`, else the tour's `screen`. A target is accepted when
+  it is a shell id the declared parts produce (`shell_search`, `shell_inbox`, `shell_help`, `shell_principal_menu`,
+  `shell_brand_title`, `shell_context`), `shell_tours` (a tour is declared), `chat_input` (whether chat is offered is the
+  chat service's, which the registry does not see; a client without chat shows the card centred), `nav_<id>` for a
+  registered screen that has a document and is not public, a literal `testId` anywhere in the effective screen's
+  document (its components' fallbacks included), or `action_<id>` for one of its head `actions`. A host screen, which
+  has no document, offers only shell ids. A `tour.start` host command whose `args` names a tour as a literal
+  (`{"obj": {"id": "..."}}` or `{"lit": {...}}`) in any registered document or the app document must name a declared
+  tour; a computed id is reported at run time. The checks of one tour are `detail::checkTour` (`src/ui/tour_checks.hpp`),
+  the same function a runtime registration of a tour calls. The shape of `tours` is checked when the app document is
+  added ([document.md](document.md#the-app-documents-tours)). An app document that no longer loads at build, because
+  the catalog changed after it was added, refuses the build, naming the app document and the load error: its tours
+  cannot be checked.
+- **Runtime tours.** `TourRegistry` checks a tour added while the server runs with the same per-tour check
+  (`detail::checkTour`) the build runs, against the bundle served then
+  ([tours.md](tours.md#registering-tours-at-runtime)).
+- **The client's own ids are reserved.** An entry id that is one of `kReservedClientIds` (`client_ids.hpp`: the chat
+  panel's `morph.chat`, the tour card's `morph.tour`) is refused: `the id `morph.tour` is the tour card's`.
 - **`custom:` is reserved.** An entry id that starts with `custom:` (`kCustomScreenIdPrefix`) is refused, by
   `addScreen` and `addEntry` alike, because that prefix names a person's custom screen.
 - **The bundle keeps its catalog.** `ServedBundle::catalog` is the catalog every document was loaded with, so a

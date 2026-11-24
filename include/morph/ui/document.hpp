@@ -553,6 +553,49 @@ struct FocusTarget {
     bool row = false;
 };
 
+/// @brief The most steps a guided tour has.
+inline constexpr std::size_t kMaxTourSteps = 50;
+
+/// @brief The longest a guided tour's id is, in characters (`[a-z0-9-]`, so bytes too).
+inline constexpr std::size_t kMaxTourIdBytes = 64;
+
+/// @brief One step of a guided tour, as the app document declares it (`docs/spec/ui/tours.md`).
+struct TourStepDecl {
+    /// @brief The step's JSON Pointer, where a refusal about it points.
+    std::string path;
+    /// @brief The step's title: a text expression in the app scope.
+    ExprPtr title;
+    /// @brief The step's body: a text expression in the app scope; `nullptr` when none is declared.
+    ExprPtr body;
+    /// @brief The screen the step opens before it shows; empty for none.
+    std::string screen;
+    /// @brief The params it opens that screen with: literal values.
+    ValueRecord params;
+    /// @brief The test id of the part the step rings; empty for a card with nothing ringed.
+    std::string target;
+    /// @brief The screen whose opening moves the tour on; empty for a step that waits for Next.
+    std::string advanceOn;
+};
+
+/// @brief A guided tour, as the app document declares it.
+struct TourDecl {
+    /// @brief The tour's JSON Pointer, where a refusal about it points.
+    std::string path;
+    /// @brief Its id: `[a-z0-9-]+`, at most `kMaxTourIdBytes`, unique among the app's tours.
+    std::string id;
+    /// @brief The screen it belongs to; empty for a general tour, offered on every screen.
+    std::string screen;
+    /// @brief Its title: a text expression in the app scope.
+    ExprPtr title;
+    /// @brief Its summary: a text expression in the app scope; `nullptr` when none is declared.
+    ExprPtr summary;
+    /// @brief Its steps, one or more and at most `kMaxTourSteps`.
+    std::vector<TourStepDecl> steps;
+    /// @brief A runtime tour's revision on the server (`ListedTour::revision`), so a client tells a replaced tour from
+    ///        one whose texts changed; 0 for an app-document tour.
+    std::uint64_t revision = 0;
+};
+
 /// @brief A loaded and validated UI document: a screen, or the app document (id `app`, spec 6 §5).
 struct Document {
     /// @brief The vocabulary, `ui/1`.
@@ -607,6 +650,8 @@ struct Document {
     /// @brief The app document's counts on the navigator's entries: `navigationBadge` parts, in order; empty for a
     ///        screen, which declares none.
     std::vector<DocNodePtr> navigation;
+    /// @brief The app document's guided tours, in declaration order; empty for a screen, which declares none.
+    std::vector<TourDecl> tours;
     /// @brief The typed params, in declaration order.
     std::vector<std::pair<std::string, Type>> params;
     /// @brief The screen scope's declarations.
@@ -770,6 +815,13 @@ enum class NameCategory : std::uint8_t {
 /// @return The document, or the refusal; text that is not JSON is refused at the root.
 [[nodiscard]] MORPH_API std::expected<Document, Refusal> loadDocumentText(std::string_view text,
                                                                           LoadOptions const& options = {});
+
+/// @brief Loads one tour's JSON text, as one entry of the app document's `tours` is read: what a client makes of a
+///        runtime tour that `morph.tours.list` answers. Its shape is checked; its texts are parsed, not checked
+///        against the app scope, which the server did when the tour was added.
+/// @param text The tour's JSON text.
+/// @return The tour, or the refusal, its path a pointer into the tour.
+[[nodiscard]] MORPH_API std::expected<TourDecl, Refusal> loadTourText(std::string_view text);
 
 /// @brief The view node kinds of `ui/1`.
 /// @return Their `kind` spellings.

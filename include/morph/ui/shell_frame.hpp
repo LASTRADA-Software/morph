@@ -255,6 +255,24 @@ public:
     /// @param tone The tone, mapped to the backend's theme.
     void showToast(std::string_view text, Tone tone);
 
+    /// @brief Installs the Tours button (`shell_tours`): a button-style menu after the help button and before the
+    ///        person's menu, listing each group's heading and its tours (the title, the summary as the entry's
+    ///        description). Shown while the view holds a tour; it counts as a part of the top bar, so the top bar's
+    ///        tools show for it alone. Compact, it hides and a submenu with the same entries joins the navigation menu
+    ///        after the help entry.
+    /// @param view What to draw.
+    void setTours(ShellToursView view);
+
+    /// @brief Sets what choosing a tour, from the button or the compact submenu, calls.
+    /// @param onTour The handler, given the tour's id; empty does nothing.
+    void setOnTour(std::function<void(std::string const&)> onTour) { _onTour = std::move(onTour); }
+
+    /// @brief The spotlight a guided tour is shown in: made the first time it is asked for (`shell_spotlight`), as the
+    ///        last child of the main column, where it takes no room and covers the whole window, and kept as long as
+    ///        the frame.
+    /// @return It.
+    [[nodiscard]] SpotlightWidget& spotlight();
+
 private:
     // A row that wraps, made wrapping before it gets its children: a stack's wrap is set once, before it has any.
     [[nodiscard]] static std::unique_ptr<StackWidget> wrappingRow(IViewBackend& backend, ContainerWidget* parent);
@@ -302,7 +320,7 @@ private:
 
     // What a top-level entry of the navigation menu is.
     struct NavTarget {
-        enum class Kind : std::uint8_t { Context, Navigator, Principal, SignOut, Help, Separator };
+        enum class Kind : std::uint8_t { Context, Navigator, Principal, SignOut, Help, Tours, Separator };
         Kind kind = Kind::Separator;
         // For a navigator entry, the index of the first one among the menu's entries.
         std::size_t offset = 0;
@@ -345,8 +363,14 @@ private:
         int& _depth;
     };
 
+    // The groups as heading entries and their tours; fills `_tourMap`.
+    [[nodiscard]] std::vector<MenuEntry> tourEntries();
+
+    void chooseTour(std::size_t entry);
+
     [[nodiscard]] bool barParts() const noexcept {
-        return _parts.search.shown || _parts.inbox.shown || _parts.principal.shown || _parts.help.shown;
+        return _parts.search.shown || _parts.inbox.shown || _parts.principal.shown || _parts.help.shown ||
+               _toursView.shown();
     }
 
     // The widgets the parts are drawn with, all hidden until `setParts` says otherwise.
@@ -429,6 +453,8 @@ private:
     std::unique_ptr<StackWidget> _main;
     // Lazily made, the first time showToast is called.
     std::unique_ptr<ToastWidget> _toast;
+    // Made the first time `spotlight` is called, a child of the main column.
+    std::unique_ptr<SpotlightWidget> _spotlight;
     std::unique_ptr<StackWidget> _topBar;
     std::unique_ptr<SpacerWidget> _topAbove;
     std::unique_ptr<StackWidget> _topLine;
@@ -475,6 +501,7 @@ private:
     std::unique_ptr<TextWidget> _footerState;
     std::unique_ptr<TextWidget> _footerVersion;
     std::unique_ptr<ButtonWidget> _help;
+    std::unique_ptr<MenuWidget> _tours;
     std::unique_ptr<MenuWidget> _context;
     std::unique_ptr<StackWidget> _tools;
     std::unique_ptr<StackWidget> _searchBox;
@@ -502,9 +529,13 @@ private:
     int _dispatching = 0;
     ShellPartsView _parts;
     ShellPartsHandlers _handlers;
+    ShellToursView _toursView;
+    std::function<void(std::string const&)> _onTour;
     std::vector<NavTarget> _navTargets;
     std::vector<std::optional<std::size_t>> _contextMap;
     std::vector<PrincipalChoice> _principalMap;
+    // Maps a Tours menu entry to its tour's id, with no value for a heading.
+    std::vector<std::optional<std::string>> _tourMap;
     std::string _searchText;
     std::optional<std::size_t> _highlight;
     bool _searchDismissed = false;

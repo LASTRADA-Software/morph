@@ -65,6 +65,35 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> customsBundl
     return served.build();
 }
 
+using BundleFn = std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> (*)();
+
+constexpr std::string_view kOther =
+    R"({"vocab":"ui/1","id":"customs.other","title":"Other","view":{"kind":"text","testId":"other","text":"Other"}})";
+
+/// The customs application with a second screen and a tour whose first step waits for the home screen.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> customsToursBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "customs", .version = "1"}};
+    for (auto const& [id, text] :
+         {std::pair{std::string{"customs.home"}, kHome}, std::pair{std::string{"customs.other"}, kOther}}) {
+        ui::CatalogEntry entry;
+        entry.id = id;
+        entry.title = id;
+        if (auto added = served.addScreen(std::move(entry), std::string{text}); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
+    if (auto added = served.addFile(ui::BundleFile{
+            .kind = "app",
+            .id = "app",
+            .bytes = R"({"vocab":"ui/1","id":"app","tours":[{"id":"to-home","title":"To home","steps":[)"
+                     R"({"advanceOn":{"screen":"customs.home"},"title":"Open home"},{"title":"Arrived"}]},)"
+                     R"({"id":"at-home","title":"At home","steps":[{"screen":"customs.home","title":"Here"}]}]})"});
+        !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    return served.build();
+}
+
 /// `text` with its first `from` replaced by `to`.
 std::string replaced(std::string text, std::string_view from, std::string_view to) {
     auto const at = text.find(from);
@@ -77,8 +106,8 @@ std::string replaced(std::string text, std::string_view from, std::string_view t
 /// a memory store holding `ann`'s screen "Mine", based on the home screen. ctest runs each case in a process of its
 /// own (the cases are discovered PRE_TEST), so the registration reaches no other case.
 struct Offered {
-    Offered() {
-        auto built = customsBundle();
+    explicit Offered(BundleFn make = &customsBundle) {
+        auto built = make();
         REQUIRE(built.has_value());
         bundle = *built;
         screens = ui::registerCustomScreens(
@@ -109,8 +138,9 @@ struct Offered {
 /// The generic client over the customs application, signed in locally as `ann`, until the navigator lists "Mine".
 struct Window {
     explicit Window(Offered const& offered, std::string start = "customs.home",
-                    ui::testing::MemoryHistory* history = nullptr)
-        : mineId{offered.mineId} {
+                    ui::testing::MemoryHistory* history = nullptr, BundleFn bundle = &customsBundle)
+        : mineId{offered.mineId},
+          source{client::LocalApp{.name = "customs", .bundle = bundle}, client::LocalSetup{.db = {}, .user = "ann"}} {
         std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
         source.open(context,
                     [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
@@ -162,8 +192,7 @@ struct Window {
     std::string mineId;
     FakeAppContext context;
     ui::testing::RecordingBackend backend;
-    client::LocalSource source{client::LocalApp{.name = "customs", .bundle = &customsBundle},
-                               client::LocalSetup{.db = {}, .user = "ann"}};
+    client::LocalSource source;
     std::unique_ptr<ui::MountedShell> shell;
 };
 
@@ -821,4 +850,38 @@ TEST_CASE("Client shell: a compact frame stops a recording and drops its clip", 
     window.recorder->clip(std::string{"RIFF-clip"});
     static_cast<void>(window.wait([] { return false; }));
     CHECK(transcriber->calls() == 0);
+}
+
+// Mutation: answer the active tab's own id from the shell's `TourShell::activeScreen`, not its base (the waiting step
+// never moves on for a custom screen).
+TEST_CASE("Client shell: a tour's waiting step moves on when a custom screen based on its screen opens",
+          "[client][custom-screens][tours]") {
+    Offered const offered{&customsToursBundle};
+    Window window{offered, "customs.other", nullptr, &customsToursBundle};
+    REQUIRE(window.shell->startTour("to-home").has_value());
+    window.click("nav_" + window.mineId);
+    REQUIRE(window.wait([&window] {
+        std::optional<int> const title = window.find("Text", "tour_title");
+        return title && window.backend.prop(*title, "text") == "Arrived";
+    }));
+}
+
+// Mutation: compare the active tab's raw id in `Tours::shows` (a step naming the screen opens a second tab and moves
+// the person off their own custom screen).
+TEST_CASE("Client shell: a tour step naming a screen leaves a custom screen based on it where it is",
+          "[client][custom-screens][tours]") {
+    Offered const offered{&customsToursBundle};
+    Window window{offered, "customs.other", nullptr, &customsToursBundle};
+    window.click("nav_" + window.mineId);
+    REQUIRE(window.wait([&window] { return window.shown("Button", "source_button_" + window.mineId); }));
+    std::vector<int> const bars = window.backend.all("Tabs");
+    REQUIRE(bars.size() == 1);
+    std::string const before = window.backend.prop(bars.front(), "tabs");
+    REQUIRE(window.shell->startTour("at-home").has_value());
+    REQUIRE(window.wait([&window] {
+        std::optional<int> const title = window.find("Text", "tour_title");
+        return title && window.backend.prop(*title, "text") == "Here";
+    }));
+    CHECK(window.backend.prop(bars.front(), "tabs") == before);
+    CHECK(window.shown("Button", "source_button_" + window.mineId));
 }

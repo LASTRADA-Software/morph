@@ -15,6 +15,7 @@
 #include <morph/session/session.hpp>
 #include <morph/ui/bundle.hpp>
 #include <morph/ui/catalogue.hpp>
+#include <morph/ui/client_ids.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/file_store.hpp>
 #include <morph/ui/service.hpp>
@@ -30,15 +31,12 @@
 #include <vector>
 
 #include "document_actions.hpp"
+#include "tour_checks.hpp"
 
 namespace morph::ui {
 namespace {
 
 using detail::DocumentActions;
-
-/// @brief The id the client mounts its chat panel under. The panel reads host values no other document may, so no
-///        screen of an application may take the id.
-constexpr std::string_view kChatPanelScreen = "morph.chat";
 
 /// @brief Whether @p bytes can be served: within `kMaxFileBytes`, and within the envelope bound once escaped into
 ///        an `ok` reply.
@@ -491,8 +489,9 @@ std::optional<Refusal> UiRegistry::checkNewEntry(CatalogEntry const& entry) cons
     if (auto reason = checkEntry(entry)) {
         return Refusal{.document = entry.id, .path = {}, .reason = std::move(*reason)};
     }
-    if (entry.id == kChatPanelScreen) {
-        return Refusal{.document = entry.id, .path = {}, .reason = "the id `morph.chat` is the chat panel's"};
+    if (ReservedClientId const* const reserved = reservedClientId(entry.id)) {
+        std::string reason = "the id `" + entry.id + "` is " + std::string{reserved->owner} + "'s";
+        return Refusal{.document = entry.id, .path = {}, .reason = std::move(reason)};
     }
     if (std::ranges::any_of(_screens, [&](Screen const& screen) { return screen.served.entry.id == entry.id; })) {
         return Refusal{.document = entry.id, .path = {}, .reason = "a catalog entry with this id is registered"};
@@ -557,8 +556,39 @@ std::optional<Refusal> UiRegistry::checkShellNames() const {
     return std::nullopt;
 }
 
+std::optional<Refusal> UiRegistry::checkTourReferences() const {
+    std::optional<Document> app;
+    std::string appText;
+    for (BundleFile const& file : _files) {
+        if (file.kind != kAppFile) {
+            continue;
+        }
+        // It loaded when it was added; the catalog can have changed since, and a document that no longer loads
+        // cannot have its tours checked, so the build is refused rather than letting them through unchecked.
+        auto loaded = loadDocumentText(file.bytes, LoadOptions{.catalog = _catalog});
+        if (!loaded) {
+            std::string reason =
+                "the app document does not load, so its tours cannot be checked: " + loaded.error().reason;
+            std::string path = loaded.error().path;
+            return Refusal{.document = std::string{kAppFile}, .path = std::move(path), .reason = std::move(reason)};
+        }
+        app = std::move(*loaded);
+        appText = file.bytes;
+    }
+    std::vector<detail::TourScreen> screens;
+    screens.reserve(_screens.size());
+    for (Screen const& screen : _screens) {
+        bool const listed = !screen.served.entry.isPublic;
+        screens.push_back(detail::TourScreen{.id = screen.served.entry.id, .text = screen.text, .listed = listed});
+    }
+    return detail::checkTours(app ? &*app : nullptr, appText, screens);
+}
+
 std::optional<Refusal> UiRegistry::checkBuildable() const {
     if (auto refusal = checkThemes()) {
+        return refusal;
+    }
+    if (auto refusal = checkTourReferences()) {
         return refusal;
     }
     std::set<std::string, std::less<>> componentHashes;

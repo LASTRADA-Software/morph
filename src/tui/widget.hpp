@@ -93,10 +93,28 @@ public:
     /// a probe finds the widget.
     void applyAccessibleName(std::string_view name) { _accessibleName = name; }
     void applyAccessibleRole(std::string_view role) { _accessibleRole = role; }
-    void applyTestId(std::string_view testId) { _testId = testId; }
+    void applyTestId(std::string_view testId);
     [[nodiscard]] std::string const& accessibleName() const noexcept { return _accessibleName; }
     [[nodiscard]] std::string const& accessibleRole() const noexcept { return _accessibleRole; }
     [[nodiscard]] std::string const& testId() const noexcept { return _testId; }
+    /// The order the widget was made in, among this context's widgets.
+    [[nodiscard]] std::uint64_t sequence() const noexcept { return _sequence; }
+    /// Picks a spotlight's target again; every other widget ignores it.
+    virtual void targetsChanged() {}
+    /// Whether this is a spotlight that is open: the card's chords then come before the focused widget's own keys.
+    [[nodiscard]] virtual bool isOpenSpotlight() const { return false; }
+    /// The widget Tab reaches after this open overlay's own, or null: a spotlight's target on a waiting step.
+    [[nodiscard]] virtual WidgetBase* tabTarget() const { return nullptr; }
+    /// The widget outside this open overlay that still takes presses and keys, or null: a spotlight's target.
+    [[nodiscard]] virtual WidgetBase const* passesThrough() const { return nullptr; }
+    /// Runs the chord @p key is when a container between this widget and the open spotlight around it declares it:
+    /// inside a spotlight the card's chords come before the focused widget's own keys. The widget an open spotlight
+    /// rings sits outside its box and gets its own key first: the card's chords run only for a key it ignored.
+    /// @param key The key pressed.
+    /// @return Handled when one did; Ignored for a widget that is not inside a spotlight.
+    [[nodiscard]] ::core::tui::EventResult spotlightChord(::core::tui::KeyEvent const& key);
+    /// Whether this is an open spotlight whose box stands where its target is no longer drawn.
+    [[nodiscard]] virtual bool placementStale() const { return false; }
     /// Keeps the surface by name: the token set that styles the widget and everything inside it.
     void applySurface(std::string_view surface) { _surface = surface; }
     [[nodiscard]] std::string const& surface() const noexcept { return _surface; }
@@ -219,6 +237,7 @@ protected:
     }
 
 private:
+    [[nodiscard]] ::core::tui::EventResult targetChord(::core::tui::KeyEvent const& key);
     void syncVisible();
     void paintClipped(::core::tui::Canvas& canvas, ::core::tui::Size laidOut);
     [[nodiscard]] ::core::tui::EventResult press(::core::tui::MouseEvent const& mouse);
@@ -243,6 +262,7 @@ private:
     std::string _accessibleName;
     std::string _accessibleRole;
     std::string _testId;
+    std::uint64_t _sequence;
     std::string _surface;
     std::optional<ui::Tone> _rowTone;
     std::string _tooltip;
@@ -554,6 +574,8 @@ private:
 };
 
 /// Implements the Common setters and `moveChild` of container interface @p Interface over ContainerBase.
+// NOLINTBEGIN(portability-template-virtual-member-function): every container implementation derives from this
+// template, and a translation unit that includes a widget header without using its vtable instantiates none of these.
 template <class Interface>
 class TuiContainer : public Interface, public ContainerBase {
 public:
@@ -577,6 +599,7 @@ public:
     void moveChild(ui::Widget& child, std::size_t index) override { move(WidgetBase::of(child), index); }
     [[nodiscard]] ui::Widget const& asWidget() const noexcept override { return *this; }
 };
+// NOLINTEND(portability-template-virtual-member-function)
 
 /// Where a table cell sits in its slot: across its column and down its row.
 struct CellPlace {

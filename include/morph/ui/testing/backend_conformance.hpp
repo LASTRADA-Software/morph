@@ -221,6 +221,14 @@ public:
         static_cast<void>(widget);
         return std::nullopt;
     }
+
+    /// @brief The widget a spotlight rings now, for the spotlight cases (`spotlightConformanceCases`).
+    /// @param spotlight The spotlight.
+    /// @return The widget, or null when it rings none or the probe reads none.
+    [[nodiscard]] virtual Widget const* targetOf(SpotlightWidget const& spotlight) {
+        static_cast<void>(spotlight);
+        return nullptr;
+    }
 };
 
 /// @brief One scripted case.
@@ -4251,7 +4259,182 @@ struct MinColumnGridSpec {
     return checks.result();
 }
 
+/// @brief Case: a new spotlight is closed and its card takes no input; open, a click on a button in it runs the
+///        button's action; closed again, it does not.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> spotlightCardOnlyWhileOpen(ConformanceProbe& probe) {
+    int clicks = 0;
+    std::unique_ptr<SpotlightWidget> const spotlight = probe.backend().createSpotlight(nullptr);
+    std::unique_ptr<ButtonWidget> const next = probe.backend().createButton(spotlight.get());
+    next->setLabel("Next");
+    next->setOnClick([&clicks] { ++clicks; });
+    probe.settle();
+    probe.click(*next);
+    probe.settle();
+    Checks checks;
+    checks.that(clicks == 0, "a click reached a button inside a new spotlight; a new spotlight is closed");
+    spotlight->setOpen(true);
+    probe.settle();
+    probe.click(*next);
+    probe.settle();
+    checks.that(clicks == 1,
+                "a click on a button inside an open spotlight ran its action " + std::to_string(clicks) + " times");
+    spotlight->setOpen(false);
+    probe.settle();
+    probe.click(*next);
+    probe.settle();
+    checks.that(clicks == 1, "a click reached a button inside a closed spotlight");
+    return checks.result();
+}
+
+/// @brief Case: a spotlight named a test id nothing carries rings nothing; a widget made later with that id is found,
+///        and the handler hears it once.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> spotlightFindsLateTarget(ConformanceProbe& probe) {
+    std::vector<bool> heard;
+    std::unique_ptr<SpotlightWidget> const spotlight = probe.backend().createSpotlight(nullptr);
+    spotlight->setOnTargetShownChanged([&heard](bool shown) { heard.push_back(shown); });
+    spotlight->setOpen(true);
+    spotlight->setTarget(std::string{"late"});
+    probe.settle();
+    Checks checks;
+    checks.that(!spotlight->targetShown(), "a spotlight rings a test id nothing carries");
+    std::unique_ptr<StackWidget> const root = probe.backend().createStack(nullptr, Axis::Vertical);
+    std::unique_ptr<ButtonWidget> const late = probe.backend().createButton(root.get());
+    late->setLabel("Late");
+    late->setTestId("late");
+    probe.settle();
+    checks.that(spotlight->targetShown(), "a target made after the spotlight named it is not shown");
+    checks.that(probe.targetOf(*spotlight) == late.get(), "a target made after the spotlight named it is not ringed");
+    checks.that(heard == std::vector<bool>{true},
+                "the handler heard " + std::to_string(heard.size()) + " changes, not one");
+    return checks.result();
+}
+
+/// @brief Case: hiding the target, hiding a container around it, and destroying it each take it out of the
+///        spotlight, and showing it again brings it back; the handler hears every change.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> spotlightFollowsItsTarget(ConformanceProbe& probe) {
+    std::vector<bool> heard;
+    std::unique_ptr<StackWidget> const root = probe.backend().createStack(nullptr, Axis::Vertical);
+    std::unique_ptr<ButtonWidget> target = probe.backend().createButton(root.get());
+    target->setLabel("Target");
+    target->setTestId("target");
+    std::unique_ptr<SpotlightWidget> const spotlight = probe.backend().createSpotlight(nullptr);
+    spotlight->setOnTargetShownChanged([&heard](bool shown) { heard.push_back(shown); });
+    spotlight->setOpen(true);
+    spotlight->setTarget(std::string{"target"});
+    probe.settle();
+    Checks checks;
+    checks.that(spotlight->targetShown() && probe.targetOf(*spotlight) == target.get(),
+                "a shown target is not ringed");
+    target->setVisible(false);
+    probe.settle();
+    checks.that(!spotlight->targetShown(), "a hidden target is still shown");
+    target->setVisible(true);
+    probe.settle();
+    checks.that(spotlight->targetShown(), "a target shown again is not ringed");
+    root->setVisible(false);
+    probe.settle();
+    checks.that(!spotlight->targetShown(), "a target inside a hidden container is still shown");
+    root->setVisible(true);
+    probe.settle();
+    target.reset();
+    probe.settle();
+    checks.that(!spotlight->targetShown() && probe.targetOf(*spotlight) == nullptr,
+                "a destroyed target is still ringed");
+    checks.that(heard == std::vector<bool>{true, false, true, false, true, false},
+                "the handler heard " + std::to_string(heard.size()) + " changes, not six");
+    return checks.result();
+}
+
+/// @brief Case: of two widgets with one test id the spotlight rings the first made that is shown.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> spotlightRingsFirstShown(ConformanceProbe& probe) {
+    std::unique_ptr<StackWidget> const root = probe.backend().createStack(nullptr, Axis::Vertical);
+    std::unique_ptr<ButtonWidget> const first = probe.backend().createButton(root.get());
+    first->setLabel("First");
+    first->setTestId("twin");
+    first->setVisible(false);
+    std::unique_ptr<ButtonWidget> const second = probe.backend().createButton(root.get());
+    second->setLabel("Second");
+    second->setTestId("twin");
+    std::unique_ptr<SpotlightWidget> const spotlight = probe.backend().createSpotlight(nullptr);
+    spotlight->setOpen(true);
+    spotlight->setTarget(std::string{"twin"});
+    probe.settle();
+    Checks checks;
+    checks.that(probe.targetOf(*spotlight) == second.get(), "with the first twin hidden, the second is not ringed");
+    first->setVisible(true);
+    probe.settle();
+    checks.that(probe.targetOf(*spotlight) == first.get(), "with both twins shown, the first made is not ringed");
+    return checks.result();
+}
+
+/// @brief Case: inside a spotlight a chord its content declares comes before the focused widget's own keys (Left
+///        reaches the content, not a segmented select), while Enter stays the focused button's.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> spotlightContentKeysFirst(ConformanceProbe& probe) {
+    std::vector<std::string> chords;
+    std::vector<Key> chosen;
+    int clicks = 0;
+    std::unique_ptr<SpotlightWidget> const spotlight = probe.backend().createSpotlight(nullptr);
+    spotlight->setOpen(true);
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column(
+            {.children = {ui::select(
+                              {.options = std::vector<SelectOption>{{.key = Key{std::int64_t{1}}, .label = "A"},
+                                                                    {.key = Key{std::int64_t{2}}, .label = "B"}},
+                               .selected = std::optional<Key>{Key{std::int64_t{2}}},
+                               .onSelect = [&chosen](Key const& key) { chosen.push_back(key); },
+                               .style = SelectStyle::Segmented}),
+                          ui::button({.label = "Next", .onClick = [&clicks] { ++clicks; }})},
+             .common = {.keys = {{.chord = "Left", .onPress = [&chords] { chords.emplace_back("Left"); }},
+                                 {.chord = "Enter", .onPress = [&chords] { chords.emplace_back("Enter"); }}}}}),
+        spotlight.get()};
+    probe.settle();
+    Widget* const select = childOf(probe, &view.root(), 0);
+    Widget* const next = childOf(probe, &view.root(), 1);
+    if (select == nullptr || next == nullptr) {
+        return "the content mounted into a spotlight is not shown";
+    }
+    Checks checks;
+    probe.press(*select, "Left");
+    probe.settle();
+    checks.that(chords == std::vector<std::string>{"Left"},
+                "Left inside a spotlight did not reach the content's chord");
+    checks.that(chosen.empty(), "Left inside a spotlight chose an option: the select took it first");
+    probe.press(*next, "Enter");
+    probe.settle();
+    checks.that(clicks == 1, "Enter on a button inside a spotlight did not click it");
+    checks.that(chords.size() == 1, "Enter on a button inside a spotlight reached the content's chord");
+    return checks.result();
+}
+
 }  // namespace detail
+
+/// @brief The spotlight's cases, which every backend that runs guided tours passes. They are their own list, so a
+///        backend runs them once it draws a spotlight.
+/// @return The cases.
+[[nodiscard]] inline std::span<ConformanceCase const> spotlightConformanceCases() {
+    static std::array<ConformanceCase, 5> const cases{{
+        {.name = "a spotlight's card takes input only while it is open", .run = detail::spotlightCardOnlyWhileOpen},
+        {.name = "a spotlight finds a target made after it was named", .run = detail::spotlightFindsLateTarget},
+        {.name = "hiding or destroying a spotlight's target flips targetShown and tells the handler",
+         .run = detail::spotlightFollowsItsTarget},
+        {.name = "of two widgets with one test id a spotlight rings the first one shown",
+         .run = detail::spotlightRingsFirstShown},
+        {.name = "inside a spotlight a chord its content declares comes before the focused widget's own keys",
+         .run = detail::spotlightContentKeysFirst},
+    }};
+    return cases;
+}
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.

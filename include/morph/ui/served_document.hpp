@@ -5,7 +5,7 @@
 #include <string>
 #include <string_view>
 
-#include "chat/panel_id.hpp"
+#include "client_ids.hpp"
 #include "value.hpp"
 
 /// @file
@@ -17,16 +17,16 @@ namespace morph::ui {
 
 /// @brief Why a server's catalog entry may not be mounted as a screen, when it may not.
 ///
-/// The chat panel's id carries host values and commands no other document may reach, so the panel is the client's
-/// own document and never a server's.
+/// The client's own documents (the chat panel, the tour card) carry host values and commands no other document may
+/// reach, so their ids are the client's and never a server's.
 /// @param screenId The catalog entry's id.
-/// @return The refusal, naming @p screenId, when it is the chat panel's id; otherwise nothing.
+/// @return The refusal, naming @p screenId, when it is a reserved id; otherwise nothing.
 [[nodiscard]] inline std::optional<Refusal> servedScreenRefusal(std::string_view screenId) {
-    if (screenId == chat::kChatPanelId) {
+    if (ReservedClientId const* const reserved = reservedClientId(screenId)) {
         return Refusal{.document = std::string{screenId},
                        .path = {},
-                       .reason = "the catalog lists the id `" + std::string{chat::kChatPanelId} +
-                                 "`, which is the chat panel's; the entry is refused"};
+                       .reason = "the catalog lists the id `" + std::string{screenId} + "`, which is " +
+                                 std::string{reserved->owner} + "'s; the entry is refused"};
     }
     return std::nullopt;
 }

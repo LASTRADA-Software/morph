@@ -16,6 +16,8 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
 - [Interfaces](#interfaces)
 - [Selection by key](#selection-by-key)
 - [Drag and drop](#drag-and-drop)
+- [The popover](#the-popover)
+- [The spotlight](#the-spotlight)
 - [RecordingBackend](#recordingbackend)
 - [The conformance suite](#the-conformance-suite)
 - [Design decisions](#design-decisions)
@@ -32,6 +34,8 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   fallback instead. A backend that loads no components keeps the default, which returns null; one
   that loads a component returns a `CustomWidget`, whose props are set by name (`setTextProp`,
   `setBoolProp`, `setNumberProp`) and whose events go to the handler given to `setOnEvent`.
+- `createSpotlight(parent)` makes a `SpotlightWidget` ([The spotlight](#the-spotlight)). Its default throws
+  `std::logic_error`: a backend that draws no spotlight cannot run a guided tour, and says so.
 - **A new widget is visible, enabled, content-sized, not draggable and not a drop target, and has
   no accessible name or role of its own, no test id, no tooltip, the theme's default surface and no
   chords. A new field (text and the six inputs) is editable, not required, without errors and not
@@ -494,6 +498,37 @@ marker, since it has no frame to say it opens, so there `None` and `Down` both d
 recording backend records `avatar` and `caret` on every `setTrigger`. Qt Quick draws the circle and the chevron from
 shapes of its own, in the trigger's text colour, so no icon file is needed.
 
+## The spotlight
+
+`SpotlightWidget` (`createSpotlight(parent)`) shows a guided tour's card: a container whose children are the card's
+content, drawn over the whole window whatever its parent, which takes no room in its parent's layout. A new spotlight
+is closed and names no target.
+
+- **The target.** `setTarget(testId)` names the widget to ring; `nullopt` rings nothing. Each backend keeps an index of
+  its own live widgets by test id, updated when a widget's test id is set and when it is destroyed, and the spotlight
+  rings the first, in creation order, that is effectively shown: visible itself, every container around it visible,
+  every overlay around it open and no closed section around it. Several widgets can carry one id (a hidden tab showing
+  the same screen, a repeated row). It picks again on every change of the index and every change of a candidate's or
+  a container's visibility. `targetShown()` says whether it rings one; `setOnTargetShownChanged(handler)` hears each
+  change. With nothing shown the card is centred with no cut-out. A widget of another backend, such as the
+  inspector's window, is never a candidate.
+- **Focus.** Opening moves keyboard focus into the card (its first shown button, or its first focusable widget, or the
+  spotlight); closing hands it back to the widget that had it when it opened. Tab stays in the card;
+  `setTargetFocusable(true)` adds the ringed widget after the card's widgets, so a step that waits for the person can
+  be finished from the keyboard.
+- **Keys.** A chord a widget inside the spotlight declares is delivered before the focused widget's own keys (so a
+  focused segmented select or row cannot take Left and Right from the card), except Enter and Space, which the
+  focused widget takes first as it always does. The exception is focus outside the card: on the ringed widget, or on a
+  popup it opened (a menu's list), that control takes the key first and the card's chords run only for a key it left
+  alone, so Escape closes an open menu and ends the tour only once it is closed.
+- **Pointer.** A press on the dimmed area reaches nothing; a press inside the ringed widget's box reaches it.
+
+Qt Quick dims the window with four scrim rectangles and rings the target in the focus colour; the terminal places the
+card's box under or over the target and draws the target in reverse video, dimming nothing
+([qt_quick/backend.md](../qt_quick/backend.md), [tui/frontend.md](../tui/frontend.md)). The recording backend records
+`open`, `target` (`none` for none), `targetFocusable`, and, resolving its target against its live widgets on every
+change, `targetShown` and `ringed` (the ringed widget's id, `0` for none).
+
 ## RecordingBackend
 
 The headless reference backend and the test double for everything above the contract.
@@ -528,6 +563,10 @@ The headless reference backend and the test double for everything above the cont
   `tone`, `text`, `icon`, `style`, and `removable` (the remove control's name) of a removable one (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
   `captions` and `captionWidth` (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title`, `description` (Drawer);
   `axis`, `sizes` (Splitter); `title`, `header` (the header child's id), `open` (Collapsible);
+  `open`, `target` (`none` for none), `targetFocusable`, `targetShown`, `ringed` (Spotlight; the store tells listeners of
+  every change that can move a spotlight's target, and `press` delivers the chords of an open spotlight's content
+  before the focused widget's own keys except Enter and Space, and, while the focus is outside the card, after the ringed
+  widget's own handling of the key);
   `accept`, `multiple` (DropZone); `component`, `minVersion` and each prop as `prop.<name>` (Custom);
   `yRange`, `xRange`, `barSlot`, `yLabel`, `yTicks`, `lines`, `series`, `summary` (Chart, each set only when its text
   changed, so a test sees which parts of the data moved).
@@ -619,6 +658,12 @@ The headless reference backend and the test double for everything above the cont
 `run` takes a `ConformanceProbe` and returns `nullopt` for a pass or the failure message. A
 backend's test suite runs every case on a fresh probe. `RecordingBackend` passes them in
 `tests/test_ui_conformance.cpp`.
+
+`spotlightConformanceCases()` holds five more, for the spotlight: its card takes input only while open; it finds a target
+made after it was named; hiding the target, hiding a container around it and destroying it flip `targetShown` and reach
+the handler; of two widgets with one id it rings the first shown; inside it the content's chords come before the
+focused widget's own keys, Enter and Space excepted. They read the ringed widget through `ConformanceProbe::targetOf`, whose
+default reads none, so a probe that does not implement it fails them. A backend runs them once it draws a spotlight.
 
 `layoutConformanceCases()` are the cases of where a backend that lays widgets out draws them, read through the
 probe's `boundsOf(widget)`: the widget's bounds in the backend's own units (a cell on the terminal, the theme's unit

@@ -341,6 +341,53 @@ void ShellFrame::showToast(std::string_view text, Tone tone) {
     _toast->show(text, tone);
 }
 
+void ShellFrame::setTours(ShellToursView view) {
+    _toursView = std::move(view);
+    showParts();
+}
+
+SpotlightWidget& ShellFrame::spotlight() {
+    if (_spotlight == nullptr) {
+        // Under the main column, as the frame's dialogs are: a child of the root row would be a third column of it.
+        _spotlight = _backend.createSpotlight(_main.get());
+        _spotlight->setTestId("shell_spotlight");
+    }
+    return *_spotlight;
+}
+
+std::vector<MenuEntry> ShellFrame::tourEntries() {
+    std::vector<MenuEntry> entries;
+    _tourMap.clear();
+    for (ShellTourGroup const& group : _toursView.groups) {
+        if (group.tours.empty()) {
+            continue;
+        }
+        MenuEntry heading;
+        heading.label = group.heading;
+        heading.heading = true;
+        heading.enabled = false;
+        entries.push_back(std::move(heading));
+        _tourMap.emplace_back(std::nullopt);
+        for (ShellTourView const& tour : group.tours) {
+            MenuEntry entry;
+            entry.label = tour.title;
+            entry.description = tour.summary;
+            entries.push_back(std::move(entry));
+            _tourMap.emplace_back(tour.id);
+        }
+    }
+    return entries;
+}
+
+void ShellFrame::chooseTour(std::size_t entry) {
+    if (entry < _tourMap.size() && _tourMap.at(entry) && _onTour) {
+        // A copy: the handler may call `setTours` or `setCompact`, which rebuild `_tourMap` under it.
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the condition above checked this slot.
+        std::string const tourId = *_tourMap.at(entry);
+        _onTour(tourId);
+    }
+}
+
 std::unique_ptr<StackWidget> ShellFrame::wrappingRow(IViewBackend& backend, ContainerWidget* parent) {
     auto row = backend.createStack(parent, Axis::Horizontal);
     row->setWrap(true);
@@ -396,6 +443,13 @@ void ShellFrame::showNavEntries() {
         add(MenuEntry{.separator = true}, NavTarget::Kind::Separator, 0);
         add(MenuEntry{.label = _parts.labels.help}, NavTarget::Kind::Help, 0);
     }
+    if (_toursView.shown()) {
+        add(MenuEntry{.separator = true}, NavTarget::Kind::Separator, 0);
+        MenuEntry submenu;
+        submenu.label = _toursView.caption;
+        submenu.items = tourEntries();
+        add(std::move(submenu), NavTarget::Kind::Tours, 0);
+    }
     if (_parts.principal.shown) {
         add(MenuEntry{.separator = true}, NavTarget::Kind::Separator, 0);
         MenuEntry person = principalMenuEntry();
@@ -444,6 +498,11 @@ void ShellFrame::chooseNav(std::vector<std::size_t> const& path) {
                 _handlers.onContext) {
                 // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the condition above checked this slot.
                 _handlers.onContext(*_contextMap.at(path.at(1)));
+            }
+            return;
+        case NavTarget::Kind::Tours:
+            if (path.size() == 2) {
+                chooseTour(path.at(1));
             }
             return;
         case NavTarget::Kind::Principal:
@@ -589,6 +648,16 @@ void ShellFrame::buildParts() {
     _help->setOnClick([this] {
         if (_handlers.onHelp) {
             _handlers.onHelp();
+        }
+    });
+    // Client-made, after the help button and before the person's menu: declaring a tour already says that it is
+    // offered.
+    _tours = _backend.createMenu(_tools.get(), MenuStyle::Button);
+    _tours->setTestId("shell_tours");
+    _tours->setVisible(false);
+    _tours->setOnActivate([this](std::vector<std::size_t> const& path) {
+        if (path.size() == 1) {
+            chooseTour(path.front());
         }
     });
     _principalMenu = _backend.createMenu(_tools.get(), MenuStyle::Button);
@@ -752,6 +821,20 @@ void ShellFrame::showParts() {
     // The help button.
     _help->setVisible(_parts.help.shown && !_compact);
     _help->setAccessibleName(labels.help);
+    // The Tours button.
+    bool const tours = _toursView.shown();
+    _tours->setVisible(tours && !_compact);
+    if (tours) {
+        _tours->setItems(tourEntries());
+        _tours->setTrigger(MenuTrigger{.label = _toursView.caption,
+                                       .icon = {},
+                                       .emphasis = ButtonEmphasis::Ghost,
+                                       .detail = {},
+                                       .avatar = {},
+                                       .caret = MenuCaret::Down});  // NOLINT(readability-trailing-comma)
+        _tours->setAccessibleName(_toursView.name);
+        _tours->setTooltip(_toursView.name);
+    }
     showBrand();
     _principal->setVisible(!_principalInHead && !person.shown);
     _signOut->setVisible(static_cast<bool>(_onSignOut) && !person.shown);

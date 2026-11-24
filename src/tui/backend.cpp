@@ -115,6 +115,10 @@ std::unique_ptr<ui::PopoverWidget> Backend::createPopover(ui::ContainerWidget* p
     return make<detail::PopoverImpl>(_impl->context, parent);
 }
 
+std::unique_ptr<ui::SpotlightWidget> Backend::createSpotlight(ui::ContainerWidget* parent) {
+    return make<detail::SpotlightImpl>(_impl->context, parent);
+}
+
 std::unique_ptr<ui::ToastWidget> Backend::createToast(ui::ContainerWidget* parent) {
     return make<detail::ToastImpl>(_impl->context, parent);
 }
@@ -194,6 +198,8 @@ std::unique_ptr<ui::PageRegionWidget> Backend::createPageRegion(ui::ContainerWid
 }
 
 void Backend::fit() { detail::fit(_impl->context); }
+
+bool Backend::spotlightMisplaced() const { return _impl->context.spotlightMisplaced(); }
 
 std::string Backend::widthClass() const { return ui::widthClassOf(_impl->context.screen->viewportArea().width); }
 

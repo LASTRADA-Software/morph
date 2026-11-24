@@ -682,6 +682,7 @@ public:
         doc.menuLabel = optionalExpr(*object, "menuLabel", "");
         doc.tools = topParts(*object, "tools", "headTool");
         doc.navigation = navigation(*object, doc.id);
+        doc.tours = tours(*object, doc.id);
         if (doc.id == "app") {
             refuseScreenHead(*object);
         }
@@ -729,6 +730,12 @@ public:
         }
         return doc;
     }
+
+    /// @brief Parses one tour, as an entry of `tours` is parsed.
+    /// @param json The tour.
+    /// @param path Its JSON Pointer.
+    /// @return The tour.
+    [[nodiscard]] static TourDecl tour(Json const& json, std::string const& path) { return tourOf(json, path); }
 
 private:
     // The app document's `formatting`: a record of the date pattern and the date-and-time pattern, each checked.
@@ -932,6 +939,113 @@ private:
             }
         }
         return badges;
+    }
+
+    // The app document's guided tours, each checked for shape here and for the names it uses when the bundle is
+    // built; a screen declares none.
+    [[nodiscard]] static std::vector<TourDecl> tours(Json::object_t const& object, std::string_view documentId) {
+        std::vector<TourDecl> out;
+        Json const* const declared = member(object, "tours");
+        if (declared == nullptr) {
+            return out;
+        }
+        if (documentId != "app") {
+            refuse("/tours", "`tours` is the app document's; a screen has none");
+        }
+        auto const* const array = std::get_if<Json::array_t>(&declared->data);
+        if (array == nullptr) {
+            refuse("/tours", "`tours` is an array of tours");
+        }
+        std::set<std::string, std::less<>> ids;
+        for (std::size_t index = 0; index < array->size(); ++index) {
+            std::string const path = pointerAppend("/tours", index);
+            TourDecl tour = tourOf(array->at(index), path);
+            if (!ids.insert(tour.id).second) {
+                refuse(pointerAppend(path, "id"), "the tour id `" + tour.id + "` is declared twice");
+            }
+            out.push_back(std::move(tour));
+        }
+        return out;
+    }
+
+    // A tour id: lower-case letters, digits and dashes, at most `kMaxTourIdBytes`.
+    [[nodiscard]] static bool isTourId(std::string_view text) {
+        return !text.empty() && text.size() <= kMaxTourIdBytes && std::ranges::all_of(text, [](char chr) {
+            return (chr >= 'a' && chr <= 'z') || (chr >= '0' && chr <= '9') || chr == '-';
+        });
+    }
+
+    [[nodiscard]] static TourDecl tourOf(Json const& json, std::string const& path) {
+        auto const& fields = objectOf(json, path, "a tour is a record of `id`, `title` and `steps`");
+        refuseMustUnderstand(fields, path);
+        TourDecl tour;
+        tour.path = path;
+        tour.id = text(fields, "id", path, true);
+        if (!isTourId(tour.id)) {
+            refuse(pointerAppend(path, "id"), "a tour id is [a-z0-9-]+, at most " + std::to_string(kMaxTourIdBytes) +
+                                                  " characters; `" + tour.id + "` is not");
+        }
+        tour.screen = text(fields, "screen", path, false);
+        tour.title = optionalExpr(fields, "title", path);
+        if (tour.title == nullptr) {
+            refuse(path, "`title` is required");
+        }
+        tour.summary = optionalExpr(fields, "summary", path);
+        Json const* const steps = member(fields, "steps");
+        if (steps == nullptr) {
+            refuse(path, "`steps` is required");
+        }
+        std::string const where = pointerAppend(path, "steps");
+        auto const* const array = std::get_if<Json::array_t>(&steps->data);
+        if (array == nullptr) {
+            refuse(where, "`steps` is an array of steps");
+        }
+        if (array->empty()) {
+            refuse(where, "a tour has one step or more");
+        }
+        if (array->size() > kMaxTourSteps) {
+            refuse(where, "a tour has at most " + std::to_string(kMaxTourSteps) + " steps");
+        }
+        for (std::size_t index = 0; index < array->size(); ++index) {
+            tour.steps.push_back(tourStepOf(array->at(index), pointerAppend(where, index)));
+        }
+        return tour;
+    }
+
+    [[nodiscard]] static TourStepDecl tourStepOf(Json const& json, std::string const& path) {
+        auto const& fields = objectOf(json, path, "a tour step is a record with a `title`");
+        refuseMustUnderstand(fields, path);
+        TourStepDecl step;
+        step.path = path;
+        step.title = optionalExpr(fields, "title", path);
+        if (step.title == nullptr) {
+            refuse(path, "`title` is required");
+        }
+        step.body = optionalExpr(fields, "body", path);
+        step.screen = text(fields, "screen", path, false);
+        step.target = text(fields, "target", path, false);
+        if (Json const* const params = member(fields, "params")) {
+            std::string const where = pointerAppend(path, "params");
+            for (auto const& [name, value] : objectOf(*params, where, "`params` is a record of literal values")) {
+                std::string const paramPath = pointerAppend(where, name);
+                if (std::holds_alternative<Json::object_t>(value.data) ||
+                    std::holds_alternative<Json::array_t>(value.data)) {
+                    refuse(paramPath, "a tour step's param is a literal: a string, a whole number, a flag or null");
+                }
+                auto converted = valueFromJson(value);
+                if (!converted) {
+                    refuse(paramPath, "a tour step's param is a literal: " + converted.error());
+                }
+                step.params.insert_or_assign(name, std::move(*converted));
+            }
+        }
+        if (Json const* const advance = member(fields, "advanceOn")) {
+            std::string const where = pointerAppend(path, "advanceOn");
+            auto const& record = objectOf(*advance, where, R"(`advanceOn` is a record: {"screen": id})");
+            refuseMustUnderstand(record, where);
+            step.advanceOn = text(record, "screen", where, true);
+        }
+        return step;
     }
 
     // A top-level list of parts: the screen head's `status` and `actions`.
@@ -2105,6 +2219,22 @@ public:
     DocumentValidator(Document const& doc, LoadOptions const& options) : _doc{&doc}, _options{&options} {}
 
     /// @brief Runs every rule; throws `DocumentRefused` on the first refusal.
+    // A tour's texts are read in the app scope, as the navigation badges are.
+    void checkTourTexts(CheckContext const& root) {
+        for (TourDecl const& tour : _doc->tours) {
+            checkExpr(*tour.title, root);
+            if (tour.summary) {
+                checkExpr(*tour.summary, root);
+            }
+            for (TourStepDecl const& step : tour.steps) {
+                checkExpr(*step.title, root);
+                if (step.body) {
+                    checkExpr(*step.body, root);
+                }
+            }
+        }
+    }
+
     void run() {
         ScopeInfo& screen = newScope(nullptr, false);
         screen.screen = true;
@@ -2188,6 +2318,8 @@ public:
         if (_doc->menuLabel) {
             checkExpr(*_doc->menuLabel, root);
         }
+
+        checkTourTexts(root);
         for (DocNodePtr const& part : headParts()) {
             checkElement(*part, root, true);
         }
@@ -5020,6 +5152,18 @@ std::expected<Document, Refusal> loadDocumentText(std::string_view text, LoadOpt
         return std::unexpected(Refusal{.document = {}, .path = "", .reason = std::move(json.error())});
     }
     return loadDocument(*json, options);
+}
+
+std::expected<TourDecl, Refusal> loadTourText(std::string_view text) {
+    auto json = parseJson(text);
+    if (!json) {
+        return std::unexpected(Refusal{.document = {}, .path = "", .reason = std::move(json.error())});
+    }
+    try {
+        return detail::DocumentParser::tour(*json, "");
+    } catch (detail::DocumentRefused const& refused) {
+        return std::unexpected(refused.refusal());
+    }
 }
 
 std::vector<std::string_view> nodeKinds() {

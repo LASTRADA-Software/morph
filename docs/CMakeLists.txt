@@ -52,6 +52,11 @@ set(DOXYGEN_WARN_IF_DOC_ERROR      YES)
 set(DOXYGEN_WARN_NO_PARAMDOC       YES)
 set(DOXYGEN_WARN_AS_ERROR          FAIL_ON_WARNINGS)
 
+# The inheritance graph of the reactive node base lists every Signal and Computed instantiation a member names, so it
+# grows with each new reactive member. Past the default 50 nodes Doxygen warns that the graph is not drawn, which the
+# strictness above makes an error.
+set(DOXYGEN_DOT_GRAPH_MAX_NODES    120)
+
 # ── Hide every per-topic detail namespace and the catch-all std/detail ──────
 set(DOXYGEN_EXCLUDE_SYMBOLS
     "morph::log::detail"

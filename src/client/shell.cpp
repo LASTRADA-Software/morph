@@ -20,7 +20,9 @@
 #include <morph/ui/chat/client.hpp>
 #include <morph/ui/chat/conversations.hpp>
 #include <morph/ui/chat/panel.hpp>
+#include <morph/ui/client_ids.hpp>
 #include <morph/ui/custom_screen_chrome.hpp>
+#include <morph/ui/custom_screen_controller.hpp>
 #include <morph/ui/custom_screen_sync.hpp>
 #include <morph/ui/dev_reload.hpp>
 #include <morph/ui/document.hpp>
@@ -39,6 +41,9 @@
 #include <morph/ui/shell_parts.hpp>
 #include <morph/ui/shell_parts_binding.hpp>
 #include <morph/ui/shell_parts_model.hpp>
+#include <morph/ui/tour_card.hpp>
+#include <morph/ui/tour_sync.hpp>
+#include <morph/ui/tours.hpp>
 #include <morph/ui/view.hpp>
 #include <morph/ui/workspace.hpp>
 #include <optional>
@@ -158,10 +163,12 @@ public:
     Shell(ui::AppContext& context, ui::IViewBackend& backend, ShellOptions options)
         : _context{&context}, _backend{&backend}, _options{std::move(options)} {}
 
+    // NOLINTNEXTLINE(bugprone-exception-escape): the tour card's refresh compares host values, which never hold a valueless variant; a failure in teardown has no recovery.
     ~Shell() override {
         *_alive = false;
         _backend->setOnWidthClass({});
         _chatPanel.reset();
+        resetTours();
         // The head row's own mount first, since it is built from the Workspace's data and lives in the ShellFrame;
         // then the tabs, then the app document's root the tabs read, then the frame they sit in. The root goes before
         // the document host, whose interpreter runs its onUnmount.
@@ -172,6 +179,9 @@ public:
             _customChrome->attach(nullptr);
         }
         _workspace.reset();
+        if (_tourSync) {
+            _tourSync->setOnListed({});
+        }
         _appRoot.reset();
         _frame.reset();
     }
@@ -197,6 +207,9 @@ public:
             if (auto const live = alive.lock(); live != nullptr && *live && _customSync) {
                 _customSync->reconnected();
             }
+            if (auto const live = alive.lock(); live != nullptr && *live && _tourSync) {
+                _tourSync->reconnected();
+            }
         });
         source.onEvent([this, alive = std::weak_ptr<bool>{_alive}](wire::EventBody const& event) {
             if (auto const live = alive.lock(); live != nullptr && *live && _session) {
@@ -207,6 +220,9 @@ public:
             }
             if (auto const live = alive.lock(); live != nullptr && *live && _customSync) {
                 _customSync->deliverEvent(event);
+            }
+            if (auto const live = alive.lock(); live != nullptr && *live && _tourSync) {
+                _tourSync->deliverEvent(event);
             }
         });
     }
@@ -233,6 +249,13 @@ public:
         followWidthClass();
         followConnection(source);
         listen(source);
+        // Made before the first frame, which lists the runtime tours; it goes through the screens' own dispatcher.
+        _tourSync = std::make_unique<ui::TourSync>(source.dispatcher(), _session.get());
+        _tourSync->setOnListed([this](std::vector<ui::TourDecl> const& listed) {
+            if (_appRoot != nullptr) {
+                _appRoot->setRuntimeTours(listed);
+            }
+        });
         showPermitted();
         // Through the screens' own dispatcher, so its calls carry their session and go where their models go; the
         // session carries its watch.
@@ -244,8 +267,8 @@ public:
             if (ui::isCustomScreenId(screenId)) {
                 return _customSync->documents().find(screenId);
             }
-            if (screenId == ui::chat::kChatPanelId) {
-                // Only the client's own panel, whatever the server listed.
+            if (ui::reservedClientId(screenId) != nullptr) {
+                // Only the client's own documents (the chat panel, the tour card), whatever the server listed.
                 auto const panel = _generated.find(screenId);
                 return panel == _generated.end() ? nullptr : panel->second;
             }
@@ -386,6 +409,7 @@ public:
             _frame->navigator().relabel();
         }
         showActiveTitle();
+        showToursMenu();
     }
 
     /// Writes the client's platform, its source's backend name and its connection state into the session before the
@@ -445,6 +469,9 @@ public:
                 }
                 if (_frame) {
                     _frame->setCompact(compactFrame(widthClass));
+                    if (_tours) {
+                        _tours->formChanged();
+                    }
                     if (_chatBinding) {
                         _chatBinding->refresh();
                     }
@@ -461,6 +488,18 @@ public:
         if (std::optional<ui::Inspector> inspector = ui::DocumentScreenHost::inspector(*shown)) {
             visit(*inspector);
         }
+    }
+
+    std::expected<void, std::string> startTour(std::string_view tourId) override {
+        if (_tours == nullptr) {
+            return std::unexpected("no tour can start: the shell shows no frame with an app document, so `" +
+                                   std::string{tourId} + "` does not run");
+        }
+        auto const started = _tours->start(tourId);
+        if (!started) {
+            return std::unexpected(started.error().message());
+        }
+        return {};
     }
 
     /// Shows @p text in place of any screen, and reports it.
@@ -529,6 +568,9 @@ private:
         reloadThen(false, [this](auto done) {
             _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, done = std::move(done)] {
                 if (auto const live = alive.lock(); live != nullptr && *live) {
+                    resetTours();
+                    // A failed reload keeps the frame, so its Tours menu goes now.
+                    showToursMenu();
                     unmount();
                     // After the screens that read it, and before the session changes hands; its counts go first.
                     resetParts();
@@ -556,6 +598,7 @@ private:
         resetParts();
         _badges.reset();
         _chatPanel.reset();
+        resetTours();
         _workspace.reset();
         _appRoot.reset();
         _frame.reset();
@@ -637,18 +680,20 @@ private:
         tabs.onChanged = [this] {
             showActiveTitle();
             followChat();
+            followTours();
         };
         tabs.diagnostics = [this](ui::Refusal const& refusal) { problem(refusal.message()); };
         tabs.hosts = &_hosts;
         // The shell mounts the head row itself, in its top bar: an in-page head would show it a second time. An
         // application that declares the search, the inbox or the person's menu has the top bar for them, and its
-        // screens keep their heads in the page.
+        // screens keep their heads in the page; so does one that declares any tour.
         tabs.chrome = [this](ui::WorkspaceTabId tab, std::string_view screenId) -> ui::Node {
             return _customChrome ? _customChrome->chromeFor(tab, screenId) : nullptr;
         };
-        _headInPage = _appDocument && _appDocument->shell &&
-                      (!_appDocument->shell->search.empty() || _appDocument->shell->inbox ||
-                       _appDocument->shell->principal || _appDocument->shell->help);
+        bool const declaredBar = _appDocument && _appDocument->shell &&
+                                 (!_appDocument->shell->search.empty() || _appDocument->shell->inbox ||
+                                  _appDocument->shell->principal || _appDocument->shell->help);
+        _headInPage = declaredBar || (_appDocument && !_appDocument->tours.empty());
         ++_workspaceNumber;
         _workspace =
             std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs), &_frame->page(),
@@ -661,6 +706,12 @@ private:
         followBadges();
         followParts();
         buildChat();
+        buildTours();
+        // A new frame is a new session's: its runtime tours are listed again, into the new app root.
+        if (_tourSync) {
+            (*_tourSync).reset();
+            _tourSync->list();
+        }
     }
 
     // Asks the server whether it offers custom screens, for the session the frame was built for.
@@ -818,6 +869,194 @@ private:
         }
         if (_chatBinding) {
             _chatBinding->refresh();
+        }
+    }
+
+    // What a tour reaches of this shell: its workspace, its frame and its navigator.
+    class Tours final : public ui::TourShell {
+    public:
+        explicit Tours(Shell& shell) : _shell{&shell} {}
+
+        std::expected<void, ui::MountError> openScreen(std::string const& screenId,
+                                                       ui::ParamMap const& params) override {
+            auto const opened = _shell->tryMount(screenId, params);
+            if (!opened) {
+                return std::unexpected(ui::MountError{.screenId = screenId, .reason = opened.error(), .pointer = {}});
+            }
+            return {};
+        }
+        [[nodiscard]] bool shows(std::string const& screenId, ui::ParamMap const& params) const override {
+            ui::ScreenHandle const* const handle = _shell->_workspace ? _shell->_workspace->activeHandle() : nullptr;
+            if (handle == nullptr || _shell->activeBaseScreen() != screenId) {
+                return false;
+            }
+            std::optional<std::string> const wanted = _shell->_host->identityOf(screenId, params);
+            return !wanted || wanted == ui::identityKey(handle->identity().peek());
+        }
+        [[nodiscard]] std::string activeScreen() const override { return _shell->activeBaseScreen(); }
+        [[nodiscard]] std::string screenTitle(std::string const& screenId) const override {
+            return _shell->screenTitleOf(screenId);
+        }
+        [[nodiscard]] bool compact() const override { return _shell->_frame != nullptr && _shell->_frame->compact(); }
+        void revealNavEntry(std::string const& screenId) override {
+            if (_shell->_frame != nullptr) {
+                static_cast<void>(_shell->_frame->navigator().reveal(screenId));
+            }
+        }
+        ui::SpotlightWidget& spotlight() override { return _shell->tourSpotlight(); }
+        // The card's widgets follow the host values in a flush posted when they change; a post made now runs after it.
+        void afterCardUpdated(std::function<void()> then) override {
+            _shell->_context->executor().post([alive = std::weak_ptr<bool>{_shell->_alive}, then = std::move(then)] {
+                if (auto const live = alive.lock(); live != nullptr && *live) {
+                    then();
+                }
+            });
+        }
+        void notify(std::string const& text, ui::Tone tone) override {
+            if (_shell->_frame != nullptr) {
+                _shell->_frame->showToast(text, tone);
+            }
+        }
+        [[nodiscard]] std::string text(std::string_view key) const override {
+            return ui::shellText(
+                key, _shell->_session != nullptr ? _shell->_session->formattingNow() : ui::FormatContext{});
+        }
+
+    private:
+        Shell* _shell;
+    };
+
+    // The screen the active tab shows, a custom screen named by the screen it is based on, as a tour compares it.
+    [[nodiscard]] std::string activeBaseScreen() const {
+        std::string screenId = activeScreen();
+        if (ui::isCustomScreenId(screenId) && _customChrome != nullptr) {
+            return _customChrome->controller().baseOf(screenId);
+        }
+        return screenId;
+    }
+
+    // The frame's spotlight, with the tour card mounted in it the first time a tour asks in this frame.
+    ui::SpotlightWidget& tourSpotlight() {
+        ui::SpotlightWidget& spotlight = _frame->spotlight();
+        if (_tourCard == nullptr) {
+            auto document = ui::tourCardDocument();
+            if (!document) {
+                problem("the tour card: " + document.error().message());
+                return spotlight;
+            }
+            _generated.insert_or_assign(std::string{ui::kTourCardId}, std::move(*document));
+            auto mounted = _host->mountInto(ui::kTourCardId, {}, spotlight);
+            if (!mounted) {
+                problem("the tour card: " + mounted.error().reason);
+                return spotlight;
+            }
+            _tourCard = std::move(*mounted);
+        }
+        return spotlight;
+    }
+
+    // The frame's tours: the controller over this shell, the Tours menu following the app document's tours and the
+    // active tab, and `tour.start` for every document. With no app root there is nothing to offer.
+    void buildTours() {
+        if (!_tourBinding) {
+            _tourBinding = std::make_unique<ui::TourCardBinding>(
+                _chatHost, [this] { return _tours.get(); },
+                [this](std::function<void()> work) {
+                    // Posted: a step can open a screen, and the command runs inside one of a widget's handlers.
+                    _context->executor().post([alive = std::weak_ptr<bool>{_alive}, work = std::move(work)] {
+                        if (auto const live = alive.lock(); live != nullptr && *live) {
+                            work();
+                        }
+                    });
+                },
+                [this](std::string const& text) { problem(text); });
+        }
+        _frame->setOnTour([this](std::string const& tourId) {
+            // Posted: the menu is a widget of the frame, and the tour may open a screen. The id is copied, since the
+            // menu's entries are rebuilt while the tour starts.
+            _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, chosen = std::string{tourId}] {
+                if (auto const live = alive.lock(); live == nullptr || !*live) {
+                    return;
+                }
+                if (!_tours) {
+                    problem("the tour `" + chosen + "` cannot start: this window runs no tours");
+                } else if (auto const started = _tours->start(chosen); !started) {
+                    problem(started.error().message());
+                }
+            });
+        });
+        if (_appRoot == nullptr) {
+            _frame->setTours(ui::ShellToursView{});
+            return;
+        }
+        ui::TourControllerOptions options;
+        options.warn = [this](std::string const& text) { problem(text); };
+        options.onChanged = [this] {
+            if (_tourBinding) {
+                _tourBinding->refresh();
+            }
+        };
+        _tours = std::make_unique<ui::TourController>(_context->runtime(), *_appRoot, _tourShell, std::move(options));
+        _toursMenu = std::make_unique<reactive::Effect>(_context->runtime(), [this] {
+            static_cast<void>(_appRoot->tours().get());
+            _context->runtime().untracked([this] { showToursMenu(); });
+        });
+    }
+
+    // The Tours menu follows the active tab, and a step waiting for the screen now active moves on.
+    void followTours() {
+        showToursMenu();
+        if (_tours) {
+            _tours->activeChanged();
+        }
+    }
+
+    // The Tours menu for the active tab: its screen's tours under its title, then the general ones.
+    void showToursMenu() {
+        if (_frame == nullptr || _appRoot == nullptr || _session == nullptr) {
+            return;
+        }
+        if (_tours == nullptr) {
+            // No controller, so no choice could start a tour.
+            _frame->setTours(ui::ShellToursView{});
+            return;
+        }
+        std::string const screen = activeBaseScreen();
+        ui::OfferedTours const offered = ui::offeredTours(_appRoot->tours().peek(), screen);
+        ui::FormatContext const format = _session->formattingNow();
+        ui::ShellToursView view;
+        view.caption = ui::shellText("morph.shell.tours", format);
+        view.name = ui::shellText("morph.shell.toursName", format);
+        auto const group = [](std::string heading, std::vector<ui::Tour> const& tours) {
+            ui::ShellTourGroup out{.heading = std::move(heading), .tours = {}};
+            for (ui::Tour const& tour : tours) {
+                out.tours.push_back(ui::ShellTourView{.id = tour.id, .title = tour.title, .summary = tour.summary});
+            }
+            return out;
+        };
+        if (!offered.screen.empty()) {
+            view.groups.push_back(group(screenTitleOf(screen), offered.screen));
+        }
+        if (!offered.general.empty()) {
+            view.groups.push_back(group(ui::shellText("morph.shell.toursGeneral", format), offered.general));
+        }
+        _frame->setTours(std::move(view));
+    }
+
+    // Ends a running tour, then drops the frame's controller, its card and its menu: before the frame, the workspace
+    // and the app root they read. The tour is ended here, not left to the frame's destruction, because a sign-out
+    // whose reload fails keeps the frame: its spotlight would stay open over an emptied card, with nothing to close it
+    // and the focus trapped inside. The controller's destructor stays inert since the spotlight belongs to the frame,
+    // which may be gone by then. The card's values go back to their initial ones.
+    void resetTours() {
+        _toursMenu.reset();
+        if (_tours) {
+            _tours->end();
+        }
+        _tours.reset();
+        _tourCard.reset();
+        if (_tourBinding) {
+            _tourBinding->refresh();
         }
     }
 
@@ -1312,9 +1551,10 @@ private:
     // As `mount`, but the refusal is answered, not shown.
     std::expected<bool, std::string> tryMount(std::string const& screenId, ui::ParamMap const& params) {
         _message.reset();
-        // The chat panel is the frame's own slot: a route or a navigation to it must not open a second one.
-        if (screenId == ui::chat::kChatPanelId) {
-            return std::unexpected("the chat panel is not a screen to open");
+        // The client's own documents (the chat panel, the tour card) belong to the frame: a route or a navigation to
+        // one must not open it as a tab.
+        if (ui::ReservedClientId const* const reserved = ui::reservedClientId(screenId)) {
+            return std::unexpected(std::string{reserved->owner} + " is not a screen to open");
         }
         if (!_workspace) {
             buildFrame();
@@ -1534,7 +1774,8 @@ private:
     // The documents the explorer generates for "Try it", by their screen ids.
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _generated;
     ui::ScreenHostRegistry _hosts;
-    // What the chat panel document reads and runs; it outlives the session it is connected to.
+    // What the client's own documents (the chat panel, the tour card) and `tour.start` read and run; it outlives the
+    // session it is connected to.
     ui::HostVocabulary _chatHost;
     std::unique_ptr<ui::Session> _session;
     // The bundle's message catalogues, read again with each bundle load; the navigator's labels read them.
@@ -1555,6 +1796,9 @@ private:
     // the chrome mounts drafts through, so they go before it; the frame and the workspace go before them.
     std::unique_ptr<ui::CustomScreenSync> _customSync;
     std::unique_ptr<ui::CustomScreenChrome> _customChrome;
+    // The client of the server's runtime tours, over the screens' own dispatcher; it outlives frames and is reset with
+    // each one, since what it listed is the old session's.
+    std::unique_ptr<ui::TourSync> _tourSync;
     // Counts the workspaces built, so a turn's tab is told from a tab of a later workspace with the same number.
     std::uint64_t _workspaceNumber = 0;
     // What the chat panel dictates with; made once, before the binding, which goes first.
@@ -1564,6 +1808,16 @@ private:
     std::unique_ptr<ui::ShellFrame> _frame;
     // The panel document, mounted into the frame's chat slot, so it goes before the frame.
     std::unique_ptr<ui::ScreenHandle> _chatPanel;
+    // What a tour reaches of this shell; it holds nothing of its own.
+    Tours _tourShell{*this};
+    // Connects the tour card and `tour.start` to the frame's controller. Made once, like the chat's binding, since the
+    // vocabulary it registers in outlives frames.
+    std::unique_ptr<ui::TourCardBinding> _tourBinding;
+    // The frame's tour controller, the card mounted in its spotlight, and what follows the Tours menu: rebuilt with
+    // each frame (`resetTours`), before the frame and the app root they read go.
+    std::unique_ptr<ui::TourController> _tours;
+    std::unique_ptr<ui::ScreenHandle> _tourCard;
+    std::unique_ptr<reactive::Effect> _toursMenu;
     std::unique_ptr<ui::Workspace> _workspace;
     // The app document's root for the current frame; destroyed after the tabs that read it.
     std::unique_ptr<ui::AppRoot> _appRoot;

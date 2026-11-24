@@ -62,6 +62,8 @@ public:
     [[nodiscard]] std::unique_ptr<ui::ToastWidget> createToast(ui::ContainerWidget* parent) override;
     /// @copydoc ui::IViewBackend::createPopover
     [[nodiscard]] std::unique_ptr<ui::PopoverWidget> createPopover(ui::ContainerWidget* parent) override;
+    /// @copydoc ui::IViewBackend::createSpotlight
+    [[nodiscard]] std::unique_ptr<ui::SpotlightWidget> createSpotlight(ui::ContainerWidget* parent) override;
     [[nodiscard]] std::unique_ptr<ui::BusyWidget> createBusy(ui::ContainerWidget* parent) override;
     [[nodiscard]] std::unique_ptr<ui::TableWidget> createTable(ui::ContainerWidget* parent) override;
     [[nodiscard]] std::unique_ptr<ui::DateTimeInputWidget> createDateTimeInput(ui::ContainerWidget* parent,
@@ -92,6 +94,12 @@ public:
     /// @brief Sizes every root widget to the screen's viewport and centres every open dialog; call before each
     ///        `Screen::draw()`, which is how a resize reaches the tree.
     void fit();
+
+    /// @brief Whether an open spotlight's box stands where its target is no longer drawn: the frame just drawn
+    ///        moved the target or showed it for the first time, so the box is placed by a stale rectangle. Call after
+    ///        `Screen::draw()`; when true, `fit()` and draw once more.
+    /// @return True while an open spotlight's box needs placing again.
+    [[nodiscard]] bool spotlightMisplaced() const;
 
     /// @brief Moves keyboard focus to the next focusable widget — inside the innermost open dialog when one is
     ///        open, because `Screen::focusNext` does not know overlays.

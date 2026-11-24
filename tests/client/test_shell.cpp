@@ -27,6 +27,7 @@
 #include <morph/ui/shell_parts.hpp>
 #include <morph/ui/shell_parts_view.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
+#include <morph/ui/tour_registry.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -37,6 +38,7 @@
 #include <vector>
 
 #include "probe_app.hpp"
+#include "tours_app.hpp"
 
 namespace client = morph::client;
 namespace ui = morph::ui;
@@ -341,7 +343,18 @@ public:
     void setDisconnectHandler(std::function<void()> const& handler) override { *disconnect = handler; }
     std::shared_ptr<std::function<void()>> connect = std::make_shared<std::function<void()>>();
     std::shared_ptr<std::function<void()>> disconnect = std::make_shared<std::function<void()>>();
+    // Delivers an event as a server would; valid while the backend lives.
+    std::shared_ptr<std::function<void(morph::wire::EventBody)>> emit =
+        std::make_shared<std::function<void(morph::wire::EventBody)>>(
+            [this](morph::wire::EventBody event) { deliverEvent(std::move(event)); });
 };
+
+/// A `changes` event naming the whole record @p record.
+morph::wire::EventBody changesOf(std::string_view record) {
+    return morph::wire::EventBody{
+        .topic = std::string{morph::wire::kChangesTopic},
+        .payload = glz::raw_json{R"({"records":[{"record":")" + std::string{record} + R"("}],"instances":[]})"}};
+}
 
 /// The env screen's application behind a transport the test can drop and restore.
 class DroppingSource final : public client::Source {
@@ -349,6 +362,7 @@ public:
     // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the test fires these.
     std::shared_ptr<std::function<void()>> connectHook;
     std::shared_ptr<std::function<void()>> disconnectHook;
+    std::shared_ptr<std::function<void(morph::wire::EventBody)>> emitHook;
     // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
     /// @param bundle Builds the application's bundle; by default the env screen's.
@@ -373,6 +387,7 @@ protected:
         auto made = std::make_unique<HookedBackend>(*_workers);
         connectHook = made->connect;
         disconnectHook = made->disconnect;
+        emitHook = made->emit;
         return Transport{
             .backend = std::move(made),
             .exchange = [this](morph::wire::Envelope const& request,
@@ -532,6 +547,142 @@ TEST_CASE("Client shell: env online follows the transport's drop and reconnect",
         CHECK_FALSE(source.online());
         (*source.connectHook)();
         REQUIRE(pumpUntil(context.owner(), [&backend] { return shown(backend, "online") == "on"; }));
+    }
+    source.close();
+}
+
+// Mutation: call `buildFrame` from the source's connect listener (the running tour's spotlight goes with the frame).
+TEST_CASE("Client shell: a reconnect leaves a running tour running", "[client][shell][tours]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    DroppingSource source{&tours::toursBundle};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "tours.home"});
+        REQUIRE(pumpUntil(context.owner(),
+                          [&backend] { return backend.find("Menu", "testId", "shell_tours").has_value(); }));
+        REQUIRE(shell->startTour("getting-started").has_value());
+        auto const spotlight = [&backend] { return backend.find("Spotlight", "testId", "shell_spotlight"); };
+        REQUIRE(pumpUntil(context.owner(),
+                          [&] { return spotlight().has_value() && backend.prop(*spotlight(), "open") == "true"; }));
+        int const before = *spotlight();
+        (*source.disconnectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&source] { return !source.online(); }));
+        (*source.connectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&source] { return source.online(); }));
+        REQUIRE(spotlight().has_value());
+        CHECK(*spotlight() == before);
+        CHECK(backend.prop(before, "open") == "true");
+        // The controller survived too: Next still moves the running tour on.
+        auto const next = backend.find("Button", "testId", "tour_next");
+        REQUIRE(next.has_value());
+        backend.click(*next);
+        REQUIRE(pumpUntil(context.owner(), [&backend] {
+            auto const title = backend.find("Text", "testId", "tour_title");
+            return title.has_value() && backend.prop(*title, "text") == "Open Samples";
+        }));
+    }
+    source.close();
+}
+
+// Mutation: drop `_tourSync->reconnected()` from the source's connect listener (the tour added while away never
+// shows).
+TEST_CASE("Client shell: a runtime tour added while the client was away is offered after the reconnect",
+          "[client][shell][tours]") {
+    std::shared_ptr<ui::TourRegistry> const registry = tours::toursRegistry();
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    DroppingSource source{&tours::toursBundle};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "tours.home"});
+        auto const items = [&backend] {
+            std::optional<int> const menu = backend.find("Menu", "testId", "shell_tours");
+            return menu ? backend.prop(*menu, "items") : std::string{};
+        };
+        REQUIRE(pumpUntil(context.owner(), [&] { return items().contains("Getting started"); }));
+        (*source.disconnectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&source] { return !source.online(); }));
+        REQUIRE(registry->add(tours::runtimeTour("whats-new")).has_value());
+        (*source.connectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&] { return items().contains("What's new"); }));
+    }
+    source.close();
+}
+
+// Mutation: drop `_tourSync->deliverEvent` from the source's event listener (a tour added while the window is open
+// never reaches the menu, and one removed never leaves it).
+TEST_CASE("Client shell: a tour added then removed on the server follows in the Tours menu",
+          "[client][shell][tours]") {
+    std::shared_ptr<ui::TourRegistry> const registry = tours::toursRegistry();
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    DroppingSource source{&tours::toursBundle};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "tours.home"});
+        auto const items = [&backend] {
+            std::optional<int> const menu = backend.find("Menu", "testId", "shell_tours");
+            return menu ? backend.prop(*menu, "items") : std::string{};
+        };
+        REQUIRE(pumpUntil(context.owner(), [&] { return items().contains("Getting started"); }));
+        CHECK_FALSE(items().contains("What's new"));
+        REQUIRE(registry->add(tours::runtimeTour("whats-new")).has_value());
+        (*source.emitHook)(changesOf(ui::kTourRecord));
+        REQUIRE(pumpUntil(context.owner(), [&] { return items().contains("What's new"); }));
+        REQUIRE(registry->remove("whats-new").has_value());
+        (*source.emitHook)(changesOf(ui::kTourRecord));
+        REQUIRE(pumpUntil(context.owner(), [&] { return !items().contains("What's new"); }));
+        CHECK(items().contains("Getting started"));
+    }
+    source.close();
+}
+
+// Mutation: skip `setRuntimeTours` in the sync's list handler (the app root never sees the replaced tour, so it keeps
+// running).
+TEST_CASE("Client shell: a running runtime tour replaced on the server ends with a toast", "[client][shell][tours]") {
+    std::shared_ptr<ui::TourRegistry> const registry = tours::toursRegistry();
+    REQUIRE(registry->add(tours::runtimeTour("whats-new")).has_value());
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    DroppingSource source{&tours::toursBundle};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "tours.home"});
+        REQUIRE(pumpUntil(context.owner(), [&backend] {
+            std::optional<int> const menu = backend.find("Menu", "testId", "shell_tours");
+            return menu && backend.prop(*menu, "items").contains("What's new");
+        }));
+        REQUIRE(shell->startTour("whats-new").has_value());
+        REQUIRE(registry->replace(tours::runtimeTour("whats-new", "Fresh news")).has_value());
+        (*source.emitHook)(changesOf(ui::kTourRecord));
+        REQUIRE(pumpUntil(context.owner(), [&backend] {
+            std::vector<int> const toasts = backend.all("Toast");
+            return !toasts.empty() && backend.prop(toasts.front(), "text").contains("changed");
+        }));
+        std::optional<int> const spotlight = backend.find("Spotlight", "testId", "shell_spotlight");
+        REQUIRE(spotlight.has_value());
+        CHECK(backend.prop(*spotlight, "open") == "false");
     }
     source.close();
 }

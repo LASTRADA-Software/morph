@@ -480,6 +480,9 @@ add_library(morph ${_morph_library_type}
     src/ui/interpreter.cpp
     src/ui/library.cpp
     src/ui/service.cpp
+    src/ui/tour_checks.cpp
+    src/ui/tour_registry.cpp
+    src/ui/tour_sync.cpp
     src/ui/custom_screen_checks.cpp
     src/ui/custom_screens.cpp
     src/ui/json_source.cpp
@@ -498,6 +501,7 @@ add_library(morph ${_morph_library_type}
     src/ui/theme.cpp
     src/ui/shell_frame.cpp
     src/ui/shell_parts_model.cpp
+    src/ui/tours.cpp
     src/ui/workspace.cpp
 )
 add_library(morph::morph ALIAS morph)
@@ -676,12 +680,17 @@ target_sources(morph
         include/morph/ui/route.hpp
         include/morph/ui/route_history.hpp
         include/morph/ui/served_document.hpp
+        include/morph/ui/client_ids.hpp
+        include/morph/ui/tour_registry.hpp
+        include/morph/ui/tour_sync.hpp
         include/morph/ui/service_client.hpp
         include/morph/ui/shell_frame.hpp
         include/morph/ui/shell_parts.hpp
         include/morph/ui/shell_parts_binding.hpp
         include/morph/ui/shell_parts_model.hpp
         include/morph/ui/shell_parts_view.hpp
+        include/morph/ui/tours.hpp
+        include/morph/ui/tour_card.hpp
         include/morph/ui/explorer.hpp
         include/morph/ui/agent.hpp
         include/morph/ui/chat/client.hpp

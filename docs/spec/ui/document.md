@@ -181,6 +181,19 @@ An `actionButton` part is one button of a list:
 | `enabled`, `visible` | conditions | default `true` |
 | `onClick` | commands | run in the scope the list belongs to |
 
+### The app document's tours
+
+The app document's `tours` is a list of guided tours ([tours.md](tours.md)). A tour is `{id, screen?, title,
+summary?, steps}`: `id` is `[a-z0-9-]+`, at most 64 characters, unique among the tours; `screen` names the screen the
+tour belongs to (without it the tour is general); `title` and `summary` are text expressions in the app scope. `steps`
+holds one step or more and at most 50. A step is `{title, body?, screen?, params?, target?, advanceOn?}`: `title` and
+`body` are text expressions in the app scope; `screen` is a screen id the step opens before it shows, with `params` a
+record of literal values; `target` is a test id; `advanceOn` is `{"screen": id}`. Unknown members are ignored and a
+member starting with `!` is refused, as everywhere in ui/1. A screen that declares `tours` is refused
+(`` `tours` is the app document's; a screen has none ``). Whether the screens, targets and ids a tour names exist is
+checked when the bundle is built ([service.md](service.md#the-registry)). `AppRoot::tours()` answers them
+([interpreter.md](interpreter.md#the-app-root-scope)).
+
 ## Declarations
 
 A scope's declarations are a `ScopeDecl`, each kind in declaration order.

@@ -381,6 +381,13 @@ public:
     void setCloseButton(bool shown);
     /// The footer, which a sheet lays out at the bottom of its box.
     void setFooter(WidgetBase const* footer) noexcept { _footer = footer; }
+    /// Places the box beside a rectangle rather than centred: under it, or over it when there is no room below,
+    /// clamped inside the screen. The anchor is read at every frame; a null one, or one that answers nothing, centres.
+    /// @param anchor Answers the rectangle, in screen cells, or nothing.
+    void setAnchor(std::function<std::optional<::core::tui::Rect>()> anchor) { _anchor = std::move(anchor); }
+    /// Whether Esc inside the box closes it, as a dialog's does. A spotlight's card handles Esc itself.
+    /// @param dismissible Whether Esc closes the box.
+    void setDismissible(bool dismissible) noexcept { _dismissible = dismissible; }
     /// Closes the overlay and calls `onDismiss`, as Esc does.
     void dismiss();
     [[nodiscard]] std::string const& title() const noexcept { return _title; }
@@ -432,6 +439,8 @@ private:
     WidgetBase const* _footer = nullptr;
     bool _sheet = false;
     bool _open = false;
+    bool _dismissible = true;
+    std::function<std::optional<::core::tui::Rect>()> _anchor;
     bool _framed = false;  ///< Whether the box showed when last seen.
     WidgetBase* _restore = nullptr;
 };
@@ -536,6 +545,56 @@ public:
 private:
     OverlayCore _overlay;
     OverlayFooter _footer;
+};
+
+/// A guided tour's spotlight: an `OverlayCore` box holding the card, placed under the target's drawn rectangle, or
+/// over it when there is no room below; the target is drawn in reverse video and nothing is dimmed. Like a dialog the
+/// box is modal and takes the focus when it opens, except that the target still takes presses and keys, and on a
+/// waiting step Tab reaches the target after the card. Esc is the card's to handle.
+class SpotlightImpl final : public TuiContainer<ui::SpotlightWidget> {
+public:
+    explicit SpotlightImpl(Context& context);
+    ~SpotlightImpl() override;
+    SpotlightImpl(SpotlightImpl const&) = delete;
+    SpotlightImpl& operator=(SpotlightImpl const&) = delete;
+    SpotlightImpl(SpotlightImpl&&) = delete;
+    SpotlightImpl& operator=(SpotlightImpl&&) = delete;
+
+    void setOpen(bool open) override;
+    void setTarget(std::optional<std::string> testId) override;
+    [[nodiscard]] bool targetShown() const override { return _ringed != nullptr; }
+    void setOnTargetShownChanged(std::function<void(bool)> handler) override { _onChanged = std::move(handler); }
+    void setTargetFocusable(bool focusable) override { _targetFocusable = focusable; }
+    void targetsChanged() override { resolve(); }
+    [[nodiscard]] bool isOpenSpotlight() const override { return _overlay.isOpen(); }
+    [[nodiscard]] WidgetBase* tabTarget() const override { return _targetFocusable ? _ringed : nullptr; }
+    [[nodiscard]] WidgetBase const* passesThrough() const override { return _ringed; }
+    [[nodiscard]] bool placementStale() const override { return _overlay.isOpen() && anchorRect() != _placedBy; }
+    /// The widget it rings now, or null.
+    [[nodiscard]] WidgetBase const* ringed() const noexcept { return _ringed; }
+    [[nodiscard]] ::core::tui::Size naturalSize() const override { return {.width = 0, .height = 0}; }
+    [[nodiscard]] ::core::tui::Component& host() override { return _overlay.frame(); }
+    [[nodiscard]] bool letsChildrenAct() const override { return _overlay.isOpen(); }
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override {
+        return _overlay.childAreas(size);
+    }
+    [[nodiscard]] OverlayCore* overlay() override { return &_overlay; }
+
+private:
+    // Picks the target again: the first widget carrying the test id, in creation order, that is displayed and is not
+    // inside the card.
+    void resolve();
+    // The rectangle the target is drawn in, or nothing while none is shown or it has not been drawn yet.
+    [[nodiscard]] std::optional<::core::tui::Rect> anchorRect() const;
+
+    OverlayCore _overlay;
+    // The rectangle the box was last placed by; `placementStale` compares it with where the target is drawn now.
+    std::optional<::core::tui::Rect> _placedBy;
+    std::optional<std::string> _target;
+    WidgetBase* _ringed = nullptr;
+    bool _targetFocusable = false;
+    bool _resolving = false;
+    std::function<void(bool)> _onChanged;
 };
 
 }  // namespace morph::tui::detail

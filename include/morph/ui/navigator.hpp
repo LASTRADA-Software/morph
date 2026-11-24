@@ -190,6 +190,12 @@ public:
     /// @return Whether the navigator lists the module.
     bool setOpenModule(std::string_view module);
 
+    /// @brief Makes a screen's entry drawable: empties the search, which may be hiding it, and, while modules are
+    ///        collapsed, opens the module that holds it.
+    /// @param screenId The entry's screen.
+    /// @return Whether the navigator lists the screen; `false` changes nothing.
+    bool reveal(std::string_view screenId);
+
     /// @brief The module whose entries are listed.
     /// @return It; empty when none is open.
     [[nodiscard]] std::string const& openModule() const noexcept { return _openModule; }

@@ -1103,12 +1103,23 @@ bool OverlayCore::showsFrame() const {
     };
 }
 
-// A dialog is centred; a drawer stands against its side, the whole height of the screen.
+// A dialog is centred, or placed by its anchor; a drawer stands against its side, the whole height of the screen.
 ::core::tui::Point OverlayCore::framePosition() const {
     auto const& screen = *_self->context().screen;
     if (_sheet && !_side.has_value()) {
         auto const area = screen.viewportArea();
         return {.x = area.x, .y = area.y};
+    }
+    if (_anchor) {
+        if (std::optional<::core::tui::Rect> const target = _anchor()) {
+            auto const area = screen.viewportArea();
+            auto const size = frameSize();
+            int const below = target->y + target->height;
+            int const y =
+                below + size.height <= area.y + area.height ? below : std::max(area.y, target->y - size.height);
+            int const x = std::clamp(target->x, area.x, std::max(area.x, area.x + area.width - size.width));
+            return {.x = x, .y = y};
+        }
     }
     if (!_side.has_value()) {
         return centredIn(screen, frameSize());
@@ -1187,7 +1198,8 @@ void OverlayCore::paintFrame(::core::tui::Canvas& canvas) {
         return ::core::tui::EventResult::Handled;
     }
     auto const* const key = std::get_if<::core::tui::KeyEvent>(&event);
-    if (key == nullptr || key->key != ::core::tui::KeyCode::Escape || !_open || !_self->actionable()) {
+    if (key == nullptr || key->key != ::core::tui::KeyCode::Escape || !_open || !_dismissible ||
+        !_self->actionable()) {
         return ::core::tui::EventResult::Ignored;
     }
     dismiss();
@@ -1347,6 +1359,75 @@ void OverlayCore::closeFrame() {
     forgetRestore();
     if (focusInside) {
         returnFocus(shared, restore);
+    }
+}
+
+SpotlightImpl::SpotlightImpl(Context& context) : TuiContainer{context}, _overlay{*this, std::nullopt} {
+    adopt(makeView(*this));
+    _overlay.setDismissible(false);
+    _overlay.setAnchor([this] -> std::optional<::core::tui::Rect> {
+        _placedBy = anchorRect();
+        return _placedBy;
+    });
+    context.spotlights.push_back(this);
+}
+
+SpotlightImpl::~SpotlightImpl() {
+    std::erase(context().spotlights, this);
+    if (context().spotlit == _ringed) {
+        context().spotlit = nullptr;
+    }
+    _overlay.setOpen(false);
+}
+
+std::optional<::core::tui::Rect> SpotlightImpl::anchorRect() const {
+    if (_ringed == nullptr) {
+        return std::nullopt;
+    }
+    auto const bounds = _ringed->view().screenBounds();
+    return bounds.width > 0 && bounds.height > 0 ? std::optional<::core::tui::Rect>{bounds} : std::nullopt;
+}
+
+void SpotlightImpl::setOpen(bool open) {
+    _overlay.setOpen(open);
+    resolve();
+    context().spotlit = _overlay.isOpen() ? _ringed : nullptr;
+    refresh();
+}
+
+void SpotlightImpl::setTarget(std::optional<std::string> testId) {
+    _target = std::move(testId);
+    resolve();
+}
+
+void SpotlightImpl::resolve() {
+    if (_resolving) {
+        return;
+    }
+    _resolving = true;
+    WidgetBase* found = nullptr;
+    if (_target) {
+        for (auto const& [view, candidate] : context().owners) {
+            static_cast<void>(view);
+            bool const better = found == nullptr || candidate->sequence() < found->sequence();
+            if (better && candidate->testId() == *_target && candidate != this &&
+                !isWithin(&candidate->view(), _overlay.frame()) && candidate->displayed()) {
+                found = candidate;
+            }
+        }
+    }
+    bool const was = _ringed != nullptr;
+    bool const moved = found != _ringed;
+    _ringed = found;
+    context().spotlit = _overlay.isOpen() ? found : nullptr;
+    _resolving = false;
+    // Only a change redraws: every frame asks, and a redraw each time would draw for ever.
+    if (moved) {
+        refresh();
+    }
+    if ((found != nullptr) != was && _onChanged) {
+        auto const handler = _onChanged;
+        handler(found != nullptr);
     }
 }
 

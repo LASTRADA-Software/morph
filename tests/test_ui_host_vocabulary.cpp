@@ -349,3 +349,27 @@ TEST_CASE("host vocabulary: publishing the same scopes again does not re-run wha
     h.settle();
     CHECK(reads == afterFirst + 1);
 }
+
+// Mutation: skip `refusal` in `HostVocabulary::run` (the refused id runs).
+TEST_CASE("host vocabulary: a command's refusal check refuses it with its reason, and run is not called",
+          "[ui][host]") {
+    morph::ui::HostVocabulary host;
+    std::vector<std::string> ran;
+    host.add(morph::ui::HostCommand{
+        .name = "pick",
+        .version = 1,
+        .args = {morph::ui::HostArg{.name = "id", .type = "string"}},
+        .safeForUntrusted = true,
+        .run = [&ran](morph::ui::ValueRecord const& args) { ran.push_back(*args.at("id").asString()); },
+        .documents = {},
+        .refusal = [](morph::ui::ValueRecord const& args) -> std::optional<std::string> {
+            return *args.at("id").asString() == "bad" ? std::optional<std::string>{"`bad` is not one"} : std::nullopt;
+        }});
+    morph::ui::HostCommandResult const refused =
+        host.run("pick", morph::ui::Value{morph::ui::ValueRecord{{"id", morph::ui::Value{"bad"}}}});
+    CHECK(refused.kind == morph::ui::HostCommandResult::Kind::Refused);
+    CHECK(refused.reason == "`bad` is not one");
+    CHECK(host.run("pick", morph::ui::Value{morph::ui::ValueRecord{{"id", morph::ui::Value{"good"}}}}).kind ==
+          morph::ui::HostCommandResult::Kind::Ran);
+    CHECK(ran == std::vector<std::string>{"good"});
+}

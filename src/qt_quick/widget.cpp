@@ -59,28 +59,29 @@ ContainerCore* containerOf(ui::ContainerWidget* widget) noexcept { return dynami
 ItemBase::ItemBase(Context& context, QString const& type, ui::ContainerWidget* parent, QVariantMap initial)
     : ItemBase{context, context.make(type, std::move(initial)), parent} {}
 
-namespace {
-
-// Every live widget, in creation order, for tests and tools that find a widget by its test id.
-std::vector<ItemBase*>& registry() {
-    static std::vector<ItemBase*> widgets;
-    return widgets;
+std::vector<ItemBase*> liveWidgets() {
+    std::vector<ItemBase*> out;
+    for (Context* const context : Context::all()) {
+        auto const& widgets = context->widgets().all();
+        out.insert(out.end(), widgets.begin(), widgets.end());
+    }
+    return out;
 }
 
-}  // namespace
-
-std::vector<ItemBase*> const& liveWidgets() noexcept { return registry(); }
-
 ItemBase* findWidget(QString const& testId) noexcept {
-    auto const found = std::ranges::find_if(registry(), [&testId](ItemBase const* widget) {
-        return widget->item() != nullptr && widget->item()->objectName() == testId;
-    });
-    return found != registry().end() ? *found : nullptr;
+    for (Context* const context : Context::all()) {
+        for (ItemBase* const widget : context->widgets().all()) {
+            if (widget->item() != nullptr && widget->item()->objectName() == testId) {
+                return widget;
+            }
+        }
+    }
+    return nullptr;
 }
 
 ItemBase::ItemBase(Context& context, Context::Made made, ui::ContainerWidget* parent)
     : _context{&context}, _item{made.item}, _relay{made.relay} {
-    registry().push_back(this);
+    context.widgets().add(*this);
     ContainerCore* const container = parent != nullptr ? containerOf(parent) : &context.roots();
     if (container != nullptr) {
         _container = container;
@@ -93,13 +94,13 @@ ItemBase::ItemBase(Context& context, QString const& type, ContainerCore& contain
     Context::Made const made = context.make(type, {});
     _item = made.item;
     _relay = made.relay;
-    registry().push_back(this);
+    context.widgets().add(*this);
     container.adopt(*this);
 }
 
 ItemBase::~ItemBase() {
     _relay->kill();
-    std::erase(registry(), this);
+    _context->widgets().remove(*this);
     if (_container != nullptr) {
         _container->release(*this);
     }
@@ -284,6 +285,7 @@ void ItemBase::showTestId(std::string_view testId) const {
     if (auto* const node = qobject_cast<QQuickItem*>(part("accessibleItem")); node != nullptr && node != _item) {
         identify(*node);
     }
+    _context->widgets().retag(*this, identifier);
 }
 
 void ItemBase::showTooltip(std::string_view text) const { write("tooltip", toQString(text)); }

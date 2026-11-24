@@ -54,7 +54,12 @@ public:
 
 std::unique_ptr<::core::tui::Component> makeView(WidgetBase& owner) { return std::make_unique<View>(owner); }
 
-WidgetBase::WidgetBase(Context& context) noexcept : _context{&context} {}
+WidgetBase::WidgetBase(Context& context) noexcept : _context{&context}, _sequence{++context.nextSequence} {}
+
+void WidgetBase::applyTestId(std::string_view testId) {
+    _testId = testId;
+    _context->targetsChanged();
+}
 
 // The view is unregistered before the focus is cleared: clearing it calls the view's onBlur, which runs while the
 // widget's own class is already destroyed and tells that apart by the view having no owner.
@@ -116,6 +121,7 @@ void WidgetBase::syncVisible() {
     refresh();
     closeUnreachablePopups(*_context);
     countSpinners(*_context);
+    _context->targetsChanged();
 }
 
 void WidgetBase::applyEnabled(bool enabled) {
@@ -231,6 +237,17 @@ void invert(::core::tui::Buffer& buffer, ::core::tui::Rect area) {
     }
 }
 
+/// Flips every cell of @p area between reverse and normal video.
+void flipInverse(::core::tui::Buffer& buffer, ::core::tui::Rect area) {
+    for (int row = area.y; row < area.y + area.height; ++row) {
+        for (int col = area.x; col < area.x + area.width; ++col) {
+            if (auto* const cell = buffer.cellAt({.x = col, .y = row})) {
+                cell->style.inverse = !cell->style.inverse;
+            }
+        }
+    }
+}
+
 /// Draws every cell of @p area in @p foreground: what a toned table row does to what its cells painted. A selected
 /// row's inverse, and every other attribute, stays.
 void colour(::core::tui::Buffer& buffer, ::core::tui::Rect area, ::core::tui::Color foreground) {
@@ -262,6 +279,13 @@ void WidgetBase::render(::core::tui::Canvas& canvas) {
     }
     if (invertsSurface(effectiveSurface())) {
         invert(canvas.buffer(), drawn);
+    }
+    // The widget an open spotlight rings: the terminal dims nothing, so the target is marked instead. The mark flips
+    // each cell's reverse video rather than setting it: a target already drawn inverse (a focused button, an entry
+    // on an inverted surface) would show no change if it were set, and flipped it reads as the opposite of what the
+    // widget normally looks like.
+    if (_context->spotlit == this) {
+        flipInverse(canvas.buffer(), drawn);
     }
 }
 
@@ -356,7 +380,18 @@ EventResult WidgetBase::dispatch(::core::tui::InputEvent const& event) {
         if (EventResult const result = chord(*pressed); result != EventResult::Ignored) {
             return result;
         }
-        return key(*pressed);
+        // Inside a spotlight the card's chords come before this widget's own keys; Enter and Space stay its own.
+        if (!isActivation(*pressed)) {
+            if (EventResult const result = spotlightChord(*pressed); result != EventResult::Ignored) {
+                return result;
+            }
+        }
+        EventResult const own = key(*pressed);
+        if (own != EventResult::Ignored || isActivation(*pressed)) {
+            return own;
+        }
+        // The focus is on an open spotlight's target: the card's chords run only for a key the target did not take.
+        return targetChord(*pressed);
     }
     return EventResult::Ignored;
 }
@@ -380,6 +415,58 @@ EventResult WidgetBase::chord(::core::tui::KeyEvent const& key) {
         handler(*declared);
     }
     return EventResult::Handled;
+}
+
+// The focus is on an open spotlight's target, outside its box, and the target did not take the key: the card's chords
+// run, so the spotlight and every container inside it are tried, outermost first.
+EventResult WidgetBase::targetChord(::core::tui::KeyEvent const& key) {
+    for (WidgetBase* const candidate : std::vector<WidgetBase*>{_context->spotlights}) {
+        auto* const spotlight = dynamic_cast<ContainerBase*>(candidate);
+        WidgetBase const* const target = spotlight == nullptr ? nullptr : spotlight->passesThrough();
+        if (target == nullptr || !spotlight->isOpenSpotlight() || !isWithin(_view.get(), target->view())) {
+            continue;
+        }
+        // NOLINTNEXTLINE(misc-no-recursion): the widget tree is walked down.
+        auto const walk = [&key](auto const& self, WidgetBase& node) -> EventResult {
+            if (EventResult const result = node.chord(key); result != EventResult::Ignored) {
+                return result;
+            }
+            if (auto const* const container = dynamic_cast<ContainerBase*>(&node)) {
+                for (WidgetBase* const child :
+                     std::vector<WidgetBase*>{container->children().begin(), container->children().end()}) {
+                    if (EventResult const result = self(self, *child); result != EventResult::Ignored) {
+                        return result;
+                    }
+                }
+            }
+            return EventResult::Ignored;
+        };
+        return walk(walk, *spotlight);
+    }
+    return EventResult::Ignored;
+}
+
+EventResult WidgetBase::spotlightChord(::core::tui::KeyEvent const& key) {
+    ContainerBase const* spotlight = nullptr;
+    for (ContainerBase const* outer = _container; outer != nullptr; outer = outer->container()) {
+        if (outer->isOpenSpotlight()) {
+            spotlight = outer;
+            break;
+        }
+    }
+    if (spotlight == nullptr) {
+        return EventResult::Ignored;
+    }
+    for (ContainerBase* outer = _container; outer != nullptr; outer = outer->container()) {
+        bool const last = outer == spotlight;
+        if (EventResult const result = outer->chord(key); result != EventResult::Ignored) {
+            return result;
+        }
+        if (last) {
+            break;
+        }
+    }
+    return EventResult::Ignored;
 }
 
 void WidgetBase::takeFocus() { static_cast<void>(focusWidget(*_context, this)); }
@@ -540,7 +627,11 @@ void WidgetBase::refresh() const { _context->screen->invalidate(); }
 
 bool WidgetBase::blockedByDialog() const {
     auto* const dialog = activeDialog(*_context);
-    return dialog != nullptr && !isWithin(_view.get(), dialog->host());
+    if (dialog == nullptr || isWithin(_view.get(), dialog->host())) {
+        return false;
+    }
+    WidgetBase const* const through = dialog->passesThrough();
+    return through == nullptr || !isWithin(_view.get(), through->view());
 }
 
 ContainerBase::~ContainerBase() {
@@ -1102,6 +1193,7 @@ void fit(Context& context) {
         screen.positionOverlay(
             frame, overlay != nullptr ? overlay->framePosition() : centredIn(screen, frame.preferredSize()));
     }
+    context.targetsChanged();
 }
 
 void countSpinners(Context& context) {
@@ -1125,6 +1217,9 @@ void moveFocus(Context& context, Direction direction) {
     std::vector<::core::tui::Component*> order;
     if (dialog != nullptr) {
         collectFocusable(*dialog, order);
+        if (WidgetBase* const target = dialog->tabTarget()) {
+            collectFocusable(*target, order);
+        }
     } else {
         for (auto* root : context.roots) {
             collectFocusable(*root, order);

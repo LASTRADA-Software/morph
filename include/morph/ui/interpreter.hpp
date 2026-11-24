@@ -2333,6 +2333,46 @@ struct NavigationBadge {
     bool operator==(NavigationBadge const&) const = default;
 };
 
+/// @brief One step of a guided tour, its texts evaluated now, as `AppRoot::tours` answers it.
+struct TourStep {
+    /// @brief The step's title.
+    std::string title;
+    /// @brief Its body; empty for none.
+    std::string body;
+    /// @brief The screen it opens before it shows; empty for none.
+    std::string screen;
+    /// @brief The params it opens that screen with.
+    ValueRecord params;
+    /// @brief The test id it rings; empty for a card with nothing ringed.
+    std::string target;
+    /// @brief The screen whose opening moves the tour on; empty for a step that waits for Next.
+    std::string advanceOn;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(TourStep const&) const = default;
+};
+
+/// @brief A guided tour, its texts evaluated now, as `AppRoot::tours` answers it.
+struct Tour {
+    /// @brief Its id.
+    std::string id;
+    /// @brief The screen it belongs to; empty for a general tour.
+    std::string screen;
+    /// @brief Its title.
+    std::string title;
+    /// @brief Its summary; empty for none.
+    std::string summary;
+    /// @brief Its steps, in order.
+    std::vector<TourStep> steps;
+    /// @brief A runtime tour's revision on the server; 0 for an app-document tour.
+    std::uint64_t revision = 0;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(Tour const&) const = default;
+};
+
 /// @brief An action of a screen's head, as its handle answers it.
 struct HeadAction {
     /// @brief The action's id, what `ScreenHead::run` takes.
@@ -2692,6 +2732,16 @@ public:
     /// @return They, valid as long as the root; empty when the document declares no `navigation`.
     [[nodiscard]] reactive::Computed<std::vector<NavigationBadge>> const& navigationBadges() const;
 
+    /// @brief The app document's guided tours in declaration order, then the runtime tours `setRuntimeTours` gave,
+    ///        each text evaluated in the app scope and again when what it reads changes, a change of locale included.
+    /// @return They, valid as long as the root; empty when the document declares none.
+    [[nodiscard]] reactive::Computed<std::vector<Tour>> const& tours() const;
+
+    /// @brief Gives the runtime tours, as the server listed them: `tours()` lists them after the app document's, in
+    ///        this order, leaving out one whose id an app-document tour has.
+    /// @param tours The tours, loaded with `loadTourText`.
+    void setRuntimeTours(std::vector<TourDecl> tours);
+
     /// @brief Where a shell shows who is signed in: the document's `principalPlacement`.
     /// @return The place; `Sidebar` when the document declares none.
     [[nodiscard]] PrincipalPlacement principalPlacement() const noexcept;
@@ -2754,6 +2804,8 @@ private:
     std::shared_ptr<detail::RtScope> _scope;
     std::vector<PlacedBadge> _navigation;
     std::unique_ptr<reactive::Computed<std::vector<NavigationBadge>>> _navigationBadges;
+    std::unique_ptr<reactive::Signal<std::shared_ptr<std::vector<TourDecl> const>>> _runtimeTours;
+    std::unique_ptr<reactive::Computed<std::vector<Tour>>> _tours;
 };
 
 /// @brief Mounts UI documents (spec 5): one per client process or window, over a session and a dispatcher.

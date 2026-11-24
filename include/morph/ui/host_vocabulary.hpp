@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -49,6 +50,10 @@ struct HostCommand {
     ///        `{"host": name}` finds no such command: it is reported missing and nothing runs, and
     ///        `{"can": "host:name"}` is false.
     std::set<std::string, std::less<>> documents;
+    /// @brief Checks the arguments beyond their types, after they are checked and before `run`: a reason refuses the
+    ///        command, which then does not run and answers as one that did not succeed, and the interpreter reports
+    ///        the reason. Empty checks nothing more.
+    std::function<std::optional<std::string>(ValueRecord const&)> refusal;
 };
 
 /// @brief A value the application registers, such as `sync.needsYouCount`.
@@ -166,7 +171,8 @@ public:
     /// @param name The command.
     /// @param args Its arguments: a record, or `null` for none.
     /// @return `Ran`; `Missing` for a command nobody registered; `Refused`, with the reason, for an argument that is
-    ///         missing, of the wrong type or not declared, or for an unsafe command on an unverified connection.
+    ///         missing, of the wrong type or not declared, for an unsafe command on an unverified connection, or for
+    ///         arguments the command's `refusal` check refuses.
     [[nodiscard]] HostCommandResult run(std::string const& name, Value const& args) const {
         auto const found = _commands.find(name);
         if (found == _commands.end()) {
@@ -209,6 +215,11 @@ public:
                 return refused(std::move(reason));
             }
             checked.insert_or_assign(argName, std::move(value));
+        }
+        if (registered.command.refusal) {
+            if (std::optional<std::string> reason = registered.command.refusal(checked)) {
+                return refused(std::move(*reason));
+            }
         }
         registered.command.run(checked);
         return HostCommandResult{.kind = HostCommandResult::Kind::Ran, .reason = {}};

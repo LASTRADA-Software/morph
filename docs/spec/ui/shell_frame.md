@@ -11,6 +11,7 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 - [Declared parts](#declared-parts)
 - [Module groups](#module-groups)
 - [Toast](#toast)
+- [Tours](#tours)
 - [Design decisions](#design-decisions)
 
 ## Shape
@@ -144,29 +145,30 @@ parts installed has none of these widgets visible.
 `confirm(message, yes, no, done)` asks a yes-or-no question in a dialog over the frame (`shell_confirm`, with
 `shell_confirm_yes` and `shell_confirm_no`) and answers once; Escape answers no.
 
-The widgets, by test id: `shell_brand` (the sidebar's top, where `shell_application` stood: `shell_brand_mark`, a
-round badge holding the declared icon or, without one, the title's first letter, then `shell_brand_title`) and
-`shell_context` under it; in the top bar's line, in this order, `shell_search` (a text input; Ctrl K focuses it) with
-`shell_search_popover` under it holding `shell_search_results`, `shell_inbox` with its sibling badge
-`shell_inbox_count` and its error marker, `shell_help` (a button captioned `?`, named by `labels.help`) and
-`shell_principal_menu`; and at the sidebar's foot `shell_footer`, a row of `shell_connection_dot` (`Success`, muted or
-`Error` by state), `shell_connection` (the state's words, stretching) and `shell_version`.
+The widgets, by test id: `shell_brand` (the sidebar's top, where `shell_application` stood: `shell_brand_mark`, a round
+badge holding the declared icon or, without one, the title's first letter, then `shell_brand_title`) and `shell_context`
+under it; in the top bar's line, in this order, `shell_search` (a text input; Ctrl K focuses it) with
+`shell_search_popover` under it holding `shell_search_results`, `shell_inbox` with its sibling badge `shell_inbox_count`
+and its error marker, `shell_help` (a button captioned `?`, named by `labels.help`), `shell_tours` (the Tours button,
+[Tours](#tours)) and `shell_principal_menu`; and at the sidebar's foot `shell_footer`, a row of `shell_connection_dot`
+(`Success`, muted or `Error` by state), `shell_connection` (the state's words, stretching) and `shell_version`.
 `shell_search_popover` is a `PopoverWidget` whose dismissal closes the panel; its rows are `shell_search_busy`,
-`shell_search_source_<n>`, `shell_search_failed_<n>`, `shell_search_hit_<source>_<place>` and `shell_search_empty`. With parts, the top bar's
-title and head slots are not used: the client mounts the workspace `HeadPlacement::InPage`, and `shell_head_trail` and
-`shell_head_principal` stay hidden. The sidebar's principal text and sign-out button are hidden while a principal menu is
-shown; the navigator's search field is hidden while a search part is shown (`Navigator::setSearchShown`).
+`shell_search_source_<n>`, `shell_search_failed_<n>`, `shell_search_hit_<source>_<place>` and `shell_search_empty`. With
+parts, the top bar's title and head slots are not used: the client mounts the workspace `HeadPlacement::InPage`, and
+`shell_head_trail` and `shell_head_principal` stay hidden. The sidebar's principal text and sign-out button are hidden
+while a principal menu is shown; the navigator's search field is hidden while a search part is shown
+(`Navigator::setSearchShown`).
 
 Compact, the switcher, the module groups and the principal's menu are entries of `shell_nav_menu` (below), and the search
 and the inbox are icon buttons of the bar (`shell_search_open`, `shell_inbox`); `shell_search_open` shows
 `shell_search_overlay`, a full-window overlay with the same field and results.
 
 The navigation menu's entries are, in order: the switcher submenu (when the context is shown), a separator, the
-navigator's `menuEntries()`, a separator and the help entry (when shown), a separator and the principal submenu (when
-shown), then, for a frame with no principal menu and a sign-out handler, the sign-out entry, and last, after a
-separator, a heading entry holding the foot's words (`Connected · v4.2`), since the compact frame has no sidebar to put
-the foot in. The frame keeps the list it built and maps a chosen path through it, not
-by position.
+navigator's `menuEntries()`, a separator and the help entry (when shown), a separator and the Tours submenu (when there
+are tours), a separator and the principal submenu (when shown), then, for a frame with no principal menu and a sign-out
+handler, the sign-out entry, and last, after a separator, a heading entry holding the foot's words (`Connected · v4.2`),
+since the compact frame has no sidebar to put the foot in. The frame keeps the list it built and maps a chosen path
+through it, not by position.
 
 ## Module groups
 
@@ -177,6 +179,9 @@ lists its entries, under the headings of the module's own groups as sections. `s
 current screen and `setOpenModule` keeps the person's choice until the next `setCurrent` to another module. A module
 with one entry is that entry's row. A row's accessible name carries its count and whether it is open. Pins stay above the
 modules. `setSearchShown(false)` hides the navigator's own search.
+
+`reveal(screenId)` empties the navigator's search and, with module groups, opens the module holding the entry, so a
+guided tour can ring an entry that a search or a closed module hides.
 
 `menuEntries()` changes with module groups: one submenu per module whose label carries the count after it, holding the
 module's groups as heading entries and its screens, and no submenu for a one-entry module (that entry is a plain item).
@@ -193,6 +198,21 @@ A later call always replaces the shown text and tone and restarts the dismiss in
 currently on-screen — it is one call, `ToastWidget::show(text, tone)`, not separate setters plus a visibility toggle,
 since a `setVisible(true)` while already visible would silently no-op and leave a stale dismiss timer running. The
 toast is non-modal, dims nothing, and never takes keyboard focus.
+
+## Tours
+
+`setTours(ShellToursView)` installs the Tours button, `shell_tours`: a button-style menu in the top bar's tools after
+the help button and before the person's menu, captioned `caption` ("Tours", `morph.shell.tours`) and named `name`
+("Guided tours", `morph.shell.toursName`). Its entries are each group's `heading` as a heading entry and then its tours,
+the title as the caption and the summary as the description; choosing one calls `setOnTour`'s handler with the tour's
+id. The client gives the active screen's tours under the screen's title, then the general ones under "General"
+(`morph.shell.toursGeneral`). It shows while a group holds a tour, and then counts as a part of the top bar, so the
+tools show for it alone. Menu entries carry no test id: a test chooses them by path. Compact, the button hides and a
+"Tours" submenu with the same entries joins the navigation menu after the help entry.
+
+`spotlight()` makes the frame's `SpotlightWidget` (`shell_spotlight`) the first time it is asked for, as the last child
+of the main column, as the frame's dialogs are: a child of the root row would be a third column of it. It takes no
+room and covers the whole window, sidebar included, on every backend, and goes with the frame.
 
 ## Design decisions
 

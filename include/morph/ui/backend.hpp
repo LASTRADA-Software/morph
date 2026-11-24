@@ -1207,6 +1207,48 @@ public:
     virtual void setOnDismiss(Action onDismiss) = 0;
 };
 
+/// @brief A guided tour's spotlight over the whole window: it dims everything but one widget, rings that widget, and
+///        shows its children (the tour's card) beside it. A new spotlight is closed and names no target.
+///
+/// The target is named by test id. A backend keeps an index of its own live widgets by test id, and the spotlight
+/// rings the first of them, in creation order, that is effectively shown: visible itself, every container around it
+/// visible, every overlay around it open, and no closed section around it. A tab page that is not selected is hidden,
+/// so a widget on it is not shown. The spotlight picks again whenever a widget's test id is set, a widget is
+/// destroyed, or a candidate or a container around it is shown or hidden. With no candidate shown, `targetShown()` is
+/// false and the card is centred with nothing ringed.
+///
+/// Opening it moves keyboard focus into its children (the first shown button, or the first focusable widget, or the
+/// spotlight itself), and closing it hands focus back to the widget that had it when it opened. Tab stays among its
+/// children, unless `setTargetFocusable(true)` adds the ringed widget after them. A chord a widget inside it declares
+/// is delivered before the focused widget's own keys, except Enter and Space, which the focused widget takes first as
+/// it always does; while focus is on the ringed widget or a popup it opened, that control takes the key first and the
+/// chord runs only for a key it left alone. A pointer press outside the ringed widget's box and the card reaches
+/// nothing; one inside the ringed widget's box reaches the ringed widget.
+class SpotlightWidget : public ContainerWidget {
+public:
+    /// @brief Shows or hides the spotlight.
+    /// @param open Whether it is shown.
+    virtual void setOpen(bool open) = 0;
+
+    /// @brief Names the widget to ring.
+    /// @param testId The target's test id; `nullopt` rings nothing and centres the card.
+    virtual void setTarget(std::optional<std::string> testId) = 0;
+
+    /// @brief Whether a widget carrying the target's test id is shown and ringed now.
+    /// @return It; false with no target named.
+    [[nodiscard]] virtual bool targetShown() const = 0;
+
+    /// @brief Sets what is called each time `targetShown()` changes, with its new value. No setter calls it except
+    ///        `setTarget`, whose resolution is a change like any other.
+    /// @param handler The handler; empty calls nothing.
+    virtual void setOnTargetShownChanged(std::function<void(bool)> handler) = 0;
+
+    /// @brief Adds the ringed widget to Tab's order after the spotlight's children, or takes it out: what a step that
+    ///        waits for the person to use the target needs, so it can be reached from the keyboard.
+    /// @param focusable Whether Tab reaches the ringed widget. A new spotlight's Tab stays among its children.
+    virtual void setTargetFocusable(bool focusable) = 0;
+};
+
 /// @brief Panes along the axis fixed at creation, with handles between them that the user drags.
 class SplitterWidget : public ContainerWidget {
 public:
@@ -1402,6 +1444,13 @@ public:
     /// @param parent The container it belongs to and is anchored under, or null for a root.
     /// @return The widget.
     [[nodiscard]] virtual std::unique_ptr<PopoverWidget> createPopover(ContainerWidget* parent) = 0;
+
+    /// @brief Makes a spotlight. A backend that draws none keeps this default, which throws: a tour on it cannot run,
+    ///        and that is said rather than hidden.
+    /// @param parent The container to append it to; null makes a root.
+    /// @return The widget.
+    /// @throws std::logic_error from the default.
+    [[nodiscard]] virtual std::unique_ptr<SpotlightWidget> createSpotlight(ContainerWidget* parent);
 
     /// @brief Makes a progress indicator.
     /// @param parent The container to append to, or null for a root.

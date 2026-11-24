@@ -271,6 +271,12 @@ Item {
         return root.chords.length > 0 && root.question("chord", [event.key, event.modifiers])
     }
 
+    // Runs the chord a key is when this widget declares it, called from C++: a spotlight hands its card's keys to the
+    // card's widgets before the focused control's own handling.
+    function takeChord(key: int, modifiers: int): bool {
+        return root.chords.length > 0 && root.question("chord", [key, modifiers])
+    }
+
     // A content child under an alignment other than stretch keeps its own extent across; a stretch child keeps its
     // fill, and its maximum with the alignment places it.
     // Whether this widget hands the width it has to each widget in it, as a row of actions in a sheet's footer does:

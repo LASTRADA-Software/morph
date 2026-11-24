@@ -116,6 +116,8 @@ public:
     [[nodiscard]] std::unique_ptr<ui::ToastWidget> createToast(ui::ContainerWidget* parent) override;
     /// @copydoc ui::IViewBackend::createPopover
     [[nodiscard]] std::unique_ptr<ui::PopoverWidget> createPopover(ui::ContainerWidget* parent) override;
+    /// @copydoc ui::IViewBackend::createSpotlight
+    [[nodiscard]] std::unique_ptr<ui::SpotlightWidget> createSpotlight(ui::ContainerWidget* parent) override;
     /// @copydoc ui::IViewBackend::createBusy
     [[nodiscard]] std::unique_ptr<ui::BusyWidget> createBusy(ui::ContainerWidget* parent) override;
     /// @copydoc ui::IViewBackend::createTable

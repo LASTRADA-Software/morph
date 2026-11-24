@@ -302,6 +302,12 @@ public:
                                          .height = item->height() / unitHeight};
     }
 
+    ui::Widget const* targetOf(ui::SpotlightWidget const& spotlight) override {
+        auto const* const impl = dynamic_cast<detail::SpotlightImpl const*>(&spotlight);
+        detail::ItemBase const* const ringed = impl == nullptr ? nullptr : impl->ringed();
+        return ringed == nullptr ? nullptr : dynamic_cast<ui::Widget const*>(ringed);
+    }
+
     // In units: the Text's label, offset inside the item by its alignment within the label's width.
     std::optional<ui::testing::WidgetBounds> textExtentOf(ui::Widget const& widget) override {
         settle();
@@ -390,6 +396,15 @@ TEST_CASE("qt_quick conformance: the Qt Quick backend passes every case", "[qt_q
 
 TEST_CASE("qt_quick conformance: the Qt Quick backend passes every layout case", "[qt_quick][conformance]") {
     for (auto const& testCase : ui::testing::layoutConformanceCases()) {
+        QtProbe probe;
+        std::optional<std::string> const failure = testCase.run(probe);
+        INFO(std::string{testCase.name} + ": " + failure.value_or("passed"));
+        CHECK_FALSE(failure.has_value());
+    }
+}
+
+TEST_CASE("qt_quick conformance: the Qt Quick backend passes every spotlight case", "[qt_quick][conformance][tours]") {
+    for (auto const& testCase : ui::testing::spotlightConformanceCases()) {
         QtProbe probe;
         std::optional<std::string> const failure = testCase.run(probe);
         INFO(std::string{testCase.name} + ": " + failure.value_or("passed"));

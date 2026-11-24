@@ -214,9 +214,11 @@ add_executable(morph_tests
     bench_mount.cpp
     test_ui_frontend.cpp
     test_ui_conformance.cpp
+    test_ui_spotlight_recording.cpp
     test_ui_common.cpp
     test_ui_custom.cpp
     test_ui_shell_frame.cpp
+    test_ui_shell_tours.cpp
     test_ui_shell_parts.cpp
     test_ui_explorer.cpp
     test_ui_workspace.cpp
@@ -289,6 +291,15 @@ add_executable(morph_tests
     test_ui_custom_screen_controller.cpp
     test_ui_custom_screen_versions.cpp
     test_ui_host_vocabulary.cpp
+    test_ui_tours_document.cpp
+    test_ui_tours_registry.cpp
+    test_ui_tours_controller.cpp
+    test_ui_tour_card.cpp
+    test_ui_tour_registry.cpp
+    test_ui_tours_runtime.cpp
+    test_ui_tour_sync.cpp
+    test_ui_tours_edges.cpp
+    test_ui_spotlight_edges.cpp
     test_ui_catalogue.cpp
     test_ui_texts.cpp
     test_ui_locale_table.cpp
