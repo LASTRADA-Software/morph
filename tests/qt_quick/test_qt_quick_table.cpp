@@ -2339,6 +2339,8 @@ struct QuickWindowFixture {
             return ui::text({.text = [this, &row, cellColumn] { return textOf(row.get(), cellColumn); }});
         };
         ui::TableOptions tableOptions;
+        // A table over a source is a viewport onto rows it does not hold: it takes the window's height.
+        tableOptions.common.layout.height = ui::Sizing::stretch();
         tableOptions.arrangement = [this] { return arrangement.get(); };
         tableOptions.focus = [this] { return focus.get(); };
         tableOptions.status = [this] { return status.get(); };
