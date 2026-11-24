@@ -59,9 +59,27 @@ MorphWidget {
             root.schedulePlace()
         }
     }
-    // Places the cells once, from the event loop: C++ asks for it as each cell of a pass is placed or pooled.
+    // Places the cells once, from the event loop: C++ asks for it as each cell of a pass is placed or pooled. The
+    // flag keeps the many asks of one turn to one placing; `Qt.callLater` alone does not join calls of a method.
+    property bool placeQueued: false
     function schedulePlace() {
-        Qt.callLater(root.place)
+        if (root.placeQueued)
+            return
+        root.placeQueued = true
+        Qt.callLater(root.placeQueuedNow)
+    }
+    // Places for a change in a cell's own size: at once in a table of its own rows; in a table over a source, with
+    // the other asks of the turn, since a cell's size changes several times as the cell is placed and each change
+    // would place every cell of the row again.
+    function placeSoon() {
+        if (root.table && root.table.sourceRows)
+            root.schedulePlace()
+        else
+            root.place()
+    }
+    function placeQueuedNow() {
+        root.placeQueued = false
+        root.place()
     }
     // The height the row's cells ask for, in a table over a source; the table keeps the largest while it is realized.
     property real measuredHeight: 0
@@ -555,8 +573,10 @@ MorphWidget {
             root.place()
         }
     }
+    // A height change while placing is the placing's own (the row's implicit height follows its cells), and the
+    // placing already reads the new height; placing again for it would only repeat the pass.
     onHeightChanged: {
-        if (root.table && root.table.sourceRows)
+        if (root.table && root.table.sourceRows && !root.placing)
             root.place()
     }
 
@@ -864,7 +884,13 @@ MorphWidget {
     Item {
         id: cells
         anchors.fill: parent
-        onChildrenChanged: root.place()
+        // A source table adopts or pools a row's cells one at a time and asks for the placing itself once the pass is
+        // done (`schedulePlace`); placing at each one would make the pass quadratic in the row's cells.
+        onChildrenChanged: {
+            if (root.table && root.table.sourceRows)
+                return
+            root.place()
+        }
     }
 
     // A modified row's mark: a bar at the leading edge.

@@ -1087,7 +1087,7 @@ void TableRowImpl::adopted(ItemBase& child) {
     // through this widget, which may be gone while Qt still holds the item.
     auto const place = [row = QPointer<QQuickItem>{item()}] {
         if (row != nullptr) {
-            QMetaObject::invokeMethod(row, "place", Qt::DirectConnection);
+            QMetaObject::invokeMethod(row, "placeSoon", Qt::DirectConnection);
         }
     };
     QObject::connect(cell, &QQuickItem::implicitWidthChanged, item(), place);
