@@ -1476,22 +1476,23 @@ MorphWidget {
                                          root.rowAtY(to.y), root.placeAtX(to.x))
                     }
                 }
+            }
 
-                // The selected cells: a wash in the selection's colour with its outline, over the rows they span.
-                Rectangle {
-                    id: cellSelectionBox
-                    objectName: "cellSelection"
-                    readonly property var box: root.cellRectBox()
-                    visible: root.selectsCells && box !== null
-                    z: 2
-                    x: box !== null ? box.x : 0
-                    y: box !== null ? box.y : 0
-                    width: box !== null ? box.width : 0
-                    height: box !== null ? box.height : 0
-                    color: Qt.alpha(Theme.themeScheme.selection, 0.5)
-                    border.width: 2
-                    border.color: Theme.themeScheme.accent
-                }
+            // The selected cells: a wash in the selection's colour with its outline, over the rows they span. It
+            // sits beside the rows plane, not in it, so the plane holds only rows.
+            Rectangle {
+                id: cellSelectionBox
+                objectName: "cellSelection"
+                readonly property var box: root.cellRectBox()
+                visible: root.selectsCells && box !== null
+                z: 2
+                x: box !== null ? box.x : 0
+                y: box !== null ? box.y : 0
+                width: box !== null ? box.width : 0
+                height: box !== null ? box.height : 0
+                color: Qt.alpha(Theme.themeScheme.selection, 0.5)
+                border.width: 2
+                border.color: Theme.themeScheme.accent
             }
         }
     }
