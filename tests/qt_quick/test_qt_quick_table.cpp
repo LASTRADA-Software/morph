@@ -2699,7 +2699,7 @@ TEST_CASE("qt_quick table window: a tap keeps the focus on the table, and the st
 // the mount).
 TEST_CASE("qt_quick table window: the select-all box selects the view through the mount", "[qt_quick]") {
     QuickWindowFixture f{100'000, 30, {.selection = ui::SelectionMode::Multiple, .selectColumn = true}};
-    auto* const box = f.item()->findChild<QQuickItem*>(QStringLiteral("selectAll"));
+    auto* const box = itemNamed(*f.item(), QStringLiteral("selectAll"));
     REQUIRE(box != nullptr);
     f.scene.click(*box);
     REQUIRE_FALSE(f.ranges.empty());
@@ -2730,7 +2730,7 @@ TEST_CASE("qt_quick table window: a select-all handler takes Ctrl+A and the sele
     f.item()->forceActiveFocus();
     f.scene.key(Qt::Key_A, Qt::ControlModifier);
     CHECK(f.selectAlls == 1);
-    auto* const box = f.item()->findChild<QQuickItem*>(QStringLiteral("selectAll"));
+    auto* const box = itemNamed(*f.item(), QStringLiteral("selectAll"));
     REQUIRE(box != nullptr);
     f.scene.click(*box);
     CHECK(f.selectAlls == 2);
