@@ -1166,6 +1166,9 @@ MorphWidget {
             Row {
                 id: header
                 y: root.groupRowHeight
+                // Once the columns are windowed, the header cells are placed in the header area, not in this row, which
+                // would otherwise have nothing to size to and leave the select-all box half above the table.
+                height: root.arranged ? headerMetrics.height + 2 * Theme.tableCellPaddingY : implicitHeight
 
                 // The select-all box: checked while every shown row is selected, partly while some are. It shows the
                 // selection and never changes its own state, so a selection the document refuses leaves it as it was.
