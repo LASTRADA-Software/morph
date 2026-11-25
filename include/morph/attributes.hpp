@@ -35,3 +35,17 @@
 #ifndef MORPH_LIFETIMEBOUND
 #define MORPH_LIFETIMEBOUND
 #endif
+
+/// @brief Gives a header-defined function default visibility, so the function-local statics inside it are one
+/// object per process however many shared objects include the header.
+///
+/// A header-only function is compiled into every shared object that uses it, and under `-fvisibility=hidden` each
+/// copy keeps its own function-local static: a counter that must hand out distinct values process-wide hands out the
+/// same ones from two objects, and a memo is built once per object. Default visibility lets the dynamic linker merge
+/// the copies, which is what Clang's `-Wunique-object-duplication` asks for. Windows has no such merge for a
+/// header-only function, and its compilers do not take the attribute, so it expands to nothing there.
+#if defined(__GNUC__) && !defined(_WIN32)
+#define MORPH_PROCESS_UNIQUE __attribute__((visibility("default")))
+#else
+#define MORPH_PROCESS_UNIQUE
+#endif

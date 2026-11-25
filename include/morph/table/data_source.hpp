@@ -29,6 +29,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <morph/attributes.hpp>
 #include <morph/core/callback_scope.hpp>
 #include <morph/util/datetime.hpp>
 #include <morph/util/quantity.hpp>
@@ -280,7 +281,7 @@ struct UnitIdHash {
 
 /// @brief The next registry lineage of the process: one per registry built from nothing.
 /// @return A lineage no registry of the process has had; never 0.
-[[nodiscard]] inline std::uint64_t nextUnitLineage() noexcept {
+[[nodiscard]] MORPH_PROCESS_UNIQUE inline std::uint64_t nextUnitLineage() noexcept {
     static std::atomic<std::uint64_t> counter{0};
     return counter.fetch_add(1, std::memory_order_relaxed) + 1;
 }

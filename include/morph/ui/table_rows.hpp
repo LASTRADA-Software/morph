@@ -36,6 +36,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <morph/attributes.hpp>
 #include <morph/core/callback_scope.hpp>
 #include <morph/core/change_types.hpp>
 #include <morph/core/completion.hpp>
@@ -1324,7 +1325,7 @@ public:
 
 private:
     // The fold of a text: the one this thread made last when it was of the same text, else a new one, counted.
-    [[nodiscard]] std::string folded(std::string_view text) const {
+    [[nodiscard]] MORPH_PROCESS_UNIQUE std::string folded(std::string_view text) const {
         struct Last {
             std::string text;
             std::string fold;

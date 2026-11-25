@@ -1623,7 +1623,7 @@ public:
     void unsubscribe(ChangeListener& listener) override { static_cast<void>(listener); }
 
 private:
-    [[nodiscard]] static std::uint64_t nextPin() noexcept {
+    [[nodiscard]] MORPH_PROCESS_UNIQUE static std::uint64_t nextPin() noexcept {
         static std::atomic<std::uint64_t> pins{0};
         return pins.fetch_add(1) + 1;
     }

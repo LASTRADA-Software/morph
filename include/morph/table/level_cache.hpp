@@ -26,6 +26,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <morph/attributes.hpp>
 #include <morph/core/change_types.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/logger.hpp>
@@ -1971,7 +1972,7 @@ private:
             }
         }
 
-        [[nodiscard]] LevelRead state(std::size_t row, std::string_view level) const {
+        [[nodiscard]] MORPH_PROCESS_UNIQUE LevelRead state(std::size_t row, std::string_view level) const {
             for (auto const& entry : _levels) {
                 if (entry.name == level) {
                     thread_local std::vector<Cell> buffer;
