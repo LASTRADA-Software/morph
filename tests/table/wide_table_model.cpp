@@ -21,9 +21,9 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
-#include <windows.h>
-// windows.h first: psapi.h needs its types.
-#include <psapi.h>
+#include <Windows.h>
+// Windows.h first: Psapi.h needs its types.
+#include <Psapi.h>
 #elif defined(__linux__)
 #include <unistd.h>
 
