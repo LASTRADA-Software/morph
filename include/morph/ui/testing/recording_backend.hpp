@@ -2921,7 +2921,7 @@ public:
 
     /// @brief Stores the handler `RecordingBackend::measureColumn` calls.
     /// @param handler The handler.
-    void setOnColumnMeasured(std::function<void(std::size_t, int)> handler) override {
+    void setOnColumnMeasured(std::function<void(std::size_t, ColumnMeasure const&)> handler) override {
         _onMeasured = std::move(handler);
     }
 
@@ -3110,11 +3110,11 @@ public:
     }
 
     /// @brief Calls the handler `setOnColumnMeasured` stored, as a cell's layout would.
-    /// @param column The column.
-    /// @param width  The width.
-    void measure(std::size_t column, int width) {
+    /// @param column  The column.
+    /// @param measure What was measured.
+    void measure(std::size_t column, ColumnMeasure const& measure) {
         if (_onMeasured) {
-            _onMeasured(column, width);
+            _onMeasured(column, measure);
         }
     }
 
@@ -3372,7 +3372,7 @@ private:
     std::pair<std::optional<std::int64_t>, std::size_t> _counts;
     std::function<void(int, int)> _onHorizontal;
     std::function<void(std::size_t, std::size_t, SelectionChange)> _onSelectRange;
-    std::function<void(std::size_t, int)> _onMeasured;
+    std::function<void(std::size_t, ColumnMeasure const&)> _onMeasured;
     std::function<void(FocusMove)> _onFocusMove;
     std::function<void(std::size_t, std::size_t, std::size_t, std::size_t)> _onCellSelect;
     std::function<void(std::string)> _onText;
@@ -4560,7 +4560,16 @@ public:
     /// @param width    The width.
     /// @throws std::logic_error when the widget is not a table.
     void measureColumn(int widgetId, std::size_t column, int width) {
-        fakeTable(widgetId, "measureColumn").measure(column, width);
+        fakeTable(widgetId, "measureColumn").measure(column, ColumnMeasure{.natural = width, .least = width});
+    }
+
+    /// @brief Reports what a column's header and cells measured, as a backend's layout would.
+    /// @param widgetId The table.
+    /// @param column   The column: an index into the table's columns.
+    /// @param measure  What was measured.
+    /// @throws std::logic_error when the widget is not a table.
+    void measureColumn(int widgetId, std::size_t column, ColumnMeasure const& measure) {
+        fakeTable(widgetId, "measureColumn").measure(column, measure);
     }
 
     /// @brief A table's column window, as the mount last set it.

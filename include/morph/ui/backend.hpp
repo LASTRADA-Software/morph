@@ -743,6 +743,26 @@ struct TableMeasure {
     ///        a width the user set, so a column is as wide windowed as unwindowed (a graphical backend's cell padding
     ///        on both sides, a terminal's gap after the column).
     int padding = 0;
+    /// @brief The narrowest a stretch column with `shrink` goes, padding included: a column whose header is narrower
+    ///        keeps its header.
+    int shrinkFloor = 8;
+};
+
+/// @brief What a backend measured of one table column (`TableWidget::setOnColumnMeasured`), in its own measure with
+/// the
+///        column's padding added. A width of 0 reports nothing of that kind.
+struct ColumnMeasure {
+    /// @brief The width of the column's header: its label, and the marks and button it draws.
+    int header = 0;
+    /// @brief The width a shown cell asks for.
+    int natural = 0;
+    /// @brief The narrowest a shown cell is laid out without losing content: a text's widest word, else `natural`.
+    int least = 0;
+
+    /// @brief Member-wise equality.
+    /// @param other The measure to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(ColumnMeasure const& other) const = default;
 };
 
 /// @brief A key that moves a table's focused cell, which the mount resolves over rows and columns it may not have
@@ -1127,10 +1147,14 @@ public:
         static_cast<void>(column);
     }
 
-    /// @brief Sets what the backend calls with the width a cell measured, so the mount can grow the column.
-    /// @param handler The handler, with the column (an index into the columns `setColumns` gave) and the width, in the
-    ///        backend's measure (`tableMeasure`); empty does nothing.
-    virtual void setOnColumnMeasured(std::function<void(std::size_t column, int width)> handler) {
+    /// @brief Sets what the backend calls with the widths a column's header and cells measured, so the mount can grow
+    /// a
+    ///        content column and fit the stretch columns to the table. A report only ever adds to what the mount
+    ///        knows: it keeps the largest of each width reported.
+    /// @param handler The handler, with the column (an index into the columns `setColumns` gave) and what was
+    /// measured,
+    ///        in the backend's measure (`tableMeasure`), padding included; empty does nothing.
+    virtual void setOnColumnMeasured(std::function<void(std::size_t column, ColumnMeasure const& measure)> handler) {
         static_cast<void>(handler);
     }
 

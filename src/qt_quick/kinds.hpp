@@ -754,7 +754,8 @@ public:
     /// index and each cell by its column.
     void setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler) override;
     void setHorizontalOffset(int scrollX) override;
-    void setOnColumnMeasured(std::function<void(std::size_t column, int width)> handler) override;
+    void setOnColumnMeasured(
+        std::function<void(std::size_t column, ui::ColumnMeasure const& measure)> handler) override;
     /// Pixels: a unit is `Theme.unitWidth`, a monospace character `Theme.monoAdvance`, a content column starts at
     /// twelve units, and a column's padding is `table.cellPaddingX` a side, as the unwindowed table sizes them.
     [[nodiscard]] ui::TableMeasure tableMeasure() const override;
@@ -869,7 +870,7 @@ private:
     // Engaged while the selection is of the view: every row but these keys is marked, until the next setSelection.
     std::optional<std::vector<ui::Key>> _viewExcept;
     std::function<void(int, int)> _onHorizontalRange;
-    std::function<void(std::size_t, int)> _onColumnMeasured;
+    std::function<void(std::size_t, ui::ColumnMeasure const&)> _onColumnMeasured;
     std::function<void(ui::FocusMove)> _onFocusMove;
     std::function<void(std::size_t, std::size_t, ui::SelectionChange)> _onSelectRange;
     std::function<void(std::string)> _onText;

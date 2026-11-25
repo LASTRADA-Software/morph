@@ -1824,6 +1824,41 @@ void TableImpl::setOnHorizontalRange(std::function<void(int scrollX, int viewpor
     _source = true;
 }
 
+ui::TableMeasure TableImpl::tableMeasure() const {
+    return ui::TableMeasure{.unit = 1.0,
+                            .monoUnit = 1.0,
+                            .contentEstimate = 12,
+                            .padding = kColumnGap,
+                            .shrinkFloor = kShrunkColumn + kColumnGap};
+}
+
+void TableImpl::setOnColumnMeasured(
+    std::function<void(std::size_t column, ui::ColumnMeasure const& measure)> handler) {
+    _onColumnMeasured = std::move(handler);
+    _reportedMeasures.clear();
+}
+
+std::vector<std::pair<std::size_t, ui::ColumnMeasure>> TableImpl::grownMeasures() const {
+    std::vector<std::pair<std::size_t, ui::ColumnMeasure>> grown;
+    if (!_onColumnMeasured) {
+        return grown;
+    }
+    auto const naturals = naturalWidths();
+    auto const leasts = leastWidths();
+    for (std::size_t column = 0; column < _columns.size(); ++column) {
+        ui::ColumnMeasure const before =
+            column < _reportedMeasures.size() ? _reportedMeasures.at(column) : ui::ColumnMeasure{};
+        // The widths of the cells and the header each carry the gap after the column, as the mount's widths do.
+        ui::ColumnMeasure const now{.header = std::max(before.header, headerWidth(_columns.at(column)) + kColumnGap),
+                                    .natural = std::max(before.natural, naturals.at(column) + kColumnGap),
+                                    .least = std::max(before.least, leasts.at(column) + kColumnGap)};
+        if (now != before) {
+            grown.emplace_back(column, now);
+        }
+    }
+    return grown;
+}
+
 void TableImpl::setOnSelectRange(
     std::function<void(std::size_t anchorRow, std::size_t focusRow, ui::SelectionChange)> handler) {
     _onSelectRange = std::move(handler);
@@ -2028,6 +2063,25 @@ void TableImpl::reportRanges() {
         _reportedColumns = columns;
         auto const handler = _onHorizontalRange;
         handler(columns.first, columns.second);
+    }
+    // The mount fits the columns to the table from these, so they go before the rows are asked for.
+    if (auto const grown = grownMeasures(); !grown.empty()) {
+        _reportedMeasures.resize(_columns.size());
+        auto const handler = _onColumnMeasured;
+        Context& held = context();
+        WidgetBase* alive = this;
+        held.watches.push_back(&alive);
+        for (auto const& [column, measure] : grown) {
+            _reportedMeasures.at(column) = measure;
+            handler(column, measure);
+            if (alive == nullptr) {
+                break;
+            }
+        }
+        std::erase(held.watches, &alive);
+        if (alive == nullptr) {
+            return;
+        }
     }
     auto const rows = rowsInView();
     if (_onVisibleRange && _reportedRows != rows) {
@@ -2255,7 +2309,8 @@ void TableImpl::reportBeforeNextFrame() {
     }
     bool const columnsDue = _onHorizontalRange && _reportedColumns != std::pair{_scrollX, viewport()};
     bool const rowsDue = _onVisibleRange && _reportedRows != rowsInView();
-    if (!columnsDue && !rowsDue) {
+    bool const measuresDue = !grownMeasures().empty();
+    if (!columnsDue && !rowsDue && !measuresDue) {
         return;
     }
     if (std::ranges::find(context().windowTables, this) == context().windowTables.end()) {

@@ -6,11 +6,13 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QStringList>
+#include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <morph/ui/cell_format.hpp>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -18,8 +20,6 @@
 #include <string_view>
 #include <utility>
 #include <variant>
-
-#include <morph/ui/cell_format.hpp>
 
 #include "qt_quick/kinds.hpp"
 
@@ -49,7 +49,10 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
         QVariantMap const map = payload.toMap();
         qlonglong const column = map.value(QStringLiteral("column")).toLongLong();
         if (auto const handler = _onColumnMeasured; handler && column >= 0) {
-            handler(static_cast<std::size_t>(column), map.value(QStringLiteral("width")).toInt());
+            handler(static_cast<std::size_t>(column),
+                    ui::ColumnMeasure{.header = map.value(QStringLiteral("header")).toInt(),
+                                      .natural = map.value(QStringLiteral("natural")).toInt(),
+                                      .least = map.value(QStringLiteral("least")).toInt()});
         }
     });
     relay().on(QStringLiteral("focusMove"), [this](QVariant const& payload) {
@@ -577,10 +580,12 @@ ui::TableMeasure TableImpl::tableMeasure() const {
     return ui::TableMeasure{.unit = read("measureUnit").toDouble(),
                             .monoUnit = read("measureMonoUnit").toDouble(),
                             .contentEstimate = static_cast<int>(std::lround(12 * read("measureUnit").toDouble())),
-                            .padding = static_cast<int>(std::lround(read("measurePadding").toDouble()))};
+                            .padding = static_cast<int>(std::lround(read("measurePadding").toDouble())),
+                            .shrinkFloor = static_cast<int>(std::lround(8 * read("measureUnit").toDouble()))};
 }
 
-void TableImpl::setOnColumnMeasured(std::function<void(std::size_t column, int width)> handler) {
+void TableImpl::setOnColumnMeasured(
+    std::function<void(std::size_t column, ui::ColumnMeasure const& measure)> handler) {
     _onColumnMeasured = std::move(handler);
 }
 
@@ -722,6 +727,19 @@ void TableImpl::setCellColumn(ui::Widget& row, ui::Widget& cell, std::optional<s
     }
     base->offer("measuredIndex", column ? static_cast<int>(*column) : -1);
     base->cover(!column.has_value());
+    // A cell reports a change of its width itself, but its width may have changed before it had this column, and a
+    // pooled cell's content is rebound after its column is set. Its width in this column is told to the table once the
+    // pass is over, when the content is the row's own.
+    if (column && base->item() != nullptr && item() != nullptr) {
+        QTimer::singleShot(0, item(),
+                           [tableRef = QPointer<QQuickItem>{item()}, cellRef = QPointer<QQuickItem>{base->item()}] {
+                               if (tableRef != nullptr && cellRef != nullptr && cellRef->isVisible()) {
+                                   QMetaObject::invokeMethod(tableRef, "reportCell", Qt::DirectConnection,
+                                                             Q_ARG(int, cellRef->property("measuredIndex").toInt()),
+                                                             Q_ARG(QVariant, QVariant::fromValue(cellRef.data())));
+                               }
+                           });
+    }
     // Once per row and event loop turn, however many of its cells a pass places.
     if (QQuickItem* const rowItem = tableRow->item(); rowItem != nullptr) {
         QMetaObject::invokeMethod(rowItem, "schedulePlace", Qt::DirectConnection);
@@ -1105,8 +1123,10 @@ void TableRowImpl::adopted(ItemBase& child) {
     int const columnIndex = static_cast<int>(children().size()) - 1;
     // A cell reports a change of its least or width-free natural width itself, through these. Its column is read when
     // it reports: a table over a source moves a pooled cell to another column (`TableImpl::setCellColumn`).
+    // A table over a source places each cell in a column of its own choosing (`setCellColumn`), whatever its place
+    // among the row's children, so no cell is reported for a column before it has one.
     child.offer("measuredBy", QVariant::fromValue<QObject*>(tableItem));
-    child.offer("measuredIndex", columnIndex);
+    child.offer("measuredIndex", tableItem->property("sourceRows").toBool() ? -1 : columnIndex);
     QObject::connect(cell, &QQuickItem::implicitWidthChanged, item(),
                      [tableRef = QPointer<QQuickItem>{tableItem}, cellRef = QPointer<QQuickItem>{cell}] {
                          if (tableRef != nullptr && cellRef != nullptr && cellRef->isVisible()) {

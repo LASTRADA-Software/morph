@@ -1424,6 +1424,8 @@ using morph::testing::FakeRows;
 struct WindowOptions {
     std::size_t pinned = 0;
     std::vector<std::size_t> custom;
+    // Changes the columns before the table is built.
+    std::function<void(std::vector<ui::TableColumn>&)> columns;
 };
 
 // The text of a record's field, or nothing.
@@ -1445,6 +1447,9 @@ struct WindowFixture {
             columns.push_back(ui::TableColumn{.id = "c" + std::to_string(column),
                                               .label = "C" + std::to_string(column),
                                               .width = ui::Sizing::fixed(100)});
+        }
+        if (options.columns) {
+            options.columns(columns);
         }
         ui::TableSource source;
         source.rows = rows;
@@ -1490,8 +1495,8 @@ struct WindowFixture {
         settle();
     }
 
-    void scrollColumns(int scrollX) {
-        backend.scrollTableColumns(table, scrollX, 2000);
+    void scrollColumns(int scrollX, int viewport = 2000) {
+        backend.scrollTableColumns(table, scrollX, viewport);
         settle();
     }
 
@@ -1677,9 +1682,101 @@ TEST_CASE("table window: a pooled cell is rebound by its row signal", "[ui][moun
     CHECK(f.backend.prop(*f.cellOf(Key{std::int64_t{40'000}}, 5), "text") == "r40000c5");  // rebound to its new row
 }
 
+// A table of a fixed column and two stretch columns, over a viewport of @p viewport.
+struct StretchFixture : WindowFixture {
+    explicit StretchFixture(int viewport, bool wrapFirst = false)
+        : WindowFixture{10, 3, {.columns = [wrapFirst](std::vector<ui::TableColumn>& columns) {
+                            columns.at(1).width = ui::Sizing::stretch(1);
+                            columns.at(1).wrap = wrapFirst;
+                            columns.at(2).width = ui::Sizing::stretch(1);
+                            columns.at(2).wrap = false;
+                        }}} {
+        scrollColumns(0, viewport);
+    }
+
+    [[nodiscard]] std::vector<int> widths() const {
+        return {extents().widthOf(0), extents().widthOf(1), extents().widthOf(2)};
+    }
+
+    void measure(std::size_t column, ui::ColumnMeasure const& measure) {
+        backend.measureColumn(table, column, measure);
+        settle();
+    }
+};
+
+// Mutation: the stretch columns keep the estimate (the fit is never run).
+TEST_CASE("table stretch: the stretch columns share the width the fixed column leaves", "[ui][mount]") {
+    StretchFixture f{600};
+    f.measure(1, {.header = 50, .natural = 200, .least = 200});
+    f.measure(2, {.header = 50, .natural = 200, .least = 200});
+    // 500 left of 600: each is 200 and half of the spare 100.
+    CHECK(f.widths() == std::vector<int>{100, 250, 250});
+    CHECK(f.extents().totalWidth() == 600);
+}
+
+// Mutation: a stretch width only grows (`ColumnExtents::grow` in place of `fit`).
+TEST_CASE("table stretch: the stretch columns narrow when the table does, and widen when it grows again",
+          "[ui][mount]") {
+    StretchFixture f{600};
+    f.measure(1, {.header = 100, .natural = 200, .least = 200});
+    f.measure(2, {.header = 100, .natural = 200, .least = 200});
+    f.scrollColumns(0, 400);
+    // 300 left, floors 100 each: the last column gives up first, down to its header.
+    CHECK(f.widths() == std::vector<int>{100, 200, 100});
+    f.scrollColumns(0, 700);
+    CHECK(f.widths() == std::vector<int>{100, 300, 300});
+}
+
+// Mutation: a wrapping column's least width is its natural width (step 2 never narrows it).
+TEST_CASE("table stretch: a wrapping column narrows to its least width before the others give up width",
+          "[ui][mount]") {
+    StretchFixture f{340, /*wrapFirst*/ true};
+    f.measure(1, {.header = 50, .natural = 200, .least = 80});
+    f.measure(2, {.header = 50, .natural = 100, .least = 100});
+    // 240 left: between the least widths (180) and the natural ones (300).
+    CHECK(f.widths() == std::vector<int>{100, 140, 100});
+    f.scrollColumns(0, 100 + 180);
+    CHECK(f.widths() == std::vector<int>{100, 80, 100});
+}
+
+TEST_CASE("table stretch: a table too narrow for the floors keeps every stretch column at its header", "[ui][mount]") {
+    StretchFixture f{150};
+    f.measure(1, {.header = 60, .natural = 200, .least = 200});
+    f.measure(2, {.header = 70, .natural = 200, .least = 200});
+    CHECK(f.widths() == std::vector<int>{100, 60, 70});
+}
+
+TEST_CASE("table stretch: a measure only adds to what the mount knows", "[ui][mount]") {
+    StretchFixture f{600};
+    f.measure(1, {.header = 50, .natural = 200, .least = 200});
+    f.measure(2, {.header = 50, .natural = 200, .least = 200});
+    f.measure(1, {.natural = 120});  // narrower: the widest cell seen stays
+    CHECK(f.widths() == std::vector<int>{100, 250, 250});
+    f.measure(1, {.natural = 300, .least = 300});
+    // 500 left, naturals 300 and 200: the spare 0.
+    CHECK(f.widths() == std::vector<int>{100, 300, 200});
+}
+
+TEST_CASE("table stretch: a width the user set is not stretched", "[ui][mount]") {
+    StretchFixture f{600};
+    f.measure(1, {.header = 50, .natural = 200, .least = 200});
+    f.measure(2, {.header = 50, .natural = 200, .least = 200});
+    TableArrangement arrangement = f.arrangement.peek();
+    arrangement.widths = {{1, 150}};
+    f.arrangement.set(arrangement);
+    f.settle();
+    // The user's 150 is held, and the last column takes the rest of 600 - 100 - 150.
+    CHECK(f.widths() == std::vector<int>{100, 150, 350});
+}
+
 // Mutation: no anchoring (`horizontalOffset` is never set).
 TEST_CASE("table window: a column growing left of the view keeps the columns in view where they are", "[ui][mount]") {
-    WindowFixture f{1'999, 300, {.pinned = 0}};
+    // Content columns, which the estimate (100) starts at the width the other fixtures give them.
+    WindowFixture f{1'999, 300, {.pinned = 0, .columns = [](std::vector<ui::TableColumn>& columns) {
+                                     for (ui::TableColumn& column : columns) {
+                                         column.width = ui::Sizing::content();
+                                     }
+                                 }}};
     f.scrollColumns(10'000);  // column 100 is the first in view
     f.backend.measureColumn(f.table, 98, 160);
     f.settle();  // an overscan column grows by 60

@@ -169,10 +169,9 @@ public:
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowIndex(ui::Widget& row, std::size_t viewRow) override;
     /// The terminal measures in cells: a unit, and a monospace character, is one cell; a column takes its gap after it
-    /// beyond its content, as an unwindowed column does; a column that declares no width starts at twelve.
-    [[nodiscard]] ui::TableMeasure tableMeasure() const override {
-        return ui::TableMeasure{.unit = 1.0, .monoUnit = 1.0, .contentEstimate = 12, .padding = 1};
-    }
+    /// beyond its content, as an unwindowed column does; a column that declares no width starts at twelve; a column
+    /// that shrinks goes down to a few cells and its gap.
+    [[nodiscard]] ui::TableMeasure tableMeasure() const override;
     void setStatus(ui::TableStatus const& status) override;
     void setOnRetry(std::function<void()> onRetry) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
@@ -184,6 +183,10 @@ public:
     void setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
                          std::span<int const> widths, int totalWidth, std::size_t pinned) override;
     void setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler) override;
+    /// Reports the widths of the headers and of the shown cells, with the gap after the column, when one grew since it
+    /// was last reported, so the mount can fit the columns to the table.
+    void setOnColumnMeasured(
+        std::function<void(std::size_t column, ui::ColumnMeasure const& measure)> handler) override;
     void setHorizontalOffset(int scrollX) override;
     void setFocusCell(std::size_t viewRow, std::size_t column) override;
     void setOnFocusMove(std::function<void(ui::FocusMove)> handler) override;
@@ -400,6 +403,8 @@ private:
     void clampView();
     /// Has the next frame report the ranges in view, when they changed.
     void reportBeforeNextFrame();
+    /// The columns whose measure grew past what was last reported, with the measure to report.
+    [[nodiscard]] std::vector<std::pair<std::size_t, ui::ColumnMeasure>> grownMeasures() const;
     /// Draws the status line on the last line.
     void paintStatus(::core::tui::Canvas& canvas);
     /// Draws the marks of the cells that are not loaded, in their rows' @p areas.
@@ -501,6 +506,8 @@ private:
     std::function<void(int, int)> _onHorizontalRange;
     std::optional<std::pair<std::size_t, std::size_t>> _reportedRows;
     std::optional<std::pair<int, int>> _reportedColumns;
+    std::function<void(std::size_t, ui::ColumnMeasure const&)> _onColumnMeasured;
+    std::vector<ui::ColumnMeasure> _reportedMeasures;
     std::function<void(ui::FocusMove)> _onFocusMove;
     std::function<void(std::string)> _onText;
     std::function<void(std::size_t, std::size_t, bool)> _onCellClick;

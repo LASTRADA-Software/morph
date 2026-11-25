@@ -36,6 +36,7 @@
 #include "../reactive/signal.hpp"
 #include "../table/view_change.hpp"
 #include "../ui/backend.hpp"
+#include "stretch_columns.hpp"
 #include "table_rows.hpp"
 #include "value.hpp"
 #include "view.hpp"
@@ -121,6 +122,20 @@ public:
     /// @return Whether the width changed.
     bool grow(std::size_t column, int width) {
         if (column >= _widths.size() || _user[column] || width <= _widths[column]) {
+            return false;
+        }
+        add(column, width - _widths[column]);
+        _widths[column] = width;
+        return true;
+    }
+
+    /// @brief Sets a width the mount computed, which may be narrower than the one before; a width the user set stays.
+    /// @param column The column's place in the layout.
+    /// @param width  The width; a negative width reads as 0.
+    /// @return Whether the width changed.
+    bool fit(std::size_t column, int width) {
+        width = std::max(width, 0);
+        if (column >= _widths.size() || _user[column] || width == _widths[column]) {
             return false;
         }
         add(column, width - _widths[column]);
@@ -2815,6 +2830,15 @@ private:
         bool visibleTold = false;
         std::vector<std::optional<std::size_t>> placeOf;
         std::shared_ptr<ColumnExtents> extents = std::make_shared<ColumnExtents>();
+        // What the backend measured of each column (an index into `columns`), the largest of each width reported; it
+        // outlives an arrangement, so a column laid out again starts from it.
+        std::vector<ColumnMeasure> measures;
+        // The places of the visible stretch columns whose width the user did not set, and whether the widths they get
+        // are owed a recomputation: the room, a measure or another column's width changed.
+        std::vector<std::size_t> stretchPlaces;
+        bool stretchDirty = true;
+        // The backend's measure of the table, as of the last arrangement.
+        TableMeasure measure;
         // The horizontal viewport, once the backend reported one.
         bool horizontal = false;
         int scrollX = 0;
@@ -2911,6 +2935,12 @@ private:
         return table.horizontal || table.arrangement != TableArrangement{};
     }
 
+    // A content column's width: its widest cell and its header once either is measured, the backend's estimate before.
+    [[nodiscard]] static int contentWidthOf(ColumnMeasure const& known, TableMeasure const& measure) {
+        int const measured = std::max(known.natural, known.header);
+        return measured > 0 ? measured : measure.contentEstimate;
+    }
+
     // Takes a new arrangement: the visible columns, their places, and their widths, the declared ones and the user's.
     static void arrange(SourceTable& table, TableArrangement arrangement) {
         table.arrangement = std::move(arrangement);
@@ -2939,6 +2969,8 @@ private:
         // column takes beyond its content, a content column from the backend's estimate. Monospace characters are
         // rounded up, so a column of n of them never cuts the last.
         TableMeasure const measure = table.widget->tableMeasure();
+        table.measure = measure;
+        table.measures.resize(table.columns.size());
         auto const scaled = [&measure, &table](std::size_t column, int units) {
             bool const mono = table.columns.at(column).role == TextRole::Mono;
             double const content = units * (mono ? measure.monoUnit : measure.unit);
@@ -2949,10 +2981,20 @@ private:
         widths.reserve(table.visible.size());
         for (std::size_t const column : table.visible) {
             Sizing const& width = table.columns.at(column).width;
+            ColumnMeasure const& known = table.measures.at(column);
             widths.push_back(width.kind == Sizing::Kind::Fixed ? scaled(column, width.amount)
-                                                                : measure.contentEstimate);
+                                                               : contentWidthOf(known, measure));
         }
         table.extents->assign(widths);
+        table.stretchPlaces.clear();
+        for (std::size_t place = 0; place < table.visible.size(); ++place) {
+            std::size_t const column = table.visible.at(place);
+            if (table.columns.at(column).width.kind == Sizing::Kind::Stretch &&
+                !table.arrangement.widths.contains(column)) {
+                table.stretchPlaces.push_back(place);
+            }
+        }
+        table.stretchDirty = true;
         if (table.spans != nullptr) {
             table.spans->placeOf = table.placeOf;
         }
@@ -3007,6 +3049,9 @@ private:
     // Brings the column window up to date with the scroll, the arrangement, the widths and the rows' count, and tells
     // the backend and the rows what changed. Reads one width per column of the window, and none outside it.
     void refreshColumns(SourceTable& table, std::size_t rows) {
+        if (table.stretchDirty) {
+            fitStretch(table);
+        }
         bool const windowed =
             table.horizontal &&
             windowingOf(table.virtualize, rows, table.visible.size(), /*serverMode*/ true).columns;
@@ -3066,6 +3111,67 @@ private:
                     tellVisible(table);
                 }
             }
+        }
+    }
+
+    // The place of the first column fully in view, past the pinned ones: a width change left of it moves the scroll
+    // offset by as much, so the columns in view stay where they are.
+    [[nodiscard]] static std::size_t firstFullPlace(SourceTable const& table) {
+        ColumnExtents const& extents = *table.extents;
+        std::size_t firstFull = extents.columnsAt(table.scrollX, 1).first;
+        if (extents.offsetOf(firstFull) < table.scrollX) {
+            ++firstFull;
+        }
+        return std::max(firstFull, table.pinnedShown);
+    }
+
+    // Gives the stretch columns the width the other columns leave, by the rules of `stretchWidths`: each column's
+    // natural width is the larger of its header and its widest cell measured so far, so a table over rows it has not
+    // realized fits the rows it has seen. A table whose viewport the backend has not reported keeps the estimate.
+    static void fitStretch(SourceTable& table) {
+        table.stretchDirty = false;
+        if (!table.horizontal || table.stretchPlaces.empty()) {
+            return;
+        }
+        ColumnExtents& extents = *table.extents;
+        int const shrinkFloor = table.measure.shrinkFloor;
+        std::vector<StretchColumn> columns;
+        columns.reserve(table.stretchPlaces.size());
+        std::int64_t held = 0;
+        for (std::size_t const place : table.stretchPlaces) {
+            TableColumn const& column = table.columns.at(table.visible.at(place));
+            ColumnMeasure const& known = table.measures.at(table.visible.at(place));
+            int const natural = std::max(known.header, known.natural);
+            columns.push_back(
+                StretchColumn{.natural = natural,
+                              .least = column.wrap ? std::max(known.header, known.least) : natural,
+                              .floor = column.shrink ? std::min(known.header, shrinkFloor) : known.header,
+                              .weight = column.width.amount,
+                              .shrink = column.shrink});
+            held += extents.offsetOf(place + 1) - extents.offsetOf(place);
+        }
+        std::int64_t const room = std::int64_t{table.viewport} - (extents.totalWidth() - held);
+        std::vector<int> const widths = stretchWidths(
+            columns, static_cast<int>(std::clamp<std::int64_t>(room, 0, std::numeric_limits<int>::max())));
+        std::size_t const firstFull = firstFullPlace(table);
+        int moved = 0;
+        bool changed = false;
+        for (auto const [place, width] : std::views::zip(table.stretchPlaces, widths)) {
+            int const before = extents.offsetOf(place + 1) - extents.offsetOf(place);
+            if (extents.fit(place, width)) {
+                changed = true;
+                if (place >= table.pinnedShown && place < firstFull) {
+                    moved += width - before;
+                }
+            }
+        }
+        if (!changed) {
+            return;
+        }
+        table.windowDirty = true;
+        if (moved != 0) {
+            table.scrollX = std::max(table.scrollX + moved, 0);
+            table.widget->setHorizontalOffset(table.scrollX);
         }
     }
 
@@ -4538,11 +4644,12 @@ private:
                 table.scrollX = std::max(scrollX, 0);
                 table.viewport = std::max(viewport, 0);
                 table.windowDirty = true;
+                table.stretchDirty = true;
                 realizeWindow(table, [](std::int64_t) { return false; });
             }));
         });
-        widget.setOnColumnMeasured([this, &table](std::size_t column, int width) {
-            static_cast<void>(runCallback(*_rt, [&] { measured(table, column, width); }));
+        widget.setOnColumnMeasured([this, &table](std::size_t column, ColumnMeasure const& measure) {
+            static_cast<void>(runCallback(*_rt, [&] { measured(table, column, measure); }));
         });
         widget.setOnFocusMove([this, &table](FocusMove move) {
             static_cast<void>(runCallback(*_rt, [&] { moveFocus(table, move); }));
@@ -4609,21 +4716,41 @@ private:
         return widget;
     }
 
-    // A width a cell of @p column measured: the column's extent grows by it, and a growth left of the first column
-    // fully in view moves the scroll offset by as much, so the columns in view stay where they are.
-    void measured(SourceTable& table, std::size_t column, int width) {
+    // What the backend measured of @p column: a content column is as wide as its widest cell and its header, which
+    // only grow once measured, and a change left of the first column fully in view moves the scroll offset by as much,
+    // so the columns in view stay where they are. A
+    // stretch column's measure feeds the fit of every stretch column to the table, which may narrow as well as widen
+    // them. A fixed column keeps its width.
+    void measured(SourceTable& table, std::size_t column, ColumnMeasure const& reported) {
+        if (column >= table.measures.size()) {
+            return;
+        }
+        ColumnMeasure& known = table.measures.at(column);
+        ColumnMeasure const next{.header = std::max(known.header, reported.header),
+                                 .natural = std::max(known.natural, reported.natural),
+                                 .least = std::max(known.least, reported.least)};
+        if (next == known) {
+            return;
+        }
+        known = next;
         if (column >= table.placeOf.size() || !table.placeOf.at(column)) {
             return;
         }
         std::size_t const place = *table.placeOf.at(column);
         ColumnExtents& extents = *table.extents;
-        int const before = extents.offsetOf(place + 1) - extents.offsetOf(place);
-        std::size_t firstFull = extents.columnsAt(table.scrollX, 1).first;
-        if (extents.offsetOf(firstFull) < table.scrollX) {
-            ++firstFull;
+        if (std::ranges::contains(table.stretchPlaces, place)) {
+            table.stretchDirty = true;
+            table.windowDirty = true;
+            realizeWindow(table, [](std::int64_t) { return false; });
+            return;
         }
-        firstFull = std::max(firstFull, table.pinnedShown);
-        if (!extents.grow(place, width)) {
+        if (table.columns.at(column).width.kind != Sizing::Kind::Content) {
+            return;
+        }
+        int const width = contentWidthOf(next, table.measure);
+        int const before = extents.offsetOf(place + 1) - extents.offsetOf(place);
+        std::size_t const firstFull = firstFullPlace(table);
+        if (!extents.fit(place, width)) {
             return;
         }
         if (table.horizontal && place >= table.pinnedShown && place < firstFull) {
@@ -4631,6 +4758,7 @@ private:
             table.widget->setHorizontalOffset(table.scrollX);
         }
         table.windowDirty = true;
+        table.stretchDirty = true;
         realizeWindow(table, [](std::int64_t) { return false; });
     }
 

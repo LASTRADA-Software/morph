@@ -543,6 +543,19 @@ MorphWidget {
     // wider in sum than the table by a pixel or more scroll sideways (`hflick`).
     //
     // Each column's widths, read from the caches and the headers, never from the table's own width.
+    // The width a column's header asks for, padding included, and never under 8 units. A sortable header keeps room for
+    // a one-key mark, and for the mark it draws now: a chain of two or more keys adds the key's place after its arrow.
+    // The header draws its unit after its label: the column is never narrower than both, its sort mark and its filter
+    // button.
+    function headerWidthOf(index: int): real {
+        const column = root.columns[index]
+        const mark = column.sortable ? Math.max(headerMetrics.advanceWidth(root.ascendingMark),
+                                                headerMetrics.advanceWidth(root.sortMarkOf(index))) : 0
+        const button = column.filterable === true ? Theme.targetHeight : 0
+        return Math.max(headerMetrics.advanceWidth(root.headerTextOf(column)) + mark + button +
+                        2 * Theme.tableCellPaddingX, 8 * Theme.unitWidth)
+    }
+
     function measure(): var {
         // `advanceWidth` is a plain call, so the font is read here for the widths to follow a header font that changes.
         void headerMetrics.font
@@ -552,15 +565,7 @@ MorphWidget {
         const out = []
         for (let i = 0; i < root.columns.length; ++i) {
             const column = root.columns[i]
-            // A sortable header keeps room for a one-key mark, and for the mark it draws now: a chain of two or more
-            // keys adds the key's place after its arrow.
-            const mark = column.sortable ? Math.max(headerMetrics.advanceWidth(root.ascendingMark),
-                                                    headerMetrics.advanceWidth(root.sortMarkOf(i))) : 0
-            const button = column.filterable === true ? Theme.targetHeight : 0
-            // The header draws its unit after its label: the column is never narrower than both, its sort mark and
-            // its filter button.
-            const header = Math.max(headerMetrics.advanceWidth(root.headerTextOf(column)) + mark + button + pad,
-                                    8 * Theme.unitWidth)
+            const header = root.headerWidthOf(i)
             let natural = header
             let least = header
             let floor = header
@@ -784,12 +789,19 @@ MorphWidget {
         const column = root.columns[index]
         if (!column || column.kind === 1 || !cell || !cell.visible || cell.parent?.parent?.heading)
             return
-        // Over a source the mount holds the widths: a cell wider than its column asks it to grow.
+        // Over a source the mount holds the widths: it learns what a cell asks for, and widens a content column to it
+        // and fits the stretch columns to the table. It keeps the largest it was told, so a width already told is not
+        // told again.
         if (root.sourceRows) {
-            const place = root.windowPlaces[index]
-            const width = Math.ceil(root.naturalOf(cell) + 2 * Theme.tableCellPaddingX)
-            if (place === undefined || width > root.windowColumns[place].width)
-                root.fire("measured", {"column": index, "width": width})
+            const pad = 2 * Theme.tableCellPaddingX
+            const natural = Math.ceil(root.naturalOf(cell) + pad)
+            const least = Math.ceil(root.leastOf(cell, root.naturalOf(cell)) + pad)
+            const told = root.toldWidths[index]
+            if (!told || natural > told.natural || least > told.least) {
+                root.toldWidths[index] = {"natural": Math.max(natural, told ? told.natural : 0),
+                                          "least": Math.max(least, told ? told.least : 0)}
+                root.fire("measured", {"column": index, "natural": natural, "least": least})
+            }
             return
         }
         const natural = root.naturalOf(cell)
@@ -841,7 +853,36 @@ MorphWidget {
     onColumnsChanged: {
         root.columnCache = []
         root.leastCache = []
+        root.toldWidths = []
         root.seedMissingColumns()
+        root.scheduleHeaders()
+    }
+
+    // What the mount was told of each column's cells, by column: a plain list, written outside any binding.
+    property var toldWidths: []
+
+    // Over a source the mount fits the columns to the table, so it is told each header's width, and again when a font
+    // or a sort mark changes it.
+    readonly property var headerWidths: {
+        void headerMetrics.font
+        void root.sortMarks
+        const out = []
+        for (let i = 0; i < root.columns.length; ++i)
+            out.push(Math.ceil(root.headerWidthOf(i)))
+        return out
+    }
+    onHeaderWidthsChanged: root.scheduleHeaders()
+    function scheduleHeaders() {
+        if (root.sourceRows)
+            Qt.callLater(root.reportHeaders)
+    }
+    function reportHeaders() {
+        if (!root.sourceRows)
+            return
+        for (let i = 0; i < root.headerWidths.length; ++i) {
+            if (root.columns[i].kind !== 1)
+                root.fire("measured", {"column": i, "header": root.headerWidths[i]})
+        }
     }
 
     // A Tab stop: the focus goes on to the current row, or the first one.
@@ -1747,11 +1788,25 @@ MorphWidget {
 
     // Reports the sideways scroll and the viewport, in pixels from the first column's start.
     property bool settingOffset: false
+    //
+    // A report goes out once per event loop turn: the mount answers a viewport with the columns' widths, and those
+    // set `contentWidth`, whose clamp of `contentX` reports again from inside the binding that is setting it.
+    property bool columnsQueued: false
     function reportColumns() {
-        if (root.sourceRows && !root.settingOffset)
+        if (!root.sourceRows || root.settingOffset || root.columnsQueued)
+            return
+        root.columnsQueued = true
+        Qt.callLater(root.sendColumns)
+    }
+    function sendColumns() {
+        root.columnsQueued = false
+        if (root.sourceRows)
             root.fire("hscroll", {"scrollX": Math.round(hflick.contentX), "viewport": Math.round(root.columnViewport)})
     }
-    onSourceRowsChanged: Qt.callLater(root.reportColumns)
+    onSourceRowsChanged: {
+        Qt.callLater(root.reportColumns)
+        root.scheduleHeaders()
+    }
 
     // Called by C++: the mount moved the view so the columns in view stay where they were; it is not told back.
     function setHorizontalOffset(scrollX: int) {
