@@ -566,34 +566,27 @@ TEST_CASE("tui table: a disabled row is neither selected nor activated", "[tui][
 }
 
 // Mutation: fit reporting the tables it took without watching them (the second report runs on a destroyed table:
-// a use after free under ASan, two reports otherwise).
-TEST_CASE("tui table: a focus-out handler may destroy another table waiting to report", "[tui][table][lifetime]") {
-    Harness harness{30, 8};
+// a use after free under ASan).
+TEST_CASE("tui table: a range handler may destroy another table waiting to report", "[tui][table][lifetime]") {
+    Harness harness{30, 12};
     auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
-    auto outer = std::make_unique<Fruit>(harness, ui::SelectionMode::Single, column.get());
-    // In the outer table's first row, so a focus in it is within both tables.
-    auto inner = std::make_unique<Fruit>(harness, ui::SelectionMode::Single, outer->rows.at(0).get());
-    auto const survivor = harness.make<ButtonImpl>(column.get());
-    survivor->setLabel("Stay");
-    // A focus-out is reported only by a table over a source, which a range handler makes it.
-    outer->table->setOnHorizontalRange([](int /*scrollX*/, int /*viewport*/) {});
-    inner->table->setOnHorizontalRange([](int /*scrollX*/, int /*viewport*/) {});
+    auto first = std::make_unique<Fruit>(harness, ui::SelectionMode::Single, column.get());
+    auto second = std::make_unique<Fruit>(harness, ui::SelectionMode::Single, column.get());
     int reports = 0;
-    outer->table->setOnFocusOut([&] {
+    // Each table's first frame asks to report its columns before the next one, so both wait in the same batch; the
+    // first to report destroys the other.
+    first->table->setOnHorizontalRange([&](int /*scrollX*/, int /*viewport*/) {
         ++reports;
-        inner->table.reset();
+        second->table.reset();
     });
-    inner->table->setOnFocusOut([&] {
+    second->table->setOnHorizontalRange([&](int /*scrollX*/, int /*viewport*/) {
         ++reports;
-        outer->table.reset();
+        first->table.reset();
     });
-    harness.focus(*inner->table);
-    static_cast<void>(harness.draw());
-    harness.focus(*survivor);
-    static_cast<void>(harness.draw());  // both tables see the focus leave, and wait to report it
+    static_cast<void>(harness.draw());  // both tables ask to report
     static_cast<void>(harness.draw());  // the first report destroys the other table, whose report is skipped
     CHECK(reports == 1);
-    CHECK((outer->table == nullptr) != (inner->table == nullptr));
+    CHECK((first->table == nullptr) != (second->table == nullptr));
 }
 
 TEST_CASE("tui table: a table handler may destroy its own table", "[tui][table][lifetime]") {
