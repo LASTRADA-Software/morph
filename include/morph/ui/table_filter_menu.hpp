@@ -1446,28 +1446,29 @@ private:
                 write(std::move(ordered));
                 return;
             }
-            pageAll({}, [this, serial, ticks, write](
-                            std::expected<std::vector<table::DistinctValue>, std::string> values, std::int64_t) {
-                if (serial != _serial) {
-                    return;
-                }
-                if (!values) {
-                    refuse(std::move(values.error()));
-                    return;
-                }
-                std::vector<std::string> ticked;
-                for (table::DistinctValue const& value : *values) {
-                    auto const held = ticks.covered.find(value.operand);
-                    if (held != ticks.covered.end() ? held->second : ticks.ticked) {
-                        ticked.push_back(value.operand);
-                    }
-                }
-                if (ticked.size() > _host.maxSetValues) {
-                    refuse(tableText::tooManyValues());
-                    return;
-                }
-                write(std::move(ticked));
-            });
+            pageAll({},
+                    [this, serial, ticks, write](
+                        std::expected<std::vector<table::DistinctValue>, std::string> const& values, std::int64_t) {
+                        if (serial != _serial) {
+                            return;
+                        }
+                        if (!values) {
+                            refuse(values.error());
+                            return;
+                        }
+                        std::vector<std::string> ticked;
+                        for (table::DistinctValue const& value : *values) {
+                            auto const held = ticks.covered.find(value.operand);
+                            if (held != ticks.covered.end() ? held->second : ticks.ticked) {
+                                ticked.push_back(value.operand);
+                            }
+                        }
+                        if (ticked.size() > _host.maxSetValues) {
+                            refuse(tableText::tooManyValues());
+                            return;
+                        }
+                        write(std::move(ticked));
+                    });
         });
     }
 

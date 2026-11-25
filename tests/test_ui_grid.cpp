@@ -314,7 +314,8 @@ struct MountedGrid {
     MountedGrid& operator=(MountedGrid const&) = delete;
     MountedGrid(MountedGrid&&) = delete;
     MountedGrid& operator=(MountedGrid&&) = delete;
-    ~MountedGrid() { view.reset(); }
+    // `view` is declared after `backend` and `f`, so it is destroyed before them.
+    ~MountedGrid() = default;
 
     // The row widget showing a key.
     [[nodiscard]] int row(std::int64_t key) {

@@ -12067,8 +12067,11 @@ Node ScreenCore::lowerCollectionRows(ElementState& element, LowerCtx const& ctx,
     markFilterable(config, columns, options);
     // An arrangement that lists the columns it shows lists the buttons last.
     if (buttons) {
-        options.arrangement = slotProp<TableArrangement>([inner = std::move(options.arrangement), laidOut] {
-            TableArrangement arranged = inner.evaluate();
+        // Held by pointer: the slot's closure is moved into the property, and moving a property that holds a
+        // `std::function` makes GCC 15 at -O3 report that function as uninitialized.
+        auto const inner = std::make_shared<Prop<TableArrangement> const>(std::move(options.arrangement));
+        options.arrangement = slotProp<TableArrangement>([inner, laidOut] {
+            TableArrangement arranged = inner->evaluate();
             if (!arranged.visible.empty()) {
                 arranged.visible.push_back(laidOut);
             }
