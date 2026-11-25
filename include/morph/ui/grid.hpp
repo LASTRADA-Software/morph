@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <charconv>
 #include <chrono>
+#include <core/async/StopToken.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -21,7 +22,6 @@
 #include <optional>
 #include <span>
 #include <stdexcept>
-#include <stop_token>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -607,7 +607,8 @@ public:
     /// @param key  The row's key.
     /// @param stop Once a stop is requested, @p done is not called.
     /// @param done Called on the owner with the index, or nothing when the view lacks the key.
-    void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
+    void locateRow(table::RowId key, ::core::async::StopToken stop,
+                   std::function<void(RowLocation const&)> done) override {
         std::optional<std::size_t> const at = positionOf(key);
         RowLocation const found{at ? std::optional{static_cast<std::int64_t>(*at)} : std::nullopt};
         _source->form().runtime().owner().post([stop = std::move(stop), done = std::move(done), found] {
@@ -1037,7 +1038,8 @@ public:
     /// @param key  The key.
     /// @param stop Once a stop is requested, @p done is not called.
     /// @param done Called with the mounted index, or nothing.
-    void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
+    void locateRow(table::RowId key, ::core::async::StopToken stop,
+                   std::function<void(RowLocation const&)> done) override {
         _data->locateRow(std::move(key), std::move(stop), [this, done = std::move(done)](RowLocation const& found) {
             if (found && *found) {
                 done(RowLocation{mounted(**found)});
@@ -3447,7 +3449,8 @@ private:
             std::int64_t first, std::int64_t count) override {
             return _inner->keysOf(first, count);
         }
-        void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
+        void locateRow(table::RowId key, ::core::async::StopToken stop,
+                       std::function<void(RowLocation const&)> done) override {
             _inner->locateRow(std::move(key), std::move(stop), std::move(done));
         }
         async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> fetchRows(

@@ -4,6 +4,7 @@
 #include <array>
 #include <charconv>
 #include <chrono>
+#include <core/async/StopToken.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -62,7 +63,6 @@
 #include <set>
 #include <span>
 #include <stdexcept>
-#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -296,7 +296,8 @@ public:
         std::int64_t first, std::int64_t count) override {
         return _inner->keysOf(first, count);
     }
-    void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
+    void locateRow(table::RowId key, ::core::async::StopToken stop,
+                   std::function<void(RowLocation const&)> done) override {
         _inner->locateRow(std::move(key), std::move(stop), std::move(done));
     }
     async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> fetchRows(
@@ -1086,7 +1087,8 @@ public:
     }
     /// Where the key is among the page's entries, answered on the owner: a row of the engine's view the page does
     /// not hold is not in the view the mount sees.
-    void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
+    void locateRow(table::RowId key, ::core::async::StopToken stop,
+                   std::function<void(RowLocation const&)> done) override {
         auto const at = std::ranges::find(_entries, key, &Entry::key);
         RowLocation const found{
             at == _entries.end() ? std::nullopt : std::optional{static_cast<std::int64_t>(at - _entries.begin())}};
@@ -1157,7 +1159,8 @@ public:
         std::int64_t first, std::int64_t count) override {
         return _engine->keysOf(first, count);
     }
-    void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
+    void locateRow(table::RowId key, ::core::async::StopToken stop,
+                   std::function<void(RowLocation const&)> done) override {
         _engine->locateRow(std::move(key), std::move(stop), std::move(done));
     }
     async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> fetchRows(

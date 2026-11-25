@@ -250,10 +250,8 @@ struct Digits {
             }
             // A double no exact decimal holds (1e+21, 1e-20, 9.3e+18) is its own text in a record; it is still a
             // number, shown from its shortest fixed-notation text.
-            double number = 0;
-            auto const read = std::from_chars(text.data(), text.data() + text.size(), number);
-            if (read.ec == std::errc{} && read.ptr == text.data() + text.size() && !text.empty()) {
-                return table::Cell{number};
+            if (auto const number = table::detail::parseReal(text)) {
+                return table::Cell{*number};
             }
             return std::nullopt;
         }
@@ -522,10 +520,8 @@ struct Digits {
             }
             return table::Cell{text};
         case ColumnKind::Number: {
-            double value = 0;
-            auto const read = std::from_chars(text.data(), text.data() + text.size(), value);
-            if (read.ec == std::errc{} && read.ptr == text.data() + text.size() && !text.empty()) {
-                return table::Cell{value};
+            if (auto const value = table::detail::parseReal(text)) {
+                return table::Cell{*value};
             }
             return table::Cell{text};
         }

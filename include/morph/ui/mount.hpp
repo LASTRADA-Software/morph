@@ -5,6 +5,7 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <core/async/StopToken.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -20,7 +21,6 @@
 #include <set>
 #include <span>
 #include <stdexcept>
-#include <stop_token>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -2870,7 +2870,7 @@ private:
         // key is, an ask `focusLocate` stops, and their answer ends its search.
         bool focusSearching = false;
         bool highlightSearching = false;
-        std::stop_source focusLocate;
+        ::core::async::StopSource focusLocate;
         // The rows answered where the focused key is, and the backend is not told yet: it is told once the view's
         // count is known and holds the index, which a server's rows learn only from the first page after a reset.
         bool focusUntold = false;
@@ -3939,8 +3939,8 @@ private:
     // Asks the rows where the focused key is now, stopping an earlier ask.
     void locateFocus(SourceTable& table) {
         table.focusLocate.request_stop();
-        table.focusLocate = std::stop_source{};
-        std::stop_token const stop = table.focusLocate.get_token();
+        table.focusLocate = ::core::async::StopSource{};
+        ::core::async::StopToken const stop = table.focusLocate.get_token();
         table.source.rows->locateRow(
             *table.focusKey, stop, [this, &table, stop, alive = std::weak_ptr{table.alive}](RowLocation const& found) {
                 if (alive.expired() || stop.stop_requested()) {

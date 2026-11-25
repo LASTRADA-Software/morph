@@ -348,10 +348,12 @@ double millisSince(Clock::time_point began) {
     return std::chrono::duration<double, std::milli>(Clock::now() - began).count();
 }
 
+#ifndef __EMSCRIPTEN__
 void printBytes(std::string const& what, std::size_t rows, std::size_t bytes) {
     std::println("| {} | {} | {} | {:.1f} |", what, rows, bytes, static_cast<double>(bytes) / (1024.0 * 1024.0));
     static_cast<void>(std::fflush(stdout));
 }
+#endif
 
 }  // namespace
 
@@ -1169,9 +1171,9 @@ TEST_CASE("table benchmark: L1 L2 L3 L6 the level cache", "[.benchmark][levels]"
         for (int run = 0; run < kRuns; ++run) {
             refill();
             std::latch holding{1};
-            std::jthread reader;
+            std::thread reader;
             if (withReader) {
-                reader = std::jthread{[&] {
+                reader = std::thread{[&] {
                     auto const snapshot = cache->snapshot();
                     holding.count_down();
                     std::this_thread::sleep_for(std::chrono::milliseconds{40});
@@ -1185,6 +1187,9 @@ TEST_CASE("table benchmark: L1 L2 L3 L6 the level cache", "[.benchmark][levels]"
             began = Clock::now();
             cache->changed(change);
             observe.push_back(std::chrono::duration<double, std::milli>(Clock::now() - began).count());
+            if (reader.joinable()) {
+                reader.join();
+            }
         }
         print("L3", withReader ? "invalidate 1,000 keys, a reader holding a snapshot" : "invalidate 1,000 keys",
               spreadOf(invalidate));

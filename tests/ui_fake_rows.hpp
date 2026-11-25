@@ -2,6 +2,7 @@
 
 #pragma once
 #include <algorithm>
+#include <core/async/StopToken.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -13,7 +14,6 @@
 #include <morph/ui/table_rows.hpp>
 #include <optional>
 #include <span>
-#include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
@@ -83,7 +83,8 @@ public:
     }
 
     // Scans the view for the key, and answers on the owner.
-    void locateRow(table::RowId key, std::stop_token stop, std::function<void(ui::RowLocation const&)> done) override {
+    void locateRow(table::RowId key, ::core::async::StopToken stop,
+                   std::function<void(ui::RowLocation const&)> done) override {
         std::optional<std::int64_t> found;
         for (std::int64_t index = 0; index < _rows && !found; ++index) {
             if (table::RowId{_keyAt ? _keyAt(index) : index} == key) {

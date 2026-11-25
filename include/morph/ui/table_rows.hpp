@@ -61,7 +61,6 @@
 #include <set>
 #include <span>
 #include <stdexcept>
-#include <stop_token>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -530,7 +529,8 @@ public:
     /// @param stop Once a stop is requested, @p done is not called.
     /// @param done Called once on the owner, never before this returns, with the row's view index, nothing when the
     ///        view has no row with @p key, or the error that kept the model from telling.
-    virtual void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) = 0;
+    virtual void locateRow(table::RowId key, ::core::async::StopToken stop,
+                           std::function<void(RowLocation const&)> done) = 0;
 
     /// @brief Fetches rows by key, whether or not they are held, with the cells of the columns named: what a copy
     ///        of rows the model does not hold reads. Nothing is held or cached for them.
@@ -1072,7 +1072,8 @@ public:
     /// @param key  The row's key.
     /// @param stop Once a stop is requested, @p done is not called.
     /// @param done Called on the engine's owner with the row's view index, or nothing when the view lacks it.
-    void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
+    void locateRow(table::RowId key, ::core::async::StopToken stop,
+                   std::function<void(RowLocation const&)> done) override {
         std::optional<std::size_t> const at = _engine->viewRowOfKey(key);
         RowLocation const found{at ? std::optional{static_cast<std::int64_t>(*at)} : std::nullopt};
         _owner->post([stop = std::move(stop), done = std::move(done), found] {
@@ -3195,7 +3196,7 @@ public:
                 keysAnswered(*state, page, std::unexpected(body.error()));
                 continue;
             }
-            std::stop_source stop;
+            ::core::async::StopSource stop;
             auto reply = _session->read(_options.channel, "Table." + _options.table, *body, stop.get_token());
             state->stops.push_back(std::move(stop));
             reply.then(_scope, [this, state, page](std::string const& text) {
@@ -3223,7 +3224,8 @@ public:
     /// @param done Called on the owner with the row's view index, nothing when the reply has no row, or the error the
     ///        fetch failed with; `Unavailable` while no description is held, and `InvalidValue` when the reply holds
     ///        the row without its index.
-    void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
+    void locateRow(table::RowId key, ::core::async::StopToken stop,
+                   std::function<void(RowLocation const&)> done) override {
         table::TableQuery query = queryOf(table::PageRequest{}, {});
         query.columns = std::vector<std::string>{};
         query.keys = std::vector<table::RowId>{std::move(key)};
@@ -3310,7 +3312,7 @@ public:
                 rowsAnswered(*state, std::unexpected(std::move(body.error())));
                 continue;
             }
-            std::stop_source stop;
+            ::core::async::StopSource stop;
             auto reply = _session->read(_options.channel, actionName(), *body, stop.get_token());
             state->stops.push_back(std::move(stop));
             reply.then(_scope, [this, state, named](std::string const& text) {
@@ -3350,7 +3352,7 @@ public:
     /// @brief Stops a `locate` fetch in flight; its handler is never called.
     void stopLocating() {
         _locateStop.request_stop();
-        _locateStop = std::stop_source{};
+        _locateStop = ::core::async::StopSource{};
     }
 
     /// @brief Sets the query's sort: a new query.
@@ -3427,7 +3429,7 @@ public:
             promise.resolve(Result{held->second});
             return std::move(completion);
         }
-        std::stop_source stop;
+        ::core::async::StopSource stop;
         ++_stats.distinctFetches;
         auto reply = _session->read(_options.channel, actionName(), *body, stop.get_token());
         // The oldest values list still in flight is stopped past the bound: its menu has asked for others since.
@@ -3713,7 +3715,7 @@ public:
                 rowsAnswered(*state, std::unexpected(std::move(body.error())));
                 continue;
             }
-            std::stop_source stop;
+            ::core::async::StopSource stop;
             auto reply = _session->read(_options.channel, actionName(), *body, stop.get_token());
             state->stops.push_back(std::move(stop));
             reply.then(_scope, [this, state, named](std::string const& text) {
@@ -3762,7 +3764,7 @@ private:
 
     struct PageFlight {
         table::PageFetch fetch;
-        std::stop_source stop;
+        ::core::async::StopSource stop;
         // The retained set the query carried, by `_retainStamp`.
         std::uint64_t retained = 0;
     };
@@ -3775,7 +3777,7 @@ private:
         std::map<std::int64_t, std::vector<table::RowId>> pages;
         std::size_t waiting = 0;
         std::optional<table::TableError> failed;
-        std::vector<std::stop_source> stops;
+        std::vector<::core::async::StopSource> stops;
     };
 
     void keysAnswered(KeysRequest& request, std::int64_t page,
@@ -3826,7 +3828,7 @@ private:
         std::vector<FetchedRow> rows;
         std::size_t waiting = 0;
         std::optional<table::TableError> failed;
-        std::vector<std::stop_source> stops;
+        std::vector<::core::async::StopSource> stops;
     };
 
     void rowsAnswered(RowsRequest& request, std::expected<std::vector<FetchedRow>, table::TableError> rows) {
@@ -3894,7 +3896,7 @@ private:
 
     struct RowsFlight {
         table::RowsFetch fetch;
-        std::stop_source stop;
+        ::core::async::StopSource stop;
         // The retained set the query carried, by `_retainStamp`.
         std::uint64_t retained = 0;
     };
@@ -4106,7 +4108,7 @@ private:
             _error = std::move(body.error());
             return;
         }
-        std::stop_source stop;
+        ::core::async::StopSource stop;
         ++_stats.pageFetches;
         auto reply = _session->read(_options.channel, actionName(), *body, stop.get_token());
         _pageFlights.push_back(PageFlight{.fetch = fetch, .stop = std::move(stop), .retained = _retainStamp});
@@ -4123,7 +4125,7 @@ private:
             keyedFailed(std::move(body.error()));
             return;
         }
-        std::stop_source stop;
+        ::core::async::StopSource stop;
         ++_stats.rowsFetches;
         auto reply = _session->read(_options.channel, actionName(), *body, stop.get_token());
         _rowsFlights.push_back(RowsFlight{.fetch = fetch, .stop = std::move(stop), .retained = _retainStamp});
@@ -4723,9 +4725,9 @@ private:
     std::map<std::string, table::DistinctValues, std::less<>> _distinct;
     std::deque<std::string> _distinctOrder;
     std::uint64_t _distinctEpoch = 0;
-    std::map<std::uint64_t, std::stop_source> _distinctFlights;
+    std::map<std::uint64_t, ::core::async::StopSource> _distinctFlights;
     std::uint64_t _distinctFlight = 0;
-    std::stop_source _locateStop;
+    ::core::async::StopSource _locateStop;
     // Last, so it is the first to go: no reply or timer reaches a half-destroyed object.
     async::CallbackScope _scope;
 };

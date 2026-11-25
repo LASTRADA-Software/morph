@@ -250,6 +250,9 @@ struct FilterCounters {
 
 namespace detail {
 
+/// @brief The golden-ratio constant a hash combine mixes in, cut to the width of `std::size_t`.
+inline constexpr auto kHashSeed = static_cast<std::size_t>(0x9e3779b97f4a7c15ULL);
+
 /// @brief A hash of an exact value: of its canonical numerator and denominator, which `Rational`'s equality
 ///        compares.
 struct RationalHash {
@@ -259,7 +262,7 @@ struct RationalHash {
     [[nodiscard]] std::size_t operator()(math::Rational const& value) const noexcept {
         auto const numerator = std::hash<std::int64_t>{}(value.numerator);
         auto const denominator = std::hash<std::int64_t>{}(value.denominator);
-        return numerator ^ (denominator + 0x9e3779b97f4a7c15ULL + (numerator << 6U) + (numerator >> 2U));
+        return numerator ^ (denominator + kHashSeed + (numerator << 6U) + (numerator >> 2U));
     }
 };
 
@@ -283,8 +286,7 @@ struct MeasureKeyHash {
     /// @return The hash.
     [[nodiscard]] std::size_t operator()(MeasureKey const& key) const noexcept {
         auto const amount = RationalHash{}(key.amount);
-        return amount ^
-               (std::hash<std::uint32_t>{}(key.place) + 0x9e3779b97f4a7c15ULL + (amount << 6U) + (amount >> 2U));
+        return amount ^ (std::hash<std::uint32_t>{}(key.place) + kHashSeed + (amount << 6U) + (amount >> 2U));
     }
 };
 

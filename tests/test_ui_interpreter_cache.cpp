@@ -25,7 +25,6 @@
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/value.hpp>
 #include <optional>
-#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -187,7 +186,7 @@ TEST_CASE("cache: a read makes no entry", "[push][cache][table]") {
     CHECK(text == reply);
     CHECK(h.session.cacheSize() == entries);
 
-    std::stop_source stop;
+    ::core::async::StopSource stop;
     bool cancelled = false;
     bool resolved = false;
     auto stopped = h.session.read(channel, "T_Page", valueOf("{}"), stop.get_token());

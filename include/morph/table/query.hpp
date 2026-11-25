@@ -1536,7 +1536,9 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
         if (validated.group.empty()) {
             listed.push_back(*findColumn(input.columns, validated.column));
         } else {
-            for (auto const& columnId : *groupColumns(input.groups, validated.group)) {
+            // A local, not the range-for's own temporary: the optional holding the span must outlive the loop.
+            auto const members = groupColumns(input.groups, validated.group);
+            for (auto const& columnId : *members) {
                 listed.push_back(*findColumn(input.columns, columnId));
             }
         }
@@ -1667,11 +1669,12 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
         auto const begin = std::min(validated.offset, count);
         auto const end = validated.limit >= count - begin ? count : begin + validated.limit;
         // Only the values up to the page's end are put in order: a menu's first page of 50,000 values sorts 200.
-        std::ranges::partial_sort(
-            groups, groups.begin() + end, [&listedKeys](DistinctGroup const& a, DistinctGroup const& b) {
-                int const order = compareValues(*listedKeys[a.column], a.first, *listedKeys[b.column], b.first);
-                return order != 0 ? order < 0 : a.first < b.first;
-            });
+        std::ranges::partial_sort(groups, groups.begin() + static_cast<std::ptrdiff_t>(end),
+                                  [&listedKeys](DistinctGroup const& a, DistinctGroup const& b) {
+                                      int const order = compareValues(*listedKeys[a.column], a.first,
+                                                                      *listedKeys[b.column], b.first);
+                                      return order != 0 ? order < 0 : a.first < b.first;
+                                  });
         for (auto at = begin; at < end; ++at) {
             auto const& group = groups[static_cast<std::size_t>(at)];
             auto value = describe(group);

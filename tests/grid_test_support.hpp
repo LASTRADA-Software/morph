@@ -387,7 +387,8 @@ public:
         return async::Completion<std::expected<std::vector<table::RowId>, table::TableError>>::makeSettleable(nullptr)
             .first;
     }
-    void locateRow(table::RowId key, std::stop_token, std::function<void(ui::RowLocation const&)> done) override {
+    void locateRow(table::RowId key, ::core::async::StopToken,
+                   std::function<void(ui::RowLocation const&)> done) override {
         _locates.emplace_back(std::move(key), std::move(done));
     }
     async::Completion<std::expected<std::vector<ui::FetchedRow>, table::TableError>> fetchRows(
