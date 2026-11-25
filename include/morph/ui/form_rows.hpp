@@ -127,8 +127,10 @@ namespace detail {
             }
             std::string_view const text = forms::detail::engine::trim(field.draft());
             if (auto const midnight = forms::detail::engine::parseWallClock(std::string{text} + "T00:00")) {
-                return static_cast<std::int64_t>(
-                    std::chrono::floor<std::chrono::days>(*midnight).time_since_epoch().count());
+                // Assigned, not cast: the duration's count type is the library's own, and only the
+                // assignment is right whether or not it is `std::int64_t`.
+                std::int64_t const days = std::chrono::floor<std::chrono::days>(*midnight).time_since_epoch().count();
+                return days;
             }
             break;
         }
@@ -137,8 +139,9 @@ namespace detail {
                 return *seconds;
             }
             if (time::DateTime const* const instant = value.asTimestamp()) {
-                return static_cast<std::int64_t>(
-                    std::chrono::floor<std::chrono::seconds>(instant->value).time_since_epoch().count());
+                std::int64_t const seconds =
+                    std::chrono::floor<std::chrono::seconds>(instant->value).time_since_epoch().count();
+                return seconds;
             }
             break;
         case table::ColumnKind::Quantity:

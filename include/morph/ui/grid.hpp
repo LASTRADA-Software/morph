@@ -1885,7 +1885,7 @@ public:
     [[nodiscard]] std::size_t modifiedRows() const {
         std::size_t rows = 0;
         for (auto const& row : _rowsSource->array().rows()) {
-            rows += _form->rowModified(_arrayPath, row->key()) ? 1 : 0;
+            rows += _form->rowModified(_arrayPath, row->key()) ? 1U : 0U;
         }
         return rows;
     }
@@ -2003,7 +2003,7 @@ private:
         for (auto const& row : _rowsSource->array().rows()) {
             for (GridColumn const& column : _columns) {
                 forms::FieldState const* const state = memberOf(column, *row);
-                count += state != nullptr && test(*state) ? 1 : 0;
+                count += state != nullptr && test(*state) ? 1U : 0U;
             }
         }
         return count;
@@ -2812,7 +2812,7 @@ private:
         std::size_t count = 0;
         for (Expanded const& row : _expanded) {
             for (auto const& [column, state] : row.fields) {
-                count += state != nullptr && test(*state) ? 1 : 0;
+                count += state != nullptr && test(*state) ? 1U : 0U;
             }
         }
         return count;

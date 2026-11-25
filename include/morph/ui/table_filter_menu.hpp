@@ -1166,9 +1166,11 @@ private:
             return;
         }
         table::DistinctRequest request = requestOf(now);
-        request.offset = next ? static_cast<std::int64_t>(std::ranges::count_if(
-                                    now.list, [](FilterListEntry const& entry) { return entry.depth == 0; }))
-                              : 0;
+        // Assigned, not cast: the count's type is the platform's difference type, which is `std::int64_t` on some
+        // targets and a different 64-bit type on others.
+        std::int64_t const listed =
+            std::ranges::count_if(now.list, [](FilterListEntry const& entry) { return entry.depth == 0; });
+        request.offset = next ? listed : 0;
         std::uint64_t const serial = ++_serial;
         bool const searched = !request.search.empty();
         ask(request, [this, serial, next, searched](Reply const& reply) {
@@ -1335,21 +1337,21 @@ private:
             auto const& [ticks, distinct] = *resolved;
             ValueFilterPlan const plan = planValueFilter(distinct, ticks, _host.maxSetValues);
             std::string const column = _state.peek().target.column;
-            using Side = ValueFilterPlan::Side;
-            if (plan.side == Side::Disabled) {
+            using PlanSide = ValueFilterPlan::Side;
+            if (plan.side == PlanSide::Disabled) {
                 refuse(tableText::tooManyValues());
                 return;
             }
-            if (plan.side == Side::Nothing) {
+            if (plan.side == PlanSide::Nothing) {
                 return;
             }
-            if (plan.side == Side::All) {
+            if (plan.side == PlanSide::All) {
                 table::FilterSpec spec = _host.filters ? _host.filters() : table::FilterSpec{};
                 spec.columns.erase(column);
                 commit(std::move(spec));
                 return;
             }
-            bool const include = plan.side == Side::Include;
+            bool const include = plan.side == PlanSide::Include;
             auto write = [this, column, side = plan.side, blanks = ticks.blanks](std::vector<std::string> members) {
                 table::FilterSpec spec = _host.filters ? _host.filters() : table::FilterSpec{};
                 if (auto filter = valueFilter(side, std::move(members), blanks)) {
@@ -1370,25 +1372,26 @@ private:
                 return;
             }
             // The side names values no operation reached: every value is paged to name them.
-            pageAll({}, [this, serial, ticks, include, write](
-                            std::expected<std::vector<table::DistinctValue>, std::string> values, std::int64_t) {
-                if (serial != _serial) {
-                    return;
-                }
-                if (!values) {
-                    refuse(std::move(values.error()));
-                    return;
-                }
-                std::vector<std::string> members;
-                for (table::DistinctValue const& value : *values) {
-                    auto const held = ticks.covered.find(value.operand);
-                    bool const ticked = held != ticks.covered.end() ? held->second : ticks.ticked;
-                    if (ticked == include) {
-                        members.push_back(value.operand);
-                    }
-                }
-                write(std::move(members));
-            });
+            pageAll({},
+                    [this, serial, ticks, include, write](
+                        std::expected<std::vector<table::DistinctValue>, std::string> const& values, std::int64_t) {
+                        if (serial != _serial) {
+                            return;
+                        }
+                        if (!values) {
+                            refuse(values.error());
+                            return;
+                        }
+                        std::vector<std::string> members;
+                        for (table::DistinctValue const& value : *values) {
+                            auto const held = ticks.covered.find(value.operand);
+                            bool const ticked = held != ticks.covered.end() ? held->second : ticks.ticked;
+                            if (ticked == include) {
+                                members.push_back(value.operand);
+                            }
+                        }
+                        write(std::move(members));
+                    });
         });
     }
 
@@ -1875,8 +1878,8 @@ namespace detail::filtermenu {
         count.label = std::string{"N"};
         count.common.testId = "table_filter_count";
         count.common.visible = [&menu] {
-            GroupMatch const match = menu.state().match;
-            return match == GroupMatch::AtLeast || match == GroupMatch::Exactly;
+            GroupMatch const line = menu.state().match;
+            return line == GroupMatch::AtLeast || line == GroupMatch::Exactly;
         };
         parts.push_back(textInput(std::move(count)));
     }

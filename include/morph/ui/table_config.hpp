@@ -710,7 +710,7 @@ struct ValueFilterPlan {
 /// @return The side, with `members = min(T, U)`; `Disabled` when that exceeds @p maxSetValues.
 [[nodiscard]] inline ValueFilterPlan planValueFilter(std::int64_t distinct, ResolvedTicks const& ticks,
                                                      std::size_t maxSetValues) {
-    using Side = ValueFilterPlan::Side;
+    using PlanSide = ValueFilterPlan::Side;
     std::size_t const total = distinct < 0 ? 0 : static_cast<std::size_t>(distinct);
     std::size_t const reached = std::min(ticks.covered.size(), total);
     auto const tickedCovered =
@@ -718,19 +718,20 @@ struct ValueFilterPlan {
     std::size_t const ticked = std::min(total, (ticks.ticked ? total - reached : 0) + tickedCovered);
     std::size_t const unticked = total - ticked;
     if (ticked == total && ticks.blanks != false) {
-        return {.side = Side::All, .members = 0, .needsComplement = false};
+        return {.side = PlanSide::All, .members = 0, .needsComplement = false};
     }
     if (ticked == 0 && ticks.blanks != true) {
-        return {.side = Side::Nothing, .members = 0, .needsComplement = false};
+        return {.side = PlanSide::Nothing, .members = 0, .needsComplement = false};
     }
     bool const include = ticked < unticked;
     std::size_t const members = include ? ticked : unticked;
     if (members > maxSetValues) {
-        return {.side = Side::Disabled, .members = members, .needsComplement = false};
+        return {.side = PlanSide::Disabled, .members = members, .needsComplement = false};
     }
     // The values outside C are on the side `ticks.ticked` puts them.
     bool const outsideOnSide = total > reached && (include == ticks.ticked);
-    return {.side = include ? Side::Include : Side::Exclude, .members = members, .needsComplement = outsideOnSide};
+    return {
+        .side = include ? PlanSide::Include : PlanSide::Exclude, .members = members, .needsComplement = outsideOnSide};
 }
 
 /// @brief How a values list's members are written.
@@ -754,8 +755,8 @@ enum class ValueForm : std::uint8_t {
                                                                     std::vector<std::string> members,
                                                                     std::optional<bool> blanks,
                                                                     ValueForm form = ValueForm::Set) {
-    using Side = ValueFilterPlan::Side;
-    if (side != Side::Include && side != Side::Exclude) {
+    using PlanSide = ValueFilterPlan::Side;
+    if (side != PlanSide::Include && side != PlanSide::Exclude) {
         return std::nullopt;
     }
     std::vector<table::FilterEntry> entries;
@@ -774,7 +775,7 @@ enum class ValueForm : std::uint8_t {
             }
         }
     }
-    if (blanks == (side == Side::Include)) {
+    if (blanks == (side == PlanSide::Include)) {
         table::FilterEntry entry;
         entry.isEmpty = true;
         entries.push_back(std::move(entry));
@@ -783,7 +784,7 @@ enum class ValueForm : std::uint8_t {
         return std::nullopt;
     }
     table::ColumnFilter filter{.combine = table::Combine::Any, .include = {}, .exclude = {}};
-    (side == Side::Include ? filter.include : filter.exclude) = std::move(entries);
+    (side == PlanSide::Include ? filter.include : filter.exclude) = std::move(entries);
     return filter;
 }
 

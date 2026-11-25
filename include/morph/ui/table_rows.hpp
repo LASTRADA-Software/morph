@@ -4364,7 +4364,7 @@ private:
     void pageArrived(table::PageFetch const& fetch, std::string const& text) {
         auto const flight = std::ranges::find(_pageFlights, fetch, &PageFlight::fetch);
         std::uint64_t const stamp = flight == _pageFlights.end() ? 0 : flight->retained;
-        std::erase_if(_pageFlights, [&fetch](PageFlight const& flight) { return flight.fetch == fetch; });
+        std::erase_if(_pageFlights, [&fetch](PageFlight const& other) { return other.fetch == fetch; });
         if (!_description) {
             return;
         }
@@ -4418,7 +4418,7 @@ private:
     }
 
     void pageFailed(table::PageFetch const& fetch, std::exception_ptr const& error) {
-        std::erase_if(_pageFlights, [&fetch](PageFlight const& flight) { return flight.fetch == fetch; });
+        std::erase_if(_pageFlights, [&fetch](PageFlight const& other) { return other.fetch == fetch; });
         if (wasCancelled(error)) {
             return;
         }
@@ -4431,7 +4431,7 @@ private:
     void rowsArrived(table::RowsFetch const& fetch, std::string const& text) {
         auto const flight = std::ranges::find(_rowsFlights, fetch, &RowsFlight::fetch);
         std::uint64_t const stamp = flight == _rowsFlights.end() ? 0 : flight->retained;
-        std::erase_if(_rowsFlights, [&fetch](RowsFlight const& flight) { return flight.fetch == fetch; });
+        std::erase_if(_rowsFlights, [&fetch](RowsFlight const& other) { return other.fetch == fetch; });
         if (!_description) {
             return;
         }
@@ -4488,7 +4488,7 @@ private:
     }
 
     void rowsFailed(table::RowsFetch const& fetch, std::exception_ptr const& error) {
-        std::erase_if(_rowsFlights, [&fetch](RowsFlight const& flight) { return flight.fetch == fetch; });
+        std::erase_if(_rowsFlights, [&fetch](RowsFlight const& other) { return other.fetch == fetch; });
         if (wasCancelled(error)) {
             return;
         }

@@ -1090,8 +1090,10 @@ public:
     void locateRow(table::RowId key, ::core::async::StopToken stop,
                    std::function<void(RowLocation const&)> done) override {
         auto const at = std::ranges::find(_entries, key, &Entry::key);
-        RowLocation const found{
-            at == _entries.end() ? std::nullopt : std::optional{static_cast<std::int64_t>(at - _entries.begin())}};
+        // Assigned, not cast: the iterator difference is `std::ptrdiff_t`, which is `std::int64_t` only on some
+        // targets.
+        std::int64_t const index = at - _entries.begin();
+        RowLocation const found{at == _entries.end() ? std::nullopt : std::optional{index}};
         _owner->post([stop = std::move(stop), done = std::move(done), found] {
             if (!stop.stop_requested()) {
                 done(found);
@@ -10480,12 +10482,12 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     // A field's text as a column's default cell shows it: by the column's display parts, of the kind the value has,
     // or the value's own text. A copy writes it for every column, one with its own `cell` too.
     auto const plainText = [](Value const* value, std::optional<table::ColumnDisplay> const& display,
-                              FormatContext const& format) {
+                              FormatContext const& formatting) {
         if (display) {
             Value const shown = value == nullptr ? Value{} : *value;
             table::TableColumn const kind = columnFor(shown, *display);
             table::Cell const cell = cellOfRecord(value, kind, nullptr);
-            std::string text = formatCell(cell, kind, format);
+            std::string text = formatCell(cell, kind, formatting);
             // A quantity keeps its unit after its formatted amount, as its own text writes it; a label's text stands
             // for the value whole and takes none.
             std::optional<std::string> const operand = operandOf(cell, kind);
@@ -10494,13 +10496,13 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
                                   });
             if (Quantity const* const quantity = shown.asQuantity();
                 quantity != nullptr && !text.empty() && !labelled) {
-                auto const unit = format.units.find(quantity->unit);
-                bool const named = unit != format.units.end() && !unit->second.display.empty();
+                auto const unit = formatting.units.find(quantity->unit);
+                bool const named = unit != formatting.units.end() && !unit->second.display.empty();
                 text += " " + (named ? unit->second.display : quantity->unit);
             }
             return text;
         }
-        return value == nullptr ? std::string{} : textOf(*value, format);
+        return value == nullptr ? std::string{} : textOf(*value, formatting);
     };
     source.cellView = [this, ctx, &node, cells, fields, roles, keyText, registry, displays, plainText](
                           std::size_t column, reactive::Signal<Value> const& row) -> Node {
@@ -10519,11 +10521,11 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
         auto const found = registry->scopes.find(key);
         std::shared_ptr<RtScope> scope = found == registry->scopes.end() ? nullptr : found->second.lock();
         if (scope == nullptr) {
-            std::vector<DocNode const*> own;
+            std::vector<DocNode const*> cellNodes;
             for (DocNodePtr const& cell : nodes) {
-                own.push_back(cell.get());
+                cellNodes.push_back(cell.get());
             }
-            scope = rowScope(node, ctx, row, own, std::move(key));
+            scope = rowScope(node, ctx, row, cellNodes, std::move(key));
         }
         LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
         // The cell owns its row's scope as long as its node lives.
@@ -10724,10 +10726,10 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
             return std::nullopt;
         }
         table::TableColumn const shown{.info = *info, .display = displays.at(at).value_or(table::ColumnDisplay{})};
-        EngineRows const& rows = *table->engine;
-        std::int64_t const total = rows.total().rows;
+        EngineRows const& engineRows = *table->engine;
+        std::int64_t const total = engineRows.total().rows;
         for (std::int64_t row = 0; row < total; ++row) {
-            std::optional<TableRowRef> const ref = rows.row(row);
+            std::optional<TableRowRef> const ref = engineRows.row(row);
             if (ref && ref->key == key) {
                 return HeldCell{.record = ref->row,
                                 .cell = cellOfRecord(ref->row.field(fields.at(at)), shown, nullptr),
@@ -10752,18 +10754,18 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
                 gathered.headers.push_back(headers->at(place));
             }
         }
-        FormatContext const& format = scope->formatting();
+        FormatContext const& formatting = scope->formatting();
         std::unordered_set<Key> wanted{keys.begin(), keys.end()};
-        EngineRows const& rows = *table->engine;
-        std::int64_t const total = rows.total().rows;
+        EngineRows const& engineRows = *table->engine;
+        std::int64_t const total = engineRows.total().rows;
         for (std::int64_t at = 0; at < total && !wanted.empty(); ++at) {
-            std::optional<TableRowRef> const ref = rows.row(at);
+            std::optional<TableRowRef> const ref = engineRows.row(at);
             if (!ref || wanted.erase(ref->key) == 0) {
                 continue;
             }
             CopyRow copied{.viewRow = at, .cells = {}};
             for (std::size_t const place : places) {
-                copied.cells.emplace_back(plainText(ref->row.field(fields.at(place)), displays.at(place), format));
+                copied.cells.emplace_back(plainText(ref->row.field(fields.at(place)), displays.at(place), formatting));
             }
             gathered.rows.push_back(std::move(copied));
         }
@@ -13783,7 +13785,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             return;
         }
         std::vector<Key> keys;
-        std::vector<std::string> columns = runtime().untracked([&] {
+        std::vector<std::string> copyColumns = runtime().untracked([&] {
             if (ValueList const* const items = tableSelection(element).asList()) {
                 for (Value const& item : *items) {
                     keys.push_back(keyOf(item));
@@ -13800,11 +13802,11 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             return;
         }
         if (keys.empty() && !viewing) {
-            if (!config.focused || !std::ranges::contains(columns, config.focused->column)) {
+            if (!config.focused || !std::ranges::contains(copyColumns, config.focused->column)) {
                 return;
             }
             keys.push_back(config.focused->key);
-            columns = {config.focused->column};
+            copyColumns = {config.focused->column};
         }
         // A copy started after this one wins: this one's rows, arriving late, write nothing.
         std::uint64_t const started = ++config.copies;
@@ -13816,8 +13818,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 config.gather(std::move(keys), named, std::move(done));
             }
         };
-        gather(columns, [this, &config, &element, headers, started,
-                         separator = std::move(separator)](std::expected<CopyGathered, std::string> gathered) {
+        gather(copyColumns, [this, &config, &element, headers, started,
+                             separator = std::move(separator)](std::expected<CopyGathered, std::string> gathered) {
             if (started != config.copies) {
                 return;
             }
@@ -15141,10 +15143,11 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     // A cell's text, by its column's display. Each column's `DisplayUnits` points into `registry`, so the formatters
     // hold it: it lives as long as the cells do.
     auto const textOfCell = [shown, displayUnits, registry](std::size_t column, Value const& record,
-                                                            FormatContext const& format) {
+                                                            FormatContext const& formatting) {
         table::TableColumn const& display = shown->at(column);
         DisplayUnits const& units = displayUnits->at(column);
-        return formatCell(cellOfRecord(record.field(display.info.id), display, units.units), display, format, units);
+        return formatCell(cellOfRecord(record.field(display.info.id), display, units.units), display, formatting,
+                          units);
     };
     // A cell's accent: the document's tone and tooltip, else its companions'; an unreadable value is invalid. An
     // unknown tone is reported once per column.
@@ -15308,10 +15311,10 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                     return marks;
                 }
                 Value const& record = row.get();
-                table::TableDescription const* const description = model.window->description();
+                table::TableDescription const* const rowDescription = model.window->description();
                 std::optional<std::string> const locked =
-                    description == nullptr ? std::nullopt
-                                           : lockText(TableRowRef{.key = *rowKey, .row = record}, *description);
+                    rowDescription == nullptr ? std::nullopt
+                                              : lockText(TableRowRef{.key = *rowKey, .row = record}, *rowDescription);
                 RowStates const& states = model.rows->states();
                 marks.busy = states.isBusy(*rowKey);
                 marks.locked = locked.has_value();
@@ -15649,11 +15652,11 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     // A selection of the view is copied from page queries of the view's rows naming the columns copied, in view
     // order, its `except` left out.
     model.config.gatherView = [&model, shown, displayUnits, registry, headers, scope = ctx.scope](
-                                  std::vector<std::string> const& ids, CopyDone done) {
+                                  std::vector<std::string> const& columnIds, CopyDone done) {
         std::vector<std::size_t> places;
         std::vector<std::string> named;
         CopyGathered gathered;
-        for (std::string const& id : ids) {
+        for (std::string const& id : columnIds) {
             auto const found =
                 std::ranges::find_if(*shown, [&id](table::TableColumn const& column) { return column.info.id == id; });
             if (found != shown->end()) {
@@ -15668,40 +15671,40 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             return;
         }
         std::unordered_set<Key> const except(view->except.begin(), view->except.end());
-        FormatContext const format = scope->formatting();
+        FormatContext const formatting = scope->formatting();
         model.rows->rowsOf(0, model.rows->total().rows, named)
-            .then(model.scope, [shown, displayUnits, registry, places, format, except, done,
-                                gathered = std::move(gathered)](
-                                   std::expected<std::vector<FetchedRow>, table::TableError> const& found) mutable {
-                if (!found) {
-                    done(std::unexpected("The rows could not be copied: " + found.error().message));
-                    return;
-                }
-                for (FetchedRow const& fetchedRow : *found) {
-                    if (except.contains(fetchedRow.key)) {
-                        continue;
-                    }
-                    CopyRow row{.viewRow = fetchedRow.viewRow, .cells = {}};
-                    for (std::size_t column = 0; column < places.size() && column < fetchedRow.cells.size();
-                         ++column) {
-                        table::Cell const& cell = fetchedRow.cells.at(column);
-                        std::size_t const place = places.at(column);
-                        row.cells.push_back(
-                            std::holds_alternative<table::Unloaded>(cell)
-                                ? std::nullopt
-                                : std::optional{formatCell(cell, shown->at(place), format, displayUnits->at(place))});
-                    }
-                    gathered.rows.push_back(std::move(row));
-                }
-                done(std::move(gathered));
-            });
+            .then(model.scope,
+                  [shown, displayUnits, registry, places, formatting, except, done, gathered = std::move(gathered)](
+                      std::expected<std::vector<FetchedRow>, table::TableError> const& found) mutable {
+                      if (!found) {
+                          done(std::unexpected("The rows could not be copied: " + found.error().message));
+                          return;
+                      }
+                      for (FetchedRow const& fetchedRow : *found) {
+                          if (except.contains(fetchedRow.key)) {
+                              continue;
+                          }
+                          CopyRow row{.viewRow = fetchedRow.viewRow, .cells = {}};
+                          for (std::size_t column = 0; column < places.size() && column < fetchedRow.cells.size();
+                               ++column) {
+                              table::Cell const& cell = fetchedRow.cells.at(column);
+                              std::size_t const place = places.at(column);
+                              row.cells.push_back(std::holds_alternative<table::Unloaded>(cell)
+                                                      ? std::nullopt
+                                                      : std::optional{formatCell(cell, shown->at(place), formatting,
+                                                                                 displayUnits->at(place))});
+                          }
+                          gathered.rows.push_back(std::move(row));
+                      }
+                      done(std::move(gathered));
+                  });
     };
     model.config.gather = [&model, shown, displayUnits, registry, headers, textOfCell, scope = ctx.scope](
-                              std::vector<Key> keys, std::vector<std::string> const& ids, CopyDone done) {
+                              std::vector<Key> keys, std::vector<std::string> const& columnIds, CopyDone done) {
         std::vector<std::size_t> places;
         std::vector<std::string> named;
         CopyGathered gathered;
-        for (std::string const& id : ids) {
+        for (std::string const& id : columnIds) {
             auto const found =
                 std::ranges::find_if(*shown, [&id](table::TableColumn const& column) { return column.info.id == id; });
             if (found != shown->end()) {
@@ -15710,7 +15713,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                 gathered.headers.push_back(headers->at(places.back()));
             }
         }
-        FormatContext const format = scope->formatting();
+        FormatContext const formatting = scope->formatting();
         std::unordered_set<Key> wanted{keys.begin(), keys.end()};
         // The rows held with every column copied; a row held without one of them is fetched with the rest.
         TableRows& rows = *model.rows;
@@ -15734,7 +15737,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             for (std::size_t const place : places) {
                 std::string const& level = shown->at(place).info.level;
                 bool const missing = !level.empty() && std::ranges::contains(unloaded, level);
-                row.cells.push_back(missing ? std::nullopt : std::optional{textOfCell(place, ref->row, format)});
+                row.cells.push_back(missing ? std::nullopt : std::optional{textOfCell(place, ref->row, formatting)});
             }
             gathered.rows.push_back(std::move(row));
             wanted.erase(ref->key);
@@ -15750,27 +15753,28 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             }
         }
         model.rows->fetchRows(std::move(fetched), std::move(named))
-            .then(model.scope, [shown, displayUnits, registry, places, format, done, gathered = std::move(gathered)](
-                                   std::expected<std::vector<FetchedRow>, table::TableError> const& found) mutable {
-                if (!found) {
-                    done(std::unexpected("The rows could not be copied: " + found.error().message));
-                    return;
-                }
-                for (FetchedRow const& fetchedRow : *found) {
-                    CopyRow row{.viewRow = fetchedRow.viewRow, .cells = {}};
-                    for (std::size_t column = 0; column < places.size() && column < fetchedRow.cells.size();
-                         ++column) {
-                        table::Cell const& cell = fetchedRow.cells.at(column);
-                        std::size_t const place = places.at(column);
-                        row.cells.push_back(
-                            std::holds_alternative<table::Unloaded>(cell)
-                                ? std::nullopt
-                                : std::optional{formatCell(cell, shown->at(place), format, displayUnits->at(place))});
-                    }
-                    gathered.rows.push_back(std::move(row));
-                }
-                done(std::move(gathered));
-            });
+            .then(model.scope,
+                  [shown, displayUnits, registry, places, formatting, done, gathered = std::move(gathered)](
+                      std::expected<std::vector<FetchedRow>, table::TableError> const& found) mutable {
+                      if (!found) {
+                          done(std::unexpected("The rows could not be copied: " + found.error().message));
+                          return;
+                      }
+                      for (FetchedRow const& fetchedRow : *found) {
+                          CopyRow row{.viewRow = fetchedRow.viewRow, .cells = {}};
+                          for (std::size_t column = 0; column < places.size() && column < fetchedRow.cells.size();
+                               ++column) {
+                              table::Cell const& cell = fetchedRow.cells.at(column);
+                              std::size_t const place = places.at(column);
+                              row.cells.push_back(std::holds_alternative<table::Unloaded>(cell)
+                                                      ? std::nullopt
+                                                      : std::optional{formatCell(cell, shown->at(place), formatting,
+                                                                                 displayUnits->at(place))});
+                          }
+                          gathered.rows.push_back(std::move(row));
+                      }
+                      done(std::move(gathered));
+                  });
     };
     Node dialogs = configureTable(model.config, ctx, options, nullptr);
     markFilterable(model.config, columns, options);

@@ -408,8 +408,9 @@ public:
             bool handed = false;
             {
                 std::scoped_lock const lock{_locks->_mutex};
-                if (_queued) {
-                    std::erase(_locks->_held[_name], this);
+                if (auto const held = _queued ? _locks->_held.find(_name) : _locks->_held.end();
+                    held != _locks->_held.end()) {
+                    std::erase(held->second, this);
                 }
                 handed = _handed;
             }
@@ -427,8 +428,11 @@ public:
         /// @return `false` when taken at once; `true` when queued.
         bool await_suspend(std::coroutine_handle<> awaiting) {
             std::scoped_lock const lock{_locks->_mutex};
-            auto [held, free] = _locks->_held.try_emplace(_name);
-            if (free) {
+            // `find` then `emplace`, not `try_emplace`: the latter's already-present path, inlined here, makes GCC at
+            // -O3 report a `-Wstrict-overflow` inside the deque's destructor.
+            auto const held = _locks->_held.find(_name);
+            if (held == _locks->_held.end()) {
+                _locks->_held.emplace(_name, std::deque<Acquire*>{});
                 _handed = true;
                 return false;
             }

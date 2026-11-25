@@ -854,7 +854,7 @@ private:
                 masks[at] = group.index[at].compiled;
             }
             covered |= masks[at];
-            usable += masks[at] != 0 ? 1 : 0;
+            usable += masks[at] != 0 ? 1U : 0U;
         }
         // Each entry needs a column of its own, so fewer columns that match any entry than there are entries
         // cannot be matched (Hall's condition on the column side). The unknown columns' masks are full, so the

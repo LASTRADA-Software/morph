@@ -29,6 +29,7 @@
 #include <morph/core/records.hpp>
 #include <morph/table/description.hpp>
 #include <morph/table/query.hpp>
+#include <morph/table/record_name.hpp>
 #include <morph/table/runtime.hpp>
 #include <morph/table/view_cache.hpp>
 #include <optional>
@@ -44,15 +45,6 @@
 namespace morph::table {
 
 namespace detail {
-
-/// @brief A record's registered name, by the record's type.
-/// @param type The record type.
-/// @return Its name in `record::detail::recordRegistry()`, or empty when none is registered.
-[[nodiscard]] inline std::string recordNameOf(std::type_index type) {
-    auto const& records = record::detail::recordRegistry();
-    auto const found = std::ranges::find(records, type, &record::RecordInfo::type);
-    return found != records.end() ? found->name : std::string{};
-}
 
 /// @brief A filter's JSON with every member at its default left out: a `combine` of `any`, and empty lists, texts
 ///        and nulls. It reads back as the same filter, and is the shape a client writes.

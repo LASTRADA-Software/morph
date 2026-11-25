@@ -788,6 +788,7 @@ target_sources(morph
         include/morph/table/view_change.hpp
         include/morph/table/engine.hpp
         include/morph/table/query.hpp
+        include/morph/table/record_name.hpp
         include/morph/table/row_selection.hpp
         include/morph/table/runtime.hpp
         include/morph/table/bands.hpp
