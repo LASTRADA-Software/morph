@@ -28,8 +28,9 @@
 
 #include "test_support.hpp"
 
-namespace {
-
+// Reflected by glaze, so not in an anonymous namespace: MSVC rejects a reflected
+// type with internal linkage.
+// NOLINTBEGIN(misc-use-internal-linkage)
 struct DeadlineCount {
     int x = 0;
 };
@@ -37,6 +38,9 @@ struct DeadlineCount {
 struct DeadlineModel {
     int execute(const DeadlineCount& a) { return a.x; }
 };
+// NOLINTEND(misc-use-internal-linkage)
+
+namespace {
 
 // A backend whose execute() never resolves its Completion, simulating a frame
 // the server dropped -- no reply, ever, on this path -- or a hung server.
@@ -149,17 +153,18 @@ struct morph::model::ModelTraits<DeadlineModel> {
     static constexpr std::string_view typeId() { return "Deadline_Model"; }
 };
 
-namespace {
 // An action whose model handler throws for a real (non-timeout) reason --
 // used to distinguish "a genuine backend failure" from "the client-side
-// deadline fired" in the .onError() continuation below.
+// deadline fired" in the .onError() continuation below. File scope for the
+// same reason as DeadlineCount.
+// NOLINTBEGIN(misc-use-internal-linkage)
 struct DeadlineFail {};
 
 struct DeadlineFailModel {
     // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
     int execute(const DeadlineFail&) { throw std::runtime_error("genuine backend failure, not a timeout"); }
 };
-}  // namespace
+// NOLINTEND(misc-use-internal-linkage)
 
 template <>
 struct morph::model::ActionTraits<DeadlineFail> {
