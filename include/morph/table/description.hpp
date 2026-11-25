@@ -2524,6 +2524,12 @@ struct DescribeTable {
     }
 };
 
+/// @brief Answers the query.
+/// @tparam Model The model type.
+/// @param model  The model instance.
+/// @param action The action.
+/// @return The page.
+/// @throws morph::model::ActionRefusal `table.<reason>` with the argument `column`, for a query the table refuses.
 template <auto Function>
 template <typename Model>
 ::core::async::Task<GenericPage> QueryTable<Function>::invoke(Model& model, QueryTable& action) {

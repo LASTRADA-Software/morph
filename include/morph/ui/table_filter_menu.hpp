@@ -166,6 +166,7 @@ struct FilterMenuState {
     std::string refusal;
 
     /// @brief Memberwise equality.
+    /// @param other The state to compare with.
     /// @return Whether every member matches.
     bool operator==(FilterMenuState const& other) const {
         return open == other.open && opening == other.opening && search == other.search && list == other.list &&
