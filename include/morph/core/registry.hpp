@@ -501,8 +501,6 @@ inline std::string actionPayloadSchema() {
 
 /// @brief Whether @p Action runs itself: it declares a static `invoke(Model&, Action&)`, as a table's actions
 ///        do, instead of the model declaring an `execute` for it.
-/// @tparam Model  The model type.
-/// @tparam Action The action type.
 template <typename Model, typename Action>
 concept DeclaresInvoke = requires(Model& model, Action& action) { Action::invoke(model, action); };
 

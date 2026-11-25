@@ -1930,14 +1930,12 @@ using LevelLoaded = std::function<bool(Row const& row, std::string_view level)>;
 namespace detail {
 
 /// @brief A row type that declares the levels of its columns.
-/// @tparam Row The row type.
 template <typename Row>
 concept HasColumnLevels = requires {
     { Row::columnLevels() };
 };
 
 /// @brief A row type that declares column groups.
-/// @tparam Row The row type.
 template <typename Row>
 concept HasColumnGroups = requires {
     { Row::columnGroups() };

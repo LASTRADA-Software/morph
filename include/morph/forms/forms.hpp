@@ -680,7 +680,6 @@ template <typename A>
 
 /// @brief Whether glaze writes @p T as one of its own members: its `glz::meta`
 ///        value is a member pointer, as a table's query action's is.
-/// @tparam T A class type.
 template <typename T>
 concept WrittenAsMember = requires { glz::meta<T>::value; } &&
                           std::is_member_object_pointer_v<std::remove_cvref_t<decltype(glz::meta<T>::value)>>;
@@ -3382,7 +3381,6 @@ void annotateSchemaRoot(glz::generic_u64& dom) {
 /// @brief A row type that declares the data levels of its columns, as
 ///        `static constexpr std::array<morph::table::ColumnLevel, N> columnLevels() noexcept`, each entry naming a
 ///        member by `column` and its level by `level`.
-/// @tparam A The type whose schema is being built.
 template <typename A>
 concept HasColumnLevels = requires {
     { A::columnLevels() };
@@ -3416,7 +3414,6 @@ void annotateColumnLevels(glz::generic_u64& dom, std::span<std::string_view cons
 /// @brief A row type that declares column groups, as
 ///        `static constexpr std::array<morph::table::ColumnGroup, N> columnGroups() noexcept`, each entry naming a
 ///        group by `id` and its members by `columns`.
-/// @tparam A The type whose schema is being built.
 template <typename A>
 concept HasColumnGroups = requires {
     { A::columnGroups() };
@@ -3708,7 +3705,6 @@ namespace detail {
 
 /// @brief A member type the server's walks descend into: a reflectable aggregate with no empty state of its own (not a
 ///        `Quantity`, `Choice` or `Timestamp`), whose members can be computed or derived.
-/// @tparam T The member's type.
 template <typename T>
 concept NestedAggregate = ReflectableAggregate<T> && !EmptyCapableField<T>;
 
