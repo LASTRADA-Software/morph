@@ -691,7 +691,9 @@ A server-mode table is always windowed by rows.
   the offsets and widths of the columns in the window and the total width. No per-frame work reads every
   column.
 - **Widths.** A column's width comes from its header, its declared width, and the cells measured while it was
-  in the window. As for rows, a windowed table's widths only grow; a width the user set does not change.
+  in the window. As for rows, a windowed table's content widths only grow; a width the user set does not change. A
+  stretch column is the exception: its width follows the table's viewport and the widths measured so far by the
+  rules of the backend contract's "Table cells", so it narrows as well as widens.
 - **Anchoring.** When a column to the left of the first fully visible unpinned column grows, the horizontal
   scroll offset grows by the same amount in the same frame, so the columns in view do not move.
 - **The header is windowed too.** A header cell and a group heading exist for the columns in the window only.

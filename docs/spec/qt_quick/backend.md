@@ -370,8 +370,10 @@ leading edge (`x` plus `hflick.contentX`), above the rest: a header label on the
 cells over an opaque backdrop the row makes in `cells` for a table with pinned columns only (`pinnedBackdrop`: the
 surface, then a further instance of the row's `background` cut to the pinned columns, so the row's state shows there
 too), which the scrolled cells pass beneath. Only they follow a sideways scroll (`placePinned`). `hflick` reports its `contentX` and the viewport less the select column (`hscroll`), unless
-`setHorizontalOffset` moved it; a cell wider than its column reports its width plus the padding (`measured`), which
-the mount grows the column by. **Row height.** A row's `measuredHeight` is its tallest placed cell's plus the padding,
+`setHorizontalOffset` moved it; a cell reports its natural width and its least width (`shrinkWidth` within its natural width), each
+plus the padding, the first time either is larger than what the column was told (`measured`), and the table reports
+each header's width the same way, again when a font or a sort mark changes it; the mount grows a content column by them
+and fits the stretch columns to the viewport (`tableMeasure().shrinkFloor` is 8 units). **Row height.** A row's `measuredHeight` is its tallest placed cell's plus the padding,
 counted in `rowMeasures`, or the one-line height when every column keeps one line, which measures nothing.
 `layoutRows`, once per event loop turn, keeps each realized row's height as the larger of what it had and what it
 measures (a row that left is forgotten), takes their mean as the height of every row not realized, places each row
