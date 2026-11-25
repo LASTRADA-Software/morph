@@ -1338,7 +1338,7 @@ TEST_CASE("table state: five large saves at once are all stored", "[ui][state]")
 // turn, so all five are stored within the first settle).
 TEST_CASE("table state: a session's store sends a busy save again after tableStateTimeout", "[ui][state]") {
     StoreFixture h;
-    auto const store = std::make_shared<ui::PreferencesTableStateStore>(h.client, h.owner);   // no timers of its own
+    auto const store = std::make_shared<ui::PreferencesTableStateStore>(h.client, h.owner);  // no timers of its own
     ui::Session session{h.runtime, ui::SessionOptions{.scheduler = &h.scheduler,
                                                       .clock = [&h] { return h.scheduler.now(); },
                                                       .keepUnused = std::chrono::minutes{5},
@@ -1368,10 +1368,10 @@ TEST_CASE("table state: a session's store sends a busy save again after tableSta
         return std::ranges::count_if(results, [](auto const& result) { return result.has_value(); });
     };
     h.settle();
-    CHECK(stored() == 4);   // the fifth was refused busy and waits
+    CHECK(stored() == 4);  // the fifth was refused busy and waits
     h.advance(299ms);
     CHECK(stored() == 4);
-    h.advance(1ms);         // tableStateTimeout after the refusal
+    h.advance(1ms);  // tableStateTimeout after the refusal
     CHECK(stored() == 5);
     for (auto const& result : results) {
         REQUIRE(result.has_value());
@@ -1390,9 +1390,11 @@ using morph::ui::testing::StoreCall;
 
 // A view of a name, sorted by @p column.
 table::SavedView viewNamed(std::string name, std::string column = "name") {
-    return table::SavedView{.name = std::move(name), .layout = {},
-                            .sort = {table::SortKey{.column = std::move(column), .dir = table::SortDirection::Ascending}},
-                            .filters = {}};
+    return table::SavedView{
+        .name = std::move(name),
+        .layout = {},
+        .sort = {table::SortKey{.column = std::move(column), .dir = table::SortDirection::Ascending}},
+        .filters = {}};
 }
 
 // A window: a session's table states over a shared store, and one table's views.
@@ -1411,7 +1413,7 @@ std::vector<std::string> callsOf(std::vector<StoreCall> const& calls, std::strin
         if (call.part != part) {
             continue;
         }
-        std::string const outcome = call.op == "load"                                  ? ""
+        std::string const outcome = call.op == "load"                              ? ""
                                     : call.outcome == table::SaveOutcome::Saved    ? " Saved"
                                     : call.outcome == table::SaveOutcome::Conflict ? " Conflict"
                                                                                    : " Refused";
@@ -1445,7 +1447,7 @@ TEST_CASE("views: views are not lost between windows", "[ui][table][state]") {
                                    "save expected=" + store.calls.at(before).revision + " Saved"});
     std::string const rA = store.calls.at(before).revision;
     std::string const rB = store.calls.back().revision;
-    CHECK(store.calls.at(before + 1).revision == rA);                      // the conflict carries A's revision
+    CHECK(store.calls.at(before + 1).revision == rA);  // the conflict carries A's revision
     CHECK(rB != rA);
     CHECK(viewNames(settled(h, store.load(viewsKey()))) == std::vector<std::string>{"A", "B"});
     // New sessions: each reads the document of revision rB, then each adds a view.
@@ -1457,9 +1459,9 @@ TEST_CASE("views: views are not lost between windows", "[ui][table][state]") {
     REQUIRE(settled(h, a->views.change(table::AddView{viewNamed("C")})).has_value());
     REQUIRE(settled(h, b->views.change(table::AddView{viewNamed("D")})).has_value());
     std::string const rC = store.calls.at(again).revision;
-    CHECK(callsOf(store.calls, "views", again) ==
-          std::vector<std::string>{"save expected=" + rB + " Saved", "save expected=" + rB + " Conflict", "load",
-                                   "save expected=" + rC + " Saved"});
+    CHECK(callsOf(store.calls, "views", again) == std::vector<std::string>{"save expected=" + rB + " Saved",
+                                                                           "save expected=" + rB + " Conflict", "load",
+                                                                           "save expected=" + rC + " Saved"});
     CHECK(viewNames(settled(h, store.load(viewsKey()))) == std::vector<std::string>{"A", "B", "C", "D"});
 }
 
@@ -1501,7 +1503,7 @@ TEST_CASE("views: a screen's state, views and shared parts load in one call, and
     CHECK(parts("state") == 5);
     CHECK(parts("views") == 5);
     CHECK(parts("shared") == 5);
-    CHECK(mountScreen() == 10);                                               // the remount
+    CHECK(mountScreen() == 10);  // the remount
     CHECK(h.client.count("load") == 1);
 
     RowsFixture p;
@@ -1523,7 +1525,7 @@ TEST_CASE("views: a store that ignores kNoDocument still saves the first view", 
     CHECK(settled(h, views.change(table::AddView{viewNamed("A")})).has_value());
     CHECK(callsOf(store.calls, "views", before) ==
           std::vector<std::string>{"save expected=- Conflict", "load", "save expected= Saved"});
-    CHECK(store.calls.at(before).revision.empty());                        // the conflict over nothing names ""
+    CHECK(store.calls.at(before).revision.empty());  // the conflict over nothing names ""
     CHECK(viewNames(store.stored("views")) == std::vector<std::string>{"A"});
     CHECK(views.own().views.size() == 1);
 }
@@ -1550,7 +1552,7 @@ TEST_CASE("views: a taken name is replaced on save and refused on rename", "[ui]
     std::size_t const renaming = store.calls.size();
     CHECK(settled(h, one.views.change(table::RenameView{.from = "B", .to = "A"})) ==
           TableViews::Result{std::unexpected(std::string{"A view named A exists"})});
-    CHECK(store.calls.size() == renaming);                                   // no save
+    CHECK(store.calls.size() == renaming);  // no save
     // Window 2 reads r1 and saves "C"; window 1, holding r1 and no "C", renames "B" to "C".
     ViewsWindow two{h, store};
     REQUIRE(settled(h, two.views.load()).has_value());
@@ -1608,7 +1610,8 @@ TEST_CASE("views: a mounted table loads its views with its state, and a second m
     }
 }
 
-// --- Saved views in the table menu -------------------------------------------------------------------------------------
+// --- Saved views in the table menu
+// -------------------------------------------------------------------------------------
 
 namespace {
 
@@ -1703,13 +1706,12 @@ table::TableQuery firstQuery(TableHarness const& h) {
 TEST_CASE("views: Save view… under a taken name replaces that view", "[ui][table][state]") {
     auto store = std::make_shared<RecordingTableStateStore>(storeExecutor());
     TableHarness h{store};
-    std::string const r0 =
-        seed(h, *store, "views",
-             ownViews({viewSorted("A", nineColumns(), "c1", table::SortDirection::Ascending),
-                       viewSorted("B", nineColumns(), "c2", table::SortDirection::Ascending)}));
+    std::string const r0 = seed(h, *store, "views",
+                                ownViews({viewSorted("A", nineColumns(), "c1", table::SortDirection::Ascending),
+                                          viewSorted("B", nineColumns(), "c2", table::SortDirection::Ascending)}));
     auto screen = h.mount(morph::ui::testing::kNine);
     int const table = h.backend.all("Table").front();
-    h.backend.clickHeader(table, 3, HeaderClick::Plain);                     // c4 ascending
+    h.backend.clickHeader(table, 3, HeaderClick::Plain);  // c4 ascending
     h.settle();
     std::size_t const before = store->calls.size();
     chooseMenu(h, table, std::nullopt, {"Views", "Save view…"});
@@ -1737,18 +1739,18 @@ TEST_CASE("views: applying a view records its name, and a change marks it modifi
     table::SavedView open = viewSorted("Open orders", nineColumns(), "c2", table::SortDirection::Descending, {"c3"});
     table::ColumnFilter gone;
     gone.include.push_back(table::FilterEntry{.eq = "1"});
-    open.filters.columns.emplace("gone", gone);                             // a column the table does not have
+    open.filters.columns.emplace("gone", gone);  // a column the table does not have
     table::ColumnFilter atLeastTwo;
     atLeastTwo.include.push_back(table::FilterEntry{.ge = "2"});
-    open.filters.columns.emplace("c1", atLeastTwo);                         // a column it has
+    open.filters.columns.emplace("c1", atLeastTwo);  // a column it has
     seed(h, *store, "views", ownViews({open}));
     auto screen = h.mount(morph::ui::testing::kNine);
     int const table = h.backend.all("Table").front();
     chooseMenu(h, table, std::nullopt, {"Views", "Open orders"});
     CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c2","direction":"desc"}])");
     CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["c1","c2","c4","c5","c6","c7","c8","c9"])");
-    CHECK_FALSE(elementValue(*screen, "t", "filters").contains("gone"));    // applied without that filter
-    CHECK(elementValue(*screen, "t", "filters").contains(R"("c1")"));       // and with the other
+    CHECK_FALSE(elementValue(*screen, "t", "filters").contains("gone"));  // applied without that filter
+    CHECK(elementValue(*screen, "t", "filters").contains(R"("c1")"));     // and with the other
     CHECK(elementValue(*screen, "t", "viewCount") == "2");
     h.advance(500ms);
     auto const state = storedPart(h, *store, "state");
@@ -1814,7 +1816,8 @@ TEST_CASE("views: the default view at mount, and Start from the default view", "
         auto screen = h.mount(morph::ui::testing::kModelTable);
         morph::ui::testing::replyDescribe(h, morph::ui::testing::samplesDescription(4));
         table::TableQuery const query = firstQuery(h);
-        CHECK(query.sort == table::SortChain{table::SortKey{.column = "name", .dir = table::SortDirection::Descending}});
+        CHECK(query.sort ==
+              table::SortChain{table::SortKey{.column = "name", .dir = table::SortDirection::Descending}});
         REQUIRE(query.columns.has_value());
         CHECK_FALSE(std::ranges::contains(*query.columns, std::string{"c3"}));
         CHECK(std::ranges::contains(*query.columns, std::string{"c4"}));
@@ -1835,8 +1838,7 @@ TEST_CASE("views: the Views submenu on a rows table, a model table and a collect
         auto store = std::make_shared<RecordingTableStateStore>(storeExecutor());
         TableHarness h{store};
         h.extraViews.insert_or_assign("Lims_ListSamples", std::string{morph::ui::testing::kMixedSamplesView});
-        seed(h, *store, "views",
-             ownViews({viewSorted("Mine", kind.order, "name", table::SortDirection::Descending)}));
+        seed(h, *store, "views", ownViews({viewSorted("Mine", kind.order, "name", table::SortDirection::Descending)}));
         std::unique_ptr<morph::ui::Screen> screen;
         int table = 0;
         if (kind.name == "rows") {
@@ -1884,8 +1886,8 @@ TEST_CASE("views: the Views submenu on a rows table, a model table and a collect
 TEST_CASE("views: a saved point naming a rows table edits its state's view", "[ui][table][state]") {
     auto store = std::make_shared<RecordingTableStateStore>(storeExecutor());
     TableHarness h{store};
-    seed(h, *store, "views", ownViews({viewSorted("Mine", {"id", "name", "weight"}, "name",
-                                                  table::SortDirection::Descending)}));
+    seed(h, *store, "views",
+         ownViews({viewSorted("Mine", {"id", "name", "weight"}, "name", table::SortDirection::Descending)}));
     std::string text = morph::ui::testing::rowsDoc(morph::ui::testing::kThree);
     text.insert(text.find(R"("state":)"), R"("customize":{"v":{"kind":"saved","of":"list"}},)");
     auto screen = h.mount(text);
@@ -1903,9 +1905,10 @@ TEST_CASE("views: a saved point naming a rows table edits its state's view", "[u
 }
 
 // Mutation: the shared part saved through `save` instead of `publish` (an authoriser cannot tell it from own state).
-TEST_CASE("shared views on a table: publish, read by another person, Save as my view; none over a store that does "
-          "not share",
-          "[ui][table][state][remote]") {
+TEST_CASE(
+    "shared views on a table: publish, read by another person, Save as my view; none over a store that does "
+    "not share",
+    "[ui][table][state][remote]") {
     StateServer server{TableStateOptions{}, std::make_shared<NoPublishForBob>()};
     table::TableStateKey const shared{
         .application = "lims", .model = "", .table = "list", .qualifier = "samples", .part = "shared"};
@@ -1925,7 +1928,7 @@ TEST_CASE("shared views on a table: publish, read by another person, Save as my 
     TableHarness alice{std::make_shared<ui::PreferencesTableStateStore>(aliceClient, storeExecutor())};
     auto aliceScreen = alice.mount(doc);
     int const aliceTable = alice.byTestId("Table", "list");
-    alice.backend.clickHeader(aliceTable, 1, HeaderClick::Plain);            // name ascending
+    alice.backend.clickHeader(aliceTable, 1, HeaderClick::Plain);  // name ascending
     alice.settle();
     chooseMenu(alice, aliceTable, std::nullopt, {"Views", "Publish view…"});
     nameView(alice, "Team");
@@ -1945,7 +1948,8 @@ TEST_CASE("shared views on a table: publish, read by another person, Save as my 
     int const bobTable = bob.byTestId("Table", "list");
     CHECK(keptRevision(bob) == published);
     std::vector<MenuEntry> const views = viewsOf(bob, bobTable);
-    CHECK(std::ranges::any_of(views, [](MenuEntry const& entry) { return entry.heading && entry.label == "Shared views"; }));
+    CHECK(std::ranges::any_of(views,
+                              [](MenuEntry const& entry) { return entry.heading && entry.label == "Shared views"; }));
     CHECK(std::ranges::contains(labelsOf(views), std::string{"Team"}));
     CHECK_FALSE(std::ranges::contains(labelsOf(views), std::string{"Save as my view"}));
     chooseMenu(bob, bobTable, std::nullopt, {"Views", "Team"});
@@ -1998,10 +2002,10 @@ TEST_CASE("views: Save view… under a name another window took after load repla
         return result.has_value() && result->has_value();
     };
     REQUIRE(done(other.views.load()));
-    REQUIRE(done(other.views.change(
-        table::AddView{viewSorted("A", nineColumns(), "c1", table::SortDirection::Ascending)})));
+    REQUIRE(done(
+        other.views.change(table::AddView{viewSorted("A", nineColumns(), "c1", table::SortDirection::Ascending)})));
     std::string const taken = store->calls.back().revision;
-    h.backend.clickHeader(table, 3, HeaderClick::Plain);                     // c4 ascending
+    h.backend.clickHeader(table, 3, HeaderClick::Plain);  // c4 ascending
     h.settle();
     std::size_t const before = store->calls.size();
     chooseMenu(h, table, std::nullopt, {"Views", "Save view…"});
@@ -2029,7 +2033,7 @@ TEST_CASE("views: a change after the default view at mount saves on top of it", 
     {
         auto screen = h.mount(morph::ui::testing::kNine);
         int const table = h.backend.all("Table").front();
-        chooseMenu(h, table, 4, {"Hide column"});                              // c5
+        chooseMenu(h, table, 4, {"Hide column"});  // c5
         h.advance(500ms);
     }
     h.settle();
@@ -2038,8 +2042,8 @@ TEST_CASE("views: a change after the default view at mount saves on top of it", 
     auto const read = table::readState(state->json);
     REQUIRE(read.has_value());
     CHECK(read->view == std::optional<std::string>{"Open orders"});
-    CHECK(read->sort == std::optional<table::SortChain>{
-                            table::SortChain{table::SortKey{.column = "c2", .dir = table::SortDirection::Descending}}});
+    CHECK(read->sort == std::optional<table::SortChain>{table::SortChain{
+                            table::SortKey{.column = "c2", .dir = table::SortDirection::Descending}}});
     auto screen = h.mount(morph::ui::testing::kNine);
     CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c2","direction":"desc"}])");
     CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["c1","c2","c4","c6","c7","c8","c9"])");
@@ -2075,18 +2079,19 @@ table::ViewsDocument sharedViews(StateServer& server) {
 
 // Mutation: "Publish view…" always publishing an AddView (`publishView` never choosing ReplaceView): the second
 // publish is refused, "This view could not be published: A view named Team exists".
-TEST_CASE("shared views on a table: publishing again under a taken name replaces that view", "[ui][table][state][remote]") {
+TEST_CASE("shared views on a table: publishing again under a taken name replaces that view",
+          "[ui][table][state][remote]") {
     StateServer server{TableStateOptions{}};
     std::string const doc = morph::ui::testing::rowsDoc(morph::ui::testing::kThree);
     PersonTable alice{server, "alice"};
     auto screen = alice.h.mount(doc);
     int const table = alice.h.byTestId("Table", "list");
-    alice.h.backend.clickHeader(table, 1, HeaderClick::Plain);                 // name ascending
+    alice.h.backend.clickHeader(table, 1, HeaderClick::Plain);  // name ascending
     alice.h.settle();
     chooseMenu(alice.h, table, std::nullopt, {"Views", "Publish view…"});
     nameView(alice.h, "Team");
     REQUIRE(statusOf(alice.h, table).message == "Published view Team");
-    alice.h.backend.clickHeader(table, 1, HeaderClick::Plain);                 // name descending
+    alice.h.backend.clickHeader(table, 1, HeaderClick::Plain);  // name descending
     alice.h.settle();
     chooseMenu(alice.h, table, std::nullopt, {"Views", "Publish view…"});
     nameView(alice.h, "Team");
@@ -2113,7 +2118,7 @@ TEST_CASE("shared views on a table: publishing under a name published elsewhere 
     chooseMenu(bob.h, bobTable, std::nullopt, {"Views", "Publish view…"});
     nameView(bob.h, "Team");
     REQUIRE(statusOf(bob.h, bobTable).message == "Published view Team");
-    alice.h.backend.clickHeader(aliceTable, 1, HeaderClick::Plain);          // name ascending
+    alice.h.backend.clickHeader(aliceTable, 1, HeaderClick::Plain);  // name ascending
     alice.h.settle();
     chooseMenu(alice.h, aliceTable, std::nullopt, {"Views", "Publish view…"});
     nameView(alice.h, "Team");

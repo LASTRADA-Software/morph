@@ -49,8 +49,8 @@ struct SelectionModel {
         {tabletest::col("status", ColumnKind::Text), tabletest::col("mass", ColumnKind::Decimal)}, [] {
             std::vector<std::vector<Cell>> rows;
             for (int i = 0; i < 10; ++i) {
-                rows.push_back({Cell{std::string{i < 6 ? "open" : "closed"}},
-                                Cell{tabletest::dec(std::to_string(i) + ".0")}});
+                rows.push_back(
+                    {Cell{std::string{i < 6 ? "open" : "closed"}}, Cell{tabletest::dec(std::to_string(i) + ".0")}});
             }
             return rows;
         }());
@@ -62,8 +62,13 @@ struct SelectionModel {
         if (scope) {
             served = scoped(source, *scope);
         }
-        return ServedTable{.description = {}, .source = served, .levels = {}, .mayRead = {}, .scope = {},
-                           .services = {}, .limits = limits};
+        return ServedTable{.description = {},
+                           .source = served,
+                           .levels = {},
+                           .mayRead = {},
+                           .scope = {},
+                           .services = {},
+                           .limits = limits};
     }
 };
 
@@ -440,21 +445,21 @@ TEST_CASE("view selection: resolve under Exact is the view less except, in sourc
           "[table][selection][resolve]") {
     SelectionModel model;
     RowSelection<&SelectionModel::rows> selection{
-        .keys = {}, .view = {{.filters = open(), .retained = {}, .revision = revisionOf(model, open())}},
+        .keys = {},
+        .view = {{.filters = open(), .retained = {}, .revision = revisionOf(model, open())}},
         .except = {RowId{std::int64_t{3}}}};
     auto exact = resolve(model, selection, caller(), SelectionPolicy::Exact);
     auto const rows = settledNow(exact).value();
-    CHECK(rows.keys == std::vector<RowId>{std::int64_t{0}, std::int64_t{1}, std::int64_t{2}, std::int64_t{4},
-                                          std::int64_t{5}});
+    CHECK(rows.keys ==
+          std::vector<RowId>{std::int64_t{0}, std::int64_t{1}, std::int64_t{2}, std::int64_t{4}, std::int64_t{5}});
     CHECK(rows.dropped == 0);
 
     model.source->patchRow(RowId{std::int64_t{7}}, {Cell{std::string{"open"}}, Cell{tabletest::dec("0.7")}});
     auto changed = resolve(model, selection, caller(), SelectionPolicy::Exact);
     CHECK(errorOf(changed) == TableErrorCode::ViewChanged);
     auto current = resolve(model, selection, caller(), SelectionPolicy::Current);
-    CHECK(settledNow(current).value().keys ==
-          std::vector<RowId>{std::int64_t{0}, std::int64_t{1}, std::int64_t{2}, std::int64_t{4}, std::int64_t{5},
-                             std::int64_t{7}});
+    CHECK(settledNow(current).value().keys == std::vector<RowId>{std::int64_t{0}, std::int64_t{1}, std::int64_t{2},
+                                                                 std::int64_t{4}, std::int64_t{5}, std::int64_t{7}});
 }
 // Mutation: `viewRevision` that ignores the source snapshot (a digest of the filter alone), which resolves the
 // edited view under Exact.
@@ -552,7 +557,8 @@ ServedTable describedRows(SelectionModel& model) {
 
 TEST_CASE("retained rows: they stay in the view, listed in unmatched", "[table][retain]") {
     SelectionModel model;
-    TableQuery query{.sort = {{.column = "mass", .dir = SortDirection::Descending}}, .filters = open(),
+    TableQuery query{.sort = {{.column = "mass", .dir = SortDirection::Descending}},
+                     .filters = open(),
                      .retain = {RowId{std::int64_t{1}}, RowId{std::int64_t{7}}, RowId{std::int64_t{8}}}};
     for (std::int64_t key : {1, 7, 8}) {  // the action closed row 1; rows 7 and 8 were closed already
         model.source->patchRow(RowId{key},
@@ -577,8 +583,8 @@ TEST_CASE("retained rows: the shared view entry is not changed by one request's 
     auto const served = describedRows(model);
     ViewCache views;
     detail::AnswerContext const context{.views = &views, .record = "seltest::SelectionModel.rows", .rowScoped = false};
-    TableQuery const retaining{.sort = {{.column = "mass", .dir = SortDirection::Ascending}}, .filters = open(),
-                               .retain = keysOf({7})};
+    TableQuery const retaining{
+        .sort = {{.column = "mass", .dir = SortDirection::Ascending}}, .filters = open(), .retain = keysOf({7})};
     auto const first = detail::answerQuery(served, retaining, context);
     REQUIRE(first.has_value());
     CHECK(first->keys == keysOf({0, 1, 2, 3, 4, 5, 7}));
@@ -729,11 +735,12 @@ TEST_CASE("retained rows: a selection of a view with retained rows resolves unde
     // client's selection of such a view, which names them, is not refused as changed.
     SelectionModel model;
     model.source->patchRow(RowId{std::int64_t{1}}, {Cell{std::string{"closed"}}, Cell{tabletest::dec("1.0")}});
-    TableQuery const query{.sort = {{.column = "mass", .dir = SortDirection::Descending}}, .filters = open(),
-                           .retain = keysOf({1, 8})};
+    TableQuery const query{
+        .sort = {{.column = "mass", .dir = SortDirection::Descending}}, .filters = open(), .retain = keysOf({1, 8})};
     auto const page = apply(*model.source, query).value();
     RowSelection<&SelectionModel::rows> selection{
-        .keys = {}, .view = {{.filters = open(), .retained = keysOf({1, 8}), .revision = page.viewRevision}},
+        .keys = {},
+        .view = {{.filters = open(), .retained = keysOf({1, 8}), .revision = page.viewRevision}},
         .except = keysOf({3})};
     auto exact = resolve(model, selection, caller(), SelectionPolicy::Exact);
     CHECK(settledNow(exact).value().keys == keysOf({0, 1, 2, 4, 5, 8}));
@@ -742,9 +749,9 @@ TEST_CASE("retained rows: a selection of a view with retained rows resolves unde
 
 TEST_CASE("retained rows: one the filter cannot decide is in the view, not undecided", "[table][retain]") {
     // Column c is at level "slow"; row 2's cell is not loaded, so `c = x` can neither admit nor reject it.
-    auto const source = tabletest::makeSource({tabletest::levelCol("c", ColumnKind::Text, "slow")},
-                                              {{Cell{std::string{"x"}}}, {Cell{std::string{"y"}}}, {Cell{Unloaded{}}},
-                                               {Cell{std::string{"x"}}}});
+    auto const source = tabletest::makeSource(
+        {tabletest::levelCol("c", ColumnKind::Text, "slow")},
+        {{Cell{std::string{"x"}}}, {Cell{std::string{"y"}}}, {Cell{Unloaded{}}}, {Cell{std::string{"x"}}}});
     TableQuery plain;
     plain.filters.columns["c"].include.push_back(FilterEntry{.eq = "x"});
     auto const without = apply(*source, plain).value();
@@ -761,8 +768,8 @@ TEST_CASE("retained rows: one the filter cannot decide is in the view, not undec
 
 TEST_CASE("retained rows: a keyed query sees the merged view", "[table][retain]") {
     SelectionModel model;
-    TableQuery query{.sort = {{.column = "mass", .dir = SortDirection::Descending}}, .filters = open(),
-                     .retain = keysOf({7})};
+    TableQuery query{
+        .sort = {{.column = "mass", .dir = SortDirection::Descending}}, .filters = open(), .retain = keysOf({7})};
     query.keys = keysOf({7, 2});
     auto const page = apply(*model.source, query).value();
     CHECK(pageKeys(*model.source, page) == keysOf({7, 2}));

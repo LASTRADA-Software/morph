@@ -27,10 +27,10 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <morph/table/engine.hpp>
 #include <morph/table/filter.hpp>
 #include <morph/table/query.hpp>
+#include <optional>
 #include <random>
 #include <string>
 #include <string_view>
@@ -147,7 +147,8 @@ TEST_CASE("distinct: an unloaded cell or an undecided row sets partial", "[table
 
 TEST_CASE("distinct: search, paging and the cap", "[table][distinct]") {
     auto const source = tabletest::distinctSource();
-    CHECK(names(distinctValues(*source, {}, {.column = "status", .search = "OP"})) == std::vector<std::string>{"open"});
+    CHECK(names(distinctValues(*source, {}, {.column = "status", .search = "OP"})) ==
+          std::vector<std::string>{"open"});
     auto const page = distinctValues(*source, {}, {.column = "status", .offset = 1, .limit = 1});
     REQUIRE(page);
     CHECK(names(page) == std::vector<std::string>{"hold"});  // ascending: closed, hold, open
@@ -167,12 +168,13 @@ TEST_CASE("distinct: search, paging and the cap", "[table][distinct]") {
 }
 
 TEST_CASE("distinct: search on numbers and accents, and an offset past the end", "[table][distinct]") {
-    auto const decimals = tabletest::column(ColumnKind::Decimal, {tabletest::dec("11.5"), tabletest::dec("1.5"),
-                                                                  std::int64_t{2}});
+    auto const decimals =
+        tabletest::column(ColumnKind::Decimal, {tabletest::dec("11.5"), tabletest::dec("1.5"), std::int64_t{2}});
     CHECK(names(distinctValues(*decimals, {}, {.column = "c", .search = "1.5"})) ==
           std::vector<std::string>{"1.5", "11.5"});
-    auto const texts = tabletest::column(ColumnKind::Text, {std::string{"\xC3\xA9" "cole"}, std::string{"Ecole"},
-                                                            std::string{"x"}});
+    auto const texts = tabletest::column(ColumnKind::Text, {std::string{"\xC3\xA9"
+                                                                        "cole"},
+                                                            std::string{"Ecole"}, std::string{"x"}});
     ApplyOptions foldingOptions;
     foldingOptions.services.collator = std::make_shared<tabletest::AccentFoldingCollator>();
     CHECK(names(distinctValues(*texts, {}, {.column = "c", .search = "\xC3\x89"}, foldingOptions)).size() == 1);
@@ -184,11 +186,10 @@ TEST_CASE("distinct: search on numbers and accents, and an offset past the end",
 
 TEST_CASE("distinct: dates by year, month and day", "[table][distinct]") {
     using namespace std::chrono;
-    auto const dates = tabletest::column(
-        ColumnKind::Date,
-        {epochDays(2025y / December / 31), epochDays(2026y / January / 15), epochDays(2026y / January / 20),
-         epochDays(2026y / February / 1)},
-        "d");
+    auto const dates = tabletest::column(ColumnKind::Date,
+                                         {epochDays(2025y / December / 31), epochDays(2026y / January / 15),
+                                          epochDays(2026y / January / 20), epochDays(2026y / February / 1)},
+                                         "d");
     auto const years = distinctValues(*dates, {}, {.column = "d", .bucket = DateBucket::Year});
     REQUIRE(years);
     REQUIRE(years->values.size() == 2);
@@ -212,8 +213,8 @@ TEST_CASE("distinct: dates by year, month and day", "[table][distinct]") {
     REQUIRE(values);
     CHECK(values->values[0].text == "2025-12-31");
 
-    auto const stamps = tabletest::column(ColumnKind::DateTime,
-                                          {epochDays(2026y / January / 15) * 86'400 + 10 * 3600}, "t");
+    auto const stamps =
+        tabletest::column(ColumnKind::DateTime, {epochDays(2026y / January / 15) * 86'400 + 10 * 3600}, "t");
     auto const stampDays = distinctValues(*stamps, {}, {.column = "t", .bucket = DateBucket::Day});
     REQUIRE(stampDays);
     REQUIRE(stampDays->values.size() == 1);
@@ -235,14 +236,12 @@ TEST_CASE("distinct: requests are validated as queries are", "[table][distinct]"
     CHECK(codeOf(distinctValues(*source, {}, {.column = "nope"})) == TableErrorCode::UnknownColumn);
     ApplyOptions hidden;
     hidden.mayRead = [](std::string_view id) { return id != "status"; };
-    CHECK(codeOf(distinctValues(*source, {}, {.column = "status"}, hidden)) ==
-          TableErrorCode::ColumnNotReadable);
+    CHECK(codeOf(distinctValues(*source, {}, {.column = "status"}, hidden)) == TableErrorCode::ColumnNotReadable);
     CHECK(codeOf(distinctValues(*source, {}, {.column = "status", .search = std::string(257, 'a')})) ==
           TableErrorCode::LimitExceeded);
     CHECK(codeOf(distinctValues(*source, {}, {.column = "status", .offset = 10'000'001})) ==
           TableErrorCode::LimitExceeded);
-    CHECK(codeOf(distinctValues(*source, {}, {.column = "status", .offset = -1})) ==
-          TableErrorCode::LimitExceeded);
+    CHECK(codeOf(distinctValues(*source, {}, {.column = "status", .offset = -1})) == TableErrorCode::LimitExceeded);
     TableQuery keyed;
     keyed.keys = std::vector<RowId>{std::int64_t{1}};
     keyed.distinct = DistinctRequest{.column = "status"};
@@ -308,14 +307,15 @@ TEST_CASE("distinct: invariant 22 over random tables", "[table][distinct]") {
             };
             rows.push_back({text(), number(), text()});
         }
-        auto const source = tabletest::makeSource({tabletest::col("c0", ColumnKind::Text),
-                                                   tabletest::col("c1", ColumnKind::Integer),
-                                                   tabletest::col("c2", ColumnKind::Text)},
-                                                  std::move(rows));
+        auto const source =
+            tabletest::makeSource({tabletest::col("c0", ColumnKind::Text), tabletest::col("c1", ColumnKind::Integer),
+                                   tabletest::col("c2", ColumnKind::Text)},
+                                  std::move(rows));
         TableQuery query;
         query.page.limit = 0;
-        query.filters.columns["c0"] = ColumnFilter{
-            .combine = Combine::Any, .include = {oneOf({kWords.at(static_cast<std::size_t>(pick(6)))})}, .exclude = {}};
+        query.filters.columns["c0"] = ColumnFilter{.combine = Combine::Any,
+                                                   .include = {oneOf({kWords.at(static_cast<std::size_t>(pick(6)))})},
+                                                   .exclude = {}};
         query.filters.columns["c1"] = ColumnFilter{
             .combine = Combine::Any, .include = {FilterEntry{.ge = std::to_string(pick(8))}}, .exclude = {}};
         if (pick(2) == 0) {
@@ -343,9 +343,9 @@ namespace {
 // The groups truth-table source plus row 5: empty, F, unloaded; declared group "company" over companyA..C.
 std::shared_ptr<VectorSource> pooledSource(std::vector<std::string> const& slow = {}) {
     using S = std::string;
-    std::vector<std::vector<Cell>> rows{{S{"F"}, S{"S"}, S{"X"}}, {S{"F"}, S{"F"}, S{"X"}}, {S{"S"}, S{"F"}, S{"F"}},
-                                        {S{"F"}, S{"X"}, S{"Y"}}, {S{"X"}, S{"Y"}, S{"Z"}},
-                                        {Cell{}, S{"F"}, Cell{Unloaded{}}}};
+    std::vector<std::vector<Cell>> rows{{S{"F"}, S{"S"}, S{"X"}}, {S{"F"}, S{"F"}, S{"X"}},
+                                        {S{"S"}, S{"F"}, S{"F"}}, {S{"F"}, S{"X"}, S{"Y"}},
+                                        {S{"X"}, S{"Y"}, S{"Z"}}, {Cell{}, S{"F"}, Cell{Unloaded{}}}};
     std::vector<ColumnInfo> columns;
     for (auto const* const id : {"companyA", "companyB", "companyC"}) {
         // companyC holds the unloaded cell, so it is at a level whatever `slow` says.
@@ -436,8 +436,8 @@ struct StatusRow {
 }  // namespace tdistinct
 
 TEST_CASE("distinct: the typed apply answers a distinct request", "[table][distinct]") {
-    std::vector<tdistinct::StatusRow> const rows{{.id = 1, .status = "open"}, {.id = 2, .status = "Open"},
-                                                 {.id = 3, .status = "closed"}};
+    std::vector<tdistinct::StatusRow> const rows{
+        {.id = 1, .status = "open"}, {.id = 2, .status = "Open"}, {.id = 3, .status = "closed"}};
     RowKey<tdistinct::StatusRow> const key = [](tdistinct::StatusRow const& row) { return RowId{row.id}; };
     TableQuery q;
     q.distinct = DistinctRequest{.column = "status"};

@@ -628,16 +628,20 @@ TEST_CASE("table: validate refuses a keyed query out of bounds", "[table][query]
 // Mutation: indices filled with positions in the reply instead of view rows.
 TEST_CASE("table: a keyed reply carries the view's totals and each row's view row", "[table][query][keyed]") {
     using morph::table::Unloaded;
-    auto source = tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")},
-                                        {{Cell{std::int64_t{40}}}, {Cell{std::int64_t{10}}}, {Cell{Unloaded{}}},
-                                         {Cell{std::int64_t{30}}}, {Cell{std::int64_t{-1}}}, {Cell{std::int64_t{20}}}});
+    auto source =
+        tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")}, {{Cell{std::int64_t{40}}},
+                                                                                        {Cell{std::int64_t{10}}},
+                                                                                        {Cell{Unloaded{}}},
+                                                                                        {Cell{std::int64_t{30}}},
+                                                                                        {Cell{std::int64_t{-1}}},
+                                                                                        {Cell{std::int64_t{20}}}});
     TableQuery query{.sort = {SortKey{.column = "a"}},
                      .filters = FilterSpec{.columns = {{"a", ColumnFilter{.include = {{.gt = "0"}}}}}}};
     query.keys = std::vector<RowId>{RowId{std::int64_t{3}}, RowId{std::int64_t{1}}, RowId{std::int64_t{2}},
                                     RowId{std::int64_t{4}}, RowId{std::int64_t{99}}};
     auto page = apply(*source, query);
     REQUIRE(page.has_value());
-    CHECK(page->rows == std::vector<std::size_t>{1, 3});          // view order; 2 undecided, 4 rejected, 99 absent
+    CHECK(page->rows == std::vector<std::size_t>{1, 3});  // view order; 2 undecided, 4 rejected, 99 absent
     CHECK(page->indices == std::vector<std::int64_t>{0, 2});
     CHECK(page->total == 4);
     CHECK(page->undecided == 1);
@@ -682,9 +686,13 @@ private:
 // Mutation: pageRows ignoring sourceRowOf.
 TEST_CASE("table: a keyed page uses the lookup it is given", "[table][query][keyed]") {
     using morph::table::Unloaded;
-    auto source = tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")},
-                                        {{Cell{std::int64_t{40}}}, {Cell{std::int64_t{10}}}, {Cell{Unloaded{}}},
-                                         {Cell{std::int64_t{30}}}, {Cell{std::int64_t{-1}}}, {Cell{std::int64_t{20}}}});
+    auto source =
+        tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")}, {{Cell{std::int64_t{40}}},
+                                                                                        {Cell{std::int64_t{10}}},
+                                                                                        {Cell{Unloaded{}}},
+                                                                                        {Cell{std::int64_t{30}}},
+                                                                                        {Cell{std::int64_t{-1}}},
+                                                                                        {Cell{std::int64_t{20}}}});
     TableQuery query{.sort = {SortKey{.column = "a"}},
                      .filters = FilterSpec{.columns = {{"a", ColumnFilter{.include = {{.gt = "0"}}}}}}};
     query.keys = std::vector<RowId>{RowId{std::int64_t{3}}, RowId{std::int64_t{1}}, RowId{std::int64_t{2}},
@@ -776,8 +784,8 @@ std::vector<std::string> texts(std::size_t n, std::size_t bytes) {
 TableQuery setQuery(std::vector<std::pair<std::string, std::vector<std::string>>> sets) {
     TableQuery q;
     for (auto& [column, values] : sets) {
-        q.filters.columns[column] = ColumnFilter{
-            .combine = Combine::Any, .include = {FilterEntry{.oneOf = std::move(values)}}, .exclude = {}};
+        q.filters.columns[column] =
+            ColumnFilter{.combine = Combine::Any, .include = {FilterEntry{.oneOf = std::move(values)}}, .exclude = {}};
     }
     return q;
 }

@@ -358,8 +358,8 @@ struct Digits {
         }
     }
     std::uint32_t const places = std::min(shown->decimals, math::kMaxDecimalPlaces);
-    auto const rounded = math::checkedRoundToDecimalPlaces(amount, math::DecimalPlaces{places},
-                                                           math::RoundingMode::HalfEven);
+    auto const rounded =
+        math::checkedRoundToDecimalPlaces(amount, math::DecimalPlaces{places}, math::RoundingMode::HalfEven);
     if (!rounded) {
         return std::nullopt;
     }
@@ -397,8 +397,8 @@ struct Digits {
     }
     time::DateTime const local{std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::seconds{seconds}}};
     std::string const& sessions = withTime ? locale.dateTimePattern : locale.datePattern;
-    std::string_view const pattern = !column.display.date.empty() ? std::string_view{column.display.date}
-                                                                  : std::string_view{sessions};
+    std::string_view const pattern =
+        !column.display.date.empty() ? std::string_view{column.display.date} : std::string_view{sessions};
     if (!pattern.empty()) {
         if (std::string text = formatDate(pattern, local, locale.utcOffsetMinutes); !text.empty()) {
             return text;
@@ -449,8 +449,7 @@ struct Digits {
     }
     bool const number = std::holds_alternative<std::int64_t>(*read) || std::holds_alternative<math::Rational>(*read) ||
                         std::holds_alternative<double>(*read) || std::holds_alternative<table::QuantityCell>(*read);
-    bool const dated =
-        column.info.kind == table::ColumnKind::Date || column.info.kind == table::ColumnKind::DateTime;
+    bool const dated = column.info.kind == table::ColumnKind::Date || column.info.kind == table::ColumnKind::DateTime;
     if (number && !dated && !detail::cells::numberText(*read, column.display)) {
         return CellLook::Invalid;
     }
@@ -585,8 +584,7 @@ struct Digits {
             }
         }
     }
-    render::NumericLocale const numbers =
-        column.display.grouping ? locale.numeric : withoutGrouping(locale.numeric);
+    render::NumericLocale const numbers = column.display.grouping ? locale.numeric : withoutGrouping(locale.numeric);
     bool const dated = column.info.kind == table::ColumnKind::Date || column.info.kind == table::ColumnKind::DateTime;
     if (auto const* const days = std::get_if<std::int64_t>(&read); days != nullptr && dated) {
         return detail::cells::dateText(*days, column, locale);

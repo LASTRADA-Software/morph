@@ -18,10 +18,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <map>
+#include <memory>
 #include <morph/forms/forms.hpp>
 #include <morph/forms/views.hpp>
-#include <memory>
-#include <map>
 #include <morph/table/data_source.hpp>
 #include <morph/table/engine.hpp>
 #include <morph/table/query.hpp>
@@ -231,10 +231,10 @@ TEST_CASE("typed rows declare their groups to the source", "[table][columns][gro
     using morph::table::FilterEntry;
     using morph::table::GroupMode;
     using morph::table::RowId;
-    auto const rows = std::make_shared<std::vector<tabletest::GroupRow> const>(std::vector<tabletest::GroupRow>{
-        {.companyA = "F", .companyB = "S", .companyC = "X", .name = "a"},
-        {.companyA = "F", .companyB = "F", .companyC = "X", .name = "b"},
-        {.companyA = "S", .companyB = "F", .companyC = "F", .name = "c"}});
+    auto const rows = std::make_shared<std::vector<tabletest::GroupRow> const>(
+        std::vector<tabletest::GroupRow>{{.companyA = "F", .companyB = "S", .companyC = "X", .name = "a"},
+                                         {.companyA = "F", .companyB = "F", .companyC = "X", .name = "b"},
+                                         {.companyA = "S", .companyB = "F", .companyC = "F", .name = "c"}});
     morph::table::RowKey<tabletest::GroupRow> const key = [](tabletest::GroupRow const& row) {
         return RowId{row.name};
     };
@@ -243,8 +243,9 @@ TEST_CASE("typed rows declare their groups to the source", "[table][columns][gro
     CHECK(source.groups()[0] ==
           ColumnGroupInfo{.id = "company", .label = "company", .columns = {"companyA", "companyB", "companyC"}});
     morph::table::TableQuery q;
-    q.filters.groups.push_back(
-        {.group = "company", .mode = GroupMode::Together, .include = {FilterEntry{.eq = "F"}, FilterEntry{.eq = "S"}}});
+    q.filters.groups.push_back({.group = "company",
+                                .mode = GroupMode::Together,
+                                .include = {FilterEntry{.eq = "F"}, FilterEntry{.eq = "S"}}});
     auto const page = morph::table::apply(*rows, key, q);
     REQUIRE(page);
     REQUIRE(page->rows.size() == 2);
@@ -277,9 +278,7 @@ using morph::table::ColumnLayoutValue;
 
 namespace {
 
-std::vector<std::string> orderOf(ColumnLayout const& layout) {
-    return {layout.order().begin(), layout.order().end()};
-}
+std::vector<std::string> orderOf(ColumnLayout const& layout) { return {layout.order().begin(), layout.order().end()}; }
 
 // A layout that has been fitted: what the round-trip case stores.
 ColumnLayout fittedLayout() {
@@ -297,14 +296,13 @@ ColumnLayout fittedLayout() {
 
 TEST_CASE("column layout: a stored layout is fitted to the table", "[table][layout]") {
     ColumnLayout layout{{"id", "name", "a", "new", "b"}};
-    layout.apply(ColumnLayoutValue{
-        .order = {"b", "ghost", "name", "id", "a"},
-        .hidden = {"ghost", "a"},
-        .pinned = 9,
-        .widths = {{"name", 24}, {"ghost", 10}},
-        .groups = {{.id = "g1", .label = "Company", .columns = {"a", "ghost", "b"}},
-                   {.id = "g2", .label = "X", .columns = {"ghost", "name"}}},
-        .units = {{"a", {{"mass", "g"}}}, {"ghost", {{"mass", "kg"}}}}});
+    layout.apply(ColumnLayoutValue{.order = {"b", "ghost", "name", "id", "a"},
+                                   .hidden = {"ghost", "a"},
+                                   .pinned = 9,
+                                   .widths = {{"name", 24}, {"ghost", 10}},
+                                   .groups = {{.id = "g1", .label = "Company", .columns = {"a", "ghost", "b"}},
+                                              {.id = "g2", .label = "X", .columns = {"ghost", "name"}}},
+                                   .units = {{"a", {{"mass", "g"}}}, {"ghost", {{"mass", "kg"}}}}});
     auto const v = layout.value();
     CHECK(v.order == std::vector<std::string>{"b", "name", "id", "a", "new"});  // "new" after its predecessor "a"
     CHECK(v.hidden == std::vector<std::string>{"a"});

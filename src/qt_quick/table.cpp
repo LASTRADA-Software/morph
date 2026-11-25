@@ -151,8 +151,8 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
                     std::move(path));
         }
     });
-    // A key the table leaves, with a cell focused, that is one of the entries' chords: the focused cell's first enabled
-    // entry without a submenu whose chord it is runs, as if chosen from its menu.
+    // A key the table leaves, with a cell focused, that is one of the entries' chords: the focused cell's first
+    // enabled entry without a submenu whose chord it is runs, as if chosen from its menu.
     relay().answer(QStringLiteral("cellKey"), [this](QVariant const& payload) {
         QVariantList const pressed = payload.toList();
         if (pressed.size() != 2 || !_cellMenu || !_cellChosen || item() == nullptr || !reachable()) {
@@ -181,21 +181,22 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
         auto const entries = _cellMenu;
         auto const chosen = _cellChosen;
         std::vector<std::size_t> path;
-        std::function<bool(std::vector<ui::MenuEntry> const&)> const find = [&](std::vector<ui::MenuEntry> const& level) {
-            for (std::size_t at = 0; at < level.size(); ++at) {
-                ui::MenuEntry const& entry = level.at(at);
-                if (entry.separator || entry.heading || !entry.enabled) {
-                    continue;
+        std::function<bool(std::vector<ui::MenuEntry> const&)> const find =
+            [&](std::vector<ui::MenuEntry> const& level) {
+                for (std::size_t at = 0; at < level.size(); ++at) {
+                    ui::MenuEntry const& entry = level.at(at);
+                    if (entry.separator || entry.heading || !entry.enabled) {
+                        continue;
+                    }
+                    path.push_back(at);
+                    if (entry.items.empty() ? !entry.keys.empty() && chordMatches(entry.keys, key, modifiers)
+                                            : find(entry.items)) {
+                        return true;
+                    }
+                    path.pop_back();
                 }
-                path.push_back(at);
-                if (entry.items.empty() ? !entry.keys.empty() && chordMatches(entry.keys, key, modifiers)
-                                        : find(entry.items)) {
-                    return true;
-                }
-                path.pop_back();
-            }
-            return false;
-        };
+                return false;
+            };
         if (!find(entries(*rowKey, static_cast<std::size_t>(column)))) {
             return false;
         }
@@ -248,19 +249,19 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
 void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
     QVariantList list;
     for (ui::TableColumn const& column : columns) {
-        list.append(QVariantMap{{QStringLiteral("label"), toQString(column.label)},
-                                {QStringLiteral("unit"), toQString(column.unit)},
-                                {QStringLiteral("accessibleName"),
-                                 toQString(ui::headerAccessibleName(column.label, column.unit))},
-                                {QStringLiteral("kind"), static_cast<int>(column.width.kind)},
-                                {QStringLiteral("amount"), column.width.amount},
-                                {QStringLiteral("role"), static_cast<int>(column.role)},
-                                {QStringLiteral("wrap"), column.wrap},
-                                {QStringLiteral("shrink"), column.shrink},
-                                {QStringLiteral("align"), static_cast<int>(column.align)},
-                                {QStringLiteral("valign"), static_cast<int>(column.valign)},
-                                {QStringLiteral("sortable"), column.sortable},
-                                {QStringLiteral("filterable"), column.filterable}});
+        list.append(QVariantMap{
+            {QStringLiteral("label"), toQString(column.label)},
+            {QStringLiteral("unit"), toQString(column.unit)},
+            {QStringLiteral("accessibleName"), toQString(ui::headerAccessibleName(column.label, column.unit))},
+            {QStringLiteral("kind"), static_cast<int>(column.width.kind)},
+            {QStringLiteral("amount"), column.width.amount},
+            {QStringLiteral("role"), static_cast<int>(column.role)},
+            {QStringLiteral("wrap"), column.wrap},
+            {QStringLiteral("shrink"), column.shrink},
+            {QStringLiteral("align"), static_cast<int>(column.align)},
+            {QStringLiteral("valign"), static_cast<int>(column.valign)},
+            {QStringLiteral("sortable"), column.sortable},
+            {QStringLiteral("filterable"), column.filterable}});
     }
     write("columns", list);
 }
@@ -405,8 +406,8 @@ void TableImpl::openCellMenu(TableRowImpl const& row, std::size_t column) {
     QPointer<QQuickItem> anchor{row.item()};
     for (ItemBase const* const child : row.children()) {
         QQuickItem* const cell = child->item();
-        if (cell != nullptr && cell->isVisible() && cell->property("measuredIndex").toLongLong() ==
-                                                        static_cast<qlonglong>(column)) {
+        if (cell != nullptr && cell->isVisible() &&
+            cell->property("measuredIndex").toLongLong() == static_cast<qlonglong>(column)) {
             anchor = cell;
         }
     }
@@ -628,8 +629,8 @@ void TableImpl::setCellEditor(ui::Widget& row, std::size_t column, ui::Widget* e
         QPointer<QQuickItem> const closing = _editors.take(tableRow);
         QQuickWindow* const window = item() != nullptr ? item()->window() : nullptr;
         bool held = false;
-        for (QQuickItem* at = window != nullptr ? window->activeFocusItem() : nullptr; at != nullptr && closing != nullptr;
-             at = at->parentItem()) {
+        for (QQuickItem* at = window != nullptr ? window->activeFocusItem() : nullptr;
+             at != nullptr && closing != nullptr; at = at->parentItem()) {
             held = held || at == closing.data();
         }
         if (held && item() != nullptr) {
@@ -899,10 +900,9 @@ void TableImpl::mark() const {
         if (row == nullptr) {
             continue;
         }
-        bool const selected =
-            row->key() && !passive(*row) &&
-            (_viewExcept ? !std::ranges::contains(*_viewExcept, *row->key())
-                         : std::ranges::find(_requested, *row->key()) != _requested.end());
+        bool const selected = row->key() && !passive(*row) &&
+                              (_viewExcept ? !std::ranges::contains(*_viewExcept, *row->key())
+                                           : std::ranges::find(_requested, *row->key()) != _requested.end());
         row->write("selected", selected);
     }
 }

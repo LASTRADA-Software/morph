@@ -16,25 +16,25 @@
 #include <initializer_list>
 #include <iterator>
 #include <map>
-#include <optional>
-#include <set>
 #include <memory>
 #include <morph/core/registry.hpp>
 #include <morph/forms/forms.hpp>
-#include <morph/table/edits.hpp>
-#include <morph/ui/grid.hpp>
-#include <morph/ui/mount.hpp>
+#include <morph/reactive/signal.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/description.hpp>
+#include <morph/table/edits.hpp>
 #include <morph/table/engine.hpp>
 #include <morph/table/query.hpp>
 #include <morph/table/sort.hpp>
 #include <morph/table/view_change.hpp>
-#include <morph/reactive/signal.hpp>
 #include <morph/ui/author.hpp>
+#include <morph/ui/grid.hpp>
+#include <morph/ui/mount.hpp>
 #include <morph/ui/table_rows.hpp>
 #include <morph/ui/value.hpp>
 #include <numeric>
+#include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -67,64 +67,89 @@ using namespace std::chrono_literals;
 // Mutations: a fetch per `visible` call (the first CHECK: 19 calls); no cancel of `superseded()` (the `stopped` and
 // `cancelled` CHECKs); an adjacent page waiting for the settle (the last CHECK).  Gate K6.
 TEST_CASE("window rows: a scroll that passes sends no fetch until it rests, and cancels what it left", "[ui][table]") {
-    RowsFixture h;  auto const rows = h.windowRows("samples");
-    h.answerFirstPage(*rows, /*total*/ 100'000);                     // pages 0 and 1 are held
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
+    h.answerFirstPage(*rows, /*total*/ 100'000);  // pages 0 and 1 are held
     std::size_t const before = h.dispatcher.count("Table.samples");
-    for (std::int64_t at = 2'500; at < 50'000; at += 2'500) { rows->visible(at, 30, h.columns); h.advance(10ms); }
-    CHECK(h.dispatcher.count("Table.samples") == before);           // inside tableSettle each time
-    h.advance(80ms);                                                 // rests at 47,500
+    for (std::int64_t at = 2'500; at < 50'000; at += 2'500) {
+        rows->visible(at, 30, h.columns);
+        h.advance(10ms);
+    }
+    CHECK(h.dispatcher.count("Table.samples") == before);  // inside tableSettle each time
+    h.advance(80ms);                                       // rests at 47,500
     std::size_t const rested = h.dispatcher.count("Table.samples");
-    CHECK(rested > before);  CHECK(rested <= before + 3);            // K6: at most three for a resting place
-    for (std::int64_t at = 50'000; at < 100'000; at += 2'500) { rows->visible(at, 30, h.columns); h.advance(10ms); }
-    h.advance(80ms);                                                 // rests at 97,500; the first rest is unanswered
-    for (std::size_t call = before; call < rested; ++call) { CHECK(h.stopped(call)); }   // what it left is cancelled
+    CHECK(rested > before);
+    CHECK(rested <= before + 3);  // K6: at most three for a resting place
+    for (std::int64_t at = 50'000; at < 100'000; at += 2'500) {
+        rows->visible(at, 30, h.columns);
+        h.advance(10ms);
+    }
+    h.advance(80ms);  // rests at 97,500; the first rest is unanswered
+    for (std::size_t call = before; call < rested; ++call) {
+        CHECK(h.stopped(call));
+    }  // what it left is cancelled
     CHECK(rows->stats().cancelled == rested - before);
     std::size_t const second = h.dispatcher.count("Table.samples");
-    CHECK(second > rested);  CHECK(second <= rested + 3);
-    while (h.pending("Table.samples") > 0) { h.replyPage(pageJson(97'400, 200, 100'000, h.columns)); }
-    rows->visible(97'790, 30, h.columns);  h.settle();               // into the page after a held one, no clock advance
-    CHECK(h.dispatcher.count("Table.samples") == second + 1);        // at once
+    CHECK(second > rested);
+    CHECK(second <= rested + 3);
+    while (h.pending("Table.samples") > 0) {
+        h.replyPage(pageJson(97'400, 200, 100'000, h.columns));
+    }
+    rows->visible(97'790, 30, h.columns);
+    h.settle();                                                // into the page after a held one, no clock advance
+    CHECK(h.dispatcher.count("Table.samples") == second + 1);  // at once
 }
 
 // Mutation: a refetch per event (the first refetch's reply is older than the events after it and is fetched again
 // at once: the 249 ms CHECK counts two).
 TEST_CASE("window rows: an awaited order is throttled", "[ui][table]") {
-    RowsFixture h;  auto const rows = h.windowRows("samples");
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
     // One full page and no other, so each refetch is one fetch.
     std::string const awaited = pageJson(0, 200, 200, h.columns, table::TotalKind::Exact, 0, {"recipe"});
-    rows->visible(0, 30, h.columns);  h.replyPage(awaited);          // the order awaits `recipe`
+    rows->visible(0, 30, h.columns);
+    h.replyPage(awaited);  // the order awaits `recipe`
     std::size_t const before = h.dispatcher.count("Table.samples");
-    for (std::int64_t key = 0; key < 10; ++key) { h.change({key}); h.advance(10ms); }   // ten events in 100 ms
-    CHECK(h.dispatcher.count("Table.samples") == before + 1);        // one, at the first event
+    for (std::int64_t key = 0; key < 10; ++key) {
+        h.change({key});
+        h.advance(10ms);
+    }                                                          // ten events in 100 ms
+    CHECK(h.dispatcher.count("Table.samples") == before + 1);  // one, at the first event
     h.replyPage(awaited);
-    h.advance(149ms);  CHECK(h.dispatcher.count("Table.samples") == before + 1);   // 249 ms after it
-    h.advance(1ms);    CHECK(h.dispatcher.count("Table.samples") == before + 2);   // tableAwaitedRefetch
-    h.replyPage(awaited);  h.advance(1'000ms);
-    CHECK(h.dispatcher.count("Table.samples") == before + 2);        // no event since: nothing more
+    h.advance(149ms);
+    CHECK(h.dispatcher.count("Table.samples") == before + 1);  // 249 ms after it
+    h.advance(1ms);
+    CHECK(h.dispatcher.count("Table.samples") == before + 2);  // tableAwaitedRefetch
+    h.replyPage(awaited);
+    h.advance(1'000ms);
+    CHECK(h.dispatcher.count("Table.samples") == before + 2);  // no event since: nothing more
 }
 
 // Mutation: build the record from every column the window holds for the row (converts 40, not 20).  Gate K8.
 TEST_CASE("window rows: a row of 300 columns converts the twenty it is asked for", "[ui][table]") {
-    RowsFixture h;  auto const rows = h.windowRows("samples", samplesDescription(300));
-    std::vector<std::string> const forty = h.columnIds(0, 40);      // id, name, c3 … c40
-    std::vector<std::string> const twenty = h.columnIds(0, 20);     // the first twenty of them
+    RowsFixture h;
+    auto const rows = h.windowRows("samples", samplesDescription(300));
+    std::vector<std::string> const forty = h.columnIds(0, 40);   // id, name, c3 … c40
+    std::vector<std::string> const twenty = h.columnIds(0, 20);  // the first twenty of them
     rows->visible(0, 50, forty);
-    h.replyPage(pageJson(0, 200, 9093, forty));                     // the window now holds 40 columns of row 0
-    REQUIRE(h.window(*rows).holds(0, "c40"));                       // the precondition K8 needs: 40 held
+    h.replyPage(pageJson(0, 200, 9093, forty));  // the window now holds 40 columns of row 0
+    REQUIRE(h.window(*rows).holds(0, "c40"));    // the precondition K8 needs: 40 held
     std::size_t const sent = h.dispatcher.count("Table.samples");
-    rows->visible(0, 50, twenty);  h.settle();
-    CHECK(h.dispatcher.count("Table.samples") == sent);             // held already: no fetch
+    rows->visible(0, 50, twenty);
+    h.settle();
+    CHECK(h.dispatcher.count("Table.samples") == sent);  // held already: no fetch
     REQUIRE(rows->row(0).has_value());
     CHECK(rows->row(0)->row.asRecord()->size() == 20);
-    CHECK(rows->stats().cellsConverted == 20);                      // K8; the mutation converts 40
-    static_cast<void>(rows->row(0));  CHECK(rows->stats().cellsConverted == 20);  // memoised
+    CHECK(rows->stats().cellsConverted == 20);  // K8; the mutation converts 40
+    static_cast<void>(rows->row(0));
+    CHECK(rows->stats().cellsConverted == 20);  // memoised
 }
 
 // Mutations: decoding through a `Value` (`ui::valueFromJson` refuses 2.5 and the page fails whole: `error()` is set);
 // a double `parseDecimal` refuses read as `null` (the row 1 REQUIRE).
 TEST_CASE("window rows: a page with a Number cell is read from the reply's text", "[ui][table]") {
     RowsFixture h;
-    table::TableDescription d = samplesDescription(2);              // id Integer key, then one more column
+    table::TableDescription d = samplesDescription(2);  // id Integer key, then one more column
     d.columns[1].info = table::ColumnInfo{.id = "ratio", .kind = table::ColumnKind::Number};
     auto const rows = h.windowRows("samples", table::describe(d));
     std::vector<std::string> const columns{"id", "ratio"};
@@ -133,9 +158,9 @@ TEST_CASE("window rows: a page with a Number cell is read from the reply's text"
                 R"(","columns":["id","ratio"],"keys":[1,2],"rows":[[1,2.5],[2,1e308]],"total":2})");
     REQUIRE_FALSE(rows->error().has_value());
     CHECK(rows->total().rows == 2);
-    REQUIRE(rows->row(0)->row.field("ratio")->asDecimal() != nullptr);          // cellValue: double → Decimal
+    REQUIRE(rows->row(0)->row.field("ratio")->asDecimal() != nullptr);  // cellValue: double → Decimal
     CHECK(valueToJsonText(*rows->row(0)->row.field("ratio")) == R"({"num":5,"den":2,"dp":1})");
-    REQUIRE(rows->row(1)->row.field("ratio")->asString() != nullptr);           // beyond a Decimal: its text
+    REQUIRE(rows->row(1)->row.field("ratio")->asString() != nullptr);  // beyond a Decimal: its text
     CHECK(*rows->row(1)->row.field("ratio")->asString() == "1e+308");
 }
 
@@ -144,13 +169,11 @@ TEST_CASE("window rows: a measure cell is a quantity in its own unit", "[ui][tab
     RowsFixture h;
     table::TableDescription d = samplesDescription(2);
     d.columns[1].info = table::ColumnInfo{.id = "weight", .kind = table::ColumnKind::Measure};
-    d.units = {table::UnitInfo{
-                   .id = "kg", .symbol = "kg", .dimension = "mass", .toBase = *table::parseDecimal("1"), .decimals = 3},
-               table::UnitInfo{.id = "g",
-                               .symbol = "g",
-                               .dimension = "mass",
-                               .toBase = *table::parseDecimal("0.001"),
-                               .decimals = 0}};
+    d.units = {
+        table::UnitInfo{
+            .id = "kg", .symbol = "kg", .dimension = "mass", .toBase = *table::parseDecimal("1"), .decimals = 3},
+        table::UnitInfo{
+            .id = "g", .symbol = "g", .dimension = "mass", .toBase = *table::parseDecimal("0.001"), .decimals = 0}};
     auto const rows = h.windowRows("samples", table::describe(d));
     std::vector<std::string> const columns{"id", "weight"};
     rows->visible(0, 30, columns);
@@ -165,15 +188,19 @@ TEST_CASE("window rows: a measure cell is a quantity in its own unit", "[ui][tab
 
 // Mutation: send the first page before `release`.
 TEST_CASE("window rows: a restoring window sends no query until released", "[ui][table]") {
-    RowsFixture h;  auto const rows = h.restoringRows("samples");
-    rows->visible(0, 30, h.columns);  h.settle();
+    RowsFixture h;
+    auto const rows = h.restoringRows("samples");
+    rows->visible(0, 30, h.columns);
+    h.settle();
     CHECK(h.dispatcher.count("Table.samples") == 0);
     REQUIRE(rows->setSort({{.column = "name", .dir = table::SortDirection::Descending}}));
-    h.settle();  CHECK(h.dispatcher.count("Table.samples") == 0);   // still restoring
-    rows->release();  h.settle();
-    CHECK(h.dispatcher.count("Table.samples") == 1);                // T3: one query, carrying the sort
+    h.settle();
+    CHECK(h.dispatcher.count("Table.samples") == 0);  // still restoring
+    rows->release();
+    h.settle();
+    CHECK(h.dispatcher.count("Table.samples") == 1);  // T3: one query, carrying the sort
     CHECK(h.dispatcher.calls.back().body.contains(R"("column":"name")"));
-    CHECK(h.dispatcher.calls.back().body.contains(R"("dir":"desc")"));   // the wire's name for a direction
+    CHECK(h.dispatcher.calls.back().body.contains(R"("dir":"desc")"));  // the wire's name for a direction
 }
 
 // Mutation: a description that does not read taken as an empty description (no error is set, and a page fetch
@@ -183,7 +210,8 @@ TEST_CASE("window rows: a description that does not read sends no page fetch", "
     WindowRows rows{h.session, h.options("samples")};
     h.settle();
     rows.setDescription(Value{"not a description"});
-    rows.visible(0, 30, h.columns);  h.settle();
+    rows.visible(0, 30, h.columns);
+    h.settle();
     REQUIRE(rows.error().has_value());
     CHECK(rows.error()->code == table::TableErrorCode::InvalidValue);
     CHECK(h.dispatcher.count("Table.samples") == 0);
@@ -191,7 +219,8 @@ TEST_CASE("window rows: a description that does not read sends no page fetch", "
     REQUIRE(json.has_value());
     auto const described = morph::ui::valueFromJson(*json);
     REQUIRE(described.has_value());
-    rows.setDescription(*described);  h.settle();                    // the describe entry's value reads
+    rows.setDescription(*described);
+    h.settle();  // the describe entry's value reads
     CHECK_FALSE(rows.error().has_value());
     REQUIRE(rows.description() != nullptr);
     CHECK(rows.description()->revision == samplesDescription(3).revision);
@@ -200,11 +229,13 @@ TEST_CASE("window rows: a description that does not read sends no page fetch", "
 
 // Mutation: the stale-description handler called for every reply that names another revision (it counts two).
 TEST_CASE("window rows: a reply of another revision is reported once and taken", "[ui][table]") {
-    RowsFixture h;  auto const rows = h.windowRows("samples");
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
     int stale = 0;
     rows->onStaleDescription([&stale] { ++stale; });
-    rows->visible(0, 30, h.columns);  h.settle();
-    h.replyPage(pageJsonAt("another", 0, 200, 300, h.columns));      // page 0; page 1 goes next to it
+    rows->visible(0, 30, h.columns);
+    h.settle();
+    h.replyPage(pageJsonAt("another", 0, 200, 300, h.columns));  // page 0; page 1 goes next to it
     h.replyPage(pageJsonAt("another", 200, 200, 300, h.columns));
     CHECK(stale == 1);
     CHECK(rows->total().known);
@@ -215,21 +246,22 @@ TEST_CASE("window rows: a reply of another revision is reported once and taken",
 // Mutation: a change with keys answered by `invalidate()` (no keyed fetch: `rowsFetches` is 0 and the pages go
 // again).
 TEST_CASE("window rows: a change with keys is a keyed fetch that patches the rows", "[ui][table]") {
-    RowsFixture h;  auto const rows = h.windowRows("samples");
-    h.answerFirstPage(*rows, /*total*/ 300);                         // rows 0 to 299 are held
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
+    h.answerFirstPage(*rows, /*total*/ 300);  // rows 0 to 299 are held
     std::vector<table::ViewChange> changes;
     rows->onChange([&changes](table::ViewChange const& change) { changes.push_back(change); });
     std::size_t const before = h.dispatcher.count("Table.samples");
     h.change({5});
     CHECK(rows->stats().rowsFetches == 1);
     REQUIRE(h.dispatcher.count("Table.samples") == before + 1);
-    CHECK(h.dispatcher.calls.back().body.contains(R"("keys":[5,0])"));   // the key and the probe of the held run
+    CHECK(h.dispatcher.calls.back().body.contains(R"("keys":[5,0])"));  // the key and the probe of the held run
     h.replyPage(keyedJson({{0, 0}, {5, 5}}, 300, h.columns));
     REQUIRE(rows->row(5).has_value());
     CHECK(*rows->row(5)->row.field("name")->asString() == "renamed-5");
     REQUIRE(changes.size() == 1);
-    CHECK(changes[0].ops.size() == 2);                               // rows 0 and 5, each changed in place
-    CHECK(h.dispatcher.count("Table.samples") == before + 1);        // no page went again
+    CHECK(changes[0].ops.size() == 2);                         // rows 0 and 5, each changed in place
+    CHECK(h.dispatcher.count("Table.samples") == before + 1);  // no page went again
 }
 
 // Mutations: countsText ignoring `undecided`; countsText grouping with a fixed "," (the "de" line fails).
@@ -237,7 +269,7 @@ TEST_CASE("status line: counts for exact, lower-bound and undecided totals", "[u
     using enum table::TotalKind;
     FormatContext const en = formatFor("en");
     FormatContext const de = formatFor("de");
-    REQUIRE(en.numeric.groupSeparator == ",");                      // the helper took the locale table's row
+    REQUIRE(en.numeric.groupSeparator == ",");  // the helper took the locale table's row
     CHECK(countsText({.view = {9093, Exact, true}}, 0, de) == "9.093 rows");
     CHECK(countsText({.view = {9093, Exact, true}}, 0, en) == "9,093 rows");
     CHECK(countsText({.view = {100000, AtLeast, true}}, 0, en) == "100,000 or more");
@@ -250,27 +282,39 @@ TEST_CASE("status line: counts for exact, lower-bound and undecided totals", "[u
 // Mutations: `keysOf` completing only after the next view change (`keysNow` fails the test); `row` answering nothing
 // outside the last `visible` range (the row 499 REQUIRE).
 TEST_CASE("engine rows: every row is present, visible does nothing, keysOf completes at once", "[ui][table]") {
-    RowsFixture h;  auto const source = std::make_shared<TestRowsSource>(500);
+    RowsFixture h;
+    auto const source = std::make_shared<TestRowsSource>(500);
     EngineRows rows{source, source->recordOf(), table::EngineOptions{.owner = &h.owner}};
-    CHECK(rows.total().rows == 500);  CHECK(rows.total().known);  CHECK(rows.total().kind == table::TotalKind::Exact);
-    rows.visible(0, 10, {});  h.settle();                           // names ten rows and no column
+    CHECK(rows.total().rows == 500);
+    CHECK(rows.total().known);
+    CHECK(rows.total().kind == table::TotalKind::Exact);
+    rows.visible(0, 10, {});
+    h.settle();  // names ten rows and no column
     REQUIRE(rows.row(499).has_value());
     CHECK(rows.row(499)->key == table::RowId{std::int64_t{499}});
     CHECK(*rows.row(499)->row.field("name")->asString() == "row-499");
     CHECK(rows.unloadedLevels(499).levels.empty());
     CHECK_FALSE(rows.row(500).has_value());
-    CHECK(h.keysNow(rows, 100, 3) == std::vector<table::RowId>{std::int64_t{100}, std::int64_t{101}, std::int64_t{102}});
-    CHECK(rows.counts().undecided == 0);  CHECK_FALSE(rows.counts().pending);
+    CHECK(h.keysNow(rows, 100, 3) ==
+          std::vector<table::RowId>{std::int64_t{100}, std::int64_t{101}, std::int64_t{102}});
+    CHECK(rows.counts().undecided == 0);
+    CHECK_FALSE(rows.counts().pending);
 }
 
 // Mutation: no memo (recordsBuilt is 2 after the two reads).
 TEST_CASE("engine rows: a row's record is built once until the row changes", "[ui][table]") {
-    RowsFixture h;  auto const source = std::make_shared<TestRowsSource>(10);
+    RowsFixture h;
+    auto const source = std::make_shared<TestRowsSource>(10);
     EngineRows rows{source, source->recordOf(), table::EngineOptions{.owner = &h.owner}};
-    static_cast<void>(rows.row(0)); static_cast<void>(rows.row(0));  CHECK(rows.recordsBuilt() == 1);
-    source->rename(0, "renamed");  h.settle();
-    CHECK(*rows.row(0)->row.field("name")->asString() == "renamed");  CHECK(rows.recordsBuilt() == 2);
-    static_cast<void>(rows.row(1));  CHECK(rows.recordsBuilt() == 3);   // another row: its own record
+    static_cast<void>(rows.row(0));
+    static_cast<void>(rows.row(0));
+    CHECK(rows.recordsBuilt() == 1);
+    source->rename(0, "renamed");
+    h.settle();
+    CHECK(*rows.row(0)->row.field("name")->asString() == "renamed");
+    CHECK(rows.recordsBuilt() == 2);
+    static_cast<void>(rows.row(1));
+    CHECK(rows.recordsBuilt() == 3);  // another row: its own record
 }
 
 namespace {
@@ -299,8 +343,8 @@ void checkReplay(std::vector<std::string> list, table::ViewChange const& change,
     auto const after = morph::ui::testing::shownKeys(rows);
     for (std::size_t index = 0; index < change.ops.size(); ++index) {
         auto const& op = change.ops[index];
-        INFO("op " << index << ": kind " << static_cast<int>(op.kind) << " first " << op.first << " count "
-                   << op.count << " to " << op.to << " on a list of " << list.size());
+        INFO("op " << index << ": kind " << static_cast<int>(op.kind) << " first " << op.first << " count " << op.count
+                   << " to " << op.to << " on a list of " << list.size());
         auto const first = static_cast<std::ptrdiff_t>(op.first);
         auto const count = static_cast<std::ptrdiff_t>(op.count);
         switch (op.kind) {
@@ -344,13 +388,18 @@ bool has(table::ViewChange const& change, table::ViewOp::Kind kind) {
 
 // Mutation: identities by place rather than by key (no `Moved`; the replay keeps key 5 where it was).
 TEST_CASE("window rows: a row that moves within its page is a move, not a reset", "[ui][table]") {
-    RowsFixture h;  auto const rows = h.windowRows("samples");
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
     auto const before = refetchFirstPages(h, *rows);
     std::vector<table::ViewChange> changes;
     rows->onChange([&changes](table::ViewChange const& change) { changes.push_back(change); });
     std::vector<std::int64_t> keys;
-    for (std::int64_t key = 0; key < 200; ++key) { if (key != 5) { keys.push_back(key); } }
-    keys.insert(keys.begin() + 9, 5);                                // key 5 now at view row 9
+    for (std::int64_t key = 0; key < 200; ++key) {
+        if (key != 5) {
+            keys.push_back(key);
+        }
+    }
+    keys.insert(keys.begin() + 9, 5);  // key 5 now at view row 9
     h.replyPage(morph::ui::testing::pageJsonOfKeys(0, keys, 300, h.columns));
     REQUIRE(changes.size() == 1);
     CHECK_FALSE(changes[0].isReset());
@@ -360,29 +409,35 @@ TEST_CASE("window rows: a row that moves within its page is a move, not a reset"
 
 // Mutation: a new total resets the view.
 TEST_CASE("window rows: a new total with the same keys moves the view's end, not a reset", "[ui][table]") {
-    RowsFixture h;  auto const rows = h.windowRows("samples");
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
     auto const before = refetchFirstPages(h, *rows);
     std::vector<table::ViewChange> changes;
     rows->onChange([&changes](table::ViewChange const& change) { changes.push_back(change); });
-    h.replyPage(pageJson(0, 200, 350, h.columns));                   // the same rows; the view grew by 50
+    h.replyPage(pageJson(0, 200, 350, h.columns));  // the same rows; the view grew by 50
     REQUIRE(changes.size() == 1);
     CHECK_FALSE(changes[0].isReset());
     REQUIRE_FALSE(changes[0].ops.empty());
-    CHECK(std::ranges::contains(changes[0].ops,
-                                table::ViewOp{.kind = table::ViewOp::Kind::Inserted, .first = 300, .count = 50, .to = 0}));
+    CHECK(std::ranges::contains(
+        changes[0].ops, table::ViewOp{.kind = table::ViewOp::Kind::Inserted, .first = 300, .count = 50, .to = 0}));
     CHECK_FALSE(has(changes[0], table::ViewOp::Kind::Moved));
     checkReplay(before, changes[0], *rows);
 }
 
 // Mutation: a page whose keys differ resets the view.
 TEST_CASE("window rows: a row that came and a row that went are an insert and a remove", "[ui][table]") {
-    RowsFixture h;  auto const rows = h.windowRows("samples");
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
     auto const before = refetchFirstPages(h, *rows);
     std::vector<table::ViewChange> changes;
     rows->onChange([&changes](table::ViewChange const& change) { changes.push_back(change); });
     std::vector<std::int64_t> keys;
-    for (std::int64_t key = 0; key < 200; ++key) { if (key != 3) { keys.push_back(key); } }
-    keys.insert(keys.begin() + 7, 1000);                             // 3 went, 1000 came at view row 7
+    for (std::int64_t key = 0; key < 200; ++key) {
+        if (key != 3) {
+            keys.push_back(key);
+        }
+    }
+    keys.insert(keys.begin() + 7, 1000);  // 3 went, 1000 came at view row 7
     h.replyPage(morph::ui::testing::pageJsonOfKeys(0, keys, 300, h.columns));
     REQUIRE(changes.size() == 1);
     CHECK_FALSE(changes[0].isReset());
@@ -393,13 +448,18 @@ TEST_CASE("window rows: a row that came and a row that went are an insert and a 
 
 // Mutation: `retry` clearing its flag when its own call returns (the held-back refetch goes with `retry: false`).
 TEST_CASE("window rows: a retry held back by the awaited spacing still carries the flag", "[ui][table]") {
-    RowsFixture h;  auto const rows = h.windowRows("samples");
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
     std::string const awaited = pageJson(0, 200, 200, h.columns, table::TotalKind::Exact, 0, {"recipe"});
-    rows->visible(0, 30, h.columns);  h.replyPage(awaited);
-    h.change({0});  h.replyPage(awaited);                            // a refetch at 0 ms starts the spacing
+    rows->visible(0, 30, h.columns);
+    h.replyPage(awaited);
+    h.change({0});
+    h.replyPage(awaited);  // a refetch at 0 ms starts the spacing
     std::size_t const before = h.dispatcher.count("Table.samples");
-    h.advance(10ms);  rows->retry();  h.settle();
-    CHECK(h.dispatcher.count("Table.samples") == before);            // held back: 10 ms after the last refetch
+    h.advance(10ms);
+    rows->retry();
+    h.settle();
+    CHECK(h.dispatcher.count("Table.samples") == before);  // held back: 10 ms after the last refetch
     h.advance(240ms);
     REQUIRE(h.dispatcher.count("Table.samples") == before + 1);
     CHECK(h.dispatcher.calls.back().body.contains(R"("retry":true)"));
@@ -407,14 +467,15 @@ TEST_CASE("window rows: a retry held back by the awaited spacing still carries t
 
 // Mutation: an unreadable keyed reply only setting `error()` (no page goes again).
 TEST_CASE("window rows: a keyed reply that does not read fetches the pages again", "[ui][table]") {
-    RowsFixture h;  auto const rows = h.windowRows("samples");
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
     h.answerFirstPage(*rows, /*total*/ 300);
     h.change({5});
     REQUIRE(rows->stats().rowsFetches == 1);
     std::size_t const before = h.dispatcher.count("Table.samples");
     h.replyPage("not a page");
     CHECK(rows->error().has_value());
-    CHECK(h.dispatcher.count("Table.samples") == before + 2);        // pages 0 and 1, held and now stale
+    CHECK(h.dispatcher.count("Table.samples") == before + 2);  // pages 0 and 1, held and now stale
 }
 
 // Mutations: `Runs` not admitting an action that runs itself (`CatalogFacts::action` of `Table.small` does not
@@ -440,20 +501,20 @@ TEST_CASE("table catalog: a table's actions are catalogued, holding the record o
 // A table's actions only read: the builder's `evaluate` and `mutation` refuse them at compile time, while `query`
 // and the catalog take them.
 template <typename Action>
-concept TableEvaluatable = requires(morph::ui::author::DeclScope& scope,
-                                    morph::ui::author::ModelHandle<bench::WideTableModel> const& model) {
-    scope.evaluate<Action>("e", model);
-};
+concept TableEvaluatable =
+    requires(morph::ui::author::DeclScope& scope, morph::ui::author::ModelHandle<bench::WideTableModel> const& model) {
+        scope.evaluate<Action>("e", model);
+    };
 template <typename Action>
-concept TableMutable = requires(morph::ui::author::DeclScope& scope,
-                                morph::ui::author::ModelHandle<bench::WideTableModel> const& model) {
-    scope.mutation<Action>("m", model);
-};
+concept TableMutable =
+    requires(morph::ui::author::DeclScope& scope, morph::ui::author::ModelHandle<bench::WideTableModel> const& model) {
+        scope.mutation<Action>("m", model);
+    };
 template <typename Action>
-concept TableQueryable = requires(morph::ui::author::DeclScope& scope,
-                                  morph::ui::author::ModelHandle<bench::WideTableModel> const& model) {
-    scope.query<Action>("q", model);
-};
+concept TableQueryable =
+    requires(morph::ui::author::DeclScope& scope, morph::ui::author::ModelHandle<bench::WideTableModel> const& model) {
+        scope.query<Action>("q", model);
+    };
 
 // Mutation: `evaluate` and `mutation` constrained by `Runs` (both static_asserts on them fail to hold).
 TEST_CASE("table catalog: a table's actions are no builder's evaluate or mutation", "[ui][table]") {
@@ -466,16 +527,20 @@ TEST_CASE("table catalog: a table's actions are no builder's evaluate or mutatio
 // Mutation: the view's end removed after the page's diff rather than before it (rows 250 to 299 are held twice while
 // the page's rows move in).
 TEST_CASE("window rows: a page that spans a shrunk view's end gives operations in bounds", "[ui][table]") {
-    RowsFixture h;  auto const rows = h.windowRows("samples");
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
     h.answerFirstPage(*rows, /*total*/ 300);
-    rows->retry();  h.settle();
-    h.replyPage(pageJson(0, 200, 300, h.columns));                   // page 0 again, as it was
+    rows->retry();
+    h.settle();
+    h.replyPage(pageJson(0, 200, 300, h.columns));  // page 0 again, as it was
     auto const before = morph::ui::testing::shownKeys(*rows);
     std::vector<table::ViewChange> changes;
     rows->onChange([&changes](table::ViewChange const& change) { changes.push_back(change); });
     std::vector<std::int64_t> keys;
-    for (std::int64_t key = 250; key < 300; ++key) { keys.push_back(key); }
-    h.replyPage(morph::ui::testing::pageJsonOfKeys(200, keys, 250, h.columns));   // keys 200 to 249 were deleted
+    for (std::int64_t key = 250; key < 300; ++key) {
+        keys.push_back(key);
+    }
+    h.replyPage(morph::ui::testing::pageJsonOfKeys(200, keys, 250, h.columns));  // keys 200 to 249 were deleted
     REQUIRE_FALSE(changes.empty());
     CHECK_FALSE(changes[0].isReset());
     CHECK(rows->total().rows == 250);
@@ -485,17 +550,23 @@ TEST_CASE("window rows: a page that spans a shrunk view's end gives operations i
 // Mutation: the view's end inserted before the page's diff rather than after it (rows 250 to 299 are held twice
 // until the page's rows move out).
 TEST_CASE("window rows: a page that spans a grown view's end never holds a key twice", "[ui][table]") {
-    RowsFixture h;  auto const rows = h.windowRows("samples");
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
     h.answerFirstPage(*rows, /*total*/ 300);
-    rows->retry();  h.settle();
-    h.replyPage(pageJson(0, 200, 300, h.columns));                   // page 0 again, as it was
+    rows->retry();
+    h.settle();
+    h.replyPage(pageJson(0, 200, 300, h.columns));  // page 0 again, as it was
     auto const before = morph::ui::testing::shownKeys(*rows);
     std::vector<table::ViewChange> changes;
     rows->onChange([&changes](table::ViewChange const& change) { changes.push_back(change); });
     std::vector<std::int64_t> keys;
-    for (std::int64_t key = 1000; key < 1050; ++key) { keys.push_back(key); }
-    for (std::int64_t key = 200; key < 300; ++key) { keys.push_back(key); }
-    h.replyPage(morph::ui::testing::pageJsonOfKeys(200, keys, 350, h.columns));   // 50 rows came at view row 200
+    for (std::int64_t key = 1000; key < 1050; ++key) {
+        keys.push_back(key);
+    }
+    for (std::int64_t key = 200; key < 300; ++key) {
+        keys.push_back(key);
+    }
+    h.replyPage(morph::ui::testing::pageJsonOfKeys(200, keys, 350, h.columns));  // 50 rows came at view row 200
     REQUIRE_FALSE(changes.empty());
     CHECK_FALSE(changes[0].isReset());
     CHECK(rows->total().rows == 350);
@@ -525,8 +596,8 @@ using morph::ui::testing::kNoStatus;
 using morph::ui::testing::kStored;
 using morph::ui::testing::lastQuery;
 using morph::ui::testing::mountShown;
-using morph::ui::testing::openCalls;
 using morph::ui::testing::oldestOpen;
+using morph::ui::testing::openCalls;
 using morph::ui::testing::pageJsonRenaming;
 using morph::ui::testing::pageJsonUnloaded;
 using morph::ui::testing::queryOf;
@@ -559,28 +630,33 @@ bool askedForPage(TableHarness const& h, std::size_t first, std::int64_t offset)
 
 // Mutation: a lowering that needs the node's `columns` (no header: `headerLabels` is empty).
 TEST_CASE("model table: a client given only the catalog draws its columns, sorts and pages it", "[ui][table]") {
-    TableHarness h;  auto screen = h.mount(kModelTable);
+    TableHarness h;
+    auto screen = h.mount(kModelTable);
     CHECK(h.dispatcher.count("Table.samples.describe") == 1);
-    CHECK(h.dispatcher.count("Table.samples") == 0);                          // no page before its description
+    CHECK(h.dispatcher.count("Table.samples") == 0);  // no page before its description
     replyDescribe(h);
     REQUIRE(h.dispatcher.count("Table.samples") == 1);
     answerPages(h, 9093);
     CHECK(headerLabels(h) == std::vector<std::string>{"Id", "Name", "C3"});
-    CHECK(h.backend.find("Text", "text", "row-0").has_value());               // the default cell, by its text
-    CHECK(statusOf(h).counts == "9,093 rows");  CHECK(statusOf(h).shown);
-    h.backend.clickHeader(tableOf(h), 1);  h.settle();
+    CHECK(h.backend.find("Text", "text", "row-0").has_value());  // the default cell, by its text
+    CHECK(statusOf(h).counts == "9,093 rows");
+    CHECK(statusOf(h).shown);
+    h.backend.clickHeader(tableOf(h), 1);
+    h.settle();
     CHECK(lastQuery(h).sort == table::SortChain{{.column = "name"}});
     answerPages(h, 9093);
     std::size_t const scrolled = h.dispatcher.calls.size();
-    h.backend.scrollTable(tableOf(h), 4'000, 30);  h.advance(80ms);
-    CHECK(askedForPage(h, scrolled, 4'000));                                  // the window pages
-    CHECK(h.dispatcher.count("Table.samples.describe") == 1);                 // W6: one request
+    h.backend.scrollTable(tableOf(h), 4'000, 30);
+    h.advance(80ms);
+    CHECK(askedForPage(h, scrolled, 4'000));                   // the window pages
+    CHECK(h.dispatcher.count("Table.samples.describe") == 1);  // W6: one request
 }
 
 // Mutation: a literal `filters` read as an expression (it evaluates to null and the query carries no filter).
 TEST_CASE("model table: a literal filter and the element values reach the query and the document", "[ui][table]") {
     TableHarness h;
-    auto screen = h.mount(withTableKey(kModelTable, R"("filters":{"columns":{"name":{"include":[{"contains":"a"}]}}})"));
+    auto screen =
+        h.mount(withTableKey(kModelTable, R"("filters":{"columns":{"name":{"include":[{"contains":"a"}]}}})"));
     replyDescribe(h);
     REQUIRE(h.dispatcher.count("Table.samples") == 1);
     REQUIRE(lastQuery(h).filters.columns.contains("name"));
@@ -599,11 +675,16 @@ TEST_CASE("model table: a literal filter and the element values reach the query 
 TEST_CASE("model table: persisted state before the first query", "[ui][table][state]") {
     auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
     TableHarness h{store};
-    auto screen = h.mount(kModelTable);  replyDescribe(h);
+    auto screen = h.mount(kModelTable);
+    replyDescribe(h);
     CHECK(h.dispatcher.count("Table.samples") == 0);
-    CHECK(store->lastLoadKey() == table::TableStateKey{.application = "lims", .model = "Lims_SampleModel",
-                                                       .table = "samples", .qualifier = "samples", .part = "state"});
-    store->release();  h.settle();
+    CHECK(store->lastLoadKey() == table::TableStateKey{.application = "lims",
+                                                       .model = "Lims_SampleModel",
+                                                       .table = "samples",
+                                                       .qualifier = "samples",
+                                                       .part = "state"});
+    store->release();
+    h.settle();
     REQUIRE(h.dispatcher.count("Table.samples") == 1);
     CHECK(lastQuery(h).sort == table::SortChain{{.column = "name", .dir = table::SortDirection::Descending}});
     CHECK(lastQuery(h).filters.columns.contains("name"));
@@ -614,18 +695,34 @@ TEST_CASE("model table: persisted state before the first query", "[ui][table][st
 TEST_CASE("model table: saves are coalesced, and unmounting saves at once", "[ui][table][state]") {
     auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
     TableHarness h{store};
-    auto screen = h.mount(kModelTable);  replyDescribe(h);  store->release();  h.settle();
-    for (int i = 0; i < 50; ++i) { h.backend.clickHeader(tableOf(h), i % 2 == 0 ? 0 : 1);  h.advance(5ms); }
-    CHECK(store->saves() == 0);                                               // inside the debounce
-    h.advance(500ms);  CHECK(store->saves() == 1);
-    CHECK(table::readState(store->lastSaved())->sort->at(0).column == "name");   // the last of the fifty
+    auto screen = h.mount(kModelTable);
+    replyDescribe(h);
+    store->release();
+    h.settle();
+    for (int i = 0; i < 50; ++i) {
+        h.backend.clickHeader(tableOf(h), i % 2 == 0 ? 0 : 1);
+        h.advance(5ms);
+    }
+    CHECK(store->saves() == 0);  // inside the debounce
+    h.advance(500ms);
+    CHECK(store->saves() == 1);
+    CHECK(table::readState(store->lastSaved())->sort->at(0).column == "name");  // the last of the fifty
     store->holdSaves();
-    h.backend.clickHeader(tableOf(h), 0);  h.advance(500ms);  CHECK(store->saves() == 2);   // in flight, held
-    h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);  CHECK(store->saves() == 2);   // one per key in flight
-    store->releaseSave();  h.settle();  CHECK(store->saves() == 3);           // one more after it
-    store->releaseSave();  h.settle();
-    h.backend.clickHeader(tableOf(h), 0);  screen.reset();  h.settle();
-    CHECK(store->saves() == 4);                                               // at once, no debounce
+    h.backend.clickHeader(tableOf(h), 0);
+    h.advance(500ms);
+    CHECK(store->saves() == 2);  // in flight, held
+    h.backend.clickHeader(tableOf(h), 1);
+    h.advance(500ms);
+    CHECK(store->saves() == 2);  // one per key in flight
+    store->releaseSave();
+    h.settle();
+    CHECK(store->saves() == 3);  // one more after it
+    store->releaseSave();
+    h.settle();
+    h.backend.clickHeader(tableOf(h), 0);
+    screen.reset();
+    h.settle();
+    CHECK(store->saves() == 4);  // at once, no debounce
 }
 
 // Mutations: applying a late state after the user scrolled (a query more in the second section); a failed load
@@ -633,30 +730,38 @@ TEST_CASE("model table: saves are coalesced, and unmounting saves at once", "[ui
 TEST_CASE("model table: a slow or failed load", "[ui][table][state]") {
     auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
     TableHarness h{store};
-    auto screen = h.mount(kModelTable);  replyDescribe(h);
-    h.advance(299ms);  CHECK(h.dispatcher.count("Table.samples") == 0);
-    h.advance(1ms);    REQUIRE(h.dispatcher.count("Table.samples") >= 1);     // defaults after tableStateTimeout
+    auto screen = h.mount(kModelTable);
+    replyDescribe(h);
+    h.advance(299ms);
+    CHECK(h.dispatcher.count("Table.samples") == 0);
+    h.advance(1ms);
+    REQUIRE(h.dispatcher.count("Table.samples") >= 1);  // defaults after tableStateTimeout
     CHECK(queryOf(h, h.dispatcher.calls.size() - 1).sort.empty());
     answerPages(h, 9093);
     std::size_t const shown = h.dispatcher.count("Table.samples");
     std::size_t const calls = h.dispatcher.calls.size();
     SECTION("the late state is applied") {
-        store->release();  h.settle();
-        REQUIRE(h.dispatcher.count("Table.samples") > shown);                // one more query, for the pages in view
+        store->release();
+        h.settle();
+        REQUIRE(h.dispatcher.count("Table.samples") > shown);  // one more query, for the pages in view
         CHECK(queryOf(h, calls).sort.at(0).column == "name");
     }
     SECTION("not under the user's hands") {
-        h.backend.scrollTable(tableOf(h), 40, 30);  h.settle();               // within the held pages: no fetch
-        store->release();  h.settle();
+        h.backend.scrollTable(tableOf(h), 40, 30);
+        h.settle();  // within the held pages: no fetch
+        store->release();
+        h.settle();
         CHECK(h.dispatcher.count("Table.samples") == shown);
         CHECK(lastQuery(h).sort.empty());
     }
     SECTION("a failed load") {
-        store->fail();  h.settle();
-        CHECK(diagnosticsMentioning(h, "state") == 1);                        // reported once
+        store->fail();
+        h.settle();
+        CHECK(diagnosticsMentioning(h, "state") == 1);  // reported once
         CHECK(h.dispatcher.count("Table.samples") == shown);
-        h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);
-        CHECK(store->saves() == 1);                                           // changes still save
+        h.backend.clickHeader(tableOf(h), 1);
+        h.advance(500ms);
+        CHECK(store->saves() == 1);  // changes still save
     }
 }
 
@@ -666,18 +771,29 @@ TEST_CASE("model table: bound values win", "[ui][table][state]") {
     auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
     TableHarness h{store};
     SECTION("a bound sort") {
-        auto screen = h.mount(kBoundSort);  replyDescribe(h);  store->release();  h.settle();
+        auto screen = h.mount(kBoundSort);
+        replyDescribe(h);
+        store->release();
+        h.settle();
         REQUIRE(h.dispatcher.count("Table.samples") == 1);
-        CHECK(lastQuery(h).sort == table::SortChain{{.column = "id"}});      // the document's
-        CHECK(lastQuery(h).filters.columns.contains("name"));                 // the stored filter still applies
-        h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);
-        screen.reset();  h.settle();  CHECK(store->saves() == 0);             // a bound sort is not saved
+        CHECK(lastQuery(h).sort == table::SortChain{{.column = "id"}});  // the document's
+        CHECK(lastQuery(h).filters.columns.contains("name"));            // the stored filter still applies
+        h.backend.clickHeader(tableOf(h), 1);
+        h.advance(500ms);
+        screen.reset();
+        h.settle();
+        CHECK(store->saves() == 0);  // a bound sort is not saved
     }
     SECTION("persist: false") {
-        auto screen = h.mount(kNoPersist);  replyDescribe(h);  h.settle();
+        auto screen = h.mount(kNoPersist);
+        replyDescribe(h);
+        h.settle();
         CHECK(store->loads() == 0);
-        REQUIRE(h.dispatcher.count("Table.samples") == 1);                    // no restoring state
-        h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);  screen.reset();  h.settle();
+        REQUIRE(h.dispatcher.count("Table.samples") == 1);  // no restoring state
+        h.backend.clickHeader(tableOf(h), 1);
+        h.advance(500ms);
+        screen.reset();
+        h.settle();
         CHECK(store->saves() == 0);
     }
 }
@@ -686,11 +802,17 @@ TEST_CASE("model table: bound values win", "[ui][table][state]") {
 TEST_CASE("model table: a stored state that does not read starts from the defaults", "[ui][table][state]") {
     auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":2,"junk":true})");
     TableHarness h{store};
-    auto screen = h.mount(kModelTable);  replyDescribe(h);  store->release();  h.settle();
-    REQUIRE(h.dispatcher.count("Table.samples") == 1);  CHECK(lastQuery(h).sort.empty());
+    auto screen = h.mount(kModelTable);
+    replyDescribe(h);
+    store->release();
+    h.settle();
+    REQUIRE(h.dispatcher.count("Table.samples") == 1);
+    CHECK(lastQuery(h).sort.empty());
     CHECK(diagnosticsMentioning(h, "the stored state of table `list` is not used") == 1);
-    h.advance(1'000ms);  CHECK(store->saves() == 0);                          // nothing written until a change
-    h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);
+    h.advance(1'000ms);
+    CHECK(store->saves() == 0);  // nothing written until a change
+    h.backend.clickHeader(tableOf(h), 1);
+    h.advance(500ms);
     REQUIRE(store->saves() == 1);
     CHECK_FALSE(store->lastSaved().contains("junk"));
     CHECK(table::readState(store->lastSaved())->version == table::kStateVersion);
@@ -700,11 +822,15 @@ TEST_CASE("model table: a stored state that does not read starts from the defaul
 TEST_CASE("model table: a refused save is said in the status line and keeps the arrangement", "[ui][table][state]") {
     auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
     TableHarness h{store};
-    auto screen = h.mount(kModelTable);  replyDescribe(h);  store->release();  h.settle();
+    auto screen = h.mount(kModelTable);
+    replyDescribe(h);
+    store->release();
+    h.settle();
     store->refuseSaves("over the table-state quota");
-    h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);
+    h.backend.clickHeader(tableOf(h), 1);
+    h.advance(500ms);
     CHECK(statusOf(h).message == "The table's arrangement could not be saved: over the table-state quota");
-    CHECK(lastQuery(h).sort.at(0).column == "name");                          // the arrangement stays
+    CHECK(lastQuery(h).sort.at(0).column == "name");  // the arrangement stays
     CHECK(h.backend.prop(tableOf(h), "sort") == "1:Ascending");
 }
 
@@ -725,9 +851,13 @@ std::string withTablePoints() {
 // not written into the table's state (no save goes).
 TEST_CASE("model table: the columns and saved points read and write the table's state", "[ui][table][state]") {
     auto store = std::make_shared<GatedTableStateStore>(
-        storeExecutor(), R"({"version":1,"layout":{"order":["id","name","c3"],"hidden":["c3"],"pinned":1},"view":"Mine"})");
+        storeExecutor(),
+        R"({"version":1,"layout":{"order":["id","name","c3"],"hidden":["c3"],"pinned":1},"view":"Mine"})");
     TableHarness h{store};
-    auto screen = h.mount(withTablePoints());  replyDescribe(h);  store->release();  h.settle();
+    auto screen = h.mount(withTablePoints());
+    replyDescribe(h);
+    store->release();
+    h.settle();
     CHECK(readJson(*screen, R"({"pref":"cols.pinned"})") == "1");
     CHECK(readJson(*screen, R"({"pref":"cols.hidden"})") == R"(["c3"])");
     CHECK(readJson(*screen, R"({"pref":"views"})") == R"("Mine")");
@@ -735,7 +865,7 @@ TEST_CASE("model table: the columns and saved points read and write the table's 
     REQUIRE(layout.has_value());
     CHECK(screen->setPreference("cols", *morph::ui::valueFromJson(*layout)));
     CHECK(screen->setPreference("views", morph::ui::Value{std::string{"Shared"}}));
-    CHECK_FALSE(screen->setPreference("cols", morph::ui::Value{std::int64_t{7}}));   // not a layout
+    CHECK_FALSE(screen->setPreference("cols", morph::ui::Value{std::int64_t{7}}));  // not a layout
     h.advance(500ms);
     REQUIRE(store->saves() == 1);
     auto const saved = table::readState(store->lastSaved());
@@ -752,7 +882,8 @@ TEST_CASE("model table: scrolling 10,000 rows keeps one row scope per realized r
     TableHarness h;
     auto screen = mountShown(h, withTableKey(kModelTable, R"("rowLabel":{"lit":"a row"})"), 100'000);
     for (std::size_t first = 0; first < 10'000; first += 30) {
-        h.backend.scrollTable(tableOf(h), first, 30);  h.settle();
+        h.backend.scrollTable(tableOf(h), first, 30);
+        h.settle();
         answerPages(h, 100'000);
     }
     // The realized rows, and at most one scroll's worth that left and are pruned when the next row comes.
@@ -764,15 +895,20 @@ TEST_CASE("model table: a new revision keeps the selection and the message", "[u
     auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
     TableHarness h{store};
     auto screen = h.mount(withTableKey(kModelTable, R"("selectionMode":"multiple")"));
-    replyDescribe(h);  store->release();  h.settle();  answerPages(h, 9093);
-    h.backend.selectRows(tableOf(h), {Key{std::int64_t{1}}, Key{std::int64_t{2}}});  h.settle();
+    replyDescribe(h);
+    store->release();
+    h.settle();
+    answerPages(h, 9093);
+    h.backend.selectRows(tableOf(h), {Key{std::int64_t{1}}, Key{std::int64_t{2}}});
+    h.settle();
     store->refuseSaves("over the table-state quota");
-    h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);
+    h.backend.clickHeader(tableOf(h), 1);
+    h.advance(500ms);
     REQUIRE(statusOf(h).message == "The table's arrangement could not be saved: over the table-state quota");
     table::TableDescription const b = samplesDescription(2);
     h.reply(oldestOpen(h, "Table.samples"), morph::ui::testing::pageJsonAt(b.revision, 0, 200, 9093, h.columns));
     replyDescribe(h, b);
-    REQUIRE(headerLabels(h) == std::vector<std::string>{"Id", "Name"});      // mounted again from revision B
+    REQUIRE(headerLabels(h) == std::vector<std::string>{"Id", "Name"});  // mounted again from revision B
     CHECK(elementValue(*screen, "list", "selectedCount") == "2");
     CHECK(statusOf(h).message == "The table's arrangement could not be saved: over the table-state quota");
 }
@@ -780,12 +916,11 @@ TEST_CASE("model table: a new revision keeps the selection and the message", "[u
 // Mutation: the body's `query` members replaced without a report (no diagnostic names `filters`).
 TEST_CASE("model table: a body's query member the table owns is reported", "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(
-        h, withTableKey(kModelTable, R"("body":{"lit":{"query":{"filters":{"columns":{}},"limit":3}}})"));
+    auto screen =
+        mountShown(h, withTableKey(kModelTable, R"("body":{"lit":{"query":{"filters":{"columns":{}},"limit":3}}})"));
     CHECK(diagnosticsMentioning(h, "`filters` is the table's own; the body's is not used") == 1);
     CHECK(diagnosticsMentioning(h, "limit") == 0);
 }
-
 
 namespace {
 
@@ -897,7 +1032,7 @@ TEST_CASE("model table: highlightKey scrolls to the row and marks it", "[ui][tab
     CHECK(h.backend.prop(table, "highlightedRow") == "5011");
     std::size_t const marked = h.dispatcher.calls.size();
     h.advance(80ms);
-    CHECK(askedForPage(h, marked, 5'000));  // the page that holds view row 5,011
+    CHECK(askedForPage(h, marked, 5'000));                         // the page that holds view row 5,011
     CHECK(elementValue(*screen, "list", "selectedCount") == "0");  // never the selection
     click(h, "to77");
     replyKeyed(h, {});  // filtered out or gone: no row
@@ -905,7 +1040,7 @@ TEST_CASE("model table: highlightKey scrolls to the row and marks it", "[ui][tab
     CHECK(h.backend.prop(table, "scrolledToRow") == "5011");  // nothing scrolled
     std::size_t const first = h.dispatcher.calls.size();
     click(h, "to5012");
-    click(h, "to77");  // two keys before a reply
+    click(h, "to77");          // two keys before a reply
     CHECK(stopped(h, first));  // the first key's fetch is stopped
     click(h, "toNone");
     CHECK(h.backend.prop(table, "highlightedRow") == "none");
@@ -1023,7 +1158,7 @@ TEST_CASE("model table: a new sort that moves the focused key off-screen keeps f
     replyKeyed(h, {{7, 5'000}});  // key 7 is at view row 5,000
     CHECK(h.backend.focusCell(table).first == 5'000);
     CHECK(h.backend.prop(table, "scrolledToRow") == "5000");  // not held: scrolled to, so the window fetches it
-    h.advance(80ms);  // the window's settle after a scroll
+    h.advance(80ms);                                          // the window's settle after a scroll
     CHECK(askedForPage(h, located, 5'000));
     answerPages(h, 9'093);
     CHECK(h.backend.focusCell(table).first == 5'000);
@@ -1043,8 +1178,7 @@ TEST_CASE("model table: an answer that the focused key is gone, before the first
 
 // Mutation: the backend told of a located row before the count is known (focus is on view row 5,000 of a view with no
 // rows yet).
-TEST_CASE("model table: a located row answered before the first page is told once the count is known",
-          "[ui][table]") {
+TEST_CASE("model table: a located row answered before the first page is told once the count is known", "[ui][table]") {
     TableHarness h;
     auto screen = mountShown(h, kModelTable, 9'093);
     int const table = focusSevenThenSort(h);
@@ -1133,13 +1267,15 @@ TEST_CASE("model table: a reused cell's elements are focused by the row it shows
 // Mutation: the mount leaving out the rows a `Changed` operation names (no row is bound again: 0, and the renamed
 // text is not shown).  Gate K5.
 TEST_CASE("model table: a refetch that changed 20 of 200 rows evaluates 20 rows again", "[ui][table]") {
-    TableHarness h;  auto screen = mountShown(h);
-    h.backend.scrollTable(tableOf(h), 0, 30);  h.settle();                    // rows 0 to 39 realized (overscan 10)
+    TableHarness h;
+    auto screen = mountShown(h);
+    h.backend.scrollTable(tableOf(h), 0, 30);
+    h.settle();  // rows 0 to 39 realized (overscan 10)
     MountStats const before = statsOf(*screen);
-    change(h, std::vector<std::int64_t>{});                                   // a change without keys: the pages again
+    change(h, std::vector<std::int64_t>{});  // a change without keys: the pages again
     // the same page 0, with rows 0 to 19 renamed and rows 20 to 199 as they were
     h.reply(oldestOpen(h, "Table.samples"), pageJsonRenaming(revisionOf(h), 0, 200, 9093, h.columns, 0, 20));
-    CHECK(statsOf(*screen).rowBinds - before.rowBinds == 20);                 // K5
+    CHECK(statsOf(*screen).rowBinds - before.rowBinds == 20);  // K5
     CHECK(statsOf(*screen).cellsCreated == before.cellsCreated);
     CHECK(h.backend.find("Text", "text", "renamed-0").has_value());
 }
@@ -1150,21 +1286,24 @@ TEST_CASE("table rows: a new description revision drops what names a removed col
         storeExecutor(),
         R"({"version":1,"sort":[{"column":"c3","direction":"asc"}],"filters":{"columns":{"c3":{"include":[{"gt":"1"}]}}}})");
     TableHarness h{store};
-    auto screen = h.mount(kModelTable);  replyDescribe(h);  store->release();  h.settle();   // revision A: id, name, c3
+    auto screen = h.mount(kModelTable);
+    replyDescribe(h);
+    store->release();
+    h.settle();  // revision A: id, name, c3
     REQUIRE(lastQuery(h).sort.at(0).column == "c3");
-    table::TableDescription const b = samplesDescription(2);                 // revision B: id, name
+    table::TableDescription const b = samplesDescription(2);  // revision B: id, name
     h.reply(oldestOpen(h, "Table.samples"),
-            morph::ui::testing::pageJsonAt(b.revision, 0, 200, 9093, h.columns));   // a reply names another revision
-    CHECK(h.dispatcher.count("Table.samples.describe") == 2);                 // exactly one more describe
+            morph::ui::testing::pageJsonAt(b.revision, 0, 200, 9093, h.columns));  // a reply names another revision
+    CHECK(h.dispatcher.count("Table.samples.describe") == 2);                      // exactly one more describe
     replyDescribe(h, samplesDescription(2));
     table::TableQuery const q = lastQuery(h);
     CHECK(std::ranges::none_of(q.sort, [](auto const& key) { return key.column == "c3"; }));
     CHECK_FALSE(q.filters.columns.contains("c3"));
     REQUIRE(q.columns.has_value());
     CHECK(std::ranges::find(*q.columns, "c3") == q.columns->end());
-    CHECK(diagnosticsMentioning(h, "c3") == 1);                               // the filter; a sort key is not reported
-    CHECK(headerLabels(h) == std::vector<std::string>{"Id", "Name"});         // mounted again from revision B
-    CHECK(h.dispatcher.count("Table.samples.describe") == 2);                 // once per revision
+    CHECK(diagnosticsMentioning(h, "c3") == 1);                        // the filter; a sort key is not reported
+    CHECK(headerLabels(h) == std::vector<std::string>{"Id", "Name"});  // mounted again from revision B
+    CHECK(h.dispatcher.count("Table.samples.describe") == 2);          // once per revision
 }
 
 // Review Focus 2. Mutation: the load completion run with no liveness check (a query is sent, or the test crashes
@@ -1172,29 +1311,35 @@ TEST_CASE("table rows: a new description revision drops what names a removed col
 TEST_CASE("model table: unmounted while its state load is held", "[ui][table][state]") {
     auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
     TableHarness h{store};
-    auto screen = h.mount(kModelTable);  replyDescribe(h);
-    h.backend.clickHeader(tableOf(h), 0);  h.settle();   // nothing loaded yet: the change is held, not saved
+    auto screen = h.mount(kModelTable);
+    replyDescribe(h);
+    h.backend.clickHeader(tableOf(h), 0);
+    h.settle();  // nothing loaded yet: the change is held, not saved
     CHECK(store->saves() == 0);
-    screen.reset();  h.settle();
-    store->release();  h.settle();
-    CHECK(h.dispatcher.count("Table.samples") == 0);     // nothing applied, no query
-    REQUIRE(store->saves() == 1);                        // the held change, over the loaded document
-    CHECK(store->lastSaved().contains(R"("contains":"a")"));   // the stored filter kept
+    screen.reset();
+    h.settle();
+    store->release();
+    h.settle();
+    CHECK(h.dispatcher.count("Table.samples") == 0);          // nothing applied, no query
+    REQUIRE(store->saves() == 1);                             // the held change, over the loaded document
+    CHECK(store->lastSaved().contains(R"("contains":"a")"));  // the stored filter kept
     CHECK(table::readState(store->lastSaved())->sort->at(0).column == "id");
 }
 
 // Review Focus 4. Mutation: `empty` shown while `total().known` is false, or while rows are undecided.
 TEST_CASE("model table: empty waits for the first reply and for undecided rows", "[ui][table]") {
-    TableHarness h;  auto screen = h.mount(kModelTable);
-    CHECK_FALSE(shownText(h, "No samples"));                                  // before the description
+    TableHarness h;
+    auto screen = h.mount(kModelTable);
+    CHECK_FALSE(shownText(h, "No samples"));  // before the description
     replyDescribe(h);
-    CHECK_FALSE(shownText(h, "No samples"));                                  // before any page
-    CHECK(statusOf(h).counts.empty());  CHECK(statusOf(h).shown);
+    CHECK_FALSE(shownText(h, "No samples"));  // before any page
+    CHECK(statusOf(h).counts.empty());
+    CHECK(statusOf(h).shown);
     replyPage(h, morph::ui::testing::pageJsonAt(revisionOf(h), 0, 0, 0, h.columns, table::TotalKind::AtLeast, 40));
     CHECK_FALSE(shownText(h, "No samples"));
     CHECK(statusOf(h).counts == "0 so far, 40 loading");
-    change(h, std::vector<std::int64_t>{});                                   // the level arrived: the page again,
-    h.advance(80ms);                                                          // which holds no row, after tableSettle
+    change(h, std::vector<std::int64_t>{});  // the level arrived: the page again,
+    h.advance(80ms);                         // which holds no row, after tableSettle
     replyPage(h, morph::ui::testing::pageJsonAt(revisionOf(h), 0, 0, 0, h.columns));
     CHECK(shownText(h, "No samples"));
     CHECK(statusOf(h).counts == "0 rows");
@@ -1202,14 +1347,16 @@ TEST_CASE("model table: empty waits for the first reply and for undecided rows",
 
 // Mutations: a status line built without `failed` (no state, no retry); Retry sending the query without `retry`.
 TEST_CASE("model table: a failed level offers Retry, which sends `retry`", "[ui][table]") {
-    TableHarness h;  auto screen = h.mount(kModelTable);
+    TableHarness h;
+    auto screen = h.mount(kModelTable);
     replyDescribe(h, withLevel(samplesDescription(3), "c3", "recipe"));
     replyPage(h, pageJsonUnloaded(revisionOf(h), 0, 200, 9093, h.columns,
                                   {{.index = 1, .levels = {"recipe"}, .failed = {"recipe"}}}, /*failed*/ {"recipe"}));
     CHECK(statusOf(h).state == "Recipe data could not be loaded.");
     REQUIRE(statusOf(h).retry);
     std::size_t const sent = h.dispatcher.count("Table.samples");
-    h.backend.retryTable(tableOf(h));  h.settle();
+    h.backend.retryTable(tableOf(h));
+    h.settle();
     REQUIRE(h.dispatcher.count("Table.samples") > sent);
     CHECK(lastQuery(h).retry);
 }
@@ -1217,9 +1364,10 @@ TEST_CASE("model table: a failed level offers Retry, which sends `retry`", "[ui]
 // Mutation: `WindowRows` not telling of a failed page fetch (no view change follows a failure, so the status line
 // keeps its empty state).
 TEST_CASE("model table: a failed page fetch is said in the status line", "[ui][table]") {
-    TableHarness h;  auto screen = mountShown(h);
+    TableHarness h;
+    auto screen = mountShown(h);
     CHECK(statusOf(h).state.empty());
-    change(h, std::vector<std::int64_t>{});                                   // the pages again
+    change(h, std::vector<std::int64_t>{});  // the pages again
     h.fail(oldestOpen(h, "Table.samples"));
     CHECK(statusOf(h).state == "The rows could not be loaded: it failed");
     CHECK(statusOf(h).retry);
@@ -1227,34 +1375,37 @@ TEST_CASE("model table: a failed page fetch is said in the status line", "[ui][t
 
 // Mutation: a page refetch per event (the call names no `keys`, or twenty calls go out).  Gate E3 on a screen.
 TEST_CASE("model table: an arrival is one keyed request", "[ui][table]") {
-    TableHarness h;  auto screen = mountShown(h);
+    TableHarness h;
+    auto screen = mountShown(h);
     std::size_t const sent = h.dispatcher.count("Table.samples");
-    std::vector<std::int64_t> keys(20);  std::ranges::iota(keys, std::int64_t{0});
+    std::vector<std::int64_t> keys(20);
+    std::ranges::iota(keys, std::int64_t{0});
     change(h, keys);
-    REQUIRE(h.dispatcher.count("Table.samples") == sent + 1);                 // exactly one more call
+    REQUIRE(h.dispatcher.count("Table.samples") == sent + 1);  // exactly one more call
     REQUIRE(lastQuery(h).keys.has_value());
-    CHECK(lastQuery(h).keys->size() == 20);                                   // the twenty keys; the run's probe is key 0
+    CHECK(lastQuery(h).keys->size() == 20);  // the twenty keys; the run's probe is key 0
 }
 
 // Mutation: the mount ignoring unloadedLevels (every cell Loaded).  Cross-part decision 29.
 TEST_CASE("model table: a cell of an unloaded level is a placeholder, of a failed one an error mark", "[ui][table]") {
-    TableHarness h;  auto screen = h.mount(kModelTable);
-    replyDescribe(h, withLevel(samplesDescription(3), "c3", "recipe"));       // column 2 has the level
+    TableHarness h;
+    auto screen = h.mount(kModelTable);
+    replyDescribe(h, withLevel(samplesDescription(3), "c3", "recipe"));  // column 2 has the level
     replyPage(h, pageJsonUnloaded(revisionOf(h), 0, 200, 9093, h.columns,
                                   {{.index = 0, .levels = {"recipe"}, .failed = {}},
                                    {.index = 1, .levels = {"recipe"}, .failed = {"recipe"}}},
                                   /*failed*/ {"recipe"}));
     int const table = tableOf(h);
     CHECK(h.backend.cellLoad(table, Key{std::int64_t{0}}, 2) == CellLoad::Unloaded);
-    CHECK(h.backend.cellLoad(table, Key{std::int64_t{0}}, 1) == CellLoad::Loaded);      // name has no level
+    CHECK(h.backend.cellLoad(table, Key{std::int64_t{0}}, 1) == CellLoad::Loaded);  // name has no level
     CHECK(h.backend.cellLoad(table, Key{std::int64_t{1}}, 2) == CellLoad::Failed);
     CHECK(h.backend.cellLoad(table, Key{std::int64_t{2}}, 2) == CellLoad::Loaded);
     auto const created = statsOf(*screen).cellsCreated;
-    change(h, std::vector<std::int64_t>{0});                                  // the level arrives for row 0
+    change(h, std::vector<std::int64_t>{0});  // the level arrives for row 0
     REQUIRE(lastQuery(h).keys.has_value());
     h.reply(h.dispatcher.last("Table.samples"), keyedJsonAt(revisionOf(h), {{0, 0}}, 9093, h.columns));
     CHECK(h.backend.cellLoad(table, Key{std::int64_t{0}}, 2) == CellLoad::Loaded);
-    CHECK(statsOf(*screen).cellsCreated == created);                          // the same cell, bound again
+    CHECK(statsOf(*screen).cellsCreated == created);  // the same cell, bound again
 }
 
 // Mutations: the miss fetched inside the binding (a signal write is refused there: the debug build aborts);
@@ -1262,27 +1413,29 @@ TEST_CASE("model table: a cell of an unloaded level is a placeholder, of a faile
 TEST_CASE("model table: a row field the window lacks is fetched once, after the binding", "[ui][table]") {
     // `c7` is described and not laid out, and read out of the whole row with `get`, which no column names; so is
     // `nosuch`, which no column of the description has. Each is its own text, so each read is made.
-    std::string const readsAcross = withTableKey(
-        kModelTable, R"("columns":[{"id":"id"},{"id":"name","cell":[)"
-                     R"({"kind":"text","text":{"get":{"row":""},"path":"c7"}},)"
-                     R"({"kind":"text","text":{"get":{"row":""},"path":"nosuch"}}]}])");
-    TableHarness h;  auto screen = h.mount(readsAcross);  replyDescribe(h, samplesDescription(8));
+    std::string const readsAcross =
+        withTableKey(kModelTable, R"("columns":[{"id":"id"},{"id":"name","cell":[)"
+                                  R"({"kind":"text","text":{"get":{"row":""},"path":"c7"}},)"
+                                  R"({"kind":"text","text":{"get":{"row":""},"path":"nosuch"}}]}])");
+    TableHarness h;
+    auto screen = h.mount(readsAcross);
+    replyDescribe(h, samplesDescription(8));
     std::vector<std::string> const laidOut{"id", "name"};
     h.dispatcher.reply(oldestOpen(h, "Table.samples"),
-                       morph::ui::testing::pageJsonAt(revisionOf(h), 0, 200, 9093, laidOut));   // no settle yet
+                       morph::ui::testing::pageJsonAt(revisionOf(h), 0, 200, 9093, laidOut));  // no settle yet
     std::size_t const replied = h.dispatcher.calls.size();
-    h.owner.runOne();                                                          // the reply is accepted, cells bind
+    h.owner.runOne();  // the reply is accepted, cells bind
     h.settle();
-    CHECK(h.diagnostics.empty());                                              // no write refused inside a binding
-    std::vector<table::TableQuery> naming;                                     // the calls since that name `c7`
+    CHECK(h.diagnostics.empty());           // no write refused inside a binding
+    std::vector<table::TableQuery> naming;  // the calls since that name `c7`
     for (std::size_t index = replied; index < h.dispatcher.calls.size(); ++index) {
         table::TableQuery const query = queryOf(h, index);
         if (query.columns && std::ranges::contains(*query.columns, "c7")) {
             naming.push_back(query);
         }
     }
-    REQUIRE(naming.size() == 1);                                               // one fetch for every row's miss
-    CHECK(naming.front().page.offset == 0);                                    // the page in view
+    REQUIRE(naming.size() == 1);             // one fetch for every row's miss
+    CHECK(naming.front().page.offset == 0);  // the page in view
     CHECK_FALSE(std::ranges::contains(*naming.front().columns, "nosuch"));
 }
 
@@ -1290,30 +1443,46 @@ TEST_CASE("model table: a row field the window lacks is fetched once, after the 
 // `message`; an empty text notifying.
 TEST_CASE("model table: a message lasts six seconds or until the next gesture", "[ui][table]") {
     SECTION("in the status line") {
-        TableHarness h;  auto screen = mountShown(h);
+        TableHarness h;
+        auto screen = mountShown(h);
         morph::ui::detail::ScreenCore& core = coreOf(*screen);
         morph::ui::detail::ElementState& list = elementOf(*screen, "list");
-        core.tableMessage(list, "Refused");  h.settle();  CHECK(statusOf(h).message == "Refused");
-        h.advance(5'999ms);  CHECK(statusOf(h).message == "Refused");
-        h.advance(1ms);      CHECK(statusOf(h).message.empty());
-        core.tableMessage(list, "Again");  h.settle();
-        h.backend.clickHeader(tableOf(h), 1);  h.settle();  CHECK(statusOf(h).message.empty());   // the next gesture
-        core.tableMessage(list, "");  h.settle();  CHECK(h.host.notified.empty());                // notifies nothing
+        core.tableMessage(list, "Refused");
+        h.settle();
+        CHECK(statusOf(h).message == "Refused");
+        h.advance(5'999ms);
+        CHECK(statusOf(h).message == "Refused");
+        h.advance(1ms);
+        CHECK(statusOf(h).message.empty());
+        core.tableMessage(list, "Again");
+        h.settle();
+        h.backend.clickHeader(tableOf(h), 1);
+        h.settle();
+        CHECK(statusOf(h).message.empty());  // the next gesture
+        core.tableMessage(list, "");
+        h.settle();
+        CHECK(h.host.notified.empty());  // notifies nothing
     }
     SECTION("status: false") {
-        TableHarness h;  auto screen = mountShown(h, kNoStatus);
-        coreOf(*screen).tableMessage(elementOf(*screen, "list"), "Refused");  h.settle();
+        TableHarness h;
+        auto screen = mountShown(h, kNoStatus);
+        coreOf(*screen).tableMessage(elementOf(*screen, "list"), "Refused");
+        h.settle();
         CHECK(h.host.notified == std::vector<std::pair<std::string, std::string>>{{"Refused", "warning"}});
-        CHECK(statusOf(h).message.empty());  CHECK_FALSE(statusOf(h).shown);
+        CHECK(statusOf(h).message.empty());
+        CHECK_FALSE(statusOf(h).shown);
     }
 }
 
 // Mutation: the mount leaving a realized row's cells unset on a change that names the row (no cell is bound again:
 // `cellBinds` grows by 0).  Gate F6, on the recording backend.
 TEST_CASE("model table: an arrival for 50 rows re-evaluates their cells and no other", "[ui][table]") {
-    TableHarness h;  auto screen = mountShown(h);
-    h.backend.scrollTable(tableOf(h), 10, 30);  h.settle();                   // rows 0 to 49 realized
-    std::vector<std::int64_t> keys(50);  std::ranges::iota(keys, std::int64_t{0});
+    TableHarness h;
+    auto screen = mountShown(h);
+    h.backend.scrollTable(tableOf(h), 10, 30);
+    h.settle();  // rows 0 to 49 realized
+    std::vector<std::int64_t> keys(50);
+    std::ranges::iota(keys, std::int64_t{0});
     auto const arrive = [&h](std::vector<std::int64_t> const& arrived) {
         change(h, arrived);
         table::TableQuery const asked = queryOf(h, h.dispatcher.last("Table.samples"));
@@ -1326,12 +1495,12 @@ TEST_CASE("model table: an arrival for 50 rows re-evaluates their cells and no o
     };
     MountStats const before = statsOf(*screen);
     arrive(keys);
-    CHECK(statsOf(*screen).cellBinds - before.cellBinds == 50 * 3);          // every cell of the 50 rows
+    CHECK(statsOf(*screen).cellBinds - before.cellBinds == 50 * 3);  // every cell of the 50 rows
     CHECK(statsOf(*screen).rowBinds - before.rowBinds == 50);
-    CHECK(statsOf(*screen).cellsCreated == before.cellsCreated);             // nothing rebuilt
+    CHECK(statsOf(*screen).cellsCreated == before.cellsCreated);  // nothing rebuilt
     MountStats const again = statsOf(*screen);
-    arrive({keys.begin(), keys.begin() + 10});                                // the same values for ten rows
-    CHECK(statsOf(*screen).cellBinds == again.cellBinds);                     // equal records: no bind
+    arrive({keys.begin(), keys.begin() + 10});             // the same values for ten rows
+    CHECK(statsOf(*screen).cellBinds == again.cellBinds);  // equal records: no bind
     CHECK(statsOf(*screen).rowBinds == again.rowBinds);
 }
 
@@ -1347,13 +1516,14 @@ TEST_CASE("ui document: a model-backed table names a table of its model", "[ui][
     using morph::ui::testing::tableCatalog;
     using morph::ui::testing::withTableKey;
     REQUIRE(refusalOf(kModelTable).empty());
-    CHECK(loads(kNoPersist, tableCatalog()));  CHECK(loads(kNoStatus, tableCatalog()));
+    CHECK(loads(kNoPersist, tableCatalog()));
+    CHECK(loads(kNoStatus, tableCatalog()));
     CHECK(loads(withTableKey(kModelTable, R"("persist":"wide")"), tableCatalog()));
     CHECK(refusalOf(withTableKey(kModelTable, R"("table":"nosuch")")) == "the table `nosuch` is not in the catalog");
     CHECK(refusalOf(withTableKey(kModelTable, R"("action":"Lims_ListSamples")")) ==
           "a table names a `table` or an `action`, not both");
     CHECK(refusalOf(withTableKey(kModelTable, R"("model":"Lims_SampleModel")")) ==
-          "`Lims_SampleModel` is not a model alias of this scope");          // a type is not an alias
+          "`Lims_SampleModel` is not a model alias of this scope");  // a type is not an alias
     CHECK(refusalOf(withTableKey(kModelTable, R"("persist":{"ref":"x"})")) ==
           "`persist` is a literal: true, false or a name");
     CHECK(loads(withTableKey(kModelTable, R"("filters":{"columns":{"name":{"include":[{"contains":"a"}]}}})"),
@@ -1479,8 +1649,8 @@ TEST_CASE("table display: companions are fetched with their column only", "[ui][
     using namespace morph::ui::testing;
     {
         TableHarness h;
-        auto screen =
-            h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples","columns":[{"id":"name"}]})"));
+        auto screen = h.mount(doc(
+            R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples","columns":[{"id":"name"}]})"));
         replyDescribe(h, describeJson(companionDescription()));
         CHECK(lastQuery(h).columns == std::vector<std::string>{"id", "name", "lockedBy"});
     }
@@ -1540,7 +1710,8 @@ TEST_CASE("table display: companion columns are not arranged", "[ui][table][disp
             CHECK(h.backend.find("Checkbox", "testId", "table_columns_show_" + std::string{column}).has_value());
         }
         for (std::string_view const companion : {"massTone", "massTip", "lockedBy"}) {
-            CHECK_FALSE(h.backend.find("Checkbox", "testId", "table_columns_show_" + std::string{companion}).has_value());
+            CHECK_FALSE(
+                h.backend.find("Checkbox", "testId", "table_columns_show_" + std::string{companion}).has_value());
         }
     }
     TableHarness h;  // a companion the document names is reported and not shown
@@ -1749,7 +1920,8 @@ using morph::ui::ValueRowsSource;
 Value rec(ValueRecord fields) { return Value{std::move(fields)}; }
 
 Value ts(std::int64_t ms) {
-    return Value{morph::time::DateTime{std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::milliseconds{ms}}}};
+    return Value{
+        morph::time::DateTime{std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::milliseconds{ms}}}};
 }
 
 Value dec(std::string_view text) {
@@ -1767,11 +1939,13 @@ Value qty(std::string_view amount, std::string unit) {
 // kg and g of mass.
 std::shared_ptr<table::UnitRegistry const> testUnits() {
     table::UnitRegistryBuilder builder;
-    REQUIRE(builder.add(table::UnitInfo{.id = "kg", .symbol = "kg", .dimension = "mass",
+    REQUIRE(builder.add(table::UnitInfo{.id = "kg",
+                                        .symbol = "kg",
+                                        .dimension = "mass",
                                         .toBase = morph::math::Rational{1, morph::math::DecimalPlaces{0}},
                                         .decimals = 3}));
-    REQUIRE(builder.add(table::UnitInfo{.id = "g", .symbol = "g", .dimension = "mass",
-                                        .toBase = *table::parseDecimal("0.001"), .decimals = 0}));
+    REQUIRE(builder.add(table::UnitInfo{
+        .id = "g", .symbol = "g", .dimension = "mass", .toBase = *table::parseDecimal("0.001"), .decimals = 0}));
     return std::move(builder).build();
 }
 
@@ -1865,73 +2039,97 @@ ValueList sampleRows(std::size_t n) {
 
 // Mutation: a diff by row value (the fresh decode notifies, or `cellsDerived` counts every field).
 TEST_CASE("value rows source: a document's rows as a source", "[ui][table]") {
-    RowsFixture h;  auto const src = sourceOf(h, {col("name"), col("notes"), col("amount")});
+    RowsFixture h;
+    auto const src = sourceOf(h, {col("name"), col("notes"), col("amount")});
     RecordingListener listener{*src};
     ValueList const rows = sampleRows(100);
-    src->use("name");  src->assign(rows);  h.settle();  listener.clear();
+    src->use("name");
+    src->assign(rows);
+    h.settle();
+    listener.clear();
     std::size_t const derived = src->cellsDerived();
-    src->assign(freshDecodeOf(rows));  h.settle();
-    CHECK(listener.changes.empty());                                          // the same cells: nothing notified
-    CHECK(src->cellsDerived() - derived == 100);                              // one column in use, not three fields
-    src->assign(withField(freshDecodeOf(rows), 7, "name", Value{std::string{"zeta"}}));  h.settle();
+    src->assign(freshDecodeOf(rows));
+    h.settle();
+    CHECK(listener.changes.empty());              // the same cells: nothing notified
+    CHECK(src->cellsDerived() - derived == 100);  // one column in use, not three fields
+    src->assign(withField(freshDecodeOf(rows), 7, "name", Value{std::string{"zeta"}}));
+    h.settle();
     REQUIRE(listener.changes.size() == 1);
     CHECK(listener.changes.front().kind == table::ChangeKind::Updated);
     CHECK(listener.changes.front().rows == std::vector<std::size_t>{7});
-    CHECK(src->cellsHeld() == 100);                                           // "notes" and "amount" hold no cells
-    src->use("amount");  h.settle();  CHECK(src->cellsHeld() == 200);
-    src->unuse("amount");  CHECK(src->cellsHeld() == 100);                    // its last use ended: its cells go
+    CHECK(src->cellsHeld() == 100);  // "notes" and "amount" hold no cells
+    src->use("amount");
+    h.settle();
+    CHECK(src->cellsHeld() == 200);
+    src->unuse("amount");
+    CHECK(src->cellsHeld() == 100);  // its last use ended: its cells go
 }
 
 // Mutations: `sortBy` read outside a tracked computation (no change is notified); a per-row change notified as Reset.
 TEST_CASE("value rows source: a change to what one row's sortBy reads updates that row", "[ui][table]") {
     RowsFixture h;
     std::vector<std::unique_ptr<reactive::Signal<std::int64_t>>> rank;
-    for (int i = 0; i < 10; ++i) { rank.push_back(std::make_unique<reactive::Signal<std::int64_t>>(h.runtime, i)); }
+    for (int i = 0; i < 10; ++i) {
+        rank.push_back(std::make_unique<reactive::Signal<std::int64_t>>(h.runtime, i));
+    }
     reactive::Signal<std::int64_t> scale{h.runtime, 1};
     ValueColumn ranked = col("name");
     ranked.sortBy = [&](Value const& row) {
         return Value{rank.at(static_cast<std::size_t>(*row.field("id")->asInt()))->get() * scale.get()};
     };
-    auto const src = sourceOf(h, {ranked});  RecordingListener listener{*src};
-    src->use("name");  src->assign(sampleRows(10));  h.settle();  listener.clear();
-    rank.at(3)->set(99);  h.settle();
+    auto const src = sourceOf(h, {ranked});
+    RecordingListener listener{*src};
+    src->use("name");
+    src->assign(sampleRows(10));
+    h.settle();
+    listener.clear();
+    rank.at(3)->set(99);
+    h.settle();
     REQUIRE(listener.changes.size() == 1);
     CHECK(listener.changes.front().kind == table::ChangeKind::Updated);
     CHECK(listener.changes.front().rows == std::vector<std::size_t>{3});
     CHECK(cellAt(*src, 3, "name") == table::Cell{std::int64_t{99}});
-    listener.clear();  scale.set(2);  h.settle();                             // what every row's cell reads
+    listener.clear();
+    scale.set(2);
+    h.settle();  // what every row's cell reads
     REQUIRE(listener.changes.size() == 1);
     CHECK(listener.changes.front().kind == table::ChangeKind::Reset);
 }
 
 // Mutation: keep the last duplicate (the view holds "c" and not "a").
 TEST_CASE("value rows source: a duplicate key keeps its first row", "[ui][table]") {
-    RowsFixture h;  auto const src = sourceOf(h, {col("name")});
+    RowsFixture h;
+    auto const src = sourceOf(h, {col("name")});
     std::size_t const reports = h.reported(morph::ui::detail::site::kDuplicateKey);
     src->use("name");
-    src->assign(ValueList{rec({{"id", 1}, {"name", "a"}}), rec({{"id", 2}, {"name", "b"}}), rec({{"id", 1}, {"name", "c"}})});
+    src->assign(
+        ValueList{rec({{"id", 1}, {"name", "a"}}), rec({{"id", 2}, {"name", "b"}}), rec({{"id", 1}, {"name", "c"}})});
     h.settle();
     CHECK(src->snapshot()->rowCount() == 2);
-    CHECK(h.reported(morph::ui::detail::site::kDuplicateKey) - reports == 1);   // once per duplicate
+    CHECK(h.reported(morph::ui::detail::site::kDuplicateKey) - reports == 1);  // once per duplicate
     auto engine = engineOver(h, src);
-    REQUIRE(engine->setSort({{.column = "name", .dir = table::SortDirection::Descending}}));  h.settle();
-    CHECK(keysInView(*engine) == std::vector<std::int64_t>{2, 1});            // "b", then the first "a"; never "c"
+    REQUIRE(engine->setSort({{.column = "name", .dir = table::SortDirection::Descending}}));
+    h.settle();
+    CHECK(keysInView(*engine) == std::vector<std::int64_t>{2, 1});  // "b", then the first "a"; never "c"
     CHECK(cellAt(*src, 0, "name") == table::Cell{std::string{"a"}});
 }
 
 // Mutation: Timestamp cells kept in milliseconds (row 2 reads 1'700'000'000'500 and sorts apart from row 1).
 TEST_CASE("value rows source: a timestamp is a DateTime of whole seconds", "[ui][table]") {
-    RowsFixture h;  auto const src = sourceOf(h, {col("at")});  src->use("at");
-    src->assign(ValueList{rec({{"id", 1}, {"at", ts(1'700'000'000'000)}}), rec({{"id", 2}, {"at", ts(1'700'000'000'500)}}),
-                          rec({{"id", 3}, {"at", ts(-1)}})});
+    RowsFixture h;
+    auto const src = sourceOf(h, {col("at")});
+    src->use("at");
+    src->assign(ValueList{rec({{"id", 1}, {"at", ts(1'700'000'000'000)}}),
+                          rec({{"id", 2}, {"at", ts(1'700'000'000'500)}}), rec({{"id", 3}, {"at", ts(-1)}})});
     h.settle();
     CHECK(kindOf(*src, "at") == table::ColumnKind::DateTime);
     CHECK(cellAt(*src, 0, "at") == table::Cell{std::int64_t{1'700'000'000}});
-    CHECK(cellAt(*src, 1, "at") == table::Cell{std::int64_t{1'700'000'000}});   // the same second: they tie
-    CHECK(cellAt(*src, 2, "at") == table::Cell{std::int64_t{-1}});              // floor, not truncation toward 0
+    CHECK(cellAt(*src, 1, "at") == table::Cell{std::int64_t{1'700'000'000}});  // the same second: they tie
+    CHECK(cellAt(*src, 2, "at") == table::Cell{std::int64_t{-1}});             // floor, not truncation toward 0
     auto engine = engineOver(h, src);
-    REQUIRE(engine->setSort({{.column = "at", .dir = table::SortDirection::Descending}}));  h.settle();
-    CHECK(keysInView(*engine) == std::vector<std::int64_t>{1, 2, 3});         // the tie keeps source order
+    REQUIRE(engine->setSort({{.column = "at", .dir = table::SortDirection::Descending}}));
+    h.settle();
+    CHECK(keysInView(*engine) == std::vector<std::int64_t>{1, 2, 3});  // the tie keeps source order
 }
 
 // Mutations: a missing case in the inference (a kind differs); an empty column given no kind (the "e" entry);
@@ -1939,25 +2137,58 @@ TEST_CASE("value rows source: a timestamp is a DateTime of whole seconds", "[ui]
 TEST_CASE("value rows source: every value kind infers its column kind", "[ui][table]") {
     using enum table::ColumnKind;
     RowsFixture h;
-    auto const src = sourceOf(h, {col("b"), col("i"), col("d"), col("s"), col("t"), col("q"), col("l"), col("id_d"),
-                                  col("e"), col("n", Number)}, testUnits());  // testUnits(): kg and g of mass
-    for (auto const* id : {"b", "i", "d", "s", "t", "q", "l", "id_d", "e", "n"}) { src->use(id); }
-    src->assign(ValueList{
-        rec({{"id", 1}, {"b", true}, {"i", 4}, {"d", dec("2.50")}, {"s", "x"}, {"t", ts(1'000)}, {"q", qty("3", "kg")},
-             {"l", 7}, {"id_d", 4}, {"e", Value{}}, {"n", dec("0.5")}}),
-        rec({{"id", 2}, {"b", false}, {"i", 5}, {"d", dec("0.125")}, {"s", "y"}, {"t", ts(2'000)}, {"q", qty("3", "zz")},
-             {"l", ValueList{}}, {"id_d", dec("0.5")}, {"e", Value{}}, {"n", 2}})});
+    auto const src = sourceOf(h,
+                              {col("b"), col("i"), col("d"), col("s"), col("t"), col("q"), col("l"), col("id_d"),
+                               col("e"), col("n", Number)},
+                              testUnits());  // testUnits(): kg and g of mass
+    for (auto const* id : {"b", "i", "d", "s", "t", "q", "l", "id_d", "e", "n"}) {
+        src->use(id);
+    }
+    src->assign(ValueList{rec({{"id", 1},
+                               {"b", true},
+                               {"i", 4},
+                               {"d", dec("2.50")},
+                               {"s", "x"},
+                               {"t", ts(1'000)},
+                               {"q", qty("3", "kg")},
+                               {"l", 7},
+                               {"id_d", 4},
+                               {"e", Value{}},
+                               {"n", dec("0.5")}}),
+                          rec({{"id", 2},
+                               {"b", false},
+                               {"i", 5},
+                               {"d", dec("0.125")},
+                               {"s", "y"},
+                               {"t", ts(2'000)},
+                               {"q", qty("3", "zz")},
+                               {"l", ValueList{}},
+                               {"id_d", dec("0.5")},
+                               {"e", Value{}},
+                               {"n", 2}})});
     h.settle();
     std::map<std::string, table::ColumnKind> kinds;
-    for (table::ColumnInfo const& column : src->columns()) { kinds.emplace(column.id, column.kind); }
-    CHECK(kinds == std::map<std::string, table::ColumnKind>{{"b", Bool}, {"i", Integer}, {"d", Decimal}, {"s", Text},
-        {"t", DateTime}, {"q", Measure}, {"l", Integer}, {"id_d", Decimal}, {"e", Text}, {"n", Number}});
-    CHECK(src->invalidCells("q") == 1);                                       // the second row's unit "zz" is unknown
-    CHECK(src->invalidCells("l") == 1);                                       // the list cell
-    CHECK(src->invalidCells("id_d") == 0);                                    // an integer is an exact decimal
-    CHECK(cellAt(*src, 0, "n") == table::Cell{0.5});  CHECK(cellAt(*src, 1, "n") == table::Cell{2.0});
+    for (table::ColumnInfo const& column : src->columns()) {
+        kinds.emplace(column.id, column.kind);
+    }
+    CHECK(kinds == std::map<std::string, table::ColumnKind>{{"b", Bool},
+                                                            {"i", Integer},
+                                                            {"d", Decimal},
+                                                            {"s", Text},
+                                                            {"t", DateTime},
+                                                            {"q", Measure},
+                                                            {"l", Integer},
+                                                            {"id_d", Decimal},
+                                                            {"e", Text},
+                                                            {"n", Number}});
+    CHECK(src->invalidCells("q") == 1);     // the second row's unit "zz" is unknown
+    CHECK(src->invalidCells("l") == 1);     // the list cell
+    CHECK(src->invalidCells("id_d") == 0);  // an integer is an exact decimal
+    CHECK(cellAt(*src, 0, "n") == table::Cell{0.5});
+    CHECK(cellAt(*src, 1, "n") == table::Cell{2.0});
     RecordingListener listener{*src};
-    src->assign(ValueList{rec({{"id", 1}, {"e", 9}})});  h.settle();          // the empty column's first vote
+    src->assign(ValueList{rec({{"id", 1}, {"e", 9}})});
+    h.settle();  // the empty column's first vote
     CHECK(kindOf(*src, "e") == Integer);
     CHECK(listener.changes.back().kind == table::ChangeKind::Reset);
 }
@@ -1965,9 +2196,11 @@ TEST_CASE("value rows source: every value kind infers its column kind", "[ui][ta
 // Mutations: every row given run 0, as an index computed after the sort would leave it (groups split: 2, 3, 1);
 // the run column named plain "group" (the source has two columns of that id, and the count CHECK reads 2).
 TEST_CASE("value rows source: a grouped table sorts within its runs", "[ui][table]") {
-    RowsFixture h;  auto const src = sourceOf(h, {col("name"), col("group")});   // a document column named "group"
+    RowsFixture h;
+    auto const src = sourceOf(h, {col("name"), col("group")});  // a document column named "group"
     src->setGroup([](Value const& row) { return *row.field("site"); }, {});
-    src->use("name");  src->use("group");
+    src->use("name");
+    src->use("group");
     src->assign(ValueList{rec({{"id", 1}, {"site", "A"}, {"name", "z"}, {"group", "q"}}),
                           rec({{"id", 2}, {"site", "A"}, {"name", "a"}, {"group", "r"}}),
                           rec({{"id", 3}, {"site", "B"}, {"name", "m"}, {"group", "p"}})});
@@ -1975,19 +2208,27 @@ TEST_CASE("value rows source: a grouped table sorts within its runs", "[ui][tabl
     CHECK(std::ranges::count(src->columns(), std::string{"group"}, &table::ColumnInfo::id) == 1);
     CHECK(std::ranges::count(src->columns(), std::string{kGroupRunColumn}, &table::ColumnInfo::id) == 1);
     auto engine = engineOver(h, src);
-    REQUIRE(engine->setSort({{.column = std::string{kGroupRunColumn}}, {.column = "name"}}));  h.settle();
+    REQUIRE(engine->setSort({{.column = std::string{kGroupRunColumn}}, {.column = "name"}}));
+    h.settle();
     CHECK(keysInView(*engine) == std::vector<std::int64_t>{2, 1, 3});
-    REQUIRE(engine->setSort({{.column = std::string{kGroupRunColumn}}, {.column = "group"}}));  h.settle();
-    CHECK(keysInView(*engine) == std::vector<std::int64_t>{1, 2, 3});         // by the document's "group", in runs
-    CHECK(src->runRecords().size() == 2);  CHECK(src->runOf(2) == 1);
+    REQUIRE(engine->setSort({{.column = std::string{kGroupRunColumn}}, {.column = "group"}}));
+    h.settle();
+    CHECK(keysInView(*engine) == std::vector<std::int64_t>{1, 2, 3});  // by the document's "group", in runs
+    CHECK(src->runRecords().size() == 2);
+    CHECK(src->runOf(2) == 1);
 }
 
 // Mutation: fold inside the comparison (about 3.4 million folds).  Gate U3.
 TEST_CASE("value rows source: a sort of 100,000 rows folds each text once", "[ui][table]") {
-    RowsFixture h;  auto const collator = std::make_shared<ValueRowsCollator>();
-    auto const src = sourceOf(h, {col("name")});  src->use("name");  src->assign(sampleRows(100'000));  h.settle();
+    RowsFixture h;
+    auto const collator = std::make_shared<ValueRowsCollator>();
+    auto const src = sourceOf(h, {col("name")});
+    src->use("name");
+    src->assign(sampleRows(100'000));
+    h.settle();
     auto engine = engineOver(h, src, collator);
-    REQUIRE(engine->setSort({{.column = "name"}}));  h.settle();
+    REQUIRE(engine->setSort({{.column = "name"}}));
+    h.settle();
     CHECK(collator->folds() == 100'000);
     CHECK(engine->stats().fullSorts == 1);
 }
@@ -1995,14 +2236,21 @@ TEST_CASE("value rows source: a sort of 100,000 rows folds each text once", "[ui
 // Mutations: a fresh decode deriving every column (cellsDerived is 300,000); the changed row sorting the list
 // (fullSorts grows).  Gates U2 and U4, as counts.
 TEST_CASE("value rows source: one changed row derives one column and repairs", "[ui][table]") {
-    RowsFixture h;  auto const src = sourceOf(h, {col("name"), col("notes"), col("amount")});
+    RowsFixture h;
+    auto const src = sourceOf(h, {col("name"), col("notes"), col("amount")});
     ValueList const rows = sampleRows(10'000);
-    src->use("name");  src->assign(rows);  h.settle();
-    auto engine = engineOver(h, src);  REQUIRE(engine->setSort({{.column = "name"}}));  h.settle();
-    CHECK(src->cellsHeld() == 10'000);                                        // U4: one column's cells
-    table::EngineStats const before = engine->stats();  std::size_t const derived = src->cellsDerived();
-    src->assign(withField(freshDecodeOf(rows), 42, "name", Value{std::string{"zzz"}}));  h.settle();
-    CHECK(src->cellsDerived() - derived == 10'000);                           // U2: the column in use only
+    src->use("name");
+    src->assign(rows);
+    h.settle();
+    auto engine = engineOver(h, src);
+    REQUIRE(engine->setSort({{.column = "name"}}));
+    h.settle();
+    CHECK(src->cellsHeld() == 10'000);  // U4: one column's cells
+    table::EngineStats const before = engine->stats();
+    std::size_t const derived = src->cellsDerived();
+    src->assign(withField(freshDecodeOf(rows), 42, "name", Value{std::string{"zzz"}}));
+    h.settle();
+    CHECK(src->cellsDerived() - derived == 10'000);  // U2: the column in use only
     CHECK(engine->stats().repairs - before.repairs == 1);
     CHECK(engine->stats().fullSorts == before.fullSorts);
     CHECK(keysInView(*engine).back() == 42);
@@ -2036,108 +2284,133 @@ TEST_CASE("value rows source: a group's runs are the interpreter's runs", "[ui][
         { "id": 3, "g": { "num": 1, "den": 1, "dp": 2 } }, { "id": 4, "g": 2 } ])";
     morph::ui::testing::Harness interpreter;
     auto screen = interpreter.mount(R"({ "vocab": "ui/1", "id": "runs",
-      "state": { "items": { "init": { "lit": )" + rows + R"( } } },
+      "state": { "items": { "init": { "lit": )" +
+                                    rows + R"( } } },
       "view": { "kind": "table", "rows": { "ref": "items" },
                 "group": { "by": { "row": "g" }, "heading": { "kind": "text", "text": { "fn": "format",
                            "args": [ "{0}", { "row": "count" } ] } } },
                 "columns": [ { "id": "id", "label": "Id" } ] } })");
     REQUIRE(headingCounts(interpreter) == std::vector<std::string>{"3", "1"});
 
-    RowsFixture h;  auto const src = sourceOf(h, {col("id")});
+    RowsFixture h;
+    auto const src = sourceOf(h, {col("id")});
     src->setGroup([](Value const& row) { return *row.field("g"); }, {});
     auto const json = morph::ui::parseJson(rows);
     REQUIRE(json.has_value());
     auto const list = morph::ui::valueFromJson(*json);
     REQUIRE(list.has_value());
-    src->assign(*list->asList());  h.settle();
+    src->assign(*list->asList());
+    h.settle();
     std::vector<std::string> counts;
-    for (Value const& record : src->runRecords()) { counts.push_back(std::to_string(*record.field("count")->asInt())); }
+    for (Value const& record : src->runRecords()) {
+        counts.push_back(std::to_string(*record.field("count")->asInt()));
+    }
     CHECK(counts == headingCounts(interpreter));
-    CHECK(*src->runRecords().front().field("key") == Value{1});                // the run's first row's `by`
-    CHECK(src->runOf(2) == 0);  CHECK(src->runOf(3) == 1);
+    CHECK(*src->runRecords().front().field("key") == Value{1});  // the run's first row's `by`
+    CHECK(src->runOf(2) == 0);
+    CHECK(src->runOf(3) == 1);
 }
 
 // Mutation: the row value not compared when its cells are equal (no change is notified, and the record still reads
 // "x").
 TEST_CASE("value rows source: a field no column reads is redrawn in place", "[ui][table]") {
-    RowsFixture h;  auto const src = sourceOf(h, {col("name"), col("notes")});
-    src->use("name");  src->assign(sampleRows(10));  h.settle();
+    RowsFixture h;
+    auto const src = sourceOf(h, {col("name"), col("notes")});
+    src->use("name");
+    src->assign(sampleRows(10));
+    h.settle();
     EngineRows rows{src, src->recordOf(), table::EngineOptions{.owner = &h.owner}};
-    REQUIRE(rows.setSort({{.column = "name"}}));  h.settle();
+    REQUIRE(rows.setSort({{.column = "name"}}));
+    h.settle();
     RecordingListener listener{*src};
     auto const viewOf7 = [&rows] {
         for (std::int64_t at = 0; at < rows.total().rows; ++at) {
-            if (rows.row(at)->key == table::RowId{std::int64_t{7}}) { return at; }
+            if (rows.row(at)->key == table::RowId{std::int64_t{7}}) {
+                return at;
+            }
         }
         return std::int64_t{-1};
     };
     std::int64_t const before = viewOf7();
     CHECK(*rows.row(before)->row.field("notes")->asString() == "x");
     std::size_t const sorts = rows.engine().stats().fullSorts;
-    src->assign(withField(freshDecodeOf(sampleRows(10)), 7, "notes", Value{std::string{"y"}}));  h.settle();
+    src->assign(withField(freshDecodeOf(sampleRows(10)), 7, "notes", Value{std::string{"y"}}));
+    h.settle();
     REQUIRE(listener.changes.size() == 1);
     CHECK(listener.changes.front().kind == table::ChangeKind::Updated);
     CHECK(listener.changes.front().rows == std::vector<std::size_t>{7});
-    CHECK(viewOf7() == before);                                               // in place
-    CHECK(*rows.row(before)->row.field("notes")->asString() == "y");          // read again
+    CHECK(viewOf7() == before);                                       // in place
+    CHECK(*rows.row(before)->row.field("notes")->asString() == "y");  // read again
     CHECK(rows.engine().stats().fullSorts == sorts);
 }
 
 // Mutation: a changed heading record not notified (the change names row 1 alone).
 TEST_CASE("value rows source: a changed run heading is an update of the run's first row", "[ui][table]") {
-    RowsFixture h;  auto const src = sourceOf(h, {col("name")});
+    RowsFixture h;
+    auto const src = sourceOf(h, {col("name")});
     src->setGroup([](Value const& row) { return *row.field("site"); }, {});
     src->use("name");
     ValueList const rows{rec({{"id", 1}, {"site", "A"}, {"name", "a"}, {"notes", "x"}}),
                          rec({{"id", 2}, {"site", "A"}, {"name", "b"}, {"notes", "x"}}),
                          rec({{"id", 3}, {"site", "B"}, {"name", "c"}, {"notes", "x"}})};
-    src->assign(rows);  h.settle();
+    src->assign(rows);
+    h.settle();
     RecordingListener listener{*src};
-    src->assign(withField(rows, 1, "notes", Value{std::string{"y"}}));  h.settle();   // run A's `last` changes
+    src->assign(withField(rows, 1, "notes", Value{std::string{"y"}}));
+    h.settle();  // run A's `last` changes
     REQUIRE(listener.changes.size() == 1);
     CHECK(listener.changes.front().kind == table::ChangeKind::Updated);
-    CHECK(listener.changes.front().rows == std::vector<std::size_t>{0, 1});    // row 1, and run A's heading at row 0
+    CHECK(listener.changes.front().rows == std::vector<std::size_t>{0, 1});  // row 1, and run A's heading at row 0
     CHECK(*src->runRecords().front().field("last")->field("notes") == Value{std::string{"y"}});
 }
 
 // Mutations: the first cell's kind taken as it is (the number-first column reads Integer, with 2 invalid cells);
 // the clause applied whatever the first cell's kind (the text-first column reads Decimal, with 1 invalid cell).
 TEST_CASE("value rows source: a text among numbers is one invalid cell", "[ui][table]") {
-    RowsFixture h;  auto const src = sourceOf(h, {col("nf"), col("tf")});
-    src->use("nf");  src->use("tf");
+    RowsFixture h;
+    auto const src = sourceOf(h, {col("nf"), col("tf")});
+    src->use("nf");
+    src->use("tf");
     src->assign(ValueList{rec({{"id", 1}, {"nf", 4}, {"tf", "x"}}), rec({{"id", 2}, {"nf", dec("0.5")}, {"tf", 4}}),
                           rec({{"id", 3}, {"nf", "x"}, {"tf", dec("0.5")}})});
     h.settle();
-    CHECK(kindOf(*src, "nf") == table::ColumnKind::Decimal);                  // integers with decimals: one Decimal
-    CHECK(src->invalidCells("nf") == 1);                                      // and the text is the one invalid cell
+    CHECK(kindOf(*src, "nf") == table::ColumnKind::Decimal);  // integers with decimals: one Decimal
+    CHECK(src->invalidCells("nf") == 1);                      // and the text is the one invalid cell
     CHECK(cellAt(*src, 0, "nf") == table::Cell{morph::math::Rational{4, morph::math::DecimalPlaces{0}}});
-    CHECK(kindOf(*src, "tf") == table::ColumnKind::Text);                     // text first: a Text column
-    CHECK(src->invalidCells("tf") == 2);                                      // and both numbers are invalid
+    CHECK(kindOf(*src, "tf") == table::ColumnKind::Text);  // text first: a Text column
+    CHECK(src->invalidCells("tf") == 2);                   // and both numbers are invalid
 }
 
 // Mutations: an insertion notified as Reset (the Inserted CHECK); a removal notified as Reset (the Removed
 // CHECK).
 TEST_CASE("value rows source: a new key is inserted and a missing key removed", "[ui][table]") {
-    RowsFixture h;  auto const src = sourceOf(h, {col("name")});  src->use("name");
+    RowsFixture h;
+    auto const src = sourceOf(h, {col("name")});
+    src->use("name");
     ValueList rows = sampleRows(3);
-    src->assign(rows);  h.settle();
+    src->assign(rows);
+    h.settle();
     auto engine = engineOver(h, src);
-    REQUIRE(engine->setSort({{.column = "name", .dir = table::SortDirection::Descending}}));  h.settle();
+    REQUIRE(engine->setSort({{.column = "name", .dir = table::SortDirection::Descending}}));
+    h.settle();
     RecordingListener listener{*src};
     rows.push_back(rec({{"id", 3}, {"name", "a"}}));
-    src->assign(rows);  h.settle();
+    src->assign(rows);
+    h.settle();
     REQUIRE(listener.changes.size() == 1);
     CHECK(listener.changes.front().kind == table::ChangeKind::Inserted);
     CHECK(listener.changes.front().rows == std::vector<std::size_t>{3});
     CHECK(keysInView(*engine) == std::vector<std::int64_t>{2, 1, 0, 3});
     listener.clear();
-    src->assign(ValueList{rows.at(0), rows.at(2), rows.at(3)});  h.settle();
+    src->assign(ValueList{rows.at(0), rows.at(2), rows.at(3)});
+    h.settle();
     REQUIRE(listener.changes.size() == 1);
     CHECK(listener.changes.front().kind == table::ChangeKind::Removed);
-    CHECK(listener.changes.front().rows == std::vector<std::size_t>{1});      // its index in the old rows
+    CHECK(listener.changes.front().rows == std::vector<std::size_t>{1});  // its index in the old rows
     CHECK(keysInView(*engine) == std::vector<std::int64_t>{2, 0, 3});
     listener.clear();
-    src->assign(ValueList{rows.at(2), rows.at(0)});  h.settle();               // one key gone and the rest reordered
+    src->assign(ValueList{rows.at(2), rows.at(0)});
+    h.settle();  // one key gone and the rest reordered
     REQUIRE(listener.changes.size() == 1);
     CHECK(listener.changes.front().kind == table::ChangeKind::Reset);
     CHECK(keysInView(*engine) == std::vector<std::int64_t>{2, 0});
@@ -2148,25 +2421,26 @@ TEST_CASE("value rows source: a new key is inserted and a missing key removed", 
 TEST_CASE("value rows source: a literal date and a measure record", "[ui][table]") {
     RowsFixture h;
     auto const src = sourceOf(h, {col("d", table::ColumnKind::Date), col("m")}, testUnits());
-    src->use("d");  src->use("m");
+    src->use("d");
+    src->use("m");
     src->assign(ValueList{
         rec({{"id", 1}, {"d", ts(86'400'000 + 1)}, {"m", rec({{"num", 3}, {"den", 2}, {"unit", "kg"}})}}),
         rec({{"id", 2}, {"d", ts(-1)}, {"m", rec({{"num", 1}, {"den", 1}, {"unit", "zz"}})}}),
-        rec({{"id", 3}, {"d", "1970-01-03"}, {"m", Value{}}}),
-        rec({{"id", 4}, {"d", "not a date"}, {"m", Value{}}})});
+        rec({{"id", 3}, {"d", "1970-01-03"}, {"m", Value{}}}), rec({{"id", 4}, {"d", "not a date"}, {"m", Value{}}})});
     h.settle();
     CHECK(cellAt(*src, 0, "d") == table::Cell{std::int64_t{1}});
-    CHECK(cellAt(*src, 1, "d") == table::Cell{std::int64_t{-1}});              // the day before the epoch
-    CHECK(cellAt(*src, 2, "d") == table::Cell{std::int64_t{2}});               // ISO text
-    CHECK(src->invalidCells("d") == 1);                                        // text that is no date
+    CHECK(cellAt(*src, 1, "d") == table::Cell{std::int64_t{-1}});  // the day before the epoch
+    CHECK(cellAt(*src, 2, "d") == table::Cell{std::int64_t{2}});   // ISO text
+    CHECK(src->invalidCells("d") == 1);                            // text that is no date
     CHECK(kindOf(*src, "m") == table::ColumnKind::Measure);
     auto const kg = testUnits()->find("kg");
     REQUIRE(kg.has_value());
-    CHECK(cellAt(*src, 0, "m") == table::Cell{table::Measure{
-        .amount = morph::math::Rational{morph::math::Numerator{3}, morph::math::Denominator{2},
-                                        morph::math::DecimalPlaces{1}},
-        .unit = *kg}});
-    CHECK(src->invalidCells("m") == 1);                                        // the unit "zz" is unknown
+    CHECK(cellAt(*src, 0, "m") ==
+          table::Cell{
+              table::Measure{.amount = morph::math::Rational{morph::math::Numerator{3}, morph::math::Denominator{2},
+                                                             morph::math::DecimalPlaces{1}},
+                             .unit = *kg}});
+    CHECK(src->invalidCells("m") == 1);  // the unit "zz" is unknown
 }
 
 // ── A table over `rows` on the engine ───────────────────────────────────────
@@ -2179,8 +2453,8 @@ using morph::ui::testing::elementOf;
 using morph::ui::testing::engineOf;
 using morph::ui::testing::idRows;
 using morph::ui::testing::kMixedSamplesView;
-using morph::ui::testing::kSamplesCollection;
 using morph::ui::testing::kRowsSamples;
+using morph::ui::testing::kSamplesCollection;
 using morph::ui::testing::kThree;
 using morph::ui::testing::mixedRows;
 using morph::ui::testing::pagesOf;
@@ -2192,11 +2466,13 @@ using morph::ui::testing::rowsDocNoId;
 // collection keeping the reply's order (its rows table not lowered by the interpreter).
 TEST_CASE("one order on every surface: a rows table, a model table and a collection order alike", "[ui][table]") {
     std::string const rows = mixedRows();
-    for (std::vector<std::size_t> const& clicks : {std::vector<std::size_t>{1},          // by name
-                                                   std::vector<std::size_t>{1, 1},       // by name, descending
-                                                   std::vector<std::size_t>{2}}) {       // by weight
-        TableHarness asRows;  auto rowsScreen = asRows.mount(rowsDoc(rows));
-        TableHarness asModel;  auto modelScreen = asModel.mount(kRowsSamples);
+    for (std::vector<std::size_t> const& clicks : {std::vector<std::size_t>{1},     // by name
+                                                   std::vector<std::size_t>{1, 1},  // by name, descending
+                                                   std::vector<std::size_t>{2}}) {  // by weight
+        TableHarness asRows;
+        auto rowsScreen = asRows.mount(rowsDoc(rows));
+        TableHarness asModel;
+        auto modelScreen = asModel.mount(kRowsSamples);
         TableHarness asCollection;
         asCollection.extraViews.insert_or_assign("Lims_ListSamples", std::string{kMixedSamplesView});
         auto collectionScreen = asCollection.mount(kSamplesCollection);
@@ -2205,12 +2481,16 @@ TEST_CASE("one order on every surface: a rows table, a model table and a collect
         replyDescribe(asModel, describedFrom(rows));
         replyPage(asModel, pagesOf(rows, lastQuery(asModel)));
         for (std::size_t column : clicks) {
-            asRows.backend.clickHeader(tableOf(asRows), column);  asRows.settle();
-            asModel.backend.clickHeader(tableOf(asModel), column);  asModel.settle();
-            asCollection.backend.clickHeader(collection, column);  asCollection.settle();
+            asRows.backend.clickHeader(tableOf(asRows), column);
+            asRows.settle();
+            asModel.backend.clickHeader(tableOf(asModel), column);
+            asModel.settle();
+            asCollection.backend.clickHeader(collection, column);
+            asCollection.settle();
             replyPage(asModel, pagesOf(rows, lastQuery(asModel)));
         }
-        asModel.backend.scrollTable(tableOf(asModel), 0, 200);  asModel.settle();  // a model table is windowed
+        asModel.backend.scrollTable(tableOf(asModel), 0, 200);
+        asModel.settle();  // a model table is windowed
         CHECK(rowOrder(asRows) == rowOrder(asModel));
         CHECK(rowOrder(asCollection) == rowOrder(asRows));
         CHECK_FALSE(rowOrder(asRows).empty());
@@ -2219,24 +2499,30 @@ TEST_CASE("one order on every surface: a rows table, a model table and a collect
 
 // Mutation: sorting the whole list on a row change (fullSorts grows).  Gate U2 counts, on a screen.
 TEST_CASE("rows table: one changed row is one repair", "[ui][table]") {
-    TableHarness h;  auto screen = h.mount(rowsDoc(kThree));
-    h.backend.clickHeader(tableOf(h), 1);  h.settle();
+    TableHarness h;
+    auto screen = h.mount(rowsDoc(kThree));
+    h.backend.clickHeader(tableOf(h), 1);
+    h.settle();
     REQUIRE(rowOrder(h) == "a b c");
     table::EngineStats const before = engineOf(*screen, "list").stats();
-    h.backend.click(h.byTestId("Button", "rename"));  h.settle();
+    h.backend.click(h.byTestId("Button", "rename"));
+    h.settle();
     CHECK(engineOf(*screen, "list").stats().repairs - before.repairs == 1);
     CHECK(engineOf(*screen, "list").stats().fullSorts == before.fullSorts);
-    CHECK(rowOrder(h) == "a c b");                                            // "zz" moved last
+    CHECK(rowOrder(h) == "a c b");  // "zz" moved last
 }
 
 // Mutations: no bound check (no warning); the bound read as `>=` (a warning at 20,000); a warning per change of the
 // list (two, for the list that grows to 20,002 rows: the screen drops only a repeat of the same words).
 TEST_CASE("rows table: a list over 20,000 rows is reported once", "[ui][table]") {
-    TableHarness h;  auto screen = h.mount(rowsDoc(idRows(20'001)));
-    std::string const warning = "table list holds 20,001 rows; a table over rows is ordered on the client up to "
-                                "20,000 rows or 1,000,000 cells — serve it as a model's table";
+    TableHarness h;
+    auto screen = h.mount(rowsDoc(idRows(20'001)));
+    std::string const warning =
+        "table list holds 20,001 rows; a table over rows is ordered on the client up to "
+        "20,000 rows or 1,000,000 cells — serve it as a model's table";
     CHECK(diagnosticsMentioning(h, warning) == 1);
-    h.backend.click(h.byTestId("Button", "rename"));  h.settle();             // the list changes: no second report
+    h.backend.click(h.byTestId("Button", "rename"));
+    h.settle();  // the list changes: no second report
     CHECK(diagnosticsMentioning(h, warning) == 1);
     // A list of another size would word its report apart: still the one report.
     std::string const growing = [] {
@@ -2245,48 +2531,69 @@ TEST_CASE("rows table: a list over 20,000 rows is reported once", "[ui][table]")
         text.replace(text.find(renamed), renamed.size(), idRows(20'002));
         return text;
     }();
-    TableHarness grows;  auto grown = grows.mount(growing);
-    grows.backend.click(grows.byTestId("Button", "rename"));  grows.settle();
+    TableHarness grows;
+    auto grown = grows.mount(growing);
+    grows.backend.click(grows.byTestId("Button", "rename"));
+    grows.settle();
     CHECK(diagnosticsMentioning(grows, "serve it as a model's table") == 1);
-    TableHarness under;  auto small = under.mount(rowsDoc(idRows(20'000)));
+    TableHarness under;
+    auto small = under.mount(rowsDoc(idRows(20'000)));
     CHECK(diagnosticsMentioning(under, "serve it as a model's table") == 0);  // at the bound: nothing
 }
 
 // Mutation: drawing the rows before the load settles (the first CHECK reads "a b c").
 TEST_CASE("rows table: persisted state before the first rows", "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(),
-                                                        R"({"version":1,"sort":[{"column":"name","direction":"desc"}]})");
-    TableHarness h{store};  auto screen = h.mount(rowsDoc(kThree));
-    CHECK(rowOrder(h).empty());                                               // placeholders only while restoring
+    auto store = std::make_shared<GatedTableStateStore>(
+        storeExecutor(), R"({"version":1,"sort":[{"column":"name","direction":"desc"}]})");
+    TableHarness h{store};
+    auto screen = h.mount(rowsDoc(kThree));
+    CHECK(rowOrder(h).empty());  // placeholders only while restoring
     CHECK(h.backend.children(tableOf(h)).size() == 3);
-    CHECK(store->lastLoadKey() == table::TableStateKey{.application = "lims", .model = "", .table = "list",
-                                                         .qualifier = "samples", .part = "state"});
-    store->release();  h.settle();
-    CHECK(rowOrder(h) == "c b a");                                            // first drawn: the stored order
-    h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);  CHECK(store->saves() == 1);
+    CHECK(store->lastLoadKey() ==
+          table::TableStateKey{
+              .application = "lims", .model = "", .table = "list", .qualifier = "samples", .part = "state"});
+    store->release();
+    h.settle();
+    CHECK(rowOrder(h) == "c b a");  // first drawn: the stored order
+    h.backend.clickHeader(tableOf(h), 1);
+    h.advance(500ms);
+    CHECK(store->saves() == 1);
 }
 
 // Mutation: a rows table without `id` given a key (a load goes out with table "").
 TEST_CASE("rows table: a table without an id persists nothing", "[ui][table][state]") {
     auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
-    TableHarness h{store};  auto screen = h.mount(rowsDocNoId(kThree));
-    CHECK(rowOrder(h) == "a b c");                                            // no restoring state
-    h.backend.clickHeader(h.backend.all("Table").front(), 1);  h.advance(500ms);
-    CHECK(store->loads() == 0);  CHECK(store->saves() == 0);
+    TableHarness h{store};
+    auto screen = h.mount(rowsDocNoId(kThree));
+    CHECK(rowOrder(h) == "a b c");  // no restoring state
+    h.backend.clickHeader(h.backend.all("Table").front(), 1);
+    h.advance(500ms);
+    CHECK(store->loads() == 0);
+    CHECK(store->saves() == 0);
 }
 
 // Mutations: `shown` always true for a rows table; a message under `status: false` kept in the line.
 TEST_CASE("rows table: the status line takes space only while it has something to say", "[ui][table]") {
-    TableHarness h;  auto screen = h.mount(rowsDoc(kThree));
+    TableHarness h;
+    auto screen = h.mount(rowsDoc(kThree));
     CHECK_FALSE(statusOf(h).shown);
-    coreOf(*screen).tableMessage(elementOf(*screen, "list"), "Refused");  h.settle();
-    CHECK(statusOf(h).shown);  CHECK(statusOf(h).message == "Refused");  CHECK(statusOf(h).counts == "3 rows");
-    h.advance(6'000ms);  CHECK_FALSE(statusOf(h).shown);
-    TableHarness always;  auto shown = always.mount(rowsDoc(kThree, R"(,"status":true)"));
-    CHECK(statusOf(always).shown);  CHECK(statusOf(always).counts == "3 rows");
-    TableHarness never;  auto hidden = never.mount(rowsDoc(kThree, R"(,"status":false)"));
-    coreOf(*hidden).tableMessage(elementOf(*hidden, "list"), "Refused");  never.settle();
-    CHECK_FALSE(statusOf(never).shown);  CHECK(statusOf(never).message.empty());
+    coreOf(*screen).tableMessage(elementOf(*screen, "list"), "Refused");
+    h.settle();
+    CHECK(statusOf(h).shown);
+    CHECK(statusOf(h).message == "Refused");
+    CHECK(statusOf(h).counts == "3 rows");
+    h.advance(6'000ms);
+    CHECK_FALSE(statusOf(h).shown);
+    TableHarness always;
+    auto shown = always.mount(rowsDoc(kThree, R"(,"status":true)"));
+    CHECK(statusOf(always).shown);
+    CHECK(statusOf(always).counts == "3 rows");
+    TableHarness never;
+    auto hidden = never.mount(rowsDoc(kThree, R"(,"status":false)"));
+    coreOf(*hidden).tableMessage(elementOf(*hidden, "list"), "Refused");
+    never.settle();
+    CHECK_FALSE(statusOf(never).shown);
+    CHECK(statusOf(never).message.empty());
 }
 
 // Mutations: no report of an invalid sort cell (the count is 0); one per view change (two, once a second column's
@@ -2297,16 +2604,21 @@ TEST_CASE("rows table: a cell not of its column's kind is reported once at the s
     auto const sortReports = [&h] {
         return std::ranges::count_if(h.diagnostics, [](Refusal const& r) { return r.path.ends_with("/sort"); });
     };
-    h.backend.clickHeader(tableOf(h), 2);  h.settle();
-    CHECK(rowOrder(h) == "a c b");                                            // the invalid cell sorts last
+    h.backend.clickHeader(tableOf(h), 2);
+    h.settle();
+    CHECK(rowOrder(h) == "a c b");  // the invalid cell sorts last
     CHECK(sortReports() == 1);
-    h.backend.clickHeader(tableOf(h), 2);  h.settle();
-    CHECK(rowOrder(h) == "c a b");  CHECK(sortReports() == 1);                // last in either direction, once
+    h.backend.clickHeader(tableOf(h), 2);
+    h.settle();
+    CHECK(rowOrder(h) == "c a b");
+    CHECK(sortReports() == 1);  // last in either direction, once
     TableHarness two;
     auto both = two.mount(rowsDoc(R"([{"id":"a","name":"x","weight":1},{"id":"b","name":2,"weight":"heavy"},)"
                                   R"({"id":"c","name":"y","weight":2}])"));
-    two.backend.clickHeader(tableOf(two), 2);  two.settle();
-    two.backend.clickHeader(tableOf(two), 1);  two.settle();                  // another column, another invalid cell
+    two.backend.clickHeader(tableOf(two), 2);
+    two.settle();
+    two.backend.clickHeader(tableOf(two), 1);
+    two.settle();  // another column, another invalid cell
     CHECK(std::ranges::count_if(two.diagnostics, [](Refusal const& r) { return r.path.ends_with("/sort"); }) == 1);
 }
 
@@ -2346,15 +2658,19 @@ std::vector<std::string> headingTexts(TableHarness const& h) {
 
 // Mutation: `EngineRows` keeping its record of an `Updated` row (the note stays "one").
 TEST_CASE("rows table: a field no sort reads redraws its row, and a heading's count follows its run", "[ui][table]") {
-    TableHarness h;  auto screen = h.mount(kGroupedRows);
-    h.backend.clickHeader(tableOf(h), 0);  h.settle();
+    TableHarness h;
+    auto screen = h.mount(kGroupedRows);
+    h.backend.clickHeader(tableOf(h), 0);
+    h.settle();
     REQUIRE(headingTexts(h) == std::vector<std::string>{"2", "1"});
     REQUIRE(shownText(h, "one"));
-    h.backend.click(h.byTestId("Button", "note"));  h.settle();              // the runs stay: an `Updated` row
+    h.backend.click(h.byTestId("Button", "note"));
+    h.settle();  // the runs stay: an `Updated` row
     CHECK(shownText(h, "uno"));
     CHECK_FALSE(shownText(h, "one"));
     CHECK(headingTexts(h) == std::vector<std::string>{"2", "1"});
-    h.backend.click(h.byTestId("Button", "join"));  h.settle();              // row 3 joins the first run
+    h.backend.click(h.byTestId("Button", "join"));
+    h.settle();  // row 3 joins the first run
     CHECK(headingTexts(h) == std::vector<std::string>{"3"});
 }
 
@@ -2373,33 +2689,39 @@ TEST_CASE("rows table: a row's cells share its scope, and a row given another's 
            {"id":"label","label":"Label"}]},
         {"kind":"button","testId":"swap","label":"Swap","onClick":[{"set":"items","value":{"lit":[
           {"id":"b","name":"b","label":"B"},{"id":"c","name":"c","label":"C"}]}}]}]}})";
-    TableHarness h;  auto screen = h.mount(kDrafts);
+    TableHarness h;
+    auto screen = h.mount(kDrafts);
     REQUIRE(shownText(h, "a"));
-    h.backend.edit(h.byTestId("TextInput", "edit"), "edited");  h.settle();  // the first row's input: a's
-    CHECK(shownText(h, "edited"));                                            // its text cell reads the same draft
+    h.backend.edit(h.byTestId("TextInput", "edit"), "edited");
+    h.settle();                     // the first row's input: a's
+    CHECK(shownText(h, "edited"));  // its text cell reads the same draft
     CHECK_FALSE(shownText(h, "a"));
     MountStats const before = statsOf(*screen);
-    h.backend.click(h.byTestId("Button", "swap"));  h.settle();              // c takes the place a left
+    h.backend.click(h.byTestId("Button", "swap"));
+    h.settle();  // c takes the place a left
     CHECK(shownText(h, "b"));
     CHECK(shownText(h, "c"));
     CHECK_FALSE(shownText(h, "edited"));
-    CHECK(shownText(h, "C"));                                                 // the plain cell, rebound to c
+    CHECK(shownText(h, "C"));  // the plain cell, rebound to c
     CHECK_FALSE(shownText(h, "A"));
-    CHECK(statsOf(*screen).cellsCreated - before.cellsCreated == 2);          // only the two scoped cells built
+    CHECK(statsOf(*screen).cellsCreated - before.cellsCreated == 2);  // only the two scoped cells built
 }
 
 // Mutation: a page of focus taken from the reported range of a document's rows, empty before any report (PageDown
 // moves one row).
 TEST_CASE("rows table: before the backend reports a range, a page of focus is the overscan's rows", "[ui][table]") {
-    TableHarness h;  auto screen = h.mount(rowsDoc(idRows(50)));
+    TableHarness h;
+    auto screen = h.mount(rowsDoc(idRows(50)));
     int const table = tableOf(h);
-    h.backend.focusMove(table, morph::ui::FocusMove::PageDown);  h.settle();
-    CHECK(h.backend.focusCell(table).first == 10);                            // Virtualization::overscan
+    h.backend.focusMove(table, morph::ui::FocusMove::PageDown);
+    h.settle();
+    CHECK(h.backend.focusCell(table).first == 10);  // Virtualization::overscan
 }
 
 // Mutation: `setGroup` given an empty unit table (1 kg and 1000 g are two runs).
 TEST_CASE("value rows source: a group's quantities are compared through the screen's units", "[ui][table]") {
-    RowsFixture h;  auto const src = sourceOf(h, {col("id")});
+    RowsFixture h;
+    auto const src = sourceOf(h, {col("id")});
     morph::ui::UnitTable const units{
         {"g", morph::ui::UnitInfo{.canonical = "g", .toCanonical = *table::parseDecimal("1"), .display = {}}},
         {"kg", morph::ui::UnitInfo{.canonical = "g", .toCanonical = *table::parseDecimal("1000"), .display = {}}}};
@@ -2433,7 +2755,8 @@ TEST_CASE("rows table: a quantity in a unit the screen does not list sorts by it
     auto screen = h.mount(rowsDoc(R"([{"id":"a","weight":{"num":3,"den":1,"dp":0,"unit":"m"}},)"
                                   R"({"id":"b","weight":{"num":1,"den":1,"dp":0,"unit":"m"}},)"
                                   R"({"id":"c","weight":{"num":2,"den":1,"dp":0,"unit":"m"}}])"));
-    h.backend.clickHeader(tableOf(h), 2);  h.settle();
+    h.backend.clickHeader(tableOf(h), 2);
+    h.settle();
     CHECK(rowOrder(h) == "b c a");
     CHECK(std::ranges::none_of(h.diagnostics, [](Refusal const& r) { return r.path.ends_with("/sort"); }));
 }
@@ -2442,10 +2765,10 @@ TEST_CASE("rows table: a quantity in a unit the screen does not list sorts by it
 TEST_CASE("rows table: a group's quantities are compared through the screen's units", "[ui][table]") {
     TableHarness h;
     FormatContext format = formatFor("en");
-    format.units.insert_or_assign("g", morph::ui::UnitInfo{.canonical = "g", .toCanonical = *table::parseDecimal("1"),
-                                                           .display = {}});
-    format.units.insert_or_assign("kg", morph::ui::UnitInfo{.canonical = "g",
-                                                            .toCanonical = *table::parseDecimal("1000"), .display = {}});
+    format.units.insert_or_assign(
+        "g", morph::ui::UnitInfo{.canonical = "g", .toCanonical = *table::parseDecimal("1"), .display = {}});
+    format.units.insert_or_assign(
+        "kg", morph::ui::UnitInfo{.canonical = "g", .toCanonical = *table::parseDecimal("1000"), .display = {}});
     h.session.setFormatting(format);
     auto screen = h.mount(R"({"vocab":"ui/1","id":"samples",
       "state":{"items":{"init":{"lit":[{"id":1,"w":{"num":1,"den":1,"dp":0,"unit":"kg"}},
@@ -2459,15 +2782,18 @@ TEST_CASE("rows table: a group's quantities are compared through the screen's un
 
 // Mutation: the page always sending the mount a reset (one reset, and no change of the row alone).
 TEST_CASE("rows table: one changed row reaches the mount as its own change, not a reset", "[ui][table]") {
-    TableHarness h;  auto screen = h.mount(rowsDoc(kThree));
-    h.backend.clickHeader(tableOf(h), 1);  h.settle();
+    TableHarness h;
+    auto screen = h.mount(rowsDoc(kThree));
+    h.backend.clickHeader(tableOf(h), 1);
+    h.settle();
     REQUIRE(rowOrder(h) == "a b c");
     MountStats const before = statsOf(*screen);
-    h.backend.click(h.byTestId("Button", "rename"));  h.settle();
+    h.backend.click(h.byTestId("Button", "rename"));
+    h.settle();
     CHECK(rowOrder(h) == "a c b");
     CHECK(statsOf(*screen).viewChanges - before.viewChanges == 1);
     CHECK(statsOf(*screen).viewResets == before.viewResets);
-    CHECK(statsOf(*screen).cellsCreated == before.cellsCreated);              // b kept its widgets as it moved
+    CHECK(statsOf(*screen).cellsCreated == before.cellsCreated);  // b kept its widgets as it moved
 }
 
 // Mutation: the rebuild for a brought unit not carrying the engine's filter over (the new engine has none).
@@ -2477,13 +2803,15 @@ TEST_CASE("rows table: a unit the rows bring keeps the engine's filter", "[ui][t
     std::string text = rowsDoc(kThree);
     std::string const renamed = morph::ui::testing::renamedB(kThree);
     text.replace(text.find(renamed), renamed.size(), quantities);
-    TableHarness h;  auto screen = h.mount(text);
+    TableHarness h;
+    auto screen = h.mount(text);
     table::FilterSpec filter;
     filter.columns["name"].include.push_back(table::FilterEntry{.contains = "a"});
     REQUIRE(engineOf(*screen, "list").setFilter(filter));
     table::Engine const* const first = &engineOf(*screen, "list");
-    h.backend.click(h.byTestId("Button", "rename"));  h.settle();             // the rows bring the unit `m`
-    REQUIRE(&engineOf(*screen, "list") != first);                              // a new engine
+    h.backend.click(h.byTestId("Button", "rename"));
+    h.settle();                                    // the rows bring the unit `m`
+    REQUIRE(&engineOf(*screen, "list") != first);  // a new engine
     CHECK(engineOf(*screen, "list").filter() == filter);
 }
 
@@ -2502,7 +2830,8 @@ using morph::ui::testing::unitOf;
 using morph::ui::testing::windowOf;
 
 /// The x-table request of the typed list actions these cases add.
-constexpr std::string_view kQuerySchema = R"({"type":"object","properties":{"query":{"type":"object","x-table":true}}})";
+constexpr std::string_view kQuerySchema =
+    R"({"type":"object","properties":{"query":{"type":"object","x-table":true}}})";
 
 /// Whether the body of the last call of @p action names @p text.
 bool lastBodyHas(TableHarness const& h, std::string_view action, std::string_view text) {
@@ -2511,35 +2840,40 @@ bool lastBodyHas(TableHarness const& h, std::string_view action, std::string_vie
 
 }  // namespace
 
-// Mutations: `{num, den, dp}` read as text (weight is Integer, from 3 alone, and not a Rational); a fractional number voted
-// Decimal (ratio is Decimal); the query written at the body's top level (no "query" member in the body).
+// Mutations: `{num, den, dp}` read as text (weight is Integer, from 3 alone, and not a Rational); a fractional number
+// voted Decimal (ratio is Decimal); the query written at the body's top level (no "query" member in the body).
 TEST_CASE("model table over an action: a typed list action's rows read into the window", "[ui][table]") {
-    TableHarness h;  addPageSamples(h);
+    TableHarness h;
+    addPageSamples(h);
     auto screen = h.mount(kActionTable);
-    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);                     // no describe call: none exists
-    CHECK(h.dispatcher.calls.back().body.contains(R"("query":{)"));          // the query in the x-table member
+    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);            // no describe call: none exists
+    CHECK(h.dispatcher.calls.back().body.contains(R"("query":{)"));  // the query in the x-table member
     h.reply(h.dispatcher.last("Lims_PageSamples"),
             R"({"rows":[{"id":1,"name":"a","weight":{"num":5,"den":2,"dp":1},"ratio":0.5,"day":"2026-11-17"},
                         {"id":2,"name":"b","weight":3,"ratio":2,"day":null}],"total":2})");
     using enum table::ColumnKind;
-    CHECK(kindOfColumn(*screen, "id") == Integer);    CHECK(kindOfColumn(*screen, "name") == Text);
-    CHECK(kindOfColumn(*screen, "weight") == Decimal);                        // {num,den,dp} with an integer
-    CHECK(kindOfColumn(*screen, "ratio") == Number);                          // a fraction with an integer
-    CHECK(kindOfColumn(*screen, "day") == Date);                              // the literal kind
-    CHECK(*cellOf(*screen, 0, "ratio") == table::Cell{0.5});  CHECK(*cellOf(*screen, 1, "ratio") == table::Cell{2.0});
+    CHECK(kindOfColumn(*screen, "id") == Integer);
+    CHECK(kindOfColumn(*screen, "name") == Text);
+    CHECK(kindOfColumn(*screen, "weight") == Decimal);  // {num,den,dp} with an integer
+    CHECK(kindOfColumn(*screen, "ratio") == Number);    // a fraction with an integer
+    CHECK(kindOfColumn(*screen, "day") == Date);        // the literal kind
+    CHECK(*cellOf(*screen, 0, "ratio") == table::Cell{0.5});
+    CHECK(*cellOf(*screen, 1, "ratio") == table::Cell{2.0});
     CHECK(std::holds_alternative<morph::math::Rational>(*cellOf(*screen, 1, "weight")));
-    CHECK(*cellOf(*screen, 0, "day") == table::Cell{std::int64_t{20'774}});   // days since 1970-01-01
+    CHECK(*cellOf(*screen, 0, "day") == table::Cell{std::int64_t{20'774}});  // days since 1970-01-01
     CHECK(std::holds_alternative<std::monostate>(*cellOf(*screen, 1, "day")));
     CHECK(statusOf(h).counts == "2 rows");
-    h.backend.clickHeader(tableOf(h), 1);  h.settle();
+    h.backend.clickHeader(tableOf(h), 1);
+    h.settle();
     CHECK(h.dispatcher.calls.back().body.contains(R"("sort":[{"column":"name")"));
-    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":3,"name":"c","weight":"heavy","ratio":1}],"total":1})");
-    CHECK(kindOfColumn(*screen, "weight") == Decimal);                        // fixed by the first reply
+    h.reply(h.dispatcher.last("Lims_PageSamples"),
+            R"({"rows":[{"id":3,"name":"c","weight":"heavy","ratio":1}],"total":1})");
+    CHECK(kindOfColumn(*screen, "weight") == Decimal);  // fixed by the first reply
 }
 
 // Mutation: the view document's `kind` ignored (id is inferred Text from a reply whose ids are strings).
 TEST_CASE("model table over an action: columns and kinds come from the action's view document", "[ui][table]") {
-    TableHarness h;                                                           // Lims_ListSamples has a v-columns view
+    TableHarness h;  // Lims_ListSamples has a v-columns view
     addAction(h, "Lims_ListSamples", R"({"type":"object","properties":{"query":{"type":"object","x-table":true}}})",
               ActionInfo{.modelType = "Lims_SampleModel"});
     auto screen = h.mount(withTableKey(kActionTableNoColumns, R"("action":"Lims_ListSamples")"));
@@ -2552,10 +2886,12 @@ TEST_CASE("model table over an action: columns and kinds come from the action's 
 // Mutations: the loader accepting an action with no x-table member (the first fetch sends a bare body); accepting
 // one with neither `columns` nor a view document; accepting two members marked x-table.
 TEST_CASE("model table over an action: an action the table cannot page is refused at load", "[ui][table]") {
-    TableHarness h;  addPageSamples(h);
-    addAction(h, "Lims_TwoQueries",
-              R"({"type":"object","properties":{"a":{"type":"object","x-table":true},"b":{"type":"object","x-table":true}}})",
-              ActionInfo{.modelType = "Lims_SampleModel"});
+    TableHarness h;
+    addPageSamples(h);
+    addAction(
+        h, "Lims_TwoQueries",
+        R"({"type":"object","properties":{"a":{"type":"object","x-table":true},"b":{"type":"object","x-table":true}}})",
+        ActionInfo{.modelType = "Lims_SampleModel"});
     CHECK(refusalOf(h, kActionTableNoQuery) == "a table over an action needs a query member marked x-table");
     CHECK(refusalOf(h, kActionTableNoColumns) ==
           "a table over an action needs its columns, or a view document for the action");
@@ -2565,11 +2901,13 @@ TEST_CASE("model table over an action: an action the table cannot page is refuse
 
 // Mutation: no reconnect handler on a window that watches no record (the reconnect fetches nothing: 1 == 2).
 TEST_CASE("model table over an action: a reconnect fetches the rows again with no record watched", "[ui][table]") {
-    TableHarness h;  addPageSamples(h);
+    TableHarness h;
+    addPageSamples(h);
     auto screen = h.mount(kActionTable);
     h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":1,"name":"a"}],"total":1})");
     REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);
-    h.session.reconnected();  h.settle();
+    h.session.reconnected();
+    h.settle();
     CHECK(h.dispatcher.count("Lims_PageSamples") == 2);
 }
 
@@ -2582,31 +2920,36 @@ TEST_CASE("model table over an action: every record the action holds is watched"
                          .records = {morph::ui::ActionRecordInfo{.record = "Lims_SampleModel.samples"},
                                      morph::ui::ActionRecordInfo{.record = "Lims_Result"}}});
     auto screen = h.mount(kActionTable);
-    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);                     // both watches answered
+    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);  // both watches answered
     h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":1,"name":"a"}],"total":1})");
     morph::wire::ChangesBody body;
     body.records.push_back(morph::effects::RecordChange{.record = "Lims_Result", .keys = std::nullopt});
-    h.session.applyChanges(body);  h.settle();
+    h.session.applyChanges(body);
+    h.settle();
     CHECK(h.dispatcher.count("Lims_PageSamples") == 2);
 }
 
 // Mutations: the stored filter fitted to the placeholder kinds (`ratio` dropped: no second query); a held filter
 // dropped without a report (no diagnostic for `name`).
-TEST_CASE("model table over an action: a stored filter on an inferred column waits for its kind", "[ui][table][state]") {
+TEST_CASE("model table over an action: a stored filter on an inferred column waits for its kind",
+          "[ui][table][state]") {
     auto store = std::make_shared<GatedTableStateStore>(
         storeExecutor(),
         R"({"version":1,"filters":{"columns":{"ratio":{"include":[{"gt":"1"}]},"name":{"include":[{"gt":"b"}]}}}})");
-    TableHarness h{store};  addPageSamples(h);
-    auto screen = h.mount(kActionTable);  store->release();  h.settle();
+    TableHarness h{store};
+    addPageSamples(h);
+    auto screen = h.mount(kActionTable);
+    store->release();
+    h.settle();
     REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);
-    CHECK_FALSE(lastBodyHas(h, "Lims_PageSamples", R"("gt")"));              // no kind yet: the filter waits
+    CHECK_FALSE(lastBodyHas(h, "Lims_PageSamples", R"("gt")"));  // no kind yet: the filter waits
     h.reply(h.dispatcher.last("Lims_PageSamples"),
             R"({"rows":[{"id":1,"name":"a","ratio":0.5},{"id":2,"name":"b","ratio":2}],"total":2})");
     REQUIRE(kindOfColumn(*screen, "ratio") == table::ColumnKind::Number);
-    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 2);                     // the stored filter, now it applies
+    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 2);  // the stored filter, now it applies
     CHECK(lastBodyHas(h, "Lims_PageSamples", R"({"gt":"1"})"));
     CHECK_FALSE(lastBodyHas(h, "Lims_PageSamples", R"({"gt":"b"})"));
-    CHECK(diagnosticsMentioning(h, "the stored filter on `name` is not applied") == 1);   // Text takes no `gt`
+    CHECK(diagnosticsMentioning(h, "the stored filter on `name` is not applied") == 1);  // Text takes no `gt`
     CHECK(diagnosticsMentioning(h, "`ratio`") == 0);
 }
 
@@ -2626,8 +2969,9 @@ TEST_CASE("model table over an action: a view document's units read its measures
             R"({"id":2,"mass":{"num":1500,"den":1,"dp":0,"unit":"g"}}],"total":2})");
     CHECK(kindOfColumn(*screen, "mass") == table::ColumnKind::Measure);
     CHECK(unitOf(*screen, "g").dimension == unitOf(*screen, "kg").dimension);
-    CHECK(unitOf(*screen, "g").toBase ==
-          morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000}, morph::math::DecimalPlaces{3}});
+    CHECK(unitOf(*screen, "g").toBase == morph::math::Rational{morph::math::Numerator{1},
+                                                               morph::math::Denominator{1000},
+                                                               morph::math::DecimalPlaces{3}});
     for (std::int64_t row : {0, 1}) {
         auto const* const measure = std::get_if<table::Measure>(cellOf(*screen, row, "mass"));
         REQUIRE(measure != nullptr);
@@ -2637,7 +2981,8 @@ TEST_CASE("model table over an action: a view document's units read its measures
 
 // Mutation: a unit no description lists left unknown (the cell's unit is kUnknownUnit, an invalid cell).
 TEST_CASE("model table over an action: a unit no one lists is its own canonical unit", "[ui][table]") {
-    TableHarness h;  addPageSamples(h);
+    TableHarness h;
+    addPageSamples(h);
     auto screen = h.mount(kActionTable);
     h.reply(h.dispatcher.last("Lims_PageSamples"),
             R"({"rows":[{"id":1,"name":"a","weight":{"num":5,"den":1,"dp":0,"unit":"furlong"}}],"total":1})");
@@ -2648,13 +2993,15 @@ TEST_CASE("model table over an action: a unit no one lists is its own canonical 
     CHECK(unitOf(*screen, "furlong").dimension == "furlong");
 }
 
-// Mutations: the locate read sent to `Table.` and the table's id, as a model's table's (no call of the action); a reply
-// that holds the row without `indices` read as the key's absence (an answer of nothing, not an error).
+// Mutations: the locate read sent to `Table.` and the table's id, as a model's table's (no call of the action); a
+// reply that holds the row without `indices` read as the key's absence (an answer of nothing, not an error).
 TEST_CASE("model table over an action: a row is located through the action, and a row without its index is unknown",
           "[ui][table]") {
-    TableHarness h;  addPageSamples(h);
+    TableHarness h;
+    addPageSamples(h);
     auto screen = h.mount(kActionTable);
-    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":1,"name":"a"},{"id":2,"name":"b"}],"total":300})");
+    h.reply(h.dispatcher.last("Lims_PageSamples"),
+            R"({"rows":[{"id":1,"name":"a"},{"id":2,"name":"b"}],"total":300})");
     std::vector<morph::ui::RowLocation> answers;
     auto const locate = [&] {
         std::size_t const sent = h.dispatcher.count("Lims_PageSamples");
@@ -2663,7 +3010,7 @@ TEST_CASE("model table over an action: a row is located through the action, and 
         h.settle();
         REQUIRE(h.dispatcher.count("Lims_PageSamples") == sent + 1);
         INFO(h.dispatcher.calls.back().body);
-        CHECK(lastBodyHas(h, "Lims_PageSamples", R"("keys":[2])"));            // the key in the x-table member
+        CHECK(lastBodyHas(h, "Lims_PageSamples", R"("keys":[2])"));  // the key in the x-table member
         CHECK(lastBodyHas(h, "Lims_PageSamples", R"("columns":[])"));
     };
     locate();
@@ -2674,12 +3021,12 @@ TEST_CASE("model table over an action: a row is located through the action, and 
     locate();
     h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":2,"name":"b"}],"total":300})");
     REQUIRE(answers.size() == 2);
-    CHECK_FALSE(answers.back().has_value());                                  // where the row is is not known
+    CHECK_FALSE(answers.back().has_value());  // where the row is is not known
     locate();
     h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[],"total":300})");
     REQUIRE(answers.size() == 3);
     REQUIRE(answers.back().has_value());
-    CHECK_FALSE(answers.back()->has_value());                                 // no row: the view lacks the key
+    CHECK_FALSE(answers.back()->has_value());  // no row: the view lacks the key
 }
 
 // Mutation: a typed list action's table taken as not described, its revision being empty (no keyed call is sent).
@@ -2690,9 +3037,11 @@ TEST_CASE("model table over an action: highlightKey locates its row through the 
         R"({"kind":"button","label":"2","testId":"to2","onClick":[{"set":"hk","value":2}]},)"
         R"({"kind":"table","id":"list","testId":"list","model":"lab","action":"Lims_PageSamples","key":{"row":"id"},)"
         R"("highlightKey":{"ref":"hk"},"columns":[{"id":"id"},{"id":"name"}]}]}})";
-    TableHarness h;  addPageSamples(h);
+    TableHarness h;
+    addPageSamples(h);
     auto screen = h.mount(kTypedHighlight);
-    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":1,"name":"a"},{"id":2,"name":"b"}],"total":300})");
+    h.reply(h.dispatcher.last("Lims_PageSamples"),
+            R"({"rows":[{"id":1,"name":"a"},{"id":2,"name":"b"}],"total":300})");
     std::size_t const sent = h.dispatcher.count("Lims_PageSamples");
     click(h, "to2");
     REQUIRE(h.dispatcher.count("Lims_PageSamples") == sent + 1);
@@ -2701,7 +3050,6 @@ TEST_CASE("model table over an action: highlightKey locates its row through the 
     CHECK(h.backend.prop(tableOf(h), "highlightedRow") == "41");
     CHECK(h.diagnostics.empty());
 }
-
 
 namespace {
 
@@ -2728,7 +3076,8 @@ table::FilterSpec filterOf(std::string const& column, table::FilterEntry entry) 
 TEST_CASE("model table over an action: a literal or bound filter on an inferred column waits for its kind",
           "[ui][table]") {
     SECTION("literal") {
-        TableHarness h;  addPageSamples(h);
+        TableHarness h;
+        addPageSamples(h);
         auto screen = h.mount(literalRatioFilter());
         REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);
         CHECK_FALSE(lastBodyHas(h, "Lims_PageSamples", R"("gt")"));
@@ -2738,7 +3087,8 @@ TEST_CASE("model table over an action: a literal or bound filter on an inferred 
         CHECK(h.diagnostics.empty());
     }
     SECTION("bound") {
-        TableHarness h;  addPageSamples(h);
+        TableHarness h;
+        addPageSamples(h);
         std::string text = withTableKey(kActionTable, R"("filters":{"ref":"f"})");
         text.replace(text.find(R"("view":)"), 7,
                      R"("state":{"f":{"init":{"lit":{"columns":{"ratio":{"include":[{"gt":"1"}]}}}}}},"view":)");
@@ -2754,11 +3104,12 @@ TEST_CASE("model table over an action: a literal or bound filter on an inferred 
 
 // Mutation: the held literal filter applied over the user's filter (a third query, filtering `ratio`: 3 == 2).
 TEST_CASE("model table over an action: the user's filter before the first reply survives it", "[ui][table]") {
-    TableHarness h;  addPageSamples(h);
+    TableHarness h;
+    addPageSamples(h);
     auto screen = h.mount(literalRatioFilter());
     REQUIRE(elementOf(*screen, "list").tableRows->setFilter(filterOf("name", table::FilterEntry{.contains = "a"})));
     h.settle();
-    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 2);                     // the user's filter is a new query
+    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 2);  // the user's filter is a new query
     h.reply(h.dispatcher.last("Lims_PageSamples"), std::string{kRatioRows});
     CHECK(h.dispatcher.count("Lims_PageSamples") == 2);
     CHECK(lastBodyHas(h, "Lims_PageSamples", R"({"contains":"a"})"));
@@ -2769,20 +3120,21 @@ TEST_CASE("model table over an action: the user's filter before the first reply 
 // Number column: 2 == 3).
 TEST_CASE("model table over an action: a user's filter the inferred kind refuses is reported and dropped",
           "[ui][table]") {
-    TableHarness h;  addPageSamples(h);
+    TableHarness h;
+    addPageSamples(h);
     auto screen = h.mount(kActionTable);
     REQUIRE(elementOf(*screen, "list").tableRows->setFilter(filterOf("ratio", table::FilterEntry{.contains = "5"})));
     h.settle();
     h.reply(h.dispatcher.last("Lims_PageSamples"), std::string{kRatioRows});
-    CHECK(diagnosticsMentioning(h, "the filter on `ratio` is not applied: it does not apply to the column's kind") == 1);
+    CHECK(diagnosticsMentioning(h, "the filter on `ratio` is not applied: it does not apply to the column's kind") ==
+          1);
     CHECK(h.dispatcher.count("Lims_PageSamples") == 3);
     CHECK(windowOf(*screen).filter() == table::FilterSpec{});
 }
 
 // Mutations: each column's units in a dimension of its own (mg is not g's: "kg" == "g"); a factor of zero listed
 // (no report).
-TEST_CASE("model table over an action: columns that share a unit share its dimension in any order",
-          "[ui][table]") {
+TEST_CASE("model table over an action: columns that share a unit share its dimension in any order", "[ui][table]") {
     TableHarness h;
     addAction(h, "Lims_WeighSamples", std::string{kQuerySchema}, ActionInfo{.modelType = "Lims_SampleModel"});
     addView(h, "Lims_WeighSamples",
@@ -2794,11 +3146,11 @@ TEST_CASE("model table over an action: columns that share a unit share its dimen
             R"("x-unitAlternatives":[{"id":"mg","num":1,"den":1000000}]}]})");
     auto screen = h.mount(withTableKey(kActionTableNoColumns, R"("action":"Lims_WeighSamples")"));
     CHECK(unitOf(*screen, "mg").dimension == unitOf(*screen, "g").dimension);
-    CHECK(unitOf(*screen, "mg").toBase ==
-          morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000}, morph::math::DecimalPlaces{3}});
+    CHECK(unitOf(*screen, "mg").toBase == morph::math::Rational{morph::math::Numerator{1},
+                                                                morph::math::Denominator{1000},
+                                                                morph::math::DecimalPlaces{3}});
     CHECK(diagnosticsMentioning(h, "the unit `bad` has a factor of zero or less") == 1);
 }
-
 
 // Mutation: a held stored filter giving way to any gesture (the sort and the scroll drop it: no `gt` in the last
 // query).
@@ -2806,11 +3158,16 @@ TEST_CASE("model table over an action: a sort and a scroll before the first repl
           "[ui][table][state]") {
     auto store = std::make_shared<GatedTableStateStore>(
         storeExecutor(), R"({"version":1,"filters":{"columns":{"ratio":{"include":[{"gt":"1"}]}}}})");
-    TableHarness h{store};  addPageSamples(h);
-    auto screen = h.mount(kActionTable);  store->release();  h.settle();
+    TableHarness h{store};
+    addPageSamples(h);
+    auto screen = h.mount(kActionTable);
+    store->release();
+    h.settle();
     REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);
-    h.backend.clickHeader(tableOf(h), 1);  h.settle();                        // a sort
-    h.backend.scrollTable(tableOf(h), 0, 5);  h.advance(80ms);                 // a scroll
+    h.backend.clickHeader(tableOf(h), 1);
+    h.settle();  // a sort
+    h.backend.scrollTable(tableOf(h), 0, 5);
+    h.advance(80ms);  // a scroll
     h.reply(h.dispatcher.last("Lims_PageSamples"), std::string{kRatioRows});
     CHECK(lastBodyHas(h, "Lims_PageSamples", R"({"gt":"1"})"));
     CHECK(lastBodyHas(h, "Lims_PageSamples", R"("sort":[{"column":"name")"));
@@ -2819,12 +3176,14 @@ TEST_CASE("model table over an action: a sort and a scroll before the first repl
 
 // Mutation: the kinds a first reply that does not read voted kept (ratio is Number before any reply read).
 TEST_CASE("model table over an action: a first reply that does not read fixes no kind", "[ui][table]") {
-    TableHarness h;  addPageSamples(h);
+    TableHarness h;
+    addPageSamples(h);
     auto screen = h.mount(kActionTable);
-    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"name":"a","ratio":0.5}],"total":1})");   // no key
+    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"name":"a","ratio":0.5}],"total":1})");  // no key
     CHECK(kindOfColumn(*screen, "ratio") == table::ColumnKind::Text);
     CHECK(windowOf(*screen).inferring());
-    windowOf(*screen).retry();  h.settle();
+    windowOf(*screen).retry();
+    h.settle();
     h.reply(h.dispatcher.last("Lims_PageSamples"), std::string{kRatioRows});
     CHECK(kindOfColumn(*screen, "ratio") == table::ColumnKind::Number);
     CHECK_FALSE(windowOf(*screen).inferring());
@@ -2832,14 +3191,16 @@ TEST_CASE("model table over an action: a first reply that does not read fixes no
 
 // Mutation: no report for a `key` that is not one row field.
 TEST_CASE("model table over an action: a key that is not one row field is reported", "[ui][table]") {
-    TableHarness h;  addPageSamples(h);
+    TableHarness h;
+    addPageSamples(h);
     auto screen = h.mount(withTableKey(kActionTable, R"("key":{"lit":"id"})"));
     CHECK(diagnosticsMentioning(h, "the key of a table over an action is one row field") == 1);
 }
 
 // Mutation: an integer beyond int64 read as its JSON text (a string cell).
 TEST_CASE("model table over an action: an integer beyond int64 is a double", "[ui][table]") {
-    TableHarness h;  addPageSamples(h);
+    TableHarness h;
+    addPageSamples(h);
     auto screen = h.mount(kActionTable);
     h.reply(h.dispatcher.last("Lims_PageSamples"),
             R"({"rows":[{"id":1,"name":"a","ratio":18446744073709551615}],"total":1})");
@@ -2849,7 +3210,8 @@ TEST_CASE("model table over an action: an integer beyond int64 is a double", "[u
 
 // Mutation: no bound on the units a window lists (the 65th unit is listed and its cell is valid).
 TEST_CASE("model table over an action: a window lists at most 64 units no one declares", "[ui][table]") {
-    TableHarness h;  addPageSamples(h);
+    TableHarness h;
+    addPageSamples(h);
     auto screen = h.mount(kActionTable);
     std::string rows;
     for (int at = 0; at < 65; ++at) {
@@ -2865,13 +3227,15 @@ TEST_CASE("model table over an action: a window lists at most 64 units no one de
 
 // Mutation: the inference handler not guarded by the table's scope (it reaches the unmounted table's state).
 TEST_CASE("model table over an action: a window that outlives its table reads its reply alone", "[ui][table]") {
-    TableHarness h;  addPageSamples(h);
+    TableHarness h;
+    addPageSamples(h);
     auto screen = h.mount(kActionTable);
     std::shared_ptr<WindowRows> const window = elementOf(*screen, "list").tableWindow;
     std::size_t const pending = h.dispatcher.last("Lims_PageSamples");
-    screen.reset();  h.settle();
+    screen.reset();
+    h.settle();
     h.reply(pending, std::string{kRatioRows});
-    CHECK_FALSE(window->inferring());                                         // the reply was read
+    CHECK_FALSE(window->inferring());  // the reply was read
     CHECK(h.diagnostics.empty());
 }
 
@@ -2911,8 +3275,8 @@ std::string withFirstColumnKey(std::string_view text, std::string_view member) {
     auto field = morph::ui::parseJson("{" + std::string{member} + "}");
     REQUIRE(field.has_value());
     auto& view = std::get<morph::ui::Json::object_t>(std::get<morph::ui::Json::object_t>(json->data).at("view").data);
-    auto& first = std::get<morph::ui::Json::object_t>(
-        std::get<morph::ui::Json::array_t>(view.at("columns").data).front().data);
+    auto& first =
+        std::get<morph::ui::Json::object_t>(std::get<morph::ui::Json::array_t>(view.at("columns").data).front().data);
     for (auto& [key, value] : std::get<morph::ui::Json::object_t>(field->data)) {
         first.insert_or_assign(key, value);
     }
@@ -2946,7 +3310,8 @@ std::string countingNine(std::string_view event, std::string_view text = kNine) 
 }  // namespace
 
 // Mutation: the lowering mapping HeaderClick::Shift to Click.
-TEST_CASE("sort chains: a plain click replaces, Shift adds and flips, a key past the bound is refused", "[ui][table][config]") {
+TEST_CASE("sort chains: a plain click replaces, Shift adds and flips, a key past the bound is refused",
+          "[ui][table][config]") {
     morph::ui::testing::TableHarness h;
     auto screen = h.mount(kNine);
     int const table = h.backend.all("Table").front();
@@ -2954,7 +3319,8 @@ TEST_CASE("sort chains: a plain click replaces, Shift adds and flips, a key past
     h.backend.clickHeader(table, 1, HeaderClick::Shift);
     h.backend.clickHeader(table, 0, HeaderClick::Shift);
     h.settle();
-    CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c1","direction":"desc"},{"column":"c2","direction":"asc"}])");
+    CHECK(elementValue(*screen, "t", "sort") ==
+          R"([{"column":"c1","direction":"desc"},{"column":"c2","direction":"asc"}])");
     CHECK(h.backend.prop(table, "sort") == "0:Descending,1:Ascending");
     for (std::size_t column = 2; column < 9; ++column) {
         h.backend.clickHeader(table, column, HeaderClick::Shift);
@@ -2972,7 +3338,8 @@ TEST_CASE("sort chains: a plain click replaces, Shift adds and flips, a key past
 }
 
 // Mutation: the client holding 8 whatever the description says.
-TEST_CASE("sort chains: a table whose limits set 32 accepts 32 keys from the header and refuses the 33rd", "[ui][table][config]") {
+TEST_CASE("sort chains: a table whose limits set 32 accepts 32 keys from the header and refuses the 33rd",
+          "[ui][table][config]") {
     SECTION("a model's table, whose description carries the bound") {
         morph::ui::testing::TableHarness h;
         auto screen = h.mount(kConfigModelTable);
@@ -3012,7 +3379,8 @@ TEST_CASE("sort chains: the header menu builds a chain without a modifier", "[ui
     int const table = h.backend.all("Table").front();
     chooseMenu(h, table, 0, {"Sort descending"});
     chooseMenu(h, table, 2, {"Add to sort"});
-    CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c1","direction":"desc"},{"column":"c3","direction":"asc"}])");
+    CHECK(elementValue(*screen, "t", "sort") ==
+          R"([{"column":"c1","direction":"desc"},{"column":"c3","direction":"asc"}])");
     chooseMenu(h, table, 0, {"Remove from sort"});
     CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c3","direction":"asc"}])");
     CHECK(readJson(*screen, R"({"ref":"n"})") == "3");
@@ -3021,8 +3389,9 @@ TEST_CASE("sort chains: the header menu builds a chain without a modifier", "[ui
 
 // Mutations: the lowering applying a menu gesture without updating `visibleColumns`; a driver's column read as a
 // visible place (the resize after the move lands on c1).
-TEST_CASE("column layout: hiding, moving, pinning and resetting from the menus change the layout and the visible columns",
-          "[ui][table][config]") {
+TEST_CASE(
+    "column layout: hiding, moving, pinning and resetting from the menus change the layout and the visible columns",
+    "[ui][table][config]") {
     morph::ui::testing::TableHarness h;
     auto screen = h.mount(countingNine("onLayoutChange"));
     int const table = h.backend.all("Table").front();
@@ -3033,8 +3402,8 @@ TEST_CASE("column layout: hiding, moving, pinning and resetting from the menus c
     CHECK(elementValue(*screen, "t", "hiddenCount") == "1");
     CHECK(elementValue(*screen, "t", "layout") ==
           R"({"hidden":["c3"],"order":["c2","c1","c3","c4","c5","c6","c7","c8","c9"],"pinned":1,"widths":{}})");
-    CHECK_THROWS(h.backend.menuOf(table, 2));                                  // the mount draws no header for c3
-    resizeColumn(h, table, 1, 20);                                             // index 1 is c2 wherever it stands
+    CHECK_THROWS(h.backend.menuOf(table, 2));  // the mount draws no header for c3
+    resizeColumn(h, table, 1, 20);             // index 1 is c2 wherever it stands
     CHECK(elementValue(*screen, "t", "layout") ==
           R"({"hidden":["c3"],"order":["c2","c1","c3","c4","c5","c6","c7","c8","c9"],"pinned":1,"widths":{"c2":20}})");
     resizeColumn(h, table, 1, std::nullopt);
@@ -3048,10 +3417,12 @@ TEST_CASE("column layout: hiding, moving, pinning and resetting from the menus c
 }
 
 // Mutation: `configurable` ignored for menus (the hide entry is present).
-TEST_CASE("column layout: configurable and locked limit what the user can do, and each refusal is shown", "[ui][table][config]") {
+TEST_CASE("column layout: configurable and locked limit what the user can do, and each refusal is shown",
+          "[ui][table][config]") {
     SECTION("hide only, the first column locked") {
         morph::ui::testing::TableHarness h;
-        auto screen = h.mount(withFirstColumnKey(withTableKey(kNine, R"("configurable":{"lit":["hide"]})"), R"("locked":true)"));
+        auto screen =
+            h.mount(withFirstColumnKey(withTableKey(kNine, R"("configurable":{"lit":["hide"]})"), R"("locked":true)"));
         int const table = h.backend.all("Table").front();
         std::vector<std::string> const labels = labelsOf(menuOf(h, table, 1));
         CHECK(std::ranges::find(labels, "Move left") == labels.end());
@@ -3093,7 +3464,7 @@ TEST_CASE("status line: a refusal is shown once, until the next gesture or six s
         CHECK(statusOf(h, table).shown);
         h.advance(1ms);
         CHECK(statusOf(h, table).message.empty());
-        CHECK_FALSE(statusOf(h, table).shown);                               // a rows table with nothing to say
+        CHECK_FALSE(statusOf(h, table).shown);  // a rows table with nothing to say
         h.backend.clickHeader(table, 8, HeaderClick::Shift);
         h.settle();
         REQUIRE(statusOf(h, table).message == "A table sorts by at most 8 columns");
@@ -3124,7 +3495,7 @@ TEST_CASE("persisted layout: a stored layout applies before the first query, a c
     SECTION("the table's own layout") {
         auto screen = h.mount(kNine);
         int const table = h.backend.all("Table").front();
-        CHECK(morph::ui::testing::rowOrder(h).empty());                         // the rows wait for the stored state
+        CHECK(morph::ui::testing::rowOrder(h).empty());  // the rows wait for the stored state
         store->release();
         h.settle();
         // c3 to c9 are placed after their nearest declared predecessor the layout places, c2; c3 stays hidden.
@@ -3148,11 +3519,12 @@ TEST_CASE("persisted layout: a stored layout applies before the first query, a c
     }
     SECTION("a model's table: the first query names only the columns the stored layout shows") {
         auto modelStore = std::make_shared<GatedTableStateStore>(
-            storeExecutor(), R"({"version":1,"layout":{"order":["name","id","c3","c4","c5"],"hidden":["c3"],"pinned":0,"widths":{}}})");
+            storeExecutor(),
+            R"({"version":1,"layout":{"order":["name","id","c3","c4","c5"],"hidden":["c3"],"pinned":0,"widths":{}}})");
         morph::ui::testing::TableHarness m{modelStore};
         auto screen = m.mount(kConfigModelTable);
         replyDescribe(m, samplesDescription(5));
-        REQUIRE(m.dispatcher.count("Table.samples") == 0);                    // the first query waits for the state
+        REQUIRE(m.dispatcher.count("Table.samples") == 0);  // the first query waits for the state
         modelStore->release();
         m.settle();
         REQUIRE(m.dispatcher.count("Table.samples") >= 1);
@@ -3174,7 +3546,7 @@ TEST_CASE("persisted layout: a stored layout applies before the first query, a c
         CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c4","direction":"desc"}])");
         chooseMenu(h, table, 0, {"Hide column"});
         h.advance(500ms);
-        CHECK(store->saves() == 0);                                            // the layout is the document's
+        CHECK(store->saves() == 0);  // the layout is the document's
         h.backend.clickHeader(table, 1, HeaderClick::Plain);
         h.advance(500ms);
         REQUIRE(store->saves() == 1);
@@ -3182,10 +3554,10 @@ TEST_CASE("persisted layout: a stored layout applies before the first query, a c
         REQUIRE(saved.has_value());
         CHECK(saved->sort == table::SortChain{{.column = "c2", .dir = table::SortDirection::Ascending}});
         INFO(store->lastSaved());
-        REQUIRE(saved->layout.has_value());                                    // the stored one, as it was kept
+        REQUIRE(saved->layout.has_value());  // the stored one, as it was kept
         CHECK(saved->layout->order == std::vector<std::string>{"c2", "c1"});
-        CHECK_FALSE(std::ranges::contains(saved->layout->hidden, "c1"));       // the user's hide is not saved
-        CHECK(saved->layout->hidden == std::vector<std::string>{"c3"});        // a sort-only save keeps it whole
+        CHECK_FALSE(std::ranges::contains(saved->layout->hidden, "c1"));  // the user's hide is not saved
+        CHECK(saved->layout->hidden == std::vector<std::string>{"c3"});   // a sort-only save keeps it whole
     }
 }
 
@@ -3207,7 +3579,7 @@ TEST_CASE("hiding a sorted and filtered column changes no row", "[ui][table][con
     CHECK(h.backend.prop(table, "filtered") == "[1]");
     chooseMenu(h, table, 1, {"Hide column"});
     CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["id","c3","c4","c5"])");
-    if (h.dispatcher.count("Table.samples") > calls) {                         // a column fetch of the rows held
+    if (h.dispatcher.count("Table.samples") > calls) {  // a column fetch of the rows held
         table::TableQuery const fetched = lastQuery(h);
         CHECK(fetched.sort == first.sort);
         CHECK(fetched.filters == first.filters);
@@ -3317,7 +3689,7 @@ TEST_CASE("column chooser: Group columns forms a group of one kind, which the la
     CHECK_FALSE(enabled(h, "Button", "table_group_create"));
     h.backend.edit(h.byTestId("TextInput", "table_group_label"), "Pair");
     h.settle();
-    CHECK_FALSE(enabled(h, "Button", "table_group_create"));                 // a label and one column
+    CHECK_FALSE(enabled(h, "Button", "table_group_create"));  // a label and one column
     h.backend.toggle(h.byTestId("Checkbox", "table_group_column_b"));
     h.settle();
     REQUIRE(enabled(h, "Button", "table_group_create"));
@@ -3384,7 +3756,8 @@ TEST_CASE("sort dialog: keys in order with direction, move and remove; Add key r
 // Mutations: the move buttons read without the pin boundary (c3, the first unpinned column, can move up); the show
 // box of the only visible column enabled; the chooser's dismissal leaving it open; a key's column select offering a
 // column another key holds.
-TEST_CASE("column chooser and sort dialog: locks, the pin boundary, a key's column and a dismissal", "[ui][table][config]") {
+TEST_CASE("column chooser and sort dialog: locks, the pin boundary, a key's column and a dismissal",
+          "[ui][table][config]") {
     {
         morph::ui::testing::TableHarness h;
         auto screen = h.mount(withFirstColumnKey(kNine, R"("locked":true)"));
@@ -3394,10 +3767,10 @@ TEST_CASE("column chooser and sort dialog: locks, the pin boundary, a key's colu
         REQUIRE(elementValue(*screen, "t", "layout").find(R"("pinned":1)") != std::string::npos);
         REQUIRE(elementValue(*screen, "t", "visibleColumns").starts_with(R"(["c2","c3","c1",)"));
         chooseMenu(h, table, std::nullopt, {"Columns…"});
-        CHECK_FALSE(enabled(h, "Checkbox", "table_columns_show_c1"));        // locked
+        CHECK_FALSE(enabled(h, "Checkbox", "table_columns_show_c1"));  // locked
         CHECK_FALSE(enabled(h, "Button", "table_columns_down_c1"));
-        CHECK_FALSE(enabled(h, "Button", "table_columns_down_c2"));          // the last pinned column
-        CHECK_FALSE(enabled(h, "Button", "table_columns_up_c3"));            // the first unpinned one
+        CHECK_FALSE(enabled(h, "Button", "table_columns_down_c2"));  // the last pinned column
+        CHECK_FALSE(enabled(h, "Button", "table_columns_up_c3"));    // the first unpinned one
         CHECK(enabled(h, "Button", "table_columns_down_c3"));
         h.backend.dismiss(h.byTestId("Dialog", "table_columns"));
         h.settle();
@@ -3412,7 +3785,7 @@ TEST_CASE("column chooser and sort dialog: locks, the pin boundary, a key's colu
     }
     h.settle();
     CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["c1"])");
-    CHECK_FALSE(enabled(h, "Checkbox", "table_columns_show_c1"));            // the only visible column
+    CHECK_FALSE(enabled(h, "Checkbox", "table_columns_show_c1"));  // the only visible column
     CHECK(enabled(h, "Checkbox", "table_columns_show_c2"));
     press(h, "table_columns_done");
 
@@ -3549,7 +3922,8 @@ std::string optionsOf(std::vector<std::string> const& labels) {
         options.push_back(morph::ui::SelectOption{.key = Key{label}, .label = label});
     }
     return morph::ui::testing::detail::formatList(options, [](morph::ui::SelectOption const& option) {
-        return morph::ui::testing::detail::formatKey(option.key) + ":" + morph::ui::testing::detail::formatItem(option.label);
+        return morph::ui::testing::detail::formatKey(option.key) + ":" +
+               morph::ui::testing::detail::formatItem(option.label);
     });
 }
 
@@ -3623,12 +3997,13 @@ table::TableDescription kindsDescription() {
     add("dec", table::ColumnKind::Decimal);
     add("weight", table::ColumnKind::Measure);
     d.columns.back().info.dimensions = {"mass"};
-    d.units = {table::UnitInfo{.id = "g", .symbol = "g", .dimension = "mass", .toBase = *table::parseDecimal("0.001"),
-                               .decimals = 0},
-               table::UnitInfo{.id = "kg", .symbol = "kg", .dimension = "mass", .toBase = *table::parseDecimal("1"),
-                               .decimals = 3},
-               table::UnitInfo{.id = "%", .symbol = "%", .dimension = "ratio", .toBase = *table::parseDecimal("0.01"),
-                               .decimals = 1}};
+    d.units = {
+        table::UnitInfo{
+            .id = "g", .symbol = "g", .dimension = "mass", .toBase = *table::parseDecimal("0.001"), .decimals = 0},
+        table::UnitInfo{
+            .id = "kg", .symbol = "kg", .dimension = "mass", .toBase = *table::parseDecimal("1"), .decimals = 3},
+        table::UnitInfo{
+            .id = "%", .symbol = "%", .dimension = "ratio", .toBase = *table::parseDecimal("0.01"), .decimals = 1}};
     return table::describe(std::move(d));
 }
 
@@ -3662,7 +4037,7 @@ TEST_CASE("filter menu: values are counted over what the other filters leave, an
     clickFilter(h, table, 0);
     CHECK(propOf(h, "Checkbox", "table_filter_value_0", "label") == "Closed (2)");
     CHECK(propOf(h, "Checkbox", "table_filter_value_1", "label") == "Open (2)");
-    CHECK_FALSE(mounted(h, "Checkbox", "table_filter_value_2"));                       // no Held
+    CHECK_FALSE(mounted(h, "Checkbox", "table_filter_value_2"));  // no Held
     CHECK(propOf(h, "Checkbox", "table_filter_blanks", "label") == "(Blanks)");
     CHECK(propOf(h, "Checkbox", "table_filter_blanks", "visible") != "false");
     toggleBox(h, "table_filter_value_1");
@@ -3691,7 +4066,8 @@ TEST_CASE("filter menu: values are counted over what the other filters leave, an
 }
 
 // Mutation: a condition's edit keeping the ticks (the values part stays beside the condition).
-TEST_CASE("filter menu: values and conditions are exclusive, and reopening shows the stored part", "[ui][table][config]") {
+TEST_CASE("filter menu: values and conditions are exclusive, and reopening shows the stored part",
+          "[ui][table][config]") {
     SECTION("a text column") {
         TableHarness h;
         auto screen = h.mount(kStatusRows);
@@ -3713,7 +4089,7 @@ TEST_CASE("filter menu: values and conditions are exclusive, and reopening shows
         h.advance(250ms);
         CHECK(readJson(*screen, R"({"ref":"t.filters.columns.status"})") ==
               R"({"combine":"any","exclude":[],"include":[{"contains":"pe"}]})");
-        CHECK(propOf(h, "Checkbox", "table_filter_blanks", "checked") == "true");   // the ticks start again
+        CHECK(propOf(h, "Checkbox", "table_filter_blanks", "checked") == "true");  // the ticks start again
         CHECK(propOf(h, "Checkbox", "table_filter_all", "checked") == "true");
         dismissMenu(h);
         clickFilter(h, table, 0);
@@ -3732,7 +4108,7 @@ TEST_CASE("filter menu: values and conditions are exclusive, and reopening shows
         CHECK(propOf(h, "Select", "table_filter_op_1", "selected") == R"("is empty")");
         CHECK_FALSE(mounted(h, "Checkbox", "table_filter_value_0"));
         CHECK_FALSE(mounted(h, "TextInput", "table_filter_search"));
-        CHECK(h.dispatcher.count("Table.samples") == calls);                           // no values asked for
+        CHECK(h.dispatcher.count("Table.samples") == calls);  // no values asked for
     }
 }
 
@@ -3745,7 +4121,8 @@ TEST_CASE("filter menu: a search typed quickly is one distinct request after the
     clickFilter(h, table, 1);
     REQUIRE(h.dispatcher.count("Table.samples") == before + 1);
     REQUIRE(lastQuery(h).distinct.has_value());
-    h.reply(lastDistinct(h), distinctReply(h.described.revision, R"({"values":[{"text":"a","operand":"a","count":1}],"distinct":1})"));
+    h.reply(lastDistinct(h),
+            distinctReply(h.described.revision, R"({"values":[{"text":"a","operand":"a","count":1}],"distinct":1})"));
     typeInto(h, "table_filter_search", "a");
     h.advance(50ms);
     typeInto(h, "table_filter_search", "ab");
@@ -3788,22 +4165,21 @@ TEST_CASE("filter menu: a condition applies once after typing pauses, and an inc
     typeInto(h, "table_filter_operand_1", "2");
     std::size_t const waiting = pageCalls(h);
     h.advance(1s);
-    CHECK(pageCalls(h) == waiting);                                                    // no second end
+    CHECK(pageCalls(h) == waiting);  // no second end
     typeInto(h, "table_filter_second_1", "5");
     h.advance(250ms);
     REQUIRE(pageCalls(h) == waiting + 1);
     REQUIRE(lastQuery(h).filters.columns.contains("c3"));
-    CHECK(lastQuery(h).filters.columns.at("c3").include.front().between ==
-          std::array<std::string, 2>{"2", "5"});
+    CHECK(lastQuery(h).filters.columns.at("c3").include.front().between == std::array<std::string, 2>{"2", "5"});
     typeInto(h, "table_filter_operand_1", "3");
     pressButton(h, "table_filter_apply");
-    REQUIRE(pageCalls(h) == waiting + 2);                                              // at once
-    CHECK(lastQuery(h).filters.columns.at("c3").include.front().between ==
-          std::array<std::string, 2>{"3", "5"});
+    REQUIRE(pageCalls(h) == waiting + 2);  // at once
+    CHECK(lastQuery(h).filters.columns.at("c3").include.front().between == std::array<std::string, 2>{"3", "5"});
 }
 
 // Mutation: the note line ignoring `partial`.
-TEST_CASE("filter menu: a partial list says it may grow and invalid cells are counted under it", "[ui][table][config]") {
+TEST_CASE("filter menu: a partial list says it may grow and invalid cells are counted under it",
+          "[ui][table][config]") {
     TableHarness h;
     auto screen = mountDescribed(h, samplesDescription(5));
     int const table = h.backend.all("Table").front();
@@ -3879,13 +4255,13 @@ TEST_CASE("filter menu: Select all under a search covers every match, and both s
 }
 
 // Mutation: conditions offered by Text for every kind; an operand sent as typed.
-TEST_CASE("filter menu: conditions follow the column's kind, and typed operands are canonical", "[ui][table][config]") {
+TEST_CASE("filter menu: conditions follow the column's kind, and typed operands are canonical",
+          "[ui][table][config]") {
     TableHarness h;
-    auto screen = mountDescribed(
-        h, kindsDescription(),
-        R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
-        R"("view":{"kind":"localeScope","locale":"de","children":[)"
-        R"({"kind":"table","id":"t","model":"sample","table":"samples"}]}})");
+    auto screen = mountDescribed(h, kindsDescription(),
+                                 R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
+                                 R"("view":{"kind":"localeScope","locale":"de","children":[)"
+                                 R"({"kind":"table","id":"t","model":"sample","table":"samples"}]}})");
     int const table = h.backend.all("Table").front();
     clickFilter(h, table, 1);
     CHECK(propOf(h, "Select", "table_filter_op_1", "options") == optionsOf({"=", "≠", "<", "≤", ">", "≥", "between"}));
@@ -3930,10 +4306,11 @@ TEST_CASE("filter menu: a Measure column's values are grouped under a heading pe
     int const table = h.backend.all("Table").front();
     clickFilter(h, table, 6);
     h.reply(lastDistinct(h),
-            distinctReply(h.described.revision,
-                          R"({"values":[{"text":"0.3 kg","operand":"0.3 kg","count":2,"dimension":"mass","unit":"kg"},)"
-                          R"({"text":"0.5 %","operand":"0.5 %","count":1,"dimension":"ratio","unit":"%"}],"distinct":2})"));
-    CHECK(propOf(h, "Checkbox", "table_filter_value_0", "label").ends_with("(2)"));   // 300 g counted with 0.3 kg
+            distinctReply(
+                h.described.revision,
+                R"({"values":[{"text":"0.3 kg","operand":"0.3 kg","count":2,"dimension":"mass","unit":"kg"},)"
+                R"({"text":"0.5 %","operand":"0.5 %","count":1,"dimension":"ratio","unit":"%"}],"distinct":2})"));
+    CHECK(propOf(h, "Checkbox", "table_filter_value_0", "label").ends_with("(2)"));  // 300 g counted with 0.3 kg
     std::string const dump = h.backend.dump();
     std::size_t const mass = dump.find("testId=table_filter_heading_mass");
     std::size_t const first = dump.find("testId=table_filter_value_0");
@@ -3997,7 +4374,8 @@ TEST_CASE("filter menu: a group's values are pooled and the match line builds th
 
 // A user-formed group has no values list, and its filter names its columns. Mutation: removing the group leaving its
 // filter held (the last CHECK: the groups still hold it).
-TEST_CASE("filter menu: a user-formed group offers conditions and the match line, no values list", "[ui][table][config]") {
+TEST_CASE("filter menu: a user-formed group offers conditions and the match line, no values list",
+          "[ui][table][config]") {
     TableHarness h;
     auto screen = h.mount(kKinds);
     int const table = h.backend.all("Table").front();
@@ -4021,8 +4399,9 @@ TEST_CASE("filter menu: a user-formed group offers conditions and the match line
     typeInto(h, "table_filter_operand_1", "F");
     chooseOption(h, "table_filter_match", "in every column");
     h.advance(250ms);
-    CHECK(readJson(*screen, R"({"ref":"t.filters.groups"})") ==
-          R"([{"columns":["a","b"],"combine":"any","exclude":[],"include":[{"eq":"F"}],"match":"all","mode":"columns"}])");
+    CHECK(
+        readJson(*screen, R"({"ref":"t.filters.groups"})") ==
+        R"([{"columns":["a","b"],"combine":"any","exclude":[],"include":[{"eq":"F"}],"match":"all","mode":"columns"}])");
     dismissMenu(h);
     chooseMenu(h, table, 0, {"Filter Pair, 2 columns…"});
     CHECK(propOf(h, "Select", "table_filter_op_1", "selected") == R"("equals")");
@@ -4070,10 +4449,10 @@ TEST_CASE("filter menu: a date column lists years, then a year's months, then a 
         CHECK_FALSE(mounted(h, "Checkbox", "table_filter_all"));
         CHECK(propOf(h, "Checkbox", "table_filter_value_0", "checked") == "false");
         CHECK(propOf(h, "Checkbox", "table_filter_value_1", "checked") == "false");
-        toggleBox(h, "table_filter_value_3");                                          // March
-        CHECK(propOf(h, "Checkbox", "table_filter_value_4", "checked") == "true");     // its first day, covered
+        toggleBox(h, "table_filter_value_3");                                       // March
+        CHECK(propOf(h, "Checkbox", "table_filter_value_4", "checked") == "true");  // its first day, covered
         CHECK(propOf(h, "Checkbox", "table_filter_value_4", "enabled") == "false");
-        toggleBox(h, "table_filter_value_0");                                          // 2025
+        toggleBox(h, "table_filter_value_0");  // 2025
         pressButton(h, "table_filter_apply");
         CHECK(readJson(*screen, R"({"ref":"t.filters.columns.c3"})") ==
               R"({"combine":"any","exclude":[],"include":[{"between":["2025-01-01","2025-12-31"]},)"
@@ -4082,15 +4461,15 @@ TEST_CASE("filter menu: a date column lists years, then a year's months, then a 
         answer(years);
         pressButton(h, "table_filter_open_1");
         answer(months);
-        CHECK(propOf(h, "Checkbox", "table_filter_value_0", "checked") == "true");     // 2025
-        CHECK(propOf(h, "Checkbox", "table_filter_value_1", "checked") == "false");    // 2026
-        CHECK(propOf(h, "Checkbox", "table_filter_value_3", "checked") == "true");     // March
+        CHECK(propOf(h, "Checkbox", "table_filter_value_0", "checked") == "true");   // 2025
+        CHECK(propOf(h, "Checkbox", "table_filter_value_1", "checked") == "false");  // 2026
+        CHECK(propOf(h, "Checkbox", "table_filter_value_3", "checked") == "true");   // March
     }
     // Mutation: a bucket a merged range covers shown disabled (the range is no listed bucket's own tick).
     SECTION("buckets Apply merged come back ticked and can be unticked") {
         openTree();
-        toggleBox(h, "table_filter_value_3");                                          // March
-        toggleBox(h, "table_filter_value_35");                                         // April, after March's days
+        toggleBox(h, "table_filter_value_3");   // March
+        toggleBox(h, "table_filter_value_35");  // April, after March's days
         pressButton(h, "table_filter_apply");
         REQUIRE(readJson(*screen, R"({"ref":"t.filters.columns.c3.include"})") ==
                 R"([{"between":["2026-03-01","2026-04-30"]}])");
@@ -4101,14 +4480,14 @@ TEST_CASE("filter menu: a date column lists years, then a year's months, then a 
         CHECK(propOf(h, "Checkbox", "table_filter_value_3", "checked") == "true");
         CHECK(propOf(h, "Checkbox", "table_filter_value_4", "checked") == "true");
         CHECK(propOf(h, "Checkbox", "table_filter_value_4", "enabled") != "false");
-        toggleBox(h, "table_filter_value_4");                                          // untick April
+        toggleBox(h, "table_filter_value_4");  // untick April
         pressButton(h, "table_filter_apply");
         CHECK(readJson(*screen, R"({"ref":"t.filters.columns.c3.include"})") ==
               R"([{"between":["2026-03-01","2026-03-31"]}])");
     }
     SECTION("touching days are one entry") {
         openTree();
-        pressButton(h, "table_filter_open_35");                                        // April, after March's days
+        pressButton(h, "table_filter_open_35");  // April, after March's days
         answer(dayValues("2026-04", 30));
         for (int at = 4; at <= 34; ++at) {
             toggleBox(h, "table_filter_value_" + std::to_string(at));
@@ -4124,7 +4503,7 @@ TEST_CASE("filter menu: a date column lists years, then a year's months, then a 
         openTree();
         pressButton(h, "table_filter_open_35");
         answer(dayValues("2026-04", 30));
-        pressButton(h, "table_filter_open_66");                                        // May, after April's days
+        pressButton(h, "table_filter_open_66");  // May, after April's days
         answer(dayValues("2026-05", 31));
         std::string const before = elementValue(*screen, "t", "filters");
         // Every second day from 2026-03-01: March's odd days, April's even days, then 2 and 4 May.
@@ -4151,7 +4530,7 @@ TEST_CASE("display unit: the header menu writes the layout's units", "[ui][table
     chooseMenu(h, table, 6, {"Display unit", "mass: g"});
     CHECK(readJson(*screen, R"({"ref":"t.layout.units"})") == R"({"weight":{"mass":"g"}})");
     CHECK(pageCalls(h) == pages);
-    chooseMenu(h, table, 6, {"Display unit", "mass: g"});                              // the checked one clears it
+    chooseMenu(h, table, 6, {"Display unit", "mass: g"});  // the checked one clears it
     CHECK(readJson(*screen, R"({"ref":"t.layout.units"})") == "null");
 }
 
@@ -4187,16 +4566,15 @@ TEST_CASE("filter menu: a table with configurable false keeps its filter buttons
 // Mutation: the counts grouped with "," whatever the session's locale.
 TEST_CASE("filter menu: counts are grouped with the session's separator", "[ui][table][config]") {
     TableHarness h;
-    auto screen = mountDescribed(
-        h, samplesDescription(5),
-        R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
-        R"("view":{"kind":"localeScope","locale":"de","children":[)"
-        R"({"kind":"table","id":"t","model":"sample","table":"samples"}]}})");
+    auto screen = mountDescribed(h, samplesDescription(5),
+                                 R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
+                                 R"("view":{"kind":"localeScope","locale":"de","children":[)"
+                                 R"({"kind":"table","id":"t","model":"sample","table":"samples"}]}})");
     int const table = h.backend.all("Table").front();
     clickFilter(h, table, 1);
-    h.reply(lastDistinct(h), distinctReply(h.described.revision,
-                                           R"({"values":[{"text":"x","operand":"x","count":1234}],"distinct":1,)"
-                                           R"("invalid":1234})"));
+    h.reply(lastDistinct(h),
+            distinctReply(h.described.revision, R"({"values":[{"text":"x","operand":"x","count":1234}],"distinct":1,)"
+                                                R"("invalid":1234})"));
     CHECK(propOf(h, "Checkbox", "table_filter_value_0", "label") == "x (1.234)");
     CHECK(h.text("table_filter_note") == "1.234 cells could not be read");
 }
@@ -4221,12 +4599,13 @@ TEST_CASE("filter menu: a values list asked for before a change is not kept", "[
     dismissMenu(h);
     std::size_t const kept = h.dispatcher.count("Table.samples");
     clickFilter(h, table, 1);
-    CHECK(h.dispatcher.count("Table.samples") == kept);                              // a reply after the change is kept
+    CHECK(h.dispatcher.count("Table.samples") == kept);  // a reply after the change is kept
 }
 
 // Mutation: a user-formed group's menu asking for its values (a distinct request with the group's layout id).
-TEST_CASE("filter menu: a user-formed group of a model's table sends no values request and its filter names its columns",
-          "[ui][table][config]") {
+TEST_CASE(
+    "filter menu: a user-formed group of a model's table sends no values request and its filter names its columns",
+    "[ui][table][config]") {
     table::TableDescription pair;
     pair.id = "samples";
     pair.label = "Samples";
@@ -4248,7 +4627,7 @@ TEST_CASE("filter menu: a user-formed group of a model's table sends no values r
     press(h, "table_columns_done");
     std::size_t const calls = h.dispatcher.count("Table.samples");
     chooseMenu(h, table, 1, {"Filter Pair, 2 columns…"});
-    CHECK(h.dispatcher.count("Table.samples") == calls);                             // no values request
+    CHECK(h.dispatcher.count("Table.samples") == calls);  // no values request
     chooseOption(h, "table_filter_op_1", "equals");
     typeInto(h, "table_filter_operand_1", "F");
     chooseOption(h, "table_filter_match", "in every column");
@@ -4265,11 +4644,13 @@ TEST_CASE("filter menu: a user-formed group of a model's table sends no values r
     dismissMenu(h);
     // A column's "(Select all)" under a search names its values by pages of `maxLimit`.
     clickFilter(h, table, 1);
-    h.reply(lastDistinct(h), distinctReply(pair.revision, R"({"values":[{"text":"x","operand":"x","count":1}],"distinct":1})"));
+    h.reply(lastDistinct(h),
+            distinctReply(pair.revision, R"({"values":[{"text":"x","operand":"x","count":1}],"distinct":1})"));
     selectAll(h, false);
     typeInto(h, "table_filter_search", "x");
     h.advance(250ms);
-    h.reply(lastDistinct(h), distinctReply(pair.revision, R"({"values":[{"text":"x","operand":"x","count":1}],"distinct":1})"));
+    h.reply(lastDistinct(h),
+            distinctReply(pair.revision, R"({"values":[{"text":"x","operand":"x","count":1}],"distinct":1})"));
     selectAll(h, true);
     pressButton(h, "table_filter_apply");
     REQUIRE(lastQuery(h).distinct.has_value());
@@ -4280,7 +4661,9 @@ TEST_CASE("filter menu: a user-formed group of a model's table sends no values r
 // Mutation: the one-kind refusal dropped (a group of a text and an integer column loads).
 TEST_CASE("ui document: a rows table's groups are 2 to 16 of its column parts, of one kind, each in one group",
           "[ui][document]") {
-    auto const with = [](std::string_view groups) { return withTableKey(kKinds, R"("groups":)" + std::string{groups}); };
+    auto const with = [](std::string_view groups) {
+        return withTableKey(kKinds, R"("groups":)" + std::string{groups});
+    };
     CHECK(loads(with(R"([{"id":"g","label":"G","columns":{"lit":["a","b"]}}])"), morph::ui::testing::tableCatalog()));
     CHECK(refusalOf(withTableKey(morph::ui::testing::kConfigModelTable,
                                  R"("groups":[{"id":"g","columns":{"lit":["a","b"]}}])")) ==
@@ -4294,7 +4677,8 @@ TEST_CASE("ui document: a rows table's groups are 2 to 16 of its column parts, o
           "a group's columns are the ids of the table's column parts");
     CHECK(refusalOf(with(R"([{"id":"g","columns":{"lit":["a","b"]}},{"id":"h","columns":{"lit":["b","c"]}}])")) ==
           "the column `b` is in another group");
-    CHECK(refusalOf(with(R"([{"id":"g","columns":{"lit":["a","n"]}}])")) == "a group's columns hold one kind of value");
+    CHECK(refusalOf(with(R"([{"id":"g","columns":{"lit":["a","n"]}}])")) ==
+          "a group's columns hold one kind of value");
 }
 
 // Mutation: WindowRows compiling a filter without the description's units (the measure operand is refused).
@@ -4302,18 +4686,17 @@ TEST_CASE("window rows: a filter on a measure reads its operand with the descrip
     RowsFixture h;
     table::TableDescription d = samplesDescription(2);
     d.columns[1].info = table::ColumnInfo{.id = "weight", .kind = table::ColumnKind::Measure};
-    d.units = {table::UnitInfo{
-                   .id = "kg", .symbol = "kg", .dimension = "mass", .toBase = *table::parseDecimal("1"), .decimals = 3},
-               table::UnitInfo{.id = "g",
-                               .symbol = "g",
-                               .dimension = "mass",
-                               .toBase = *table::parseDecimal("0.001"),
-                               .decimals = 0}};
+    d.units = {
+        table::UnitInfo{
+            .id = "kg", .symbol = "kg", .dimension = "mass", .toBase = *table::parseDecimal("1"), .decimals = 3},
+        table::UnitInfo{
+            .id = "g", .symbol = "g", .dimension = "mass", .toBase = *table::parseDecimal("0.001"), .decimals = 0}};
     auto const rows = h.windowRows("samples", table::describe(d));
     table::FilterEntry above;
     above.gt = "0.3 kg";
     table::FilterSpec filter;
-    filter.columns.insert_or_assign("weight", table::ColumnFilter{.combine = table::Combine::Any, .include = {above}, .exclude = {}});
+    filter.columns.insert_or_assign(
+        "weight", table::ColumnFilter{.combine = table::Combine::Any, .include = {above}, .exclude = {}});
     auto const set = rows->setFilter(filter);
     INFO((set ? std::string{} : set.error().message));
     CHECK(set.has_value());
@@ -4349,10 +4732,10 @@ TEST_CASE("filter menu: a table keeps at most 64 values lists, the oldest going 
         h.reply(lastDistinct(h), distinctReply(h.described.revision, values));
     }
     std::size_t const calls = h.dispatcher.count("Table.samples");
-    typeInto(h, "table_filter_search", "s0");                                          // the oldest but one: kept
+    typeInto(h, "table_filter_search", "s0");  // the oldest but one: kept
     h.advance(250ms);
     CHECK(h.dispatcher.count("Table.samples") == calls);
-    typeInto(h, "table_filter_search", "");                                            // the oldest: gone
+    typeInto(h, "table_filter_search", "");  // the oldest: gone
     h.advance(250ms);
     CHECK(h.dispatcher.count("Table.samples") == calls + 1);
 }
@@ -4361,7 +4744,8 @@ TEST_CASE("filter menu: a table keeps at most 64 values lists, the oldest going 
 
 // Mutation: `fetchRows` giving a row its place among the keys asked for instead of its view row.
 TEST_CASE("engine rows: fetchRows reads the rows of keys at once, a key the view lacks left out", "[ui][table]") {
-    RowsFixture h;  auto const source = std::make_shared<TestRowsSource>(10);
+    RowsFixture h;
+    auto const source = std::make_shared<TestRowsSource>(10);
     EngineRows rows{source, source->recordOf(), table::EngineOptions{.owner = &h.owner}};
     REQUIRE(rows.setSort({{.column = "id", .dir = table::SortDirection::Descending}}).has_value());
     h.settle();
@@ -4448,7 +4832,7 @@ TEST_CASE("copy: selected rows as tab-separated display text in layout order, ro
         TableHarness h;
         auto screen = h.mount(text);
         replyDescribe(h, samplesDescription(5));
-        replyConfigPages(h, 1000);                                             // rows 0 to 399 held
+        replyConfigPages(h, 1000);  // rows 0 to 399 held
         int const table = h.backend.all("Table").front();
         REQUIRE(elementValue(*screen, "t", "visibleColumns") == R"(["name","id","c4","c5"])");
         h.backend.selectTableRange(table, 700, 700);
@@ -4462,7 +4846,7 @@ TEST_CASE("copy: selected rows as tab-separated display text in layout order, ro
         REQUIRE(elementValue(*screen, "t", "selection") == "[700,500,3]");
         std::size_t const sent = h.dispatcher.calls.size();
         pressCopy(h, table);
-        REQUIRE(h.dispatcher.calls.size() == sent + 1);                        // one keyed request; row 3 is held
+        REQUIRE(h.dispatcher.calls.size() == sent + 1);  // one keyed request; row 3 is held
         table::TableQuery const fetched = queryOf(h, sent);
         CHECK(fetched.keys == std::optional{std::vector<table::RowId>{std::int64_t{700}, std::int64_t{500}}});
         CHECK(fetched.columns == std::optional{std::vector<std::string>{"name", "id", "c4", "c5"}});
@@ -4526,7 +4910,7 @@ TEST_CASE("copy: unloaded cells copy as empty and are counted", "[ui][table][con
     REQUIRE(elementValue(*screen, "t", "selectedCount") == "2");
     std::size_t const sent = h.dispatcher.calls.size();
     pressCopy(h, table);
-    CHECK(h.dispatcher.calls.size() == sent);                                  // no request waits for the level
+    CHECK(h.dispatcher.calls.size() == sent);  // no request waits for the level
     CHECK(clipboardText(h) == "0\trow-0\t0\t\t0\n1\trow-1\t1\t\t1");
     CHECK(statusOf(h, table).message == "Copied 2 rows, 2 cells were not loaded");
 }
@@ -4536,14 +4920,14 @@ TEST_CASE("range and copy at their bounds: 10,000 pass, 10,001 are refused", "[u
     TableHarness h;
     auto screen = h.mount(withTableKey(kConfigModelTable, R"("selectionMode":"multiple")"));
     replyDescribe(h, samplesDescription(5));
-    replyConfigPages(h, 100'000);                                              // rows 0 to 399 held
+    replyConfigPages(h, 100'000);  // rows 0 to 399 held
     int const table = h.backend.all("Table").front();
     std::size_t const sent = h.dispatcher.calls.size();
     h.backend.selectTableRange(table, 0, 9'999);
     h.settle();
     REQUIRE(h.dispatcher.calls.size() > sent);
     for (std::size_t call = sent; call < h.dispatcher.calls.size(); ++call) {
-        CHECK(h.dispatcher.calls.at(call).body.contains(R"("columns":[])"));   // the key pages name no columns
+        CHECK(h.dispatcher.calls.at(call).body.contains(R"("columns":[])"));  // the key pages name no columns
     }
     replyConfigPages(h, 100'000);
     REQUIRE(elementValue(*screen, "t", "selectedCount") == "10000");
@@ -4573,7 +4957,7 @@ TEST_CASE("range and copy at their bounds: 10,000 pass, 10,001 are refused", "[u
     CHECK(copied.ends_with("\n9999\trenamed-9999\t9999\t9999\t9999"));
     CHECK(statusOf(h, table).message == "Copied 10,000 rows");
     std::size_t const before = h.dispatcher.calls.size();
-    h.backend.selectTableRange(table, 0, 10'000);                              // 10,001 rows
+    h.backend.selectTableRange(table, 0, 10'000);  // 10,001 rows
     h.settle();
     CHECK(h.dispatcher.calls.size() == before);
     CHECK(statusOf(h, table).message == "A range selects at most 10,000 rows");
@@ -4688,8 +5072,9 @@ TEST_CASE("copy: fetched rows in view order, an unloaded level, a failed fetch, 
     REQUIRE(keyed.size() == 1);
     SECTION("the view rows order them, and an unloaded cell is copied empty and counted") {
         // The view moved under the selection: key 700 is now above key 500, and lacks `recipe`.
-        h.reply(keyed.front(), keyedReply(h, keyed.front(), {{.key = 500, .viewRow = 900, .unloaded = false},
-                                                             {.key = 700, .viewRow = 800, .unloaded = true}},
+        h.reply(keyed.front(), keyedReply(h, keyed.front(),
+                                          {{.key = 500, .viewRow = 900, .unloaded = false},
+                                           {.key = 700, .viewRow = 800, .unloaded = true}},
                                           1000));
         CHECK(clipboardText(h) == "700\trenamed-700\t700\t\t700\n500\trenamed-500\t500\t500\t500");
         CHECK(statusOf(h, table).message == "Copied 2 rows, 1 cell was not loaded");
@@ -4713,8 +5098,9 @@ TEST_CASE("copy: fetched rows in view order, an unloaded level, a failed fetch, 
         REQUIRE(keyed.size() == 2);
         h.reply(keyed.back(), keyedReply(h, keyed.back(), {{.key = 700, .viewRow = 700, .unloaded = false}}, 1000));
         CHECK(clipboardText(h) == "700\trenamed-700\t700\t700\t700");
-        h.reply(keyed.front(), keyedReply(h, keyed.front(), {{.key = 500, .viewRow = 500, .unloaded = false},
-                                                             {.key = 700, .viewRow = 700, .unloaded = false}},
+        h.reply(keyed.front(), keyedReply(h, keyed.front(),
+                                          {{.key = 500, .viewRow = 500, .unloaded = false},
+                                           {.key = 700, .viewRow = 700, .unloaded = false}},
                                           1000));
         CHECK(clipboardText(h) == "700\trenamed-700\t700\t700\t700");
         CHECK(statusOf(h, table).message == "Copied 1 row");
@@ -4784,8 +5170,8 @@ TEST_CASE("collection: a collection and a rows table over the same rows show the
     // A header index counts every column of `Table::columns`, hidden ones included (the surface lays out every
     // column and hides through `Table::arrangement`): ID is index 0 and hidden, Name is index 1 on both tables.
     REQUIRE(h.backend.prop(collection, "columns").starts_with("[ID"));
-    h.backend.clickHeader(collection, 1, HeaderClick::Plain);   // Name
-    h.backend.clickHeader(table, 1, HeaderClick::Plain);        // Name
+    h.backend.clickHeader(collection, 1, HeaderClick::Plain);  // Name
+    h.backend.clickHeader(table, 1, HeaderClick::Plain);       // Name
     h.settle();
     CHECK(rowKeys(h, collection) == rowKeys(h, table));
     CHECK(rowKeys(h, collection) != std::vector<std::string>{"1", "2", "3", "4"});
@@ -4804,7 +5190,7 @@ TEST_CASE("collection: a master-detail selection and its open row hold through a
     REQUIRE(h.backend.prop(h.byTestId("Column", "detailForm"), "visible") == "true");
     std::string const selected = h.backend.prop(collection, "selection");
     REQUIRE(selected == "[3]");
-    h.backend.clickHeader(collection, 1, HeaderClick::Plain);    // Name
+    h.backend.clickHeader(collection, 1, HeaderClick::Plain);  // Name
     h.settle();
     REQUIRE(rowKeys(h, collection) != std::vector<std::string>{"1", "2", "3", "4"});
     CHECK(h.backend.prop(collection, "selection") == selected);
@@ -4823,18 +5209,22 @@ TEST_CASE("collection: header and table menus are present and its arrangement pe
     h.reply(h.dispatcher.last("Lims_ListSamples"), std::string{kFourSamples});
     int const collection = h.byTestId("Table", "collection_rows");
     CHECK_FALSE(menuOf(h, collection, std::nullopt).empty());
-    std::vector<std::string> const labels = labelsOf(menuOf(h, collection, 1));   // Name
+    std::vector<std::string> const labels = labelsOf(menuOf(h, collection, 1));  // Name
     REQUIRE(std::ranges::find(labels, "Hide column") != labels.end());
     chooseMenu(h, collection, 1, {"Hide column"});
     h.advance(500ms);
     std::optional<std::optional<table::StoredTableState>> stored;
-    store->load(table::TableStateKey{.application = "lims", .model = "Lims_SampleModel", .table = "Lims_ListSamples",
-                                     .qualifier = "samples", .part = "state"})
+    store
+        ->load(table::TableStateKey{.application = "lims",
+                                    .model = "Lims_SampleModel",
+                                    .table = "Lims_ListSamples",
+                                    .qualifier = "samples",
+                                    .part = "state"})
         .thenDetached([&stored](std::optional<table::StoredTableState> const& state) { stored = state; });
     h.settle();
     REQUIRE(stored.has_value());
     REQUIRE(stored->has_value());
-    CHECK((*stored)->revision == "1");                                      // one save
+    CHECK((*stored)->revision == "1");  // one save
     CHECK((*stored)->json.find(R"("hidden":["name"])") != std::string::npos);
 }
 
@@ -4860,7 +5250,7 @@ TEST_CASE("rows table: a columns point naming it reads and arranges its layout",
     auto const layout = morph::ui::parseJson(R"({"order":["name","id","weight"],"hidden":["weight"],"pinned":0})");
     REQUIRE(layout.has_value());
     CHECK(screen->setPreference("cols", *morph::ui::valueFromJson(*layout)));
-    CHECK_FALSE(screen->setPreference("cols", morph::ui::Value{std::int64_t{7}}));   // not a layout
+    CHECK_FALSE(screen->setPreference("cols", morph::ui::Value{std::int64_t{7}}));  // not a layout
     h.advance(500ms);
     REQUIRE(store->saves() == 1);
     auto const saved = table::readState(store->lastSaved());
@@ -4961,7 +5351,9 @@ std::vector<MenuRow> menuRows() {
     auto const mass = [](std::string_view text) { return table::Cell{table::parseDecimal(text).value()}; };
     auto const text = [](std::string value) { return table::Cell{std::move(value)}; };
     return {
-        MenuRow{{"id", table::Cell{std::int64_t{1}}}, {"mass", mass("0.1")}, {"companyA", text("E")},
+        MenuRow{{"id", table::Cell{std::int64_t{1}}},
+                {"mass", mass("0.1")},
+                {"companyA", text("E")},
                 {"companyB", text("G")}},
         MenuRow{{"id", table::Cell{std::int64_t{2}}}, {"mass", mass("0.2")}, {"companyA", text("F")}},
         MenuRow{{"id", table::Cell{std::int64_t{3}}}, {"mass", mass("0.3")}},
@@ -5003,13 +5395,13 @@ std::string menuPage(TableHarness const& h, table::TableDescription const& descr
 // Answers every open `Table.samples` call with `menuRows()`, each by the columns its own query names: the server
 // answers a filtered query with every row, so each cell stays to be chosen.
 void answerMenu(TableHarness& h) {
-    using morph::ui::testing::openCalls;
     using morph::ui::testing::oldestOpen;
+    using morph::ui::testing::openCalls;
     using morph::ui::testing::queryOf;
     for (int round = 0; round < 16 && openCalls(h, "Table.samples") > 0; ++round) {
         std::size_t const index = oldestOpen(h, "Table.samples");
-        h.reply(index, menuPageOf(queryOf(h, index).columns.value_or(std::vector<std::string>{}), menuDescription(),
-                                  {}));
+        h.reply(index,
+                menuPageOf(queryOf(h, index).columns.value_or(std::vector<std::string>{}), menuDescription(), {}));
     }
     REQUIRE(openCalls(h, "Table.samples") == 0);
 }
@@ -5026,8 +5418,7 @@ std::string menuDoc(std::string_view tableKeys) {
     return R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
            R"("state":{"picked":{"init":{"lit":null}},"opened":{"init":{"lit":null}},"idle":{"init":{"lit":false}}},)"
            R"("view":{"kind":"column","children":[)" +
-           table +
-           R"(,{"kind":"button","testId":"other","label":"Other","onClick":[{"set":"idle","value":true}]}]}})";
+           table + R"(,{"kind":"button","testId":"other","label":"Other","onClick":[{"set":"idle","value":true}]}]}})";
 }
 
 // A menu's labels, a separator written `-`.
@@ -5047,7 +5438,9 @@ table::FilterSpec filterSpec(std::string_view json) {
 }
 
 // The table `t`'s filters, its element value read back.
-table::FilterSpec filtersOf(morph::ui::Screen const& screen) { return filterSpec(elementValue(screen, "t", "filters")); }
+table::FilterSpec filtersOf(morph::ui::Screen const& screen) {
+    return filterSpec(elementValue(screen, "t", "filters"));
+}
 
 morph::ui::Key menuKey(std::int64_t key) { return morph::ui::Key{key}; }
 
@@ -5123,8 +5516,9 @@ TEST_CASE("table menus: filter by this value", "[ui][table][menu]") {
         answerMenu(h);
         CHECK(filtersOf(*screen).groups ==
               filterSpec(R"({"groups":[{"group":"company","include":[{"oneOf":["F"]}]}]})").groups);
-        CHECK(std::ranges::none_of(menuLabels(h.backend.rightClickCell(table, menuKey(2), mass)),
-                                   [](std::string const& label) { return label.starts_with("Filter by this value in"); }));
+        CHECK(std::ranges::none_of(
+            menuLabels(h.backend.rightClickCell(table, menuKey(2), mass)),
+            [](std::string const& label) { return label.starts_with("Filter by this value in"); }));
     }
     {
         // On a cell whose level has not loaded, both entries are disabled.
@@ -5147,10 +5541,10 @@ TEST_CASE("table menus: filter by this value", "[ui][table][menu]") {
 TEST_CASE("table menus: an entry's keys work while the table has focus", "[ui][table][menu]") {
     using namespace morph::ui::testing;
     TableHarness h;
-    auto screen = h.mount(menuDoc(
-        R"("columns":[{"id":"id"},{"id":"mass"}],)"
-        R"("cellMenu":[{"label":"Open","keys":"Ctrl+O","description":{"ref":"row.companyB"},)"
-        R"("onClick":[{"set":"opened","value":{"ref":"row.id"}}]}])"));
+    auto screen =
+        h.mount(menuDoc(R"("columns":[{"id":"id"},{"id":"mass"}],)"
+                        R"("cellMenu":[{"label":"Open","keys":"Ctrl+O","description":{"ref":"row.companyB"},)"
+                        R"("onClick":[{"set":"opened","value":{"ref":"row.id"}}]}])"));
     replyDescribe(h, describeJson(menuDescription()));
     // What the entries read is fetched for every row, though no column shows it.
     std::vector<std::string> const named = lastQuery(h).columns.value_or(std::vector<std::string>{});
@@ -5178,8 +5572,9 @@ TEST_CASE("table menus: an entry's keys work while the table has focus", "[ui][t
 TEST_CASE("table menus: a disabled header", "[ui][table][header]") {
     using namespace morph::ui::testing;
     TableHarness h;
-    auto screen = h.mount(menuDoc(R"("headerEnabled":{"ref":"idle"},)"
-                                  R"("cellMenu":[{"label":"Pick","onClick":[{"set":"picked","value":{"ref":"row.id"}}]}])"));
+    auto screen =
+        h.mount(menuDoc(R"("headerEnabled":{"ref":"idle"},)"
+                        R"("cellMenu":[{"label":"Pick","onClick":[{"set":"picked","value":{"ref":"row.id"}}]}])"));
     replyDescribe(h, describeJson(menuDescription()));
     replyPage(h, menuPage(h));
     int const table = h.byTestId("Table", "t");
@@ -5234,16 +5629,18 @@ TEST_CASE("table menus: a disabled header", "[ui][table][header]") {
 }
 
 // Mutation: a table over `rows` setting no `heldCell`, which leaves its cells without a menu.
-TEST_CASE("table menus: a table over rows takes the cell and header menus and a disabled header", "[ui][table][menu]") {
+TEST_CASE("table menus: a table over rows takes the cell and header menus and a disabled header",
+          "[ui][table][menu]") {
     using namespace morph::ui::testing;
     std::size_t const name = 1;  // the columns are `id`, `name` and `weight`
     morph::ui::Key const b{std::string{"b"}};
     {
         TableHarness h;
         auto screen = h.mount(rowsDoc(
-            kThree, R"(,"selectionMode":"multiple",)"
-                    R"("cellMenu":[{"label":{"fn":"format","args":["{0} of {1}",{"ref":"column"},{"ref":"row.id"}]}}],)"
-                    R"("headerMenu":[{"label":"About"}])"));
+            kThree,
+            R"(,"selectionMode":"multiple",)"
+            R"("cellMenu":[{"label":{"fn":"format","args":["{0} of {1}",{"ref":"column"},{"ref":"row.id"}]}}],)"
+            R"("headerMenu":[{"label":"About"}])"));
         REQUIRE(reportsOf(h).empty());
         int const table = tableOf(h);
         CHECK(menuLabels(h.backend.rightClickCell(table, b, name)) ==
@@ -5309,13 +5706,14 @@ std::string selectionReply(std::vector<SelRow> const& rows, std::int64_t total, 
     for (std::size_t at = 0; at < rows.size(); ++at) {
         std::string const comma = at == 0 ? "" : ",";
         keys += comma + std::to_string(rows[at].key);
-        cells += comma + "[" + std::to_string(rows[at].key) + ",\"" + rows[at].status + "\",\"" + rows[at].lockedBy +
-                 "\"]";
+        cells +=
+            comma + "[" + std::to_string(rows[at].key) + ",\"" + rows[at].status + "\",\"" + rows[at].lockedBy + "\"]";
         indices += comma + std::to_string(at);
     }
-    std::string out = R"({"revision":")" + description.revision + R"(","columns":["id","status","lockedBy"],"keys":[)" +
-                      keys + R"(],"rows":[)" + cells + R"(],"total":)" + std::to_string(total) +
-                      R"(,"offset":0,"viewRevision":")" + std::string{viewRevision} + "\"";
+    std::string out = R"({"revision":")" + description.revision +
+                      R"(","columns":["id","status","lockedBy"],"keys":[)" + keys + R"(],"rows":[)" + cells +
+                      R"(],"total":)" + std::to_string(total) + R"(,"offset":0,"viewRevision":")" +
+                      std::string{viewRevision} + "\"";
     if (keyed) {
         out += R"(,"indices":[)" + indices + "]";
     }
@@ -5352,8 +5750,8 @@ morph::ui::ActionInfo samplesAction() {
     morph::ui::ActionInfo info;
     info.modelType = "Lims_SampleModel";
     info.effects = std::vector<morph::ui::ActionEffect>{{.kind = "updates", .record = "Lims_SampleModel.samples"}};
-    info.records = {morph::ui::ActionRecordInfo{
-        .record = "Lims_SampleModel.samples", .keyField = "key", .paths = {"rows.rows"}}};
+    info.records = {
+        morph::ui::ActionRecordInfo{.record = "Lims_SampleModel.samples", .keyField = "key", .paths = {"rows.rows"}}};
     return info;
 }
 
@@ -5424,7 +5822,8 @@ TEST_CASE("view selection: Ctrl+A selects the view and fetches no row", "[ui][ta
 }
 // Mutation: select-all selecting the held keys, which sends no view and counts the held rows only.
 
-TEST_CASE("view selection: a key of except that leaves the view is dropped from it", "[ui][table][selection][review]") {
+TEST_CASE("view selection: a key of except that leaves the view is dropped from it",
+          "[ui][table][selection][review]") {
     TableHarness h;
     auto screen = mountSelection(h);
     int const table = h.byTestId("Table", "t");
@@ -5645,9 +6044,9 @@ TEST_CASE("view selection: copying it fetches the view's rows in order", "[ui][t
     REQUIRE(query.columns.has_value());
     CHECK(*query.columns == std::vector<std::string>{"id", "status"});  // the visible columns
     // The fetched rows say "copied" where the held rows say "open": the copy writes what the page queries brought.
-    replyPage(h, selectionPage({{0, "copied"}, {1, "copied"}, {2, "copied"}, {3, "copied"}, {4, "copied"},
-                                {5, "copied"}},
-                               6, "v1"));
+    replyPage(
+        h, selectionPage({{0, "copied"}, {1, "copied"}, {2, "copied"}, {3, "copied"}, {4, "copied"}, {5, "copied"}}, 6,
+                         "v1"));
     CHECK(clipboardText(h) == "0\tcopied\n2\tcopied\n3\tcopied\n5\tcopied");
     SECTION("over maxCopyRows it is refused") {
         std::string const kept = clipboardText(h);
@@ -5674,7 +6073,8 @@ TEST_CASE("table rows: a new description revision drops a view selection that na
         addAction(h, "Lims_TagRows", std::string{kSelectionSchema}, samplesAction());
         std::string const tableNode =
             R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples","selectionMode":"multiple",)"
-            R"("filters":)" + std::string{filters} + "}";
+            R"("filters":)" +
+            std::string{filters} + "}";
         auto screen = h.mount(selectionDoc(tableNode, kSelectionMutations, h));
         replyDescribe(h, describeJson(withC));
         replyPage(h, selectionReply(openRows(), 6, "v1", {}, false, {}, withC));
@@ -5977,7 +6377,8 @@ inline constexpr std::string_view kLockText = "Being edited by another user";
 std::vector<SelRow> tenRows() {
     std::vector<SelRow> rows;
     for (std::int64_t key = 0; key < 10; ++key) {
-        rows.push_back(SelRow{.key = key, .status = key < 6 ? "open" : "closed",
+        rows.push_back(SelRow{.key = key,
+                              .status = key < 6 ? "open" : "closed",
                               .lockedBy = key == 6 ? std::string{kLockText} : std::string{}});
     }
     return rows;
@@ -6076,7 +6477,8 @@ void answerView(TableHarness& h, std::vector<SelRow> const& view, std::string_vi
         table::TableQuery const query = morph::ui::testing::queryOf(h, index);
         if (!query.keys) {
             std::vector<std::pair<std::int64_t, SelRow>> page;
-            for (std::int64_t at = query.page.offset; at < std::min(total, query.page.offset + query.page.limit); ++at) {
+            for (std::int64_t at = query.page.offset; at < std::min(total, query.page.offset + query.page.limit);
+                 ++at) {
                 page.emplace_back(at, view.at(static_cast<std::size_t>(at)));
             }
             h.reply(index, keyedAt(page, total, revision, query.page.offset));
@@ -6157,7 +6559,7 @@ TEST_CASE("key change: the session that ran the action moves what it holds", "[u
     REQUIRE(cells.size() > told);
     std::vector<std::optional<morph::table::RowId>> const named = h.backend.focusKeys(table);
     for (std::size_t at = told; at < cells.size(); ++at) {
-        CHECK(cells.at(at).first == 9);  // key 10's view row; no other row was focused meanwhile
+        CHECK(cells.at(at).first == 9);                 // key 10's view row; no other row was focused meanwhile
         CHECK(named.at(at) == std::optional{rid(10)});  // and the row there held key 10 when it was told
     }
     CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[10,5]})"));
@@ -6444,8 +6846,8 @@ TEST_CASE("row states: a move keeps the new key's own state", "[ui][table][keys]
     morph::ui::RowStates states;
     states.busyKeys(1, idsOf({2, 7}));
     states.busyView(2, idsOf({2}), 9);
-    states.fail(std::vector<morph::table::FailedRow>{{.key = rid(2), .message = "two"},
-                                                     {.key = rid(7), .message = "seven"}});
+    states.fail(
+        std::vector<morph::table::FailedRow>{{.key = rid(2), .message = "two"}, {.key = rid(7), .message = "seven"}});
     states.move(rid(2), rid(7));
     CHECK(states.failure(rid(7)) == std::optional<std::string>{"seven"});
     CHECK_FALSE(states.failure(rid(2)).has_value());
@@ -6569,13 +6971,15 @@ TEST_CASE("cell edits: an edit action reads, writes and names its table at the s
 
 // Mutation: onRowsAbsent called with every key the fetch named (row 2, which came back, is reported too).
 TEST_CASE("table rows: a keyed refetch that returns no row reports it absent", "[ui][table][edit]") {
-    RowsFixture h;  auto const rows = h.windowRows("samples");
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
     h.answerFirstPage(*rows, /*total*/ 300);
     std::vector<std::vector<table::RowId>> absent;
-    rows->onRowsAbsent([&absent](std::span<table::RowId const> keys) { absent.emplace_back(keys.begin(), keys.end()); });
+    rows->onRowsAbsent(
+        [&absent](std::span<table::RowId const> keys) { absent.emplace_back(keys.begin(), keys.end()); });
     h.change({2, 3});
     REQUIRE(rows->stats().rowsFetches == 1);
-    h.replyPage(keyedJson({{0, 0}, {2, 2}}, 300, h.columns));            // row 3 is gone
+    h.replyPage(keyedJson({{0, 0}, {2, 2}}, 300, h.columns));  // row 3 is gone
     REQUIRE(absent.size() == 1);
     CHECK(absent.at(0) == std::vector<table::RowId>{table::RowId{std::int64_t{3}}});
 }
@@ -6597,49 +7001,57 @@ table::RowId row(std::int64_t value) { return table::RowId{value}; }
 // Mutation: the busy test left out of ModelGridSource::readOnly (row 3 takes the edit).
 TEST_CASE("model table: read-only is one rule", "[ui][table][edit]") {
     ModelGridFixture f{{1, 2, 3, 4, 5}};
-    f.rows->view.at(1).unloaded = {"counts"};                                   // row 2's count is not loaded
-    f.rows->rowStates.busyKeys(7, {row(3)});                                    // another action's run
+    f.rows->view.at(1).unloaded = {"counts"};  // row 2's count is not loaded
+    f.rows->rowStates.busyKeys(7, {row(3)});   // another action's run
     morph::test::grid::setField(*f.rows, 4, "lockedBy", Value{std::string{"Being edited by another user"}});
     morph::test::grid::setField(*f.rows, 5, "countFrozen", Value{true});
     for (std::int64_t const k : {2, 3, 4, 5}) {
         CHECK(f.source->readOnly(key(k), "count"));
     }
     CHECK_FALSE(f.source->readOnly(key(1), "count"));
-    CHECK(f.source->readOnly(key(1), "note"));                                  // no edit action
-    f.grid->focusCell(at(2, "count"));                                          // arrows and clicks reach read-only cells
+    CHECK(f.source->readOnly(key(1), "note"));  // no edit action
+    f.grid->focusCell(at(2, "count"));          // arrows and clicks reach read-only cells
     CHECK(f.grid->focus() == at(2, "count"));
     f.grid->type("7");
     CHECK(f.grid->message() == "This value is not loaded yet");
-    f.grid->focusCell(at(3, "count"));  f.grid->type("7");
+    f.grid->focusCell(at(3, "count"));
+    f.grid->type("7");
     CHECK(f.grid->message() == "This row is being saved");
-    f.grid->focusCell(at(4, "count"));  f.grid->type("7");
+    f.grid->focusCell(at(4, "count"));
+    f.grid->type("7");
     CHECK(f.grid->message() == "Being edited by another user");
     CHECK(f.commits.sent.empty());
-    f.grid->focusCell(at(1, "count"));  f.grid->type("3");  f.grid->press("Enter");
+    f.grid->focusCell(at(1, "count"));
+    f.grid->type("3");
+    f.grid->press("Enter");
     CHECK(f.commits.sent.size() == 1);
-    CHECK(f.grid->focus() == at(1, "count"));          // Enter down passes rows 2-5, all read-only in count: it stays
-    f.permitted = {"Lims_EditSpecimenRow"};                                     // count's action refused
+    CHECK(f.grid->focus() == at(1, "count"));  // Enter down passes rows 2-5, all read-only in count: it stays
+    f.permitted = {"Lims_EditSpecimenRow"};    // count's action refused
     CHECK(f.source->readOnly(key(1), "count"));
 }
 
 // Mutation: the commit sent as a run of the session (marking row 1 busy in its states: the second cell refuses).
 TEST_CASE("model table: the table's own edits do not make its row busy", "[ui][table][edit]") {
     ModelGridFixture f{{1, 2}};
-    f.grid->focusCell(at(1, "label"));  f.grid->type("a");  f.grid->press("Enter");
+    f.grid->focusCell(at(1, "label"));
+    f.grid->type("a");
+    f.grid->press("Enter");
     REQUIRE(f.commits.sent.size() == 1);
     REQUIRE(f.commits.sent.at(0).cells.size() == 1);
     CHECK(f.commits.sent.at(0).cells.at(0).json == R"("a")");
     CHECK(f.commits.sent.at(0).cells.at(0).member == "label");
     CHECK_FALSE(f.rows->rowStates.isBusy(row(1)));
-    f.grid->focusCell(at(1, "remark"));  f.grid->type("b");
+    f.grid->focusCell(at(1, "remark"));
+    f.grid->type("b");
     CHECK(f.grid->message().empty());
     f.grid->press("Enter");
-    CHECK(f.commits.sent.size() == 1);                                          // queued behind the first
+    CHECK(f.commits.sent.size() == 1);  // queued behind the first
     CHECK(f.source->marks(key(1), "remark").stale);
     f.commits.done.at(0)(committedOk());
     CHECK(f.commits.sent.size() == 2);
-    f.rows->rowStates.busyKeys(7, {row(2)});                                    // another action's run on row 2
-    f.grid->focusCell(at(2, "label"));  f.grid->type("c");
+    f.rows->rowStates.busyKeys(7, {row(2)});  // another action's run on row 2
+    f.grid->focusCell(at(2, "label"));
+    f.grid->type("c");
     CHECK(f.grid->message() == "This row is being saved");
     CHECK(f.commits.sent.size() == 2);
 }
@@ -6651,27 +7063,32 @@ TEST_CASE("model table: the walk stops at a row not fetched yet", "[ui][table][e
     f.rows->view.at(2).fetched = false;
     std::optional<morph::ui::CellRef> heard;
     morph::reactive::Effect const following{f.h.rt, [&heard, &f] { heard = f.grid->focus(); }};
-    f.grid->focusCell(at(2, "count"));  f.grid->type("1");  f.grid->press("Enter");
+    f.grid->focusCell(at(2, "count"));
+    f.grid->type("1");
+    f.grid->press("Enter");
     f.h.settle();
     CHECK_FALSE(f.grid->focus().has_value());
     CHECK(f.grid->place() == morph::ui::GridFocus{std::nullopt, 2, "count"});
     CHECK_FALSE(f.source->keyAt(2).has_value());
-    CHECK(f.commits.sent.size() == 1);                                          // row 2 only
+    CHECK(f.commits.sent.size() == 1);  // row 2 only
     CHECK_FALSE(heard.has_value());
-    CHECK(f.grid->press("Enter") == morph::ui::KeyOutcome::Handled);           // before the row arrives
+    CHECK(f.grid->press("Enter") == morph::ui::KeyOutcome::Handled);  // before the row arrives
     CHECK(f.grid->place() == morph::ui::GridFocus{std::nullopt, 2, "count"});
     f.rows->deliver(2);
     f.h.settle();
-    CHECK(heard == at(3, "count"));                                             // no further gesture
+    CHECK(heard == at(3, "count"));  // no further gesture
     CHECK(f.grid->place() == morph::ui::GridFocus{key(3), 2, "count"});
-    f.grid->type("2");  f.grid->press("Enter");
+    f.grid->type("2");
+    f.grid->press("Enter");
     CHECK(f.commits.sent.back().row == row(3));
 }
 
 // Mutation: the walk following the edited row instead of the view position at the commit.
 TEST_CASE("model table: Enter after an edit that moves its row lands on the row that was below", "[ui][table][edit]") {
     ModelGridFixture f{{1, 2, 3}};
-    f.grid->focusCell(at(1, "count"));  f.grid->type("9");  f.grid->press("Enter");
+    f.grid->focusCell(at(1, "count"));
+    f.grid->type("9");
+    f.grid->press("Enter");
     f.rows->reorder({row(2), row(3), row(1)});
     CHECK(f.grid->focus() == at(2, "count"));
 }
@@ -6698,16 +7115,17 @@ TEST_CASE("model table: the mount and the drafts share the rows' one change slot
     morph::ui::TableSource base;
     base.rows = std::shared_ptr<morph::ui::TableRows>(f.rows, &f.source->view());
     base.cellView = [](std::size_t column, morph::reactive::Signal<Value> const& record) {
-        std::string const id =
-            std::vector<std::string>{"label", "remark", "count", "note", "sampled", "taken", "day", "at", "mass",
-                                     "weight"}
-                .at(column);
+        std::string const id = std::vector<std::string>{"label", "remark", "count", "note", "sampled",
+                                                        "taken", "day",    "at",    "mass", "weight"}
+                                   .at(column);
         return morph::ui::text(morph::ui::Text{.text = morph::ui::Prop<std::string>{[&record, id] {
-            Value const* const value = record.get().field(id);
-            if (value == nullptr) return std::string{};
-            if (std::int64_t const* const number = value->asInt()) return std::to_string(*number);
-            return value->asString() != nullptr ? *value->asString() : std::string{};
-        }}});
+                                                   Value const* const value = record.get().field(id);
+                                                   if (value == nullptr) return std::string{};
+                                                   if (std::int64_t const* const number = value->asInt())
+                                                       return std::to_string(*number);
+                                                   return value->asString() != nullptr ? *value->asString()
+                                                                                       : std::string{};
+                                               }}});
     };
     morph::ui::TableOptions options;
     options.common.testId = "m";
@@ -6716,8 +7134,10 @@ TEST_CASE("model table: the mount and the drafts share the rows' one change slot
     f.h.settle();
     int const table = backend.find("Table", "testId", "m").value_or(0);
     REQUIRE(table != 0);
-    CHECK(f.rows->handlers() == 1);                                             // the decorator's, once
-    f.grid->focusCell(at(1, "count"));  f.grid->type("9");  f.grid->press("Enter");
+    CHECK(f.rows->handlers() == 1);  // the decorator's, once
+    f.grid->focusCell(at(1, "count"));
+    f.grid->type("9");
+    f.grid->press("Enter");
     f.commits.done.at(0)(committedOk());
     f.h.settle();
     std::optional<int> const first = backend.tableRow(table, key(1));
@@ -6727,35 +7147,39 @@ TEST_CASE("model table: the mount and the drafts share the rows' one change slot
     f.h.settle();
     std::optional<int> const again = backend.tableRow(table, key(1));
     REQUIRE(again.has_value());
-    CHECK(mountedText(backend, *again, 2) == "9");                              // the mount's handler ran
-    CHECK(backend.prop(*again, "marks:2").empty());                             // rowFetched ran
+    CHECK(mountedText(backend, *again, 2) == "9");   // the mount's handler ran
+    CHECK(backend.prop(*again, "marks:2").empty());  // rowFetched ran
     view.reset();
 }
 
-// Mutation: drafts held by the window (the decorator dropping a row's drafts with the row: row 5's draft is gone when it
-// comes back).
+// Mutation: drafts held by the window (the decorator dropping a row's drafts with the row: row 5's draft is gone when
+// it comes back).
 TEST_CASE("model table: cells of a model's table", "[ui][table][edit]") {
     SECTION("cell mode") {
         ModelGridFixture f{{1, 2, 3, 4, 5}};
-        f.grid->focusCell(at(1, "count"));  f.grid->type("9");  f.grid->press("Enter");
+        f.grid->focusCell(at(1, "count"));
+        f.grid->type("9");
+        f.grid->press("Enter");
         REQUIRE(f.commits.sent.size() == 1);
         CHECK(f.commits.sent.at(0).row == row(1));
         REQUIRE(f.commits.sent.at(0).cells.size() == 1);
         CHECK(f.commits.sent.at(0).cells.at(0).column == "count");
         CHECK(f.commits.sent.at(0).cells.at(0).json == "9");
         CHECK(f.source->marks(key(1), "count").stale);
-        f.commits.done.at(0)(committedOk());                                    // ChangedRows named row 1
+        f.commits.done.at(0)(committedOk());  // ChangedRows named row 1
         CHECK(f.source->marks(key(1), "count").modified);
         CHECK_FALSE(f.source->marks(key(1), "count").stale);
         CHECK(f.source->rowModified(key(1)));
-        f.rows->refetch(row(1), specimenRecord(1, 7));                          // the row as the server has it
+        f.rows->refetch(row(1), specimenRecord(1, 7));  // the row as the server has it
         CHECK_FALSE(f.source->marks(key(1), "count").modified);
         CHECK(f.source->text(key(1), "count") == "7");
-        CHECK(f.source->draft(key(1), "count") == "7");                         // an editor opens on it, not on "9"
+        CHECK(f.source->draft(key(1), "count") == "7");  // an editor opens on it, not on "9"
     }
     SECTION("refusal") {
         ModelGridFixture f{{1, 2, 3, 4, 5}};
-        f.grid->focusCell(at(2, "count"));  f.grid->type("9");  f.grid->press("Enter");
+        f.grid->focusCell(at(2, "count"));
+        f.grid->type("9");
+        f.grid->press("Enter");
         REQUIRE(f.commits.sent.size() == 1);
         morph::table::EditCell const& cell = f.commits.sent.at(0).cells.at(0);
         CHECK((cell.column == "count" && cell.json == "9" && cell.member == "value"));
@@ -6763,14 +7187,18 @@ TEST_CASE("model table: cells of a model's table", "[ui][table][edit]") {
         CHECK(f.source->error(key(2), "count") == "Row 2 is closed");
         CHECK(f.source->draft(key(2), "count") == "9");
         CHECK(f.source->marks(key(2), "count").error);
-        f.grid->focusCell(at(3, "count"));  f.grid->type("11");  f.grid->press("Enter");
-        CHECK(f.commits.sent.size() == 1);                                      // the field's own maximum refuses it
+        f.grid->focusCell(at(3, "count"));
+        f.grid->type("11");
+        f.grid->press("Enter");
+        CHECK(f.commits.sent.size() == 1);  // the field's own maximum refuses it
         CHECK(f.source->error(key(3), "count").has_value());
         CHECK(f.source->draft(key(3), "count") == "11");
     }
     SECTION("scroll and from") {
         ModelGridFixture f{{1, 2, 3, 4, 5}};
-        f.grid->focusCell(at(5, "count"));  f.grid->type("abc");  f.grid->leave();
+        f.grid->focusCell(at(5, "count"));
+        f.grid->type("abc");
+        f.grid->leave();
         CHECK(f.edits.errorCount() == 1);
         CHECK(f.commits.sent.empty());
         morph::test::grid::FakeRows::Row dropped = f.rows->drop(row(5));
@@ -6785,9 +7213,12 @@ TEST_CASE("model table: cells of a model's table", "[ui][table][edit]") {
     }
     SECTION("row mode") {
         ModelGridFixture f{{1, 2}, morph::ui::EditMode::Row};
-        f.grid->focusCell(at(1, "label"));  f.grid->type("a");  f.grid->press("Tab");
+        f.grid->focusCell(at(1, "label"));
+        f.grid->type("a");
+        f.grid->press("Tab");
         REQUIRE(f.grid->focus() == at(1, "remark"));
-        f.grid->type("b");  f.grid->press("Enter");
+        f.grid->type("b");
+        f.grid->press("Enter");
         CHECK(f.commits.sent.empty());
         f.grid->focusCell(at(2, "label"));
         REQUIRE(f.commits.sent.size() == 1);
@@ -6800,8 +7231,10 @@ TEST_CASE("model table: cells of a model's table", "[ui][table][edit]") {
         f.commits.done.at(0)(refusedWith({{"remarkText", "too long"}}));
         CHECK(f.source->error(key(1), "remark") == "too long");
         CHECK_FALSE(f.source->error(key(1), "label").has_value());
-        CHECK(f.grid->focus() == at(1, "remark"));                              // focus back on the refused cell
-        f.grid->focusCell(at(2, "label"));  f.grid->type("c");  f.grid->press("Ctrl+Enter");
+        CHECK(f.grid->focus() == at(1, "remark"));  // focus back on the refused cell
+        f.grid->focusCell(at(2, "label"));
+        f.grid->type("c");
+        f.grid->press("Ctrl+Enter");
         REQUIRE(f.commits.sent.size() == 2);
         CHECK(f.commits.sent.at(1).row == row(2));
         CHECK(f.grid->focus() == at(2, "label"));
@@ -6813,21 +7246,24 @@ TEST_CASE("model table: cells of a model's table", "[ui][table][edit]") {
 // refused draft unchanged sends nothing).
 TEST_CASE("model table: a held cell whose row became busy is refused at the cell", "[ui][table][edit]") {
     ModelGridFixture f{{1, 2}, morph::ui::EditMode::Row};
-    f.grid->focusCell(at(1, "label"));  f.grid->type("a");  f.grid->press("Tab");
-    f.rows->rowStates.busyKeys(7, {row(1)});                                    // a document mutation's edit of row 1
+    f.grid->focusCell(at(1, "label"));
+    f.grid->type("a");
+    f.grid->press("Tab");
+    f.rows->rowStates.busyKeys(7, {row(1)});  // a document mutation's edit of row 1
     f.source->touch();
-    f.grid->focusCell(at(2, "label"));                                          // focus leaves row 1
+    f.grid->focusCell(at(2, "label"));  // focus leaves row 1
     CHECK(f.commits.sent.empty());
-    CHECK(f.source->draft(key(1), "label") == "a");                             // the draft stays
-    CHECK(f.source->error(key(1), "label") == "This row is being saved");       // with the refusal at the cell
+    CHECK(f.source->draft(key(1), "label") == "a");                        // the draft stays
+    CHECK(f.source->error(key(1), "label") == "This row is being saved");  // with the refusal at the cell
     CHECK(f.source->marks(key(1), "label").error);
     CHECK(f.edits.errorCount() == 1);
     f.grid->focusCell(at(1, "label"));
-    CHECK(f.grid->message() == "This row is being saved");                      // and in the status line
+    CHECK(f.grid->message() == "This row is being saved");  // and in the status line
     // The row is free again: committing the cell, unchanged, sends its draft when focus leaves the row.
     f.rows->rowStates.settle(7);
     f.source->touch();
-    f.grid->press("F2");  f.grid->press("Enter");
+    f.grid->press("F2");
+    f.grid->press("Enter");
     f.grid->focusCell(at(2, "label"));
     REQUIRE(f.commits.sent.size() == 1);
     CHECK(f.commits.sent.at(0).row == row(1));
@@ -6838,7 +7274,9 @@ TEST_CASE("model table: a held cell whose row became busy is refused at the cell
 // Mutation: rowsAbsent leaving the row's held cells (they are sent when focus leaves the row).
 TEST_CASE("model table: a held cell of a row gone from the view is not sent", "[ui][table][edit]") {
     ModelGridFixture f{{1, 2}, morph::ui::EditMode::Row};
-    f.grid->focusCell(at(1, "label"));  f.grid->type("a");  f.grid->press("Tab");
+    f.grid->focusCell(at(1, "label"));
+    f.grid->type("a");
+    f.grid->press("Tab");
     std::vector<table::RowId> const gone{row(1)};
     f.source->rowsAbsent(gone);
     f.grid->focusCell(at(2, "label"));
@@ -6860,10 +7298,10 @@ TEST_CASE("model table: an editor opens holding the cell's value, whatever its k
     std::string const taken = opened("taken");
     CHECK_FALSE(sampled.empty());
     CHECK_FALSE(taken.empty());
-    CHECK(opened("day") == sampled);                                            // an EpochDate field of a Date cell
-    CHECK(opened("at") == taken);                                               // an EpochDateTime field of a DateTime cell
+    CHECK(opened("day") == sampled);  // an EpochDate field of a Date cell
+    CHECK(opened("at") == taken);     // an EpochDateTime field of a DateTime cell
     CHECK(opened("mass") == "12.50");
-    CHECK(opened("weight") == "0.200");                                         // 200 g, in the field's kg
+    CHECK(opened("weight") == "0.200");  // 200 g, in the field's kg
     CHECK(f.commits.sent.empty());
 }
 
@@ -6882,9 +7320,10 @@ TEST_CASE("model table: focus follows its row's key", "[ui][table][edit]") {
 // takes "5", sent as 5 kg).
 TEST_CASE("model table: a measure its field's unit cannot hold is read-only", "[ui][table][edit]") {
     ModelGridFixture f{{1, 2}};
-    morph::test::grid::setField(*f.rows, 2, "weight",
-                                Value{morph::ui::Quantity{.value = table::parseDecimal("0.3").value(), .unit = "percent"}});
-    CHECK_FALSE(f.source->readOnly(key(1), "weight"));                          // 200 g converts into kg
+    morph::test::grid::setField(
+        *f.rows, 2, "weight",
+        Value{morph::ui::Quantity{.value = table::parseDecimal("0.3").value(), .unit = "percent"}});
+    CHECK_FALSE(f.source->readOnly(key(1), "weight"));  // 200 g converts into kg
     CHECK(f.source->readOnly(key(2), "weight"));
     CHECK(f.source->marks(key(2), "weight").readOnly);
     f.grid->focusCell(at(2, "weight"));
@@ -6913,34 +7352,35 @@ TEST_CASE("model table: the table keeps its row selection, and Delete blanks a c
 // Mutation: positionOf scanning the whole view total, and rebuilding its index on each change of a cell's draft.
 TEST_CASE("model table: finding a row by key reads only the rows held", "[ui][table][edit]") {
     ModelGridFixture f{{1, 2, 3}};
-    f.rows->unheld = 1'000'000;                                                 // a large view, three rows held
+    f.rows->unheld = 1'000'000;  // a large view, three rows held
     f.rows->rowReads = 0;
     CHECK(f.source->positionOf(key(3)) == std::size_t{2});
     std::size_t const first = f.rows->rowReads;
     CHECK(first <= 3);
     f.grid->focusCell(at(1, "label"));
     for (std::string const text : {"a", "ab", "abc"}) {
-        f.grid->type(text);                                                     // each keystroke a draft
+        f.grid->type(text);  // each keystroke a draft
     }
     f.rows->rowReads = 0;
     CHECK(f.source->positionOf(key(3)) == std::size_t{2});
-    CHECK(f.rows->rowReads <= 1);                                               // no rebuild for a draft
+    CHECK(f.rows->rowReads <= 1);  // no rebuild for a draft
 }
 
 // Mutation: draft() loading the column's session for another row while an editor of the column is open (the open
 // editor's field is reloaded with row 2's value).
 TEST_CASE("model table: reading another cell of the column leaves an open editor as it is", "[ui][table][edit]") {
     ModelGridFixture f{{1, 2}};
-    f.grid->focusCell(at(1, "count"));  f.grid->type("5");
+    f.grid->focusCell(at(1, "count"));
+    f.grid->type("5");
     morph::ui::testing::RecordingBackend backend;
     std::optional<morph::ui::Mounted> view;
-    view.emplace(f.h.rt, backend, f.source->editor(key(1), "count"));          // the open editor, as the mount builds it
+    view.emplace(f.h.rt, backend, f.source->editor(key(1), "count"));  // the open editor, as the mount builds it
     f.h.settle();
     int const input = backend.find("TextInput", "text", "5").value_or(0);
     REQUIRE(input != 0);
     CHECK(f.source->draft(key(2), "count") == "2");
     f.h.settle();
-    CHECK(backend.prop(input, "text") == "5");                                  // the editor still shows its own cell
+    CHECK(backend.prop(input, "text") == "5");  // the editor still shows its own cell
     CHECK(f.source->draft(key(1), "count") == "5");
     CHECK(f.grid->editing() == at(1, "count"));
     view.reset();
@@ -6952,11 +7392,12 @@ namespace {
 
 // The document of the edit cases: a table `t` of `samples` of the alias `sample`, @p extra added to its node.
 std::string editDoc(std::string_view extra = "") {
-    return doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",)"
-               R"("columns":[{"id":"id"},{"id":"name"},)"
-               R"({"id":"count","tone":{"lit":"warn"},"cell":[{"kind":"text","testId":"count_cell","text":{"row":"count"}}]},)"
-               R"({"id":"label"},{"id":"remark"}])" +
-               std::string{extra} + "}");
+    return doc(
+        R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",)"
+        R"("columns":[{"id":"id"},{"id":"name"},)"
+        R"({"id":"count","tone":{"lit":"warn"},"cell":[{"kind":"text","testId":"count_cell","text":{"row":"count"}}]},)"
+        R"({"id":"label"},{"id":"remark"}])" +
+        std::string{extra} + "}");
 }
 
 // `samples` with `count` edited by `Lims_EditSpecimenCount`, and `label` and `remark` by `Lims_EditSpecimenRow`.
@@ -7043,7 +7484,7 @@ TEST_CASE("model table: an editable column lowers to a cell edit", "[ui][table][
     TableHarness h;
     addEditActions(h);
     auto const screen = mountEdits(h, editDoc());
-    CHECK(cellText(h, 1, "count") == "1");                                         // the column's own cell view
+    CHECK(cellText(h, 1, "count") == "1");  // the column's own cell view
     CHECK(cellAccent(h, 1, "count").tone == morph::ui::Tone::Warn);
     int const table = h.byTestId("Table", "t");
     std::size_t const count = columnIndex(h, "count");
@@ -7051,7 +7492,7 @@ TEST_CASE("model table: an editable column lowers to a cell edit", "[ui][table][
     h.settle();
     std::optional<int> const first = h.backend.tableRow(table, Key{std::int64_t{1}});
     REQUIRE(first.has_value());
-    CHECK_FALSE(h.backend.prop(*first, "editor:" + std::to_string(count)).empty());   // the editor opened
+    CHECK_FALSE(h.backend.prop(*first, "editor:" + std::to_string(count)).empty());  // the editor opened
     h.backend.press(table, "Escape");
     h.settle();
     h.backend.typeInto(table, "4");
@@ -7061,10 +7502,10 @@ TEST_CASE("model table: an editable column lowers to a cell edit", "[ui][table][
     REQUIRE(h.dispatcher.count("Lims_EditSpecimenCount") == 1);
     std::size_t const call = h.dispatcher.last("Lims_EditSpecimenCount");
     CHECK(h.dispatcher.calls.at(call).body == R"({"key":1,"value":4})");
-    CHECK(statusOf(h, h.byTestId("Table", "t")).standing.empty());                                        // no run of the session: no "Saving"
+    CHECK(statusOf(h, h.byTestId("Table", "t")).standing.empty());  // no run of the session: no "Saving"
     h.reply(call, R"({"rows":{"rows":[{"key":1}]}})");
     change(h, {1});
-    CHECK(cellMarks(h, 1, "count") == "m");                                     // modified until the refetch
+    CHECK(cellMarks(h, 1, "count") == "m");  // modified until the refetch
     replyPage(h, editPage(h, {editRow(1, 4)}, {0}));
     CHECK(cellText(h, 1, "count") == "4");
     CHECK(cellMarks(h, 1, "count").empty());
@@ -7110,12 +7551,12 @@ TEST_CASE("model table: editMode is refused on a table that is not a model's", "
     h.settle();
     h.backend.typeInto(table, "a");
     h.settle();
-    h.backend.press(table, "Tab");                                              // to (1, remark)
+    h.backend.press(table, "Tab");  // to (1, remark)
     h.settle();
     h.backend.typeInto(table, "b");
     h.settle();
-    CHECK(h.dispatcher.count("Lims_EditSpecimenRow") == 0);                     // focus is still in row 1
-    h.backend.clickCell(table, 1, columnIndex(h, "label"));                     // row 2
+    CHECK(h.dispatcher.count("Lims_EditSpecimenRow") == 0);  // focus is still in row 1
+    h.backend.clickCell(table, 1, columnIndex(h, "label"));  // row 2
     h.settle();
     REQUIRE(h.dispatcher.count("Lims_EditSpecimenRow") == 1);
     CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_EditSpecimenRow")).body ==
@@ -7145,7 +7586,7 @@ TEST_CASE("model table: a reply's field errors land on the cells they name", "[u
     auto const screen = mountEdits(h, editDoc(R"(,"editMode":"row")"));
     typeCell(h, 0, "label", "a");
     typeCell(h, 0, "remark", "b");
-    h.backend.clickCell(h.byTestId("Table", "t"), 1, columnIndex(h, "label"));   // focus leaves row 1
+    h.backend.clickCell(h.byTestId("Table", "t"), 1, columnIndex(h, "label"));  // focus leaves row 1
     h.settle();
     REQUIRE(h.dispatcher.count("Lims_EditSpecimenRow") == 1);
     h.reply(h.dispatcher.last("Lims_EditSpecimenRow"), R"({"errors":{"values.remarkText":["too long"]}})");
@@ -7180,14 +7621,14 @@ TEST_CASE("model table: an edit that changes no row leaves nothing waiting", "[u
     int const table = h.byTestId("Table", "t");
     h.backend.clickCell(table, 0, columnIndex(h, "count"));
     h.settle();
-    h.backend.typeInto(table, "1");                                             // the value it holds
+    h.backend.typeInto(table, "1");  // the value it holds
     h.settle();
     h.backend.typeInto(table, "4");
     h.settle();
     h.backend.press(table, "Enter");
     h.settle();
     h.reply(h.dispatcher.last("Lims_EditSpecimenCount"), R"({"rows":{"rows":[]}})");
-    CHECK(cellMarks(h, 1, "count").empty());                                    // with no page since
+    CHECK(cellMarks(h, 1, "count").empty());  // with no page since
 }
 
 // Mutation: an unnamed refusal of one call landing on every cell of the request (the label, saved by its own call,
@@ -7237,7 +7678,8 @@ void answerKeyed(TableHarness& h, std::int64_t key) {
 }  // namespace
 
 // Mutation: node() binding the cell selection for every source (the editable model table's backend is given one).
-TEST_CASE("model table: an editable model table keeps its row selection in the mount", "[ui][table][edit][interpreter]") {
+TEST_CASE("model table: an editable model table keeps its row selection in the mount",
+          "[ui][table][edit][interpreter]") {
     using namespace morph::ui::testing;
     TableHarness h;
     addEditActions(h);
@@ -7265,7 +7707,7 @@ TEST_CASE("model table: focus follows a key an edit changed, in the mount", "[ui
     h.settle();
     h.reply(h.dispatcher.last("Lims_EditSpecimenCount"), R"({"rows":{"rows":[{"key":9,"from":1}]}})");
     change(h, {1, 9});
-    answerKeyed(h, 9);                                                          // row 9 now where row 1 was
+    answerKeyed(h, 9);  // row 9 now where row 1 was
     CHECK(h.backend.focusCell(table) == std::pair{std::size_t{0}, count});
     h.backend.typeInto(table, "5");
     h.settle();
@@ -7305,7 +7747,8 @@ void answerEdits(TableHarness& h, bool keyed, std::function<std::int64_t(std::in
         if (!keyed) {
             page.offset = query.page.offset;
             rows.clear();
-            for (std::int64_t at = query.page.offset; at < std::min(total, query.page.offset + query.page.limit); ++at) {
+            for (std::int64_t at = query.page.offset; at < std::min(total, query.page.offset + query.page.limit);
+                 ++at) {
                 rows.emplace_back(keyAt(at), at);
             }
         }
@@ -7351,13 +7794,13 @@ TEST_CASE("model table: a focused row a new order moves off the window is locate
     addEditActions(h);
     std::unique_ptr<morph::ui::Screen> screen;
     int const table = mountLargeAndFocus(h, screen);
-    h.backend.clickHeader(table, 1);                                            // a new order: the window resets
+    h.backend.clickHeader(table, 1);  // a new order: the window resets
     h.settle();
     auto const reordered = [](std::int64_t at) { return at == 7 ? std::int64_t{10'000} : (at == 5'000 ? 8 : at + 1); };
     answerEdits(h, false, reordered, {}, 9'093);
-    answerEdits(h, true, reordered, {{8, 5'000}}, 9'093);                       // the mount's locate: row 8 is at 5,000
+    answerEdits(h, true, reordered, {{8, 5'000}}, 9'093);  // the mount's locate: row 8 is at 5,000
     CHECK(h.backend.focusCell(table).first == 5'000);
-    h.advance(80ms);                                                            // the window's settle after a scroll
+    h.advance(80ms);  // the window's settle after a scroll
     answerEdits(h, false, reordered, {}, 9'093);
     CHECK(h.backend.focusCell(table).first == 5'000);
     h.backend.typeInto(table, "3");
@@ -7379,9 +7822,9 @@ TEST_CASE("model table: when the focused row leaves the view, focus moves to the
     int const table = mountLargeAndFocus(h, screen);
     h.backend.clickHeader(table, 1);
     h.settle();
-    auto const without = [](std::int64_t at) { return at == 7 ? std::int64_t{10'000} : at + 1; };   // row 8 is gone
+    auto const without = [](std::int64_t at) { return at == 7 ? std::int64_t{10'000} : at + 1; };  // row 8 is gone
     answerEdits(h, false, without, {}, 9'093);
-    answerEdits(h, true, without, {}, 9'093);                                   // the locate: the view lacks row 8
+    answerEdits(h, true, without, {}, 9'093);  // the locate: the view lacks row 8
     CHECK(h.backend.focusCell(table).first == 7);
     h.backend.typeInto(table, "3");
     h.settle();

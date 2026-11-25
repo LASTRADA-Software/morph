@@ -1524,8 +1524,9 @@ template <>
 struct glz::meta<morph::table::TableErrorCode> {
     using enum morph::table::TableErrorCode;
     /// @brief Each enumerator after its JSON name.
-    static constexpr auto value = glz::enumerate(
-        "unknownColumn", UnknownColumn, "unsupportedOperator", UnsupportedOperator, "invalidValue", InvalidValue,
-        "invalidSpec", InvalidSpec, "limitExceeded", LimitExceeded, "columnNotReadable", ColumnNotReadable,
-        "unavailable", Unavailable, "serviceFailed", ServiceFailed, "sourceContract", SourceContract, "viewChanged", ViewChanged);
+    static constexpr auto value =
+        glz::enumerate("unknownColumn", UnknownColumn, "unsupportedOperator", UnsupportedOperator, "invalidValue",
+                       InvalidValue, "invalidSpec", InvalidSpec, "limitExceeded", LimitExceeded, "columnNotReadable",
+                       ColumnNotReadable, "unavailable", Unavailable, "serviceFailed", ServiceFailed, "sourceContract",
+                       SourceContract, "viewChanged", ViewChanged);
 };

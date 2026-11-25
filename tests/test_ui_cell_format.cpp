@@ -41,26 +41,23 @@ morph::ui::FormatContext de() { return formatFor("de"); }  // "." groups, "," de
 TEST_CASE("format cell: a column's places and rounding", "[ui][cell_format]") {
     using morph::ui::formatCell;
     CHECK(formatCell(Cell{dec("0.125")}, numeric(ColumnKind::Decimal, {.decimals = 2}), en()) == "0.12");
-    CHECK(formatCell(Cell{dec("0.125")},
-                     numeric(ColumnKind::Decimal, {.decimals = 2, .rounding = Rounding::HalfUp}), en()) == "0.13");
+    CHECK(formatCell(Cell{dec("0.125")}, numeric(ColumnKind::Decimal, {.decimals = 2, .rounding = Rounding::HalfUp}),
+                     en()) == "0.13");
     CHECK(formatCell(Cell{dec("1.5")}, numeric(ColumnKind::Decimal, {.decimals = 2}), en()) == "1.50");
     CHECK(formatCell(Cell{dec("1.5")}, numeric(ColumnKind::Decimal, {.decimals = 2, .padPlaces = false}), en()) ==
           "1.5");
-    CHECK(formatCell(Cell{dec("2")}, numeric(ColumnKind::Decimal, {.decimals = 2, .padPlaces = false}), en()) ==
-          "2");
+    CHECK(formatCell(Cell{dec("2")}, numeric(ColumnKind::Decimal, {.decimals = 2, .padPlaces = false}), en()) == "2");
     CHECK(formatCell(Cell{std::int64_t{5}}, numeric(ColumnKind::Integer, {.decimals = 2}), en()) == "5.00");
     CHECK(formatCell(Cell{dec("12.50")}, numeric(ColumnKind::Decimal, {}), en()) == "12.50");  // own places
-    CHECK(formatCell(Cell{0.1}, numeric(ColumnKind::Number, {}), en()) == "0.1");             // shortest
-    CHECK(formatCell(Cell{std::int64_t{12500}}, numeric(ColumnKind::Integer, {.grouping = true}), en()) ==
-          "12,500");
+    CHECK(formatCell(Cell{0.1}, numeric(ColumnKind::Number, {}), en()) == "0.1");              // shortest
+    CHECK(formatCell(Cell{std::int64_t{12500}}, numeric(ColumnKind::Integer, {.grouping = true}), en()) == "12,500");
     CHECK(formatCell(Cell{std::int64_t{12500}}, numeric(ColumnKind::Integer, {}), en()) == "12500");
 }
 
 // Mutation: a zero value shown as `empty`, which gives "–" for 0.
 TEST_CASE("format cell: negative halves and empty text", "[ui][cell_format][review]") {
     using morph::ui::formatCell;
-    auto const halfUp =
-        numeric(ColumnKind::Decimal, {.decimals = 2, .rounding = Rounding::HalfUp, .empty = "–"});
+    auto const halfUp = numeric(ColumnKind::Decimal, {.decimals = 2, .rounding = Rounding::HalfUp, .empty = "–"});
     auto const halfEven = numeric(ColumnKind::Decimal, {.decimals = 2, .empty = "–"});
     CHECK(formatCell(Cell{dec("-0.125")}, halfUp, en()) == "-0.13");
     CHECK(formatCell(Cell{dec("-0.125")}, halfEven, en()) == "-0.12");
@@ -86,10 +83,9 @@ TEST_CASE("format cell: a double rounds from its shortest decimal text", "[ui][c
 // Mutation: a Measure shown at the column's `decimals` instead of its unit's, which gives "0.3 kg".
 TEST_CASE("format cell: labels, dates, quantities and measures", "[ui][cell_format]") {
     using morph::ui::formatCell;
-    auto const available =
-        TableColumn{.info = {.id = "ok", .kind = ColumnKind::Bool},
-                    .display = {.labels = {{.operand = "true", .text = "available"},
-                                           {.operand = "false", .text = "not available"}}}};
+    auto const available = TableColumn{.info = {.id = "ok", .kind = ColumnKind::Bool},
+                                       .display = {.labels = {{.operand = "true", .text = "available"},
+                                                              {.operand = "false", .text = "not available"}}}};
     CHECK(formatCell(Cell{true}, available, en()) == "available");
     CHECK(formatCell(Cell{false}, available, en()) == "not available");
     auto const coded = numeric(ColumnKind::Integer, {.labels = {{.operand = "3", .text = "three"}}});
@@ -120,8 +116,7 @@ TEST_CASE("format cell: labels, dates, quantities and measures", "[ui][cell_form
     CHECK(formatCell(Cell{morph::table::Measure{.amount = dec("1.2345"), .unit = kg}}, amount, en(), units) ==
           "1.234 kg");
     morph::ui::DisplayUnits const inKg{.units = registry.get(), .byDimension = {{"mass", "kg"}}};
-    CHECK(formatCell(Cell{morph::table::Measure{.amount = dec("200"), .unit = g}}, amount, en(), inKg) ==
-          "0.200 kg");
+    CHECK(formatCell(Cell{morph::table::Measure{.amount = dec("200"), .unit = g}}, amount, en(), inKg) == "0.200 kg");
 }
 
 // Mutation: `empty` shown for an unloaded cell, which gives "–".

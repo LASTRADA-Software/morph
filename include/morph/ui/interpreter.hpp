@@ -1535,7 +1535,8 @@ struct MORPH_API ElementState {
     ///        and its status line, made when the table is first lowered; null for any other element. It outlives every
     ///        mount of the table.
     std::unique_ptr<GridTable> gridTable;
-    /// @brief A form's fields drawn as grids through a field overlay's `grid` part, by the field's name: each an element
+    /// @brief A form's fields drawn as grids through a field overlay's `grid` part, by the field's name: each an
+    /// element
     ///        of its own, whose node is the part, holding its grid. Empty for any other element.
     std::map<std::string, std::unique_ptr<ElementState>, std::less<>> fieldGrids;
 };
@@ -2491,8 +2492,8 @@ private:
     Node lowerModelTable(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     /// A grid of a form: a table over a form node's collection, its rows the field's and its cells its members.
     Node lowerFormGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element);
-    /// The table of a grid of a form, kept in @p element: a `table` node's with `form` and `field`, or a field overlay's
-    /// `grid` part's.
+    /// The table of a grid of a form, kept in @p element: a `table` node's with `form` and `field`, or a field
+    /// overlay's `grid` part's.
     Node formGridTable(DocNode const& part, LowerCtx const& ctx, ElementState& element, forms::FormSession& form,
                        forms::FieldState& array);
     /// The table node of the grid @p element keeps, made anew by each lowering.
@@ -2516,8 +2517,8 @@ private:
                    std::vector<GridColumn>& columns, GridOptions& options);
     /// What any grid's part gives of its walk and its activation.
     void gridOptions(DocNode const& part, LowerCtx const& ctx, GridOptions& options);
-    /// A fixed grid: a table whose rows are its `layoutRows`, each cell a field of the form `form` names, an expression
-    /// or a text, kept in @p element as a grid of a form is.
+    /// A fixed grid: a table whose rows are its `layoutRows`, each cell a field of the form `form` names, an
+    /// expression or a text, kept in @p element as a grid of a form is.
     Node lowerFixedGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     /// The table a model-backed table shows for the description its rows hold, or the status line alone without one.
     Node modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementState& element);

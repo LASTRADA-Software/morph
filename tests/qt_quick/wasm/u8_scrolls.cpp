@@ -15,9 +15,8 @@
 //   mounted table=<rows|model> rows=<total> realized=<rows> columns=<columns realized> ms=<time>
 //   U1 handler_ms=<click to end of the owner's work> frame_ms=<click to the frame showing the result> ...
 //   U2 handler_ms=... frame_ms=...
-//   scroll name=<...> frames=<n> work_p50=<ms> work_p99=<ms> interval_p50=<ms> interval_p99=<ms> moved=<px> within=<yes|no>
-//   verdict F3/F4 budgets hold=<yes|no>
-//   done
+//   scroll name=<...> frames=<n> work_p50=<ms> work_p99=<ms> interval_p50=<ms> interval_p99=<ms> moved=<px>
+//   within=<yes|no> verdict F3/F4 budgets hold=<yes|no> done
 //
 // A frame's figure is `work`: everything this program does between two frames, plus the scene graph's synchronize,
 // render and swap of the frame it caused (`beforeSynchronizing` to `frameSwapped`). The program's part is the owner's
@@ -47,8 +46,8 @@
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QString>
-#include <QVariant>
 #include <QTimer>
+#include <QVariant>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -144,9 +143,10 @@ RowsFixture rowsFixture() {
     for (std::size_t row = 0; row < snapshot->rowCount(); ++row) {
         std::string const text = morph::table::displayText(snapshot->cell(row, name));
         auto const quantity = snapshot->cell(row, qty);
-        out.items += std::format(R"({}{{"id":{},"name":{},"qty":{}}})", row == 0 ? "" : ",", row + 1, jsonText(text),
-                                 std::holds_alternative<std::monostate>(quantity) ? std::string{"null"}
-                                                                                  : morph::table::displayText(quantity));
+        out.items +=
+            std::format(R"({}{{"id":{},"name":{},"qty":{}}})", row == 0 ? "" : ",", row + 1, jsonText(text),
+                        std::holds_alternative<std::monostate>(quantity) ? std::string{"null"}
+                                                                         : morph::table::displayText(quantity));
         if (row == 0 || text < smallest) {
             smallest = text;
             out.firstByName = static_cast<std::int64_t>(row + 1);
@@ -200,7 +200,8 @@ public:
     TimedScheduler(morph::reactive::Scheduler& inner, std::function<double()> clock, double& total)
         : _inner{&inner}, _clock{std::move(clock)}, _total{&total} {}
 
-    [[nodiscard]] morph::reactive::TimerHandle after(std::chrono::milliseconds delay, std::function<void()> fn) override {
+    [[nodiscard]] morph::reactive::TimerHandle after(std::chrono::milliseconds delay,
+                                                     std::function<void()> fn) override {
         return _inner->after(delay, timed(std::move(fn)));
     }
     [[nodiscard]] morph::reactive::TimerHandle every(std::chrono::milliseconds period,
@@ -279,14 +280,14 @@ struct Run {
     bool modelPhase = false;  // which table the scroll sequence is on
 
     QElapsedTimer clock;
-    double lastFrame = 0;     // when the last frame was swapped
-    double syncBegan = 0;     // when its synchronize began
-    double carryMs = 0;       // the owner's tasks and the step since the last frame, for the next frame's work
-    double timerMs = 0;       // the time of the scheduler's callbacks since the last frame
-    int frames = 0;           // frames waited in the current phase
-    double actionAt = 0;      // when U1 or U2's action began
+    double lastFrame = 0;  // when the last frame was swapped
+    double syncBegan = 0;  // when its synchronize began
+    double carryMs = 0;    // the owner's tasks and the step since the last frame, for the next frame's work
+    double timerMs = 0;    // the time of the scheduler's callbacks since the last frame
+    int frames = 0;        // frames waited in the current phase
+    double actionAt = 0;   // when U1 or U2's action began
     double handlerMs = 0;
-    std::string before;       // the first row's text before U1 or U2's action
+    std::string before;  // the first row's text before U1 or U2's action
     QQuickItem* table = nullptr;
     qint64 primeStep = 0;
     double mountBegan = 0;
@@ -313,11 +314,11 @@ struct Run {
     void tap(QQuickItem const& item) {
         QPointF const scene = item.mapToScene(QPointF{item.width() / 2, item.height() / 2});
         QPointF const global = window.mapToGlobal(scene);
-        QMouseEvent press{QEvent::MouseButtonPress, scene, scene, global, Qt::LeftButton, Qt::LeftButton,
-                          Qt::NoModifier};
+        QMouseEvent press{QEvent::MouseButtonPress, scene,          scene,         global,
+                          Qt::LeftButton,           Qt::LeftButton, Qt::NoModifier};
         QCoreApplication::sendEvent(&window, &press);
-        QMouseEvent release{QEvent::MouseButtonRelease, scene, scene, global, Qt::LeftButton, Qt::NoButton,
-                            Qt::NoModifier};
+        QMouseEvent release{
+            QEvent::MouseButtonRelease, scene, scene, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier};
         QCoreApplication::sendEvent(&window, &release);
     }
 
@@ -397,9 +398,10 @@ struct Run {
         }
         std::string const which = modelPhase ? "model 100,000x300" : "rows 20,000";
         scrolls.clear();
-        scrolls.push_back({"F3 " + which + ": vertical 20 rows/s", "flick", "contentY", rowHeight * 20.0 / 60.0, bottom});
         scrolls.push_back(
-            {"F3 " + which + ": vertical fling 2,000 rows/s", "flick", "contentY", rowHeight * 2'000.0 / 60.0, bottom});
+            {"F3 " + which + ": vertical 20 rows/s", "flick", "contentY", rowHeight * 20.0 / 60.0, bottom});
+        scrolls.push_back({"F3 " + which + ": vertical fling 2,000 rows/s", "flick", "contentY",
+                           rowHeight * 2'000.0 / 60.0, bottom});
         scrolls.push_back({"F3 " + which + ": thumb drag across the table in 2 s", "flick", "contentY",
                            bottom / kScrollFrames, bottom});
         if (modelPhase) {
@@ -449,10 +451,11 @@ struct Run {
         double const p99 = percentile(work, 0.99);
         bool const within = p50 <= kP50Budget && p99 <= kP99Budget;
         allWithin = allWithin && within;
-        print(std::format("scroll name={} frames={} work_p50={:.2f} work_p99={:.2f} interval_p50={:.2f} "
-                          "interval_p99={:.2f} moved={:.0f} within={}",
-                          scroll.name, work.size(), p50, p99, percentile(interval, 0.5), percentile(interval, 0.99),
-                          moved, within ? "yes" : "no"));
+        print(
+            std::format("scroll name={} frames={} work_p50={:.2f} work_p99={:.2f} interval_p50={:.2f} "
+                        "interval_p99={:.2f} moved={:.0f} within={}",
+                        scroll.name, work.size(), p50, p99, percentile(interval, 0.5), percentile(interval, 0.99),
+                        moved, within ? "yes" : "no"));
         if (moved <= 0) {
             fail("scroll '" + scroll.name + "' did not move");
             return;
@@ -473,8 +476,8 @@ struct Run {
             facts.action<Table, morph::table::QueryTable<&Table::wide>>();
             facts.action<Table, morph::table::DescribeTable<&Table::wide>>();
             catalog = facts.catalog();
-            built.bridge = std::make_unique<morph::bridge::Bridge>(
-                std::make_unique<morph::backend::LocalBackend>(owner), owner);
+            built.bridge =
+                std::make_unique<morph::bridge::Bridge>(std::make_unique<morph::backend::LocalBackend>(owner), owner);
             built.dispatcher = std::make_unique<ui::BridgeDispatcher>(*built.bridge, &owner);
             built.scheduler = std::make_unique<morph::qt_quick::QtScheduler>(owner, &window);
             built.timed = std::make_unique<TimedScheduler>(*built.scheduler, [this] { return now(); }, timerMs);
@@ -580,162 +583,162 @@ struct Run {
         owner.runAll();
         carryMs += now() - swapped;
         switch (phase) {
-        case Phase::RowsMount: {
-            if (!findTable(QStringLiteral("rows"))) {
-                return;
-            }
-            int const total = table->property("totalRows").toInt();
-            int const realized = table->property("realizedCount").toInt();
-            if (static_cast<std::size_t>(total) != kRowsTableRows || realized <= 0 || realized >= total) {
-                fail("rows=" + std::to_string(total) + " realized=" + std::to_string(realized));
-                return;
-            }
-            print(std::format("mounted table=rows rows={} realized={} columns=3 ms={:.0f}", total, realized,
-                              swapped - mountBegan));
-            phase = Phase::RowsPrime;
-            window.requestUpdate();
-            return;
-        }
-        case Phase::RowsPrime:
-            prime(Phase::RowsSort);
-            return;
-        case Phase::RowsSort:
-            act(child(QStringLiteral("header1")), Phase::RowsSortWait);
-            return;
-        case Phase::RowsSortWait:
-            if (table->property("sortColumn").toInt() != 1) {
-                fail("the header click did not sort the name column");
-                return;
-            }
-            if (shown("U1", Phase::RowsRename)) {
-                window.requestUpdate();
-            }
-            return;
-        case Phase::RowsRename: {
-            auto const* const button = morph::qt_quick::detail::findWidget(QStringLiteral("rename"));
-            act(button == nullptr ? nullptr : button->item(), Phase::RowsRenameWait);
-            return;
-        }
-        case Phase::RowsRenameWait:
-            if (shown("U2", Phase::Scrolling)) {
-                modelPhase = false;
-                if (prepareScrolls()) {
-                    window.requestUpdate();
-                }
-            }
-            return;
-        case Phase::Scrolling: {
-            if (scrollFrame > 0) {
-                work.push_back(carried + renderMs);
-                interval.push_back(swapped - lastFrame);
-            }
-            lastFrame = swapped;
-            if (scrollFrame >= kScrollFrames) {
-                finishScroll();
-                window.requestUpdate();
-                return;
-            }
-            Scroll const& scroll = scrolls[scrollIndex];
-            QQuickItem* const flickable = child(QString::fromLatin1(scroll.flickable));
-            if (flickable == nullptr) {
-                fail("no " + std::string{scroll.flickable});
-                return;
-            }
-            double const began = now();
-            position = std::min(scroll.limit, position + scroll.step);
-            flickable->setProperty(scroll.property, position);
-            owner.runAll();
-            carryMs += now() - began;
-            ++scrollFrame;
-            window.requestUpdate();
-            return;
-        }
-        case Phase::Settling:
-            if (++frames < kSettleFrames) {
-                window.requestUpdate();
-                return;
-            }
-            if (++scrollIndex < scrolls.size()) {
-                beginScroll();
-                window.requestUpdate();
-                return;
-            }
-            if (modelPhase) {
-                print(std::format("verdict F3 F4 budgets (work p50 <= {} ms, p99 <= {} ms) hold={}", kP50Budget,
-                                  kP99Budget, allWithin ? "yes" : "no"));
-                print("done");
-                phase = Phase::Finished;
-                return;
-            }
-            // The rows table is done: the model table replaces it.
-            table = nullptr;
-            owner.runAll();
-            client.reset();
-            modelPhase = true;
-            frames = 0;
-            mountBegan = now();
-            if (!mount(std::string{kModelDocument}, true)) {
-                return;
-            }
-            phase = Phase::ModelMount;
-            window.requestUpdate();
-            return;
-        case Phase::ModelMount: {
-            if (!findTable(QStringLiteral("wide"))) {
-                return;
-            }
-            int const total = table->property("totalRows").toInt();
-            int const realized = table->property("realizedCount").toInt();
-            if (total <= 0 || realized <= 0) {
-                if (++frames >= kMaxFramesWaited) {
-                    fail("rows=" + std::to_string(total) + " realized=" + std::to_string(realized));
-                } else {
-                    window.requestUpdate();
-                }
-                return;
-            }
-            if (total != kModelRows) {
-                fail("rows=" + std::to_string(total) + ", expected " + std::to_string(kModelRows));
-                return;
-            }
-            print(std::format("mounted table=model rows={} realized={} columns=pending ms={:.0f}", total, realized,
-                              swapped - mountBegan));
-            frames = 0;
-            phase = Phase::ModelPrime;
-            window.requestUpdate();
-            return;
-        }
-        case Phase::ModelPrime: {
-            if (primeStep == 0 && !table->property("arranged").toBool()) {
-                if (++frames >= kMaxFramesWaited) {
-                    fail("the model table never arranged its column window");
+            case Phase::RowsMount: {
+                if (!findTable(QStringLiteral("rows"))) {
                     return;
                 }
-                window.requestUpdate();
-                return;
-            }
-            bool const wasFirst = primeStep == 0;
-            prime(Phase::Scrolling);
-            if (phase == Phase::Finished) {
-                return;
-            }
-            if (!wasFirst) {
+                int const total = table->property("totalRows").toInt();
                 int const realized = table->property("realizedCount").toInt();
-                int const columns = table->property("realizedColumnCount").toInt();
-                if (realized <= 0 || realized >= 100 || columns <= 0 || columns >= 100) {
-                    fail("not windowed both ways: rows=" + std::to_string(realized) +
-                         " columns=" + std::to_string(columns));
+                if (static_cast<std::size_t>(total) != kRowsTableRows || realized <= 0 || realized >= total) {
+                    fail("rows=" + std::to_string(total) + " realized=" + std::to_string(realized));
                     return;
                 }
-                print(std::format("windowed rows={} columns={}", realized, columns));
-                if (prepareScrolls()) {
+                print(std::format("mounted table=rows rows={} realized={} columns=3 ms={:.0f}", total, realized,
+                                  swapped - mountBegan));
+                phase = Phase::RowsPrime;
+                window.requestUpdate();
+                return;
+            }
+            case Phase::RowsPrime:
+                prime(Phase::RowsSort);
+                return;
+            case Phase::RowsSort:
+                act(child(QStringLiteral("header1")), Phase::RowsSortWait);
+                return;
+            case Phase::RowsSortWait:
+                if (table->property("sortColumn").toInt() != 1) {
+                    fail("the header click did not sort the name column");
+                    return;
+                }
+                if (shown("U1", Phase::RowsRename)) {
                     window.requestUpdate();
                 }
+                return;
+            case Phase::RowsRename: {
+                auto const* const button = morph::qt_quick::detail::findWidget(QStringLiteral("rename"));
+                act(button == nullptr ? nullptr : button->item(), Phase::RowsRenameWait);
+                return;
             }
-            return;
-        }
-        case Phase::Finished:
-            return;
+            case Phase::RowsRenameWait:
+                if (shown("U2", Phase::Scrolling)) {
+                    modelPhase = false;
+                    if (prepareScrolls()) {
+                        window.requestUpdate();
+                    }
+                }
+                return;
+            case Phase::Scrolling: {
+                if (scrollFrame > 0) {
+                    work.push_back(carried + renderMs);
+                    interval.push_back(swapped - lastFrame);
+                }
+                lastFrame = swapped;
+                if (scrollFrame >= kScrollFrames) {
+                    finishScroll();
+                    window.requestUpdate();
+                    return;
+                }
+                Scroll const& scroll = scrolls[scrollIndex];
+                QQuickItem* const flickable = child(QString::fromLatin1(scroll.flickable));
+                if (flickable == nullptr) {
+                    fail("no " + std::string{scroll.flickable});
+                    return;
+                }
+                double const began = now();
+                position = std::min(scroll.limit, position + scroll.step);
+                flickable->setProperty(scroll.property, position);
+                owner.runAll();
+                carryMs += now() - began;
+                ++scrollFrame;
+                window.requestUpdate();
+                return;
+            }
+            case Phase::Settling:
+                if (++frames < kSettleFrames) {
+                    window.requestUpdate();
+                    return;
+                }
+                if (++scrollIndex < scrolls.size()) {
+                    beginScroll();
+                    window.requestUpdate();
+                    return;
+                }
+                if (modelPhase) {
+                    print(std::format("verdict F3 F4 budgets (work p50 <= {} ms, p99 <= {} ms) hold={}", kP50Budget,
+                                      kP99Budget, allWithin ? "yes" : "no"));
+                    print("done");
+                    phase = Phase::Finished;
+                    return;
+                }
+                // The rows table is done: the model table replaces it.
+                table = nullptr;
+                owner.runAll();
+                client.reset();
+                modelPhase = true;
+                frames = 0;
+                mountBegan = now();
+                if (!mount(std::string{kModelDocument}, true)) {
+                    return;
+                }
+                phase = Phase::ModelMount;
+                window.requestUpdate();
+                return;
+            case Phase::ModelMount: {
+                if (!findTable(QStringLiteral("wide"))) {
+                    return;
+                }
+                int const total = table->property("totalRows").toInt();
+                int const realized = table->property("realizedCount").toInt();
+                if (total <= 0 || realized <= 0) {
+                    if (++frames >= kMaxFramesWaited) {
+                        fail("rows=" + std::to_string(total) + " realized=" + std::to_string(realized));
+                    } else {
+                        window.requestUpdate();
+                    }
+                    return;
+                }
+                if (total != kModelRows) {
+                    fail("rows=" + std::to_string(total) + ", expected " + std::to_string(kModelRows));
+                    return;
+                }
+                print(std::format("mounted table=model rows={} realized={} columns=pending ms={:.0f}", total, realized,
+                                  swapped - mountBegan));
+                frames = 0;
+                phase = Phase::ModelPrime;
+                window.requestUpdate();
+                return;
+            }
+            case Phase::ModelPrime: {
+                if (primeStep == 0 && !table->property("arranged").toBool()) {
+                    if (++frames >= kMaxFramesWaited) {
+                        fail("the model table never arranged its column window");
+                        return;
+                    }
+                    window.requestUpdate();
+                    return;
+                }
+                bool const wasFirst = primeStep == 0;
+                prime(Phase::Scrolling);
+                if (phase == Phase::Finished) {
+                    return;
+                }
+                if (!wasFirst) {
+                    int const realized = table->property("realizedCount").toInt();
+                    int const columns = table->property("realizedColumnCount").toInt();
+                    if (realized <= 0 || realized >= 100 || columns <= 0 || columns >= 100) {
+                        fail("not windowed both ways: rows=" + std::to_string(realized) +
+                             " columns=" + std::to_string(columns));
+                        return;
+                    }
+                    print(std::format("windowed rows={} columns={}", realized, columns));
+                    if (prepareScrolls()) {
+                        window.requestUpdate();
+                    }
+                }
+                return;
+            }
+            case Phase::Finished:
+                return;
         }
     }
 };

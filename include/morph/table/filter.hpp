@@ -751,17 +751,16 @@ public:
                 if (unknown) {
                     unknownColumns |= 1U << at;
                 } else {
-                    masks.at(at) =
-                        entryBits(column.include, index.includeBits, index.include, index.includeTested, cells, row,
-                                  counters);
+                    masks.at(at) = entryBits(column.include, index.includeBits, index.include, index.includeTested,
+                                             cells, row, counters);
                 }
             } else if (!include && index.usable) {
                 --r;
                 if (unknown) {
                     ++q;
                 } else {
-                    auto const bits = entryBits(column.include, index.includeBits, index.include,
-                                                index.includeTested, cells, row, counters);
+                    auto const bits = entryBits(column.include, index.includeBits, index.include, index.includeTested,
+                                                cells, row, counters);
                     bool const satisfies = group.combine == Combine::All ? bits == index.compiled : bits != 0;
                     y += satisfies ? 1 : 0;
                 }
@@ -773,8 +772,8 @@ public:
             if (hasExclude && !index.excludeBits.empty()) {
                 if (unknown) {
                     excludeUnknown = true;
-                } else if (entryBits(column.exclude, index.excludeBits, index.exclude, index.excludeTested, cells,
-                                     row, counters) != 0) {
+                } else if (entryBits(column.exclude, index.excludeBits, index.exclude, index.excludeTested, cells, row,
+                                     counters) != 0) {
                     return Match::No;
                 }
             }
@@ -803,8 +802,7 @@ private:
     /// @return The bits; an empty or invalid cell matches only `isEmpty` or `notEmpty` entries, with no probe.
     [[nodiscard]] static std::uint32_t entryBits(std::span<Entry const> entries, std::span<std::uint32_t const> bits,
                                                  ValueIndex const& index, std::span<std::size_t const> tested,
-                                                 KeyColumn const& keys, std::uint32_t row,
-                                                 FilterCounters* counters) {
+                                                 KeyColumn const& keys, std::uint32_t row, FilterCounters* counters) {
         std::uint32_t out = 0;
         if (keys.states[row] != CellState::Valid) {
             for (std::size_t at = 0; at < entries.size(); ++at) {
@@ -1248,10 +1246,10 @@ struct RawEntry {
     parsed.caseSensitive = caseSensitive;
     for (auto const& member : members) {
         if (!parseOperand(info, services, member, 0, parsed)) {
-            return std::unexpected(TableError{.code = TableErrorCode::InvalidValue,
-                                              .column = info.id,
-                                              .message = "value \"" + member + "\" does not parse for column " +
-                                                         info.id});
+            return std::unexpected(
+                TableError{.code = TableErrorCode::InvalidValue,
+                           .column = info.id,
+                           .message = "value \"" + member + "\" does not parse for column " + info.id});
         }
         switch (info.kind) {
             case ColumnKind::Integer:
@@ -1599,8 +1597,8 @@ inline void indexEntry(CompiledFilter::Entry const& entry, FilterEntry const& ra
         }
         // With `all`, a column that cannot evaluate every entry cannot satisfy them; with `any`, one that
         // evaluates none cannot either.
-        index.usable = group.combine == Combine::All ? column.include.size() == group.include.size()
-                                                     : !column.include.empty();
+        index.usable =
+            group.combine == Combine::All ? column.include.size() == group.include.size() : !column.include.empty();
         if (!column.include.empty() || !column.exclude.empty()) {
             out.columns.push_back(std::move(column));
             out.index.push_back(std::move(index));
@@ -1610,8 +1608,9 @@ inline void indexEntry(CompiledFilter::Entry const& entry, FilterEntry const& ra
         return std::ranges::find(applies, std::size_t{0}) != applies.end();
     };
     if (unapplied(includeApplies) || unapplied(excludeApplies)) {
-        return std::unexpected(lastError.value_or(TableError{
-            .code = TableErrorCode::InvalidSpec, .column = {}, .message = "a filter group entry applies to no column"}));
+        return std::unexpected(lastError.value_or(TableError{.code = TableErrorCode::InvalidSpec,
+                                                             .column = {},
+                                                             .message = "a filter group entry applies to no column"}));
     }
     return out;
 }

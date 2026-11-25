@@ -108,23 +108,23 @@ std::string spansText(std::string_view recorded) {
 // How a probe, or the backend behind it, breaks the contract on purpose. A suite that passes a correct backend
 // measures something only if it fails a broken one.
 enum class Fault : std::uint8_t {
-    None,            // the reference probe
-    NoChildren,      // a container reports its children but hands none of them out
-    WrongText,       // every widget reads as showing other text
-    DeadInput,       // user actions never reach the widgets
-    EchoingSelect,   // the backend's Select reports a choice when its options are replaced
-    NoModifiers,     // a click on a table row arrives without its modifiers, as a plain click
-    NarrowBadge,     // a badge sized by a fixed or percent width is laid out narrower than its label
-    OverlappedText,  // the text after a badge starts inside it
-    TinyBounds,      // every widget is 5 units wide
-    HugeBounds,      // every widget is 40 units wide
-    HollowGrid,      // a grid reports no cells
-    SecondMissing,   // a column hands out only its first child
-    HollowNarrow,    // a row whose first child is sized by a fixed or percent width reports no children
-    HollowNatural,   // a row whose first child is sized by its content reports no children
-    NarrowStretch,   // a button sized by a stretch width is laid out narrower than its label
-    PlainHeaderClicks,  // every header click is reported as Plain
-    FirstSortKeyOnly,   // a header's mark and description answer for the chain's first key only
+    None,                // the reference probe
+    NoChildren,          // a container reports its children but hands none of them out
+    WrongText,           // every widget reads as showing other text
+    DeadInput,           // user actions never reach the widgets
+    EchoingSelect,       // the backend's Select reports a choice when its options are replaced
+    NoModifiers,         // a click on a table row arrives without its modifiers, as a plain click
+    NarrowBadge,         // a badge sized by a fixed or percent width is laid out narrower than its label
+    OverlappedText,      // the text after a badge starts inside it
+    TinyBounds,          // every widget is 5 units wide
+    HugeBounds,          // every widget is 40 units wide
+    HollowGrid,          // a grid reports no cells
+    SecondMissing,       // a column hands out only its first child
+    HollowNarrow,        // a row whose first child is sized by a fixed or percent width reports no children
+    HollowNatural,       // a row whose first child is sized by its content reports no children
+    NarrowStretch,       // a button sized by a stretch width is laid out narrower than its label
+    PlainHeaderClicks,   // every header click is reported as Plain
+    FirstSortKeyOnly,    // a header's mark and description answer for the chain's first key only
     MenuColumnOffByOne,  // a header menu's choice is made on the next column's menu
     MoveTargetIsSource,  // a column move reports the column's own place
     UnnamedFilter,       // a filtered header is named by its bare label
@@ -407,7 +407,7 @@ private:
             return text ? label : std::string{};
         }
         auto const direction = sort.compare(colon + 1, 9, "Ascending") == 0 ? ui::SortDirection::Ascending
-                                                                             : ui::SortDirection::Descending;
+                                                                            : ui::SortDirection::Descending;
         return text ? label + ui::sortMarkText(direction, 1, 1) : ui::sortDescription(direction, 1, 1);
     }
 
@@ -601,7 +601,8 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
     // Each configuring fault fails the case its control stands beside. Mutation: drop a fault's branch from the
     // probe (the case then passes under it).
     for (auto const& [fault, name] : std::initializer_list<std::pair<Fault, std::string_view>>{
-             {Fault::PlainHeaderClicks, "table: a Shift-click on a sortable header reports Shift, a plain click Plain"},
+             {Fault::PlainHeaderClicks,
+              "table: a Shift-click on a sortable header reports Shift, a plain click Plain"},
              {Fault::FirstSortKeyOnly, "table: a chain of three keys marks every header with its place"},
              {Fault::MenuColumnOffByOne,
               "table: a header's menu shows its entries and choosing one reports the column and the path"},

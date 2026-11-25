@@ -483,7 +483,8 @@ struct SpanRow {
 /// column's, clipped at the last place; a span whose column is hidden covers nothing and is not refused.
 /// @param rows    The rows in order.
 /// @param columns How many columns the table has.
-/// @param placeOf Each column's visible place, by index into the table's columns, none for a hidden column; empty: every
+/// @param placeOf Each column's visible place, by index into the table's columns, none for a hidden column; empty:
+/// every
 ///                column at the place of its index.
 /// @return The effective spans per row and the refusals.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one refusal per rule of a span.
@@ -507,7 +508,8 @@ struct SpanRow {
                 out.refused.emplace_back(
                     site, row.name + ": column " + std::to_string(span.column) + " " + std::string{why});
             };
-            if (span.column >= columns || span.rows == 0 || span.columns == 0 || row.heading || named.at(span.column)) {
+            if (span.column >= columns || span.rows == 0 || span.columns == 0 || row.heading ||
+                named.at(span.column)) {
                 refuse(site::kRowSpanInvalid, "is not a span of this table");
                 continue;
             }
@@ -1189,11 +1191,10 @@ private:
 
     void applyCommon(reactive::Scope& scope, Widget& widget, Common const& common) {
         // The focus chain passes over a hidden or disabled widget and what is inside it.
-        ChainFlags* const flags =
-            common.visible.isBound() || !common.visible.constant() || common.enabled.isBound() ||
-                    !common.enabled.constant()
-                ? &scope.make<ChainFlags>(_chainFlags, &widget)
-                : nullptr;
+        ChainFlags* const flags = common.visible.isBound() || !common.visible.constant() || common.enabled.isBound() ||
+                                          !common.enabled.constant()
+                                      ? &scope.make<ChainFlags>(_chainFlags, &widget)
+                                      : nullptr;
         if (common.visible.isBound() || !common.visible.constant()) {
             bind(scope, common.visible, [&widget, flags](bool shown) {
                 flags->set(true, shown);
@@ -1317,9 +1318,9 @@ private:
             return static_cast<bool>(spec.onRemove);
         } else {
             return std::is_same_v<Spec, TextInput> || std::is_same_v<Spec, Button> || std::is_same_v<Spec, Checkbox> ||
-                   std::is_same_v<Spec, Select> || std::is_same_v<Spec, Menu> ||
-                   std::is_same_v<Spec, DateTimeInput> || std::is_same_v<Spec, Slider> ||
-                   std::is_same_v<Spec, FilePicker> || std::is_same_v<Spec, Table> || std::is_same_v<Spec, Tabs>;
+                   std::is_same_v<Spec, Select> || std::is_same_v<Spec, Menu> || std::is_same_v<Spec, DateTimeInput> ||
+                   std::is_same_v<Spec, Slider> || std::is_same_v<Spec, FilePicker> || std::is_same_v<Spec, Table> ||
+                   std::is_same_v<Spec, Tabs>;
         }
     }
 
@@ -2312,8 +2313,8 @@ private:
         } else if (virtualized) {
             resolved.effective.resize(rows.size());
             if (std::ranges::any_of(rows, [](SpanRow const& row) {
-                    return std::ranges::any_of(row.requested,
-                                               [](RowSpan const& span) { return span.rows >= 2 || span.columns >= 2; });
+                    return std::ranges::any_of(
+                        row.requested, [](RowSpan const& span) { return span.rows >= 2 || span.columns >= 2; });
                 })) {
                 resolved.refused.emplace_back(site::kRowSpanVirtualized, "the table is virtualized");
             }
@@ -2359,8 +2360,8 @@ private:
     };
 
     // Reads @p items once, as a `Menu` shows them: a hidden entry is left out, and so is a separator it leaves at
-    // either end of its level or next to another. Each entry shown is appended to @p shown, and what it runs to @p kept
-    // at the same place.
+    // either end of its level or next to another. Each entry shown is appended to @p shown, and what it runs to @p
+    // kept at the same place.
     // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
     static void readMenuItems(std::vector<MenuItem> const& items, std::vector<MenuEntry>& shown,
                               std::vector<OpenItem>& kept) {
@@ -2465,7 +2466,7 @@ private:
                     return shown;
                 },
                 [runtime = _rt, chosen = event(spec.onMenu), open](std::optional<std::size_t> column,
-                                                                     std::vector<std::size_t> path) {
+                                                                   std::vector<std::size_t> path) {
                     bool const builtIn = !column || open->headerColumn != column || path.empty() ||
                                          path.front() < open->builtIn || open->header.empty();
                     if (builtIn) {
@@ -2521,14 +2522,12 @@ private:
             widget.setOnFilter(event(spec.onFilter));
         }
         if (spec.filtered.isBound() || !spec.filtered.constant().empty()) {
-            bind(scope, spec.filtered, [&widget](std::vector<std::size_t> const& columns) {
-                widget.setFiltered(columns);
-            });
+            bind(scope, spec.filtered,
+                 [&widget](std::vector<std::size_t> const& columns) { widget.setFiltered(columns); });
         }
         if (spec.columnGroups.isBound() || !spec.columnGroups.constant().empty()) {
-            bind(scope, spec.columnGroups, [&widget](std::vector<TableColumnGroup> const& groups) {
-                widget.setColumnGroups(groups);
-            });
+            bind(scope, spec.columnGroups,
+                 [&widget](std::vector<TableColumnGroup> const& groups) { widget.setColumnGroups(groups); });
         }
         if (spec.onGroupFilter) {
             widget.setOnGroupFilter(event(spec.onGroupFilter));
@@ -2656,13 +2655,13 @@ private:
                     }});
         // While the selection is of the view the backend marks it, and the key list it holds is not sent over it.
         auto& viewing = scope.make<bool>(false);
-        widget.setOnSelectionChange(inputEvent(
-            spec.onSelectionChange,
-            controlled(scope, spec.selection, [&widget, &viewing](std::vector<Key> const& keys) {
-                if (!viewing) {
-                    widget.setSelection(keys);
-                }
-            })));
+        widget.setOnSelectionChange(
+            inputEvent(spec.onSelectionChange,
+                       controlled(scope, spec.selection, [&widget, &viewing](std::vector<Key> const& keys) {
+                           if (!viewing) {
+                               widget.setSelection(keys);
+                           }
+                       })));
         bindSelectionView(scope, spec, widget, viewing);
         return widget;
     }
@@ -3053,8 +3052,7 @@ private:
             fitStretch(table);
         }
         bool const windowed =
-            table.horizontal &&
-            windowingOf(table.virtualize, rows, table.visible.size(), /*serverMode*/ true).columns;
+            table.horizontal && windowingOf(table.virtualize, rows, table.visible.size(), /*serverMode*/ true).columns;
         if (!table.windowDirty && windowed == table.windowedColumns) {
             return;
         }
@@ -3071,8 +3069,8 @@ private:
         }
         std::vector<std::size_t> places;
         if (windowed) {
-            places = columnWindow(extents, pinned, table.scrollX, table.viewport, table.virtualize.columnOverscan)
-                         .columns;
+            places =
+                columnWindow(extents, pinned, table.scrollX, table.viewport, table.virtualize.columnOverscan).columns;
         } else {
             places.resize(table.visible.size());
             std::iota(places.begin(), places.end(), std::size_t{0});
@@ -3334,14 +3332,12 @@ private:
             });
         }
         if (look.marks) {
-            bind(lookScope, *look.marks, [&table, widget = slot.widget](RowMarks const& marks) {
-                table.widget->setRowMarks(*widget, marks);
-            });
+            bind(lookScope, *look.marks,
+                 [&table, widget = slot.widget](RowMarks const& marks) { table.widget->setRowMarks(*widget, marks); });
         }
         if (look.modified) {
-            bind(lookScope, *look.modified, [&table, widget = slot.widget](bool modified) {
-                table.widget->setRowModified(*widget, modified);
-            });
+            bind(lookScope, *look.modified,
+                 [&table, widget = slot.widget](bool modified) { table.widget->setRowModified(*widget, modified); });
         }
         for (auto& [column, placed] : slot.cells) {
             placed.fresh = false;
@@ -3708,9 +3704,9 @@ private:
         }
         realizeCells(table, shown);
         syncEditor(table);
-        // The contiguous range only: a focused row kept beyond it is placed by its own `setRowIndex`. Every source table
-        // is told it, one that realizes every row as the whole view: a backend takes the view's count from it. Whether
-        // spans are drawn is the span table's (`SpanTable::windowed`), not this call's.
+        // The contiguous range only: a focused row kept beyond it is placed by its own `setRowIndex`. Every source
+        // table is told it, one that realizes every row as the whole view: a backend takes the view's count from it.
+        // Whether spans are drawn is the span table's (`SpanTable::windowed`), not this call's.
         table.widget->setRealizedWindow(lo, hi > lo ? hi - lo : 0, count);
         afterPass(table, total);
         table.lastCount = count;
@@ -3874,7 +3870,8 @@ private:
                     return;
                 }
                 table.continuing = false;
-                static_cast<void>(runCallback(*_rt, [&] { realizeWindow(table, [](std::int64_t) { return false; }); }));
+                static_cast<void>(
+                    runCallback(*_rt, [&] { realizeWindow(table, [](std::int64_t) { return false; }); }));
             });
         } catch (...) {
             table.continuing = false;
@@ -4001,9 +3998,10 @@ private:
         // A grid holds its own focus: the key that took focus is handed to it, as a gesture's cell is.
         if (table.grid) {
             if (table.onGridFocus && table.focusColumn < table.columns.size()) {
-                table.onGridFocus(GridFocus{.key = table.focusKey,
-                                            .viewRow = static_cast<std::size_t>(std::max<std::int64_t>(table.focusIndex, 0)),
-                                            .column = table.columns.at(table.focusColumn).id});
+                table.onGridFocus(
+                    GridFocus{.key = table.focusKey,
+                              .viewRow = static_cast<std::size_t>(std::max<std::int64_t>(table.focusIndex, 0)),
+                              .column = table.columns.at(table.focusColumn).id});
             }
             return;
         }
@@ -4145,11 +4143,11 @@ private:
             std::optional<std::size_t> const anchorPlace = placeOf(table.cellRange->anchor.column);
             std::optional<std::size_t> const focusPlace = placeOf(table.cellRange->focus.column);
             if (anchorRow && focusRow && anchorPlace && focusPlace) {
-                rect = std::array<std::size_t, 4>{std::min(*anchorRow, *focusRow),
-                                                  std::max(*anchorRow, *focusRow) - std::min(*anchorRow, *focusRow) + 1,
-                                                  std::min(*anchorPlace, *focusPlace),
-                                                  std::max(*anchorPlace, *focusPlace) -
-                                                      std::min(*anchorPlace, *focusPlace) + 1};
+                rect = std::array<std::size_t, 4>{
+                    std::min(*anchorRow, *focusRow),
+                    std::max(*anchorRow, *focusRow) - std::min(*anchorRow, *focusRow) + 1,
+                    std::min(*anchorPlace, *focusPlace),
+                    std::max(*anchorPlace, *focusPlace) - std::min(*anchorPlace, *focusPlace) + 1};
             }
         }
         if (table.cellRectTold && rect == table.cellRect) {
@@ -4361,7 +4359,7 @@ private:
 
     // Where a key is among the realized rows' places in the view the rows now hold, or nothing.
     [[nodiscard]] static std::optional<std::int64_t> placeOfKey(SourceTable const& table, Key const& key,
-                                                               std::int64_t also) {
+                                                                std::int64_t also) {
         TableRows const& rows = *table.source.rows;
         auto const holds = [&rows, &key](std::int64_t index) {
             std::optional<TableRowRef> const ref = rows.row(index);
@@ -4589,9 +4587,8 @@ private:
             });
             widget.setOnSort(event(spec.onSort));
         }
-        bindTableConfig(scope, spec, widget, [this, &table](Key const& key, std::size_t column) {
-            focusAt(table, key, column);
-        });
+        bindTableConfig(scope, spec, widget,
+                        [this, &table](Key const& key, std::size_t column) { focusAt(table, key, column); });
         bind(scope, spec.status, [&widget](TableStatus const& status) { widget.setStatus(status); });
         widget.setOnRetry(event(spec.onRetry));
         table.source = *spec.source;
@@ -4621,8 +4618,8 @@ private:
                     return;
                 }
                 ++_stats.viewChanges;
-                if (std::ranges::any_of(change.ops,
-                                        [](table::ViewOp const& op) { return op.kind == table::ViewOp::Kind::Reset; })) {
+                if (std::ranges::any_of(
+                        change.ops, [](table::ViewOp const& op) { return op.kind == table::ViewOp::Kind::Reset; })) {
                     ++_stats.viewResets;
                 }
                 static_cast<void>(runCallback(*_rt, [&] {
@@ -4651,9 +4648,8 @@ private:
         widget.setOnColumnMeasured([this, &table](std::size_t column, ColumnMeasure const& measure) {
             static_cast<void>(runCallback(*_rt, [&] { measured(table, column, measure); }));
         });
-        widget.setOnFocusMove([this, &table](FocusMove move) {
-            static_cast<void>(runCallback(*_rt, [&] { moveFocus(table, move); }));
-        });
+        widget.setOnFocusMove(
+            [this, &table](FocusMove move) { static_cast<void>(runCallback(*_rt, [&] { moveFocus(table, move); })); });
         widget.setOnSelectRange(event(spec.onSelectRange));
         bindGrid(scope, spec, widget, table);
         _rt->untracked([&] {
@@ -4678,16 +4674,16 @@ private:
         if (spec.cellSelection) {
             table.cells = true;
             widget.setSelectionMode(SelectionMode::None);
-            widget.setOnCellSelect([this, &table, onSelect = spec.onCellSelect](
-                                       std::size_t anchorRow, std::size_t anchorPlace, std::size_t focusRow,
-                                       std::size_t focusPlace) {
-                static_cast<void>(runCallback(*_rt, [&] {
-                    std::optional<CellRange> range = cellsAt(table, anchorRow, anchorPlace, focusRow, focusPlace);
-                    if (range && onSelect) {
-                        onSelect(std::move(range));
-                    }
-                }));
-            });
+            widget.setOnCellSelect(
+                [this, &table, onSelect = spec.onCellSelect](std::size_t anchorRow, std::size_t anchorPlace,
+                                                             std::size_t focusRow, std::size_t focusPlace) {
+                    static_cast<void>(runCallback(*_rt, [&] {
+                        std::optional<CellRange> range = cellsAt(table, anchorRow, anchorPlace, focusRow, focusPlace);
+                        if (range && onSelect) {
+                            onSelect(std::move(range));
+                        }
+                    }));
+                });
             bind(scope, *spec.cellSelection, [this, &table](std::optional<CellRange> const& range) {
                 static_cast<void>(runCallback(*_rt, [&] {
                     table.cellRange = range;
@@ -4705,13 +4701,13 @@ private:
         }
         // While the selection is of the view the backend marks it, and the key list it holds is not sent over it.
         auto& viewing = scope.make<bool>(false);
-        widget.setOnSelectionChange(inputEvent(
-            spec.onSelectionChange,
-            controlled(scope, spec.selection, [&widget, &viewing](std::vector<Key> const& keys) {
-                if (!viewing) {
-                    widget.setSelection(keys);
-                }
-            })));
+        widget.setOnSelectionChange(
+            inputEvent(spec.onSelectionChange,
+                       controlled(scope, spec.selection, [&widget, &viewing](std::vector<Key> const& keys) {
+                           if (!viewing) {
+                               widget.setSelection(keys);
+                           }
+                       })));
         bindSelectionView(scope, spec, widget, viewing);
         return widget;
     }
@@ -4914,7 +4910,7 @@ private:
     // Moves the widgets into the snapshot's order, and `rows` with them. A move that throws is recorded in `failure`
     // when it is the first failure, and leaves `rows` mirroring the container as it stands.
     void reorder(std::vector<KeyedRow>& rows, ContainerWidget& container, std::vector<Key> const& keys,
-                        std::vector<std::size_t> const& order, std::exception_ptr& failure) {
+                 std::vector<std::size_t> const& order, std::exception_ptr& failure) {
         std::unordered_map<Key, std::size_t> position;  // key -> index in `rows`
         std::unordered_map<Widget const*, std::size_t> rowOf;
         std::vector<Widget*> present;

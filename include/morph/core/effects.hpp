@@ -442,8 +442,7 @@ struct Resolved {
 [[nodiscard]] inline bool sameRegistration(record::RecordInfo const& lhs, record::RecordInfo const& rhs) {
     return lhs.name == rhs.name && lhs.type == rhs.type && lhs.keyField == rhs.keyField &&
            lhs.previousKeyField == rhs.previousKeyField && lhs.derivedFrom == rhs.derivedFrom &&
-           lhs.privateKeys == rhs.privateKeys &&
-           lhs.keyIsString == rhs.keyIsString && lhs.table == rhs.table;
+           lhs.privateKeys == rhs.privateKeys && lhs.keyIsString == rhs.keyIsString && lhs.table == rhs.table;
 }
 
 /// @brief Appends a problem for every `derivedFrom` cycle among the records.

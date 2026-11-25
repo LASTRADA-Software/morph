@@ -11,13 +11,13 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <chrono>
 #include <compare>
-#include <expected>
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <morph/table/edits.hpp>
 #include <morph/table/engine.hpp>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -862,7 +862,7 @@ TEST_CASE("cell edits: a fetch before the reply keeps the cell stale", "[table][
     table::CellEdits edits{c.commit()};
     edits.setDraft(k1, "count", "9", std::nullopt);
     edits.commitRow({k1, {{.column = "count", .json = "9"}}});
-    edits.rowFetched(k1);                                    // the change event's refetch, before the reply
+    edits.rowFetched(k1);  // the change event's refetch, before the reply
     CHECK(edits.stale(k1, "count"));
     CHECK(edits.draft(k1, "count") == "9");
     c.done.at(0)(std::expected<void, std::vector<table::FieldError>>{});
@@ -895,16 +895,18 @@ TEST_CASE("cell edits: a refusal lands on the cell whose member it names", "[tab
     CHECK(edits.error(k1, "count") == "must be at most 10");
     CHECK_FALSE(edits.error(k1, "value").has_value());
     table::RowId const k2{std::int64_t{2}};
-    edits.commitRow({k2, {{.column = "label", .json = R"("a")", .member = "label"},
-                          {.column = "remark", .json = R"("b")", .member = "remarkText"}}});
+    edits.commitRow({k2,
+                     {{.column = "label", .json = R"("a")", .member = "label"},
+                      {.column = "remark", .json = R"("b")", .member = "remarkText"}}});
     c.done.at(1)(std::unexpected(std::vector<table::FieldError>{{"remarkText", "too long"}}));
     CHECK(edits.error(k2, "remark") == "too long");
-    CHECK_FALSE(edits.error(k2, "label").has_value());      // no error reached it
+    CHECK_FALSE(edits.error(k2, "label").has_value());  // no error reached it
     table::RowId const k3{std::int64_t{3}};
-    edits.commitRow({k3, {{.column = "label", .json = R"("a")", .member = "label"},
-                          {.column = "remark", .json = R"("b")", .member = "remarkText"}}});
+    edits.commitRow({k3,
+                     {{.column = "label", .json = R"("a")", .member = "label"},
+                      {.column = "remark", .json = R"("b")", .member = "remarkText"}}});
     c.done.at(2)(std::unexpected(std::vector<table::FieldError>{{"", "The row is closed"}}));
-    CHECK(edits.error(k3, "label") == "The row is closed");   // names no cell: every cell of the request
+    CHECK(edits.error(k3, "label") == "The row is closed");  // names no cell: every cell of the request
     CHECK(edits.error(k3, "remark") == "The row is closed");
 }
 
@@ -934,7 +936,7 @@ TEST_CASE("cell edits: an edit in flight settles on the row's new key", "[table]
     CHECK_FALSE(edits.stale(k1, "count"));
     c.done.at(0)(std::expected<void, std::vector<table::FieldError>>{});
     REQUIRE(c.sent.size() == 2);
-    CHECK(c.sent.at(1).row == k9);                           // the queued edit names the new key
+    CHECK(c.sent.at(1).row == k9);  // the queued edit names the new key
     CHECK(edits.modified(k9, "count"));
     CHECK_FALSE(edits.modified(k1, "count"));
 }
@@ -961,12 +963,13 @@ TEST_CASE("cell edits: a row absent from a refetch loses its drafts", "[table][e
     CHECK_FALSE(edits.draft(k1, "count").has_value());
     CHECK_FALSE(edits.error(k1, "count").has_value());
     CHECK(edits.errorCount() == 0);
-    CHECK(edits.draft(table::RowId{std::int64_t{2}}, "count") == "7");   // other rows untouched
+    CHECK(edits.draft(table::RowId{std::int64_t{2}}, "count") == "7");  // other rows untouched
 }
 
 // Mutation: rowAbsent dropping the edit in flight from the queue (its settle then finds nothing to pop, and the
 // queued edit behind it is sent).
-TEST_CASE("cell edits: a row absent while an edit is in flight sends nothing more and keeps nothing", "[table][edits]") {
+TEST_CASE("cell edits: a row absent while an edit is in flight sends nothing more and keeps nothing",
+          "[table][edits]") {
     RowCommits c;
     table::CellEdits edits{c.commit()};
     edits.setDraft(k1, "count", "4", std::nullopt);

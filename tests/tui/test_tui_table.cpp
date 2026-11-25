@@ -24,11 +24,11 @@
 #include <utility>
 #include <vector>
 
+#include "grid_test_support.hpp"
 #include "tui/container_widgets.hpp"
 #include "tui/display_widgets.hpp"
 #include "tui/leaf_widgets.hpp"
 #include "tui/table_widget.hpp"
-#include "grid_test_support.hpp"
 #include "tui_harness.hpp"
 #include "ui_fake_rows.hpp"
 
@@ -1389,11 +1389,11 @@ struct TuiWindowFixture {
           rows{std::make_shared<FakeRows>(rowCount, columnCount, owner)} {
         std::vector<ui::TableColumn> columns;
         for (std::size_t column = 0; column < columnCount; ++column) {
-            columns.push_back(ui::TableColumn{.id = "c" + std::to_string(column),
-                                              .label = "C" + std::to_string(column),
-                                              .width = ui::Sizing::fixed(11),
-                                              .unit = column < options.units.size() ? options.units.at(column)
-                                                                                    : std::string{}});
+            columns.push_back(
+                ui::TableColumn{.id = "c" + std::to_string(column),
+                                .label = "C" + std::to_string(column),
+                                .width = ui::Sizing::fixed(11),
+                                .unit = column < options.units.size() ? options.units.at(column) : std::string{}});
         }
         ui::TableSource source;
         source.rows = rows;
@@ -1552,7 +1552,8 @@ TEST_CASE("tui table: a header with a unit reads Mass [kg]", "[tui][table]") {
     CHECK_FALSE(f.screenLine(0).contains("C1 ["));
     REQUIRE(f.screenLine(1).contains("r0c1"));
     auto& row = dynamic_cast<ui::Widget&>(*f.table->children().front());
-    f.table->setCellAccent(row, 1, ui::CellAccent{.tone = {}, .tooltip = "The value could not be read", .invalid = true});
+    f.table->setCellAccent(row, 1,
+                           ui::CellAccent{.tone = {}, .tooltip = "The value could not be read", .invalid = true});
     f.settle();
     CHECK_FALSE(f.screenLine(1).contains("r0c1"));
     CHECK(f.screenLine(1).contains("!"));
@@ -1817,13 +1818,13 @@ TEST_CASE("tui table: select-all asks the handler; a status entry reports its id
     static_cast<void>(f.screen.dispatchEvent(core::tui::test::charKey('a', core::tui::Modifier::Ctrl)));
     f.settle();
     CHECK(asked == 1);
-    f.table->setStatus(ui::TableStatus{.counts = "100 rows",
-                                       .message = "m",
-                                       .entries = {{.id = "run", .label = "Run on these"}},
-                                       .standing = "1 row could not be saved",
-                                       .standingEntries = {{.id = "select", .label = "Select them"},
-                                                           {.id = "clear", .label = "Clear marks"}},
-                                       .shown = true});
+    f.table->setStatus(ui::TableStatus{
+        .counts = "100 rows",
+        .message = "m",
+        .entries = {{.id = "run", .label = "Run on these"}},
+        .standing = "1 row could not be saved",
+        .standingEntries = {{.id = "select", .label = "Select them"}, {.id = "clear", .label = "Clear marks"}},
+        .shown = true});
     f.settle();
     std::string const line = f.screenLine(31);
     CHECK(line.find("[Alt+1 Select them]") != std::string::npos);
@@ -1928,9 +1929,10 @@ TEST_CASE("tui grid: a double click on a Boolean cell flips it once", "[tui][gri
     REQUIRE(checkedAt != std::string::npos);
     using Type = core::tui::MouseEvent::Type;
     int const x = static_cast<int>(checkedAt) + 2;
-    int const y = static_cast<int>(headerLine) + 2;   // the first row, 1-based
+    int const y = static_cast<int>(headerLine) + 2;  // the first row, 1-based
     for (int click = 0; click < 2; ++click) {
-        static_cast<void>(g.screen.dispatchEvent(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = x, .y = y}));
+        static_cast<void>(
+            g.screen.dispatchEvent(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = x, .y = y}));
         static_cast<void>(
             g.screen.dispatchEvent(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = x, .y = y}));
     }
@@ -1991,10 +1993,10 @@ TEST_CASE("tui table: bands draw above the header", "[tui][table][bands]") {
     REQUIRE(drawn.size() >= 2);
     std::size_t const m8 = drawn.at(1).find("M8");
     REQUIRE(m8 != std::string::npos);
-    CHECK(drawn.at(0).find("Mass retained [g]") == m8);   // over columns 1 to 3, not over Name
+    CHECK(drawn.at(0).find("Mass retained [g]") == m8);  // over columns 1 to 3, not over Name
     CHECK(drawn.at(1).find("Name") != std::string::npos);
     table->setBands({});
-    CHECK(harness.draw().at(0).find("Name") != std::string::npos);   // no band line once none is given
+    CHECK(harness.draw().at(0).find("Name") != std::string::npos);  // no band line once none is given
     cells.clear();
     row.reset();
 }

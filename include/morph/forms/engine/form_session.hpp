@@ -348,7 +348,8 @@ public:
                         return _parent == nullptr &&
                                readonlyVerdict(_core->model().rules(), _spec->name, _core->lookup()) == Tri::True;
                     }},
-          _required{core.runtime(), [this] {
+          _required{core.runtime(),
+                    [this] {
                         return _spec->required ||
                                (_parent == nullptr &&
                                 requiredVerdict(_core->model().rules(), _spec->name, _core->lookup()) == Tri::True);
@@ -460,7 +461,8 @@ public:
     /// @return The visibility computed.
     [[nodiscard]] reactive::Computed<bool> const& visible() const noexcept { return _visible; }
 
-    /// @brief Whether the field is frozen: `x-readonly`, `x-computed`, `x-derived`, a frozen parent, or a `readonlyWhen`
+    /// @brief Whether the field is frozen: `x-readonly`, `x-computed`, `x-derived`, a frozen parent, or a
+    /// `readonlyWhen`
     ///        naming it that is True.
     /// @return The read-only computed.
     [[nodiscard]] reactive::Computed<bool> const& readonly() const noexcept { return _readonly; }
@@ -662,9 +664,9 @@ public:
     }
 
     /// @brief What the field holds, as one string: two snapshots are equal exactly when the field holds the same
-    ///        entry (draft, unit and engagement, and every member's and row's). A computed or derived member, which only
-    ///        a round of derived values writes, is no entry and is left out, so a round never makes a field look edited
-    ///        or unsaved. Untracked.
+    ///        entry (draft, unit and engagement, and every member's and row's). A computed or derived member, which
+    ///        only a round of derived values writes, is no entry and is left out, so a round never makes a field look
+    ///        edited or unsaved. Untracked.
     /// @return The snapshot.
     [[nodiscard]] std::string snapshot() const {
         std::string out;
@@ -859,7 +861,8 @@ private:
         return _parent != nullptr && _parent->spec().kind == FieldKind::ObjectArray;
     }
 
-    // A field `x-optionsDependsOn` names: a sibling first (a row's member, an object's member), then a top-level field.
+    // A field `x-optionsDependsOn` names: a sibling first (a row's member, an object's member), then a top-level
+    // field.
     [[nodiscard]] FieldState* sibling(std::string_view name) const {
         if (_siblings != nullptr) {
             auto const found =
@@ -1411,8 +1414,9 @@ public:
     }
 
     /// @brief Whether a scalar field holds another entry than when the form was last loaded: its draft or its unit
-    ///        differs, or it is a member of a row added since. Tracked. A computed or derived member is never modified:
-    ///        only a round writes it. Any other member stays modified whatever freezes it after the user typed in it.
+    ///        differs, or it is a member of a row added since. Tracked. A computed or derived member is never
+    ///        modified: only a round writes it. Any other member stays modified whatever freezes it after the user
+    ///        typed in it.
     /// @param path The field's path (see `field`), such as `specimens#3.mass`.
     /// @return `true` when modified; `false` for a path that names no field, and for an Object or a collection.
     [[nodiscard]] bool modified(std::string_view path) const {
@@ -1450,8 +1454,8 @@ public:
     }
 
     /// @brief Why the last submission's reply refused a field: the reply's `errors` member, an object of field paths
-    ///        (`field`) to a message or a list of messages, names it. Held while the field keeps the draft it had then.
-    ///        Tracked.
+    ///        (`field`) to a message or a list of messages, names it. Held while the field keeps the draft it had
+    ///        then. Tracked.
     /// @param path The field's path.
     /// @return The message; empty while none holds.
     [[nodiscard]] std::optional<std::string> refusal(std::string_view path) const {
@@ -1473,7 +1477,8 @@ public:
     ///        scalar's draft and unit, or each member of a row (`rows#key`). A row added since the load is removed.
     /// @param path The field's or the row's path.
     void revert(std::string_view path) {
-        if (auto const hash = path.rfind('#'); hash != std::string_view::npos && path.find('.', hash) == std::string_view::npos) {
+        if (auto const hash = path.rfind('#');
+            hash != std::string_view::npos && path.find('.', hash) == std::string_view::npos) {
             std::optional<std::size_t> const key = rowIndexOf(path.substr(hash + 1));
             RowState const* const row = key ? rowOf(path.substr(0, hash), *key) : nullptr;
             if (row == nullptr) {
@@ -1504,7 +1509,8 @@ public:
         });
     }
 
-    /// @brief Asks for derived and computed values in rounds from now on: each commit (`noteCommit`) starts a round once
+    /// @brief Asks for derived and computed values in rounds from now on: each commit (`noteCommit`) starts a round
+    /// once
     ///        `options.debounce` passed with no further commit, which evaluates the body and calls the derive action.
     /// @param options The evaluation, the derive call, the timers and the debounce.
     void deriveWith(DeriveOptions options) {
@@ -1543,9 +1549,10 @@ public:
     ///         else `Current`.
     [[nodiscard]] DeriveState deriveState() const { return _deriveState.get(); }
 
-    /// @brief Whether the derived values are the last ones loaded before a failure: true from a round that failed until
-    ///        a round succeeds, so it holds through a retry in flight (what "Recalculate" offers stays until it worked).
-    ///        Tracked.
+    /// @brief Whether the derived values are the last ones loaded before a failure: true from a round that failed
+    /// until
+    ///        a round succeeds, so it holds through a retry in flight (what "Recalculate" offers stays until it
+    ///        worked). Tracked.
     /// @return `true` while the last round to settle failed.
     [[nodiscard]] bool deriveFailing() const { return _deriveFailing.get(); }
 
@@ -1585,11 +1592,12 @@ public:
     }
 
     /// @brief Loads a derive reply's values: each path names a derived member (`x-derived`) of the body @p round sent,
-    ///        `rows[i]` resolved through the row keys at sending to the row's current position, so a value lands on the
-    ///        row it was computed for; a value for a row removed since is dropped. Programmatic, and no edit: nothing is
-    ///        submitted, and a member that held its loaded value holds the new one as loaded. A derived member is in no
-    ///        field's snapshot, so a top-level field that held its loaded value, or what the submission in flight sent,
-    ///        keeps holding it. A round older than the last loaded derive reply loads nothing.
+    ///        `rows[i]` resolved through the row keys at sending to the row's current position, so a value lands on
+    ///        the row it was computed for; a value for a row removed since is dropped. Programmatic, and no edit:
+    ///        nothing is submitted, and a member that held its loaded value holds the new one as loaded. A derived
+    ///        member is in no field's snapshot, so a top-level field that held its loaded value, or what the
+    ///        submission in flight sent, keeps holding it. A round older than the last loaded derive reply loads
+    ///        nothing.
     /// @param round The round the reply answers.
     /// @param reply The reply.
     /// @return How many members were written, and the paths refused: those naming no derived member.
@@ -1633,9 +1641,9 @@ public:
     }
 
     /// @brief Loads an evaluation's recomputed body: every computed member (`x-computed`) of the body @p round sent,
-    ///        rows resolved as `loadDerived(round, Derived)` resolves them; a computed member the body leaves out of an
-    ///        object it holds is blank. The reply's `errors` and `ready` are not read. Programmatic, and no edit, as
-    ///        `loadDerived(round, Derived)` writes. A round older than the last loaded evaluation loads nothing.
+    ///        rows resolved as `loadDerived(round, Derived)` resolves them; a computed member the body leaves out of
+    ///        an object it holds is blank. The reply's `errors` and `ready` are not read. Programmatic, and no edit,
+    ///        as `loadDerived(round, Derived)` writes. A round older than the last loaded evaluation loads nothing.
     /// @param round         The round the reply answers.
     /// @param evaluatedBody The recomputed body.
     /// @return How many members were written; nothing is refused, since only computed members are read.
@@ -1672,13 +1680,14 @@ public:
         return load;
     }
 
-    /// @brief Switches units as part of how the fields were loaded: what the first unit a grid's per-row `unit` overlay
-    ///        gives each loaded row is. Each switch converts the draft as `FieldState::switchUnit` does. A cell that held
-    ///        its loaded value is then recorded as loaded with what it holds after the switch, so it draws no modified
-    ///        mark and a revert returns to it; a modified cell, and a member of a row added since the load, stay as they
-    ///        are, the switch an ordinary programmatic change. A top-level field that held its loaded value, or what the
-    ///        submission in flight sent, keeps holding it. Nothing is submitted. All the switches are one batch and one
-    ///        pass over the top-level fields, so a load's rows cost no more than one switch.
+    /// @brief Switches units as part of how the fields were loaded: what the first unit a grid's per-row `unit`
+    /// overlay
+    ///        gives each loaded row is. Each switch converts the draft as `FieldState::switchUnit` does. A cell that
+    ///        held its loaded value is then recorded as loaded with what it holds after the switch, so it draws no
+    ///        modified mark and a revert returns to it; a modified cell, and a member of a row added since the load,
+    ///        stay as they are, the switch an ordinary programmatic change. A top-level field that held its loaded
+    ///        value, or what the submission in flight sent, keeps holding it. Nothing is submitted. All the switches
+    ///        are one batch and one pass over the top-level fields, so a load's rows cost no more than one switch.
     /// @param switches Each field, a scalar of this session, and the index into its `spec().units` to switch it to.
     void switchUnitsAsLoaded(std::span<std::pair<FieldState*, std::size_t> const> switches) {
         if (switches.empty()) {
@@ -1814,7 +1823,8 @@ private:
     // The field errors a reply names in its `errors` member, by the field's path: the first message of each entry. An
     // entry that names no field of the form is left out. A failure's exception names none: a refusal's arguments are
     // its sentence's.
-    [[nodiscard]] std::map<std::string, Refused, std::less<>> fieldErrorsOf(std::optional<std::string> const& reply) const {
+    [[nodiscard]] std::map<std::string, Refused, std::less<>> fieldErrorsOf(
+        std::optional<std::string> const& reply) const {
         std::map<std::string, Refused, std::less<>> out;
         auto const dom = reply ? detail::engine::parseJson(*reply) : std::nullopt;
         detail::engine::Json const* const errors = dom ? detail::engine::member(*dom, "errors") : nullptr;
@@ -1849,7 +1859,8 @@ private:
         bool const succeeded = successes != _errorsSeenSuccesses;
         _errorsSeenSuccesses = successes;
         _refusalSeen = error;
-        _refusals.set(succeeded ? fieldErrorsOf(_mutation.lastResult()) : std::map<std::string, Refused, std::less<>>{});
+        _refusals.set(succeeded ? fieldErrorsOf(_mutation.lastResult())
+                                : std::map<std::string, Refused, std::less<>>{});
     }
 
     // What one scalar held when the form was last loaded; a row's own entry marks the row as loaded.
@@ -1909,8 +1920,8 @@ private:
     // NOLINTNEXTLINE(misc-no-recursion): an Object's members are fields.
     [[nodiscard]] bool modified(FieldState const& state) const {
         FieldSpec const& spec = state.spec();
-        if (spec.truncated || spec.kind == FieldKind::Object || spec.kind == FieldKind::ObjectArray ||
-            spec.computed || spec.derived) {
+        if (spec.truncated || spec.kind == FieldKind::Object || spec.kind == FieldKind::ObjectArray || spec.computed ||
+            spec.derived) {
             return false;
         }
         static_cast<void>(_loadGeneration.get());
@@ -1919,7 +1930,8 @@ private:
         if (found == _loadedCells.end()) {
             return true;
         }
-        return state.draft() != found->second.text || const_cast<FieldState&>(state).unit().get() != found->second.unit;
+        return state.draft() != found->second.text ||
+               const_cast<FieldState&>(state).unit().get() != found->second.unit;
     }
 
     // A collection's row by key, tracked; null when there is none.
@@ -2067,7 +2079,8 @@ private:
 
     // Every collection's row keys, by its path, in order, its rows' own collections included.
     // NOLINTNEXTLINE(misc-no-recursion): an Object's members and a row's are fields.
-    static void collectRowKeys(FieldState const& field, std::map<std::string, std::vector<std::uint64_t>, std::less<>>& out) {
+    static void collectRowKeys(FieldState const& field,
+                               std::map<std::string, std::vector<std::uint64_t>, std::less<>>& out) {
         FieldSpec const& spec = field.spec();
         if (spec.truncated) {
             return;
@@ -2193,7 +2206,8 @@ private:
     [[nodiscard]] bool holdsLoaded(FieldState const& field) const {
         auto const found = _loadedCells.find(field.path());
         return found != _loadedCells.end() && field.draft() == found->second.text &&
-               const_cast<FieldState&>(field).unit().peek() == found->second.unit;  // NOLINT(cppcoreguidelines-pro-type-const-cast)
+               const_cast<FieldState&>(field).unit().peek() ==
+                   found->second.unit;  // NOLINT(cppcoreguidelines-pro-type-const-cast)
     }
 
     // A programmatic write into @p targets that is no edit: a target that held its loaded value is recorded as loaded
@@ -2223,8 +2237,8 @@ private:
         runtime().untracked([&] {
             for (std::size_t at = 0; at < targets.size(); ++at) {
                 if (heldLoaded.at(at)) {
-                    _loadedCells.insert_or_assign(
-                        targets[at]->path(), LoadedCell{.text = targets[at]->draft(), .unit = targets[at]->unit().peek()});
+                    _loadedCells.insert_or_assign(targets[at]->path(), LoadedCell{.text = targets[at]->draft(),
+                                                                                  .unit = targets[at]->unit().peek()});
                 }
             }
             for (std::size_t index = 0; index < _fields.size(); ++index) {
@@ -2280,7 +2294,8 @@ private:
                           bool failed = false;
                           if (_round && _round->round.sequence == sequence) {
                               Derived values;
-                              if (auto const error = glz::read<glz::opts{.error_on_unknown_keys = false}>(values, reply)) {
+                              if (auto const error =
+                                      glz::read<glz::opts{.error_on_unknown_keys = false}>(values, reply)) {
                                   failed = true;
                               } else {
                                   DeriveLoad const load = loadDerived(_round->round, values);

@@ -26,11 +26,11 @@
 #include <cstdint>
 #include <cstdio>
 #include <memory>
-#include <mutex>
 #include <morph/reactive/testing/manual_scheduler.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/mount.hpp>
 #include <morph/ui/view.hpp>
+#include <mutex>
 #include <print>
 #include <string>
 #include <string_view>
@@ -225,12 +225,13 @@ TEST_CASE("qt quick baseline: F2 to F5 on a rows table of 2,000 x 300", "[.bench
     for (QQuickItem const* const item : tableItem->findChildren<QQuickItem*>()) {
         headers += item->objectName().startsWith(QStringLiteral("header")) ? 1 : 0;
     }
-    std::println("\nF2: a rows table of 2,000 x 300, 1,280 x 800, mounted in {:.0f} ms (document parse included), {} rows "
-                 "realized at the mount\n\n"
-                 "| realized rows | widgets alive | header cells | widgets per realized row |\n|---:|---:|---:|---:|\n"
-                 "| {} | {} | {} | {:.1f} |",
-                 mountMillis, realizedAtMount, realized, widgets, headers,
-                 static_cast<double>(widgets) / static_cast<double>(std::max(realized, 1)));
+    std::println(
+        "\nF2: a rows table of 2,000 x 300, 1,280 x 800, mounted in {:.0f} ms (document parse included), {} rows "
+        "realized at the mount\n\n"
+        "| realized rows | widgets alive | header cells | widgets per realized row |\n|---:|---:|---:|---:|\n"
+        "| {} | {} | {} | {:.1f} |",
+        mountMillis, realizedAtMount, realized, widgets, headers,
+        static_cast<double>(widgets) / static_cast<double>(std::max(realized, 1)));
     static_cast<void>(std::fflush(stdout));
 
     // F3 and F4: frame times of vertical and horizontal scrolls.
@@ -241,9 +242,10 @@ TEST_CASE("qt quick baseline: F2 to F5 on a rows table of 2,000 x 300", "[.bench
     REQUIRE(rowHeight > 0);
     REQUIRE(columnWidth > 0);
     REQUIRE(right > 0);
-    std::println("\nF3, F4: frame time, CPU, software scene graph, offscreen (row {:.1f} px, column {:.1f} px)\n\n"
-                 "| scroll | frames | p50 ms | p10-p90 ms | p99 ms | frames over 16.6 ms |\n|---|---:|---:|---:|---:|---:|",
-                 rowHeight, columnWidth);
+    std::println(
+        "\nF3, F4: frame time, CPU, software scene graph, offscreen (row {:.1f} px, column {:.1f} px)\n\n"
+        "| scroll | frames | p50 ms | p10-p90 ms | p99 ms | frames over 16.6 ms |\n|---|---:|---:|---:|---:|---:|",
+        rowHeight, columnWidth);
     static_cast<void>(std::fflush(stdout));
     constexpr int kFrames = 120;  // two seconds at 60 frames a second
     struct Scroll {
@@ -279,12 +281,13 @@ TEST_CASE("qt quick baseline: F2 to F5 on a rows table of 2,000 x 300", "[.bench
     REQUIRE(realizedTaller > realized);
     double const perRow = (static_cast<double>(memoryTaller) - static_cast<double>(memoryMounted)) /
                           static_cast<double>(realizedTaller - realized);
-    std::println("\nF5: memory per realized row, from a window of 800 px to one of 1,600 px\n\n"
-                 "| realized rows | process bytes after mount (over before) | rows added | bytes added | bytes per row |\n"
-                 "|---|---:|---:|---:|---:|\n| {} -> {} | {} | {} | {} | {:.0f} |",
-                 realized, realizedTaller, static_cast<std::int64_t>(memoryMounted) - static_cast<std::int64_t>(memoryBefore),
-                 realizedTaller - realized,
-                 static_cast<std::int64_t>(memoryTaller) - static_cast<std::int64_t>(memoryMounted), perRow);
+    std::println(
+        "\nF5: memory per realized row, from a window of 800 px to one of 1,600 px\n\n"
+        "| realized rows | process bytes after mount (over before) | rows added | bytes added | bytes per row |\n"
+        "|---|---:|---:|---:|---:|\n| {} -> {} | {} | {} | {} | {:.0f} |",
+        realized, realizedTaller, static_cast<std::int64_t>(memoryMounted) - static_cast<std::int64_t>(memoryBefore),
+        realizedTaller - realized, static_cast<std::int64_t>(memoryTaller) - static_cast<std::int64_t>(memoryMounted),
+        perRow);
     static_cast<void>(std::fflush(stdout));
     watchdog.step("teardown", seconds{300});
 }

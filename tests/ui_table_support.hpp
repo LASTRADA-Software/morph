@@ -13,8 +13,8 @@
 #include <glaze/glaze.hpp>
 #include <map>
 #include <memory>
-#include <morph/core/owner_strand.hpp>
 #include <morph/core/action_refusal.hpp>
+#include <morph/core/owner_strand.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/reactive/runtime.hpp>
 #include <morph/reactive/testing/manual_scheduler.hpp>
@@ -25,8 +25,8 @@
 #include <morph/testing/step_executor.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/locale_table.hpp>
-#include <morph/ui/preferences.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/ui/preferences.hpp>
 #include <morph/ui/table_rows.hpp>
 #include <morph/ui/table_state.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
@@ -172,11 +172,10 @@ inline table::GenericPage pageAt(std::string revision, std::int64_t offset, std:
 /// @return The page's JSON.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a page's numbers, in the order a page names them.
 inline std::string pageJsonAt(std::string revision, std::int64_t offset, std::int64_t count, std::int64_t total,
-                              std::vector<std::string> const& columns,
-                              table::TotalKind kind = table::TotalKind::Exact, std::int64_t undecided = 0,
-                              std::vector<std::string> awaiting = {}) {
-    return glz::write_json(pageAt(std::move(revision), offset, count, total, columns, kind, undecided,
-                                  std::move(awaiting)))
+                              std::vector<std::string> const& columns, table::TotalKind kind = table::TotalKind::Exact,
+                              std::int64_t undecided = 0, std::vector<std::string> awaiting = {}) {
+    return glz::write_json(
+               pageAt(std::move(revision), offset, count, total, columns, kind, undecided, std::move(awaiting)))
         .value_or("");
 }
 
@@ -366,13 +365,14 @@ struct RowsFixture {
                                             .catalog = tableCatalog(),
                                             .classify = {},
                                             .developmentTools = DevelopmentTools::Off,
-                                            .watcher = [this](std::string const& kind, std::string const& body) {
-                                                watches.push_back(kind + " " + body);
-                                                auto [completion, promise] =
-                                                    async::Completion<std::string>::makeSettleable(&owner);
-                                                promise.resolve(std::string{"{}"});
-                                                return std::move(completion);
-                                            }}};
+                                            .watcher =
+                                                [this](std::string const& kind, std::string const& body) {
+                                                    watches.push_back(kind + " " + body);
+                                                    auto [completion, promise] =
+                                                        async::Completion<std::string>::makeSettleable(&owner);
+                                                    promise.resolve(std::string{"{}"});
+                                                    return std::move(completion);
+                                                }}};
     /// @brief The channel of `Lims_SampleModel`.
     std::shared_ptr<ModelChannel> channel = dispatcher.bind("Lims_SampleModel", bridge::BindSharing::Private, "");
     /// @brief The description the latest rows were built with.
@@ -569,7 +569,6 @@ protected:
     }
 
 public:
-
     /// @brief The keys of a range, which must be delivered by one settle and make no `Table.samples` call.
     /// @param rows  The rows.
     /// @param first The first view row.
@@ -794,8 +793,7 @@ public:
         std::scoped_lock const lock{_mutex};
         REQUIRE(_heldGet.has_value());
         auto const found = _entries.find(_heldGet->entry);
-        _heldGet->settle.resolve(found == _entries.end() ? std::nullopt
-                                                         : std::optional<std::string>{found->second});
+        _heldGet->settle.resolve(found == _entries.end() ? std::nullopt : std::optional<std::string>{found->second});
         _heldGet.reset();
         _holdGet = 0;
     }
@@ -1367,8 +1365,7 @@ inline table::TableQuery queryOf(TableHarness const& h, std::size_t index) {
         table::TableQuery query;
     };
     Body body;
-    auto const failed =
-        glz::read<glz::opts{.error_on_unknown_keys = false}>(body, h.dispatcher.calls.at(index).body);
+    auto const failed = glz::read<glz::opts{.error_on_unknown_keys = false}>(body, h.dispatcher.calls.at(index).body);
     if (failed) {
         FAIL("the call's body does not read: " << glz::format_error(failed, h.dispatcher.calls.at(index).body));
     }
@@ -1600,7 +1597,9 @@ inline morph::ui::detail::ScreenCore& coreOf(Screen& screen) { return ScreenProb
 /// @param screen The screen.
 /// @param id     The element's id.
 /// @return Its state.
-inline morph::ui::detail::ElementState& elementOf(Screen& screen, std::string_view id) { return ScreenProbe::element(screen, id); }
+inline morph::ui::detail::ElementState& elementOf(Screen& screen, std::string_view id) {
+    return ScreenProbe::element(screen, id);
+}
 
 /// @brief A description with @p level on @p column, the level listed in its `levels`.
 /// @param description The description.
@@ -1751,17 +1750,16 @@ inline std::string idRows(std::size_t n) {
 ///        places; every tenth name and weight is `null`.
 /// @return The list's text.
 inline std::string mixedRows() {
-    static constexpr std::array<std::string_view, 14> kNames = {
-        "Émile", "emil", "Zoë", "zoe", "Anna", "anna", "Ödön", "oscar", "Ärger", "apple", "éclair", "Eclair", "zebra",
-        "Zebra"};
+    static constexpr std::array<std::string_view, 14> kNames = {"Émile",  "emil",   "Zoë",   "zoe",   "Anna",
+                                                                "anna",   "Ödön",   "oscar", "Ärger", "apple",
+                                                                "éclair", "Eclair", "zebra", "Zebra"};
     std::string out = "[";
     for (std::size_t at = 0; at < 200; ++at) {
         bool const missing = at % 10 == 9;
         std::string const name = missing ? "null" : "\"" + std::string{kNames.at((at * 5) % kNames.size())} + "\"";
-        std::string const weight =
-            missing ? "null"
-                    : std::format(R"({{"num":{},"den":100,"dp":2}})",
-                                  static_cast<std::int64_t>((at * 389) % 2000) - 700);
+        std::string const weight = missing ? "null"
+                                           : std::format(R"({{"num":{},"den":100,"dp":2}})",
+                                                         static_cast<std::int64_t>((at * 389) % 2000) - 700);
         out += (at == 0 ? "" : ",") + std::format(R"({{"id":{},"name":{},"weight":{}}})", at, name, weight);
     }
     return out + "]";
@@ -2100,7 +2098,8 @@ inline constexpr std::string_view kNine = R"({
                          { "id": "c7", "label": "C7", "sortable": true }, { "id": "c8", "label": "C8", "sortable": true },
                          { "id": "c9", "label": "C9", "sortable": true } ] } })";
 
-/// @brief The model-backed table `t` over `Table.samples`; its description is what the test replies (`h.replyDescribe`).
+/// @brief The model-backed table `t` over `Table.samples`; its description is what the test replies
+/// (`h.replyDescribe`).
 inline constexpr std::string_view kConfigModelTable = R"({
   "vocab": "ui/1", "id": "samples",
   "models": { "sample": { "type": "Lims_SampleModel" } },
@@ -2250,7 +2249,10 @@ public:
         auto [completion, promise] =
             async::Completion<std::optional<table::StoredTableState>>::makeSettleable(_executor);
         std::optional<table::StoredTableState> const stored = storedOf(key.part);
-        calls.push_back(StoreCall{.op = "load", .part = key.part, .expected = {}, .outcome = {},
+        calls.push_back(StoreCall{.op = "load",
+                                  .part = key.part,
+                                  .expected = {},
+                                  .outcome = {},
                                   .revision = stored ? stored->revision : std::string{}});
         promise.resolve(stored);
         return std::move(completion);
@@ -2285,7 +2287,8 @@ public:
             }
             auto applied = table::applyViewOperation(std::move(document), operation, table::ViewsPart::Shared);
             result = applied ? store(key.part, table::writeViews(*applied, table::ViewsPart::Shared), expected)
-                             : table::SaveResult{.outcome = table::SaveOutcome::Refused, .revision = {},
+                             : table::SaveResult{.outcome = table::SaveOutcome::Refused,
+                                                 .revision = {},
                                                  .reason = table::viewErrorText(applied.error(), operation)};
         }
         return answer("publish", key.part, expected, std::move(result));
@@ -2300,15 +2303,17 @@ private:
         return found == _stored.end() ? std::nullopt : std::optional{found->second};
     }
 
-    [[nodiscard]] std::optional<table::SaveResult> conflictOf(std::string const& part, std::string const& expected) const {
+    [[nodiscard]] std::optional<table::SaveResult> conflictOf(std::string const& part,
+                                                              std::string const& expected) const {
         auto const stored = storedOf(part);
-        bool const holds = expected.empty() || (expected == table::kNoDocument ? !stored
-                                                                               : stored && stored->revision == expected);
+        bool const holds =
+            expected.empty() || (expected == table::kNoDocument ? !stored : stored && stored->revision == expected);
         if (holds) {
             return std::nullopt;
         }
         return table::SaveResult{.outcome = table::SaveOutcome::Conflict,
-                                 .revision = stored ? stored->revision : std::string{}, .reason = {}};
+                                 .revision = stored ? stored->revision : std::string{},
+                                 .reason = {}};
     }
 
     table::SaveResult store(std::string const& part, std::string json, std::string const& expected) {
@@ -2322,8 +2327,11 @@ private:
 
     async::Completion<table::SaveResult> answer(std::string op, std::string part, std::string expected,
                                                 table::SaveResult result) {
-        calls.push_back(StoreCall{.op = std::move(op), .part = std::move(part), .expected = std::move(expected),
-                                  .outcome = result.outcome, .revision = result.revision});
+        calls.push_back(StoreCall{.op = std::move(op),
+                                  .part = std::move(part),
+                                  .expected = std::move(expected),
+                                  .outcome = result.outcome,
+                                  .revision = result.revision});
         auto [completion, promise] = async::Completion<table::SaveResult>::makeSettleable(_executor);
         promise.resolve(std::move(result));
         return std::move(completion);
@@ -2369,10 +2377,14 @@ public:
         } else {
             std::string revision = "r" + std::to_string(++_revisions);
             _stored.insert_or_assign(key.part, table::StoredTableState{.json = std::move(json), .revision = revision});
-            result = table::SaveResult{.outcome = table::SaveOutcome::Saved, .revision = std::move(revision), .reason = {}};
+            result =
+                table::SaveResult{.outcome = table::SaveOutcome::Saved, .revision = std::move(revision), .reason = {}};
         }
-        calls.push_back(StoreCall{.op = "save", .part = key.part, .expected = std::move(expected),
-                                  .outcome = result.outcome, .revision = result.revision});
+        calls.push_back(StoreCall{.op = "save",
+                                  .part = key.part,
+                                  .expected = std::move(expected),
+                                  .outcome = result.outcome,
+                                  .revision = result.revision});
         promise.resolve(std::move(result));
         return std::move(completion);
     }

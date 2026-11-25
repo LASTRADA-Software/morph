@@ -758,8 +758,8 @@ TEST_CASE("window: a refresh of 900 keys over eight runs asks 908", "[table][win
     for (std::int64_t page = 0; page < 16; page += 2) {
         for (auto const& fetch : window.visible(page * 200, 1, cols)) {
             if (fetch.request.offset == page * 200) {
-                REQUIRE(window.accept(
-                    fetch, pageOf(fetch.request.offset, range(fetch.request.offset, 200), cols, 100'000)));
+                REQUIRE(window.accept(fetch,
+                                      pageOf(fetch.request.offset, range(fetch.request.offset, 200), cols, 100'000)));
             }
         }
     }
@@ -812,8 +812,8 @@ TEST_CASE("window: the keys it remembers stay within the rows it holds", "[table
     CHECK(window.keysRemembered() == 20);
     window.invalidate();
     for (auto const& fetch : window.visible(0, 5, cols)) {
-        REQUIRE(window.accept(fetch, pageOf(fetch.request.offset, range(1'000 + fetch.request.offset, 10), cols,
-                                            1'000'000)));
+        REQUIRE(window.accept(fetch,
+                              pageOf(fetch.request.offset, range(1'000 + fetch.request.offset, 10), cols, 1'000'000)));
     }
     CHECK(window.keysRemembered() == 0);
 }
@@ -867,8 +867,8 @@ TEST_CASE("window: of the columns not shown, the one named longest ago goes firs
     for (std::string const column : {"a", "b", "c"}) {
         std::vector<std::string> const shown{column};
         for (auto const& fetch : window.visible(0, 5, shown)) {
-            static_cast<void>(window.accept(fetch, pageOf(fetch.request.offset, range(fetch.request.offset, 10),
-                                                          fetch.columns, 10)));
+            static_cast<void>(window.accept(
+                fetch, pageOf(fetch.request.offset, range(fetch.request.offset, 10), fetch.columns, 10)));
         }
     }
     CHECK(window.holds(0, "c"));

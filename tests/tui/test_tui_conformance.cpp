@@ -248,7 +248,8 @@ public:
 
     // Shift+F10 on the focused header, or a click on the header line's `⋯` for the table's menu; the open list's
     // entries are read, and Esc closes it.
-    [[nodiscard]] std::vector<ui::MenuEntry> headerMenu(ui::Widget& table, std::optional<std::size_t> column) override {
+    [[nodiscard]] std::vector<ui::MenuEntry> headerMenu(ui::Widget& table,
+                                                        std::optional<std::size_t> column) override {
         if (!openMenu(table, column)) {
             return {};
         }
@@ -309,8 +310,8 @@ public:
         std::u32string const cells =
             unicode::convert_to<char32_t>(std::string_view{rows.at(static_cast<std::size_t>(line))});
         auto const from = static_cast<std::size_t>(std::max(0, bounds.x + area->x));
-        std::u32string label = from < cells.size() ? cells.substr(from, static_cast<std::size_t>(area->width))
-                                                   : std::u32string{};
+        std::u32string label =
+            from < cells.size() ? cells.substr(from, static_cast<std::size_t>(area->width)) : std::u32string{};
         while (!label.empty() && label.back() == U' ') {
             label.pop_back();
         }

@@ -326,8 +326,8 @@ TEST_CASE("generic page: a malformed reply is refused and a malformed cell is in
 TEST_CASE("generic page: unloaded rows and indices are bounded by the page's rows", "[table][description]") {
     auto const description = describedOf({column("a", ColumnKind::Integer)});
     auto const refused = [&](std::string const& members) {
-        auto const read = readGenericPage(R"({"columns":["a"],"keys":[1,2],"rows":[[1],[2]],)" + members + "}",
-                                          description);
+        auto const read =
+            readGenericPage(R"({"columns":["a"],"keys":[1,2],"rows":[[1],[2]],)" + members + "}", description);
         REQUIRE_FALSE(read.has_value());
         return read.error().code;
     };
@@ -337,10 +337,10 @@ TEST_CASE("generic page: unloaded rows and indices are bounded by the page's row
           TableErrorCode::InvalidValue);
     CHECK(refused(R"("indices":[4])") == TableErrorCode::InvalidValue);
     CHECK(refused(R"("indices":[4,-1])") == TableErrorCode::InvalidValue);
-    auto const kept = readGenericPage(
-        R"({"columns":["a"],"keys":[1,2],"rows":[[1],[2]],"unloadedRows":[{"index":0,"levels":["r"]},)"
-        R"({"index":1,"levels":["r"]}],"indices":[4,9]})",
-        description);
+    auto const kept =
+        readGenericPage(R"({"columns":["a"],"keys":[1,2],"rows":[[1],[2]],"unloadedRows":[{"index":0,"levels":["r"]},)"
+                        R"({"index":1,"levels":["r"]}],"indices":[4,9]})",
+                        description);
     REQUIRE(kept.has_value());
     CHECK(kept->indices == std::vector<std::int64_t>{4, 9});
 }
@@ -873,8 +873,8 @@ TEST_CASE("changed rows: a changed key names both keys, and a failed row neither
     std::ranges::sort(keys);
     CHECK(keys == std::vector<std::string>{"10", "2", "7"});
     morph::table::ChangedRows<&bench::WideTableModel::wide> read;
-    REQUIRE_FALSE(glz::read_json(
-        read, R"({"rows":[{"key":10,"from":2},{"key":7}],"failed":[{"key":4,"message":"Locked"}]})"));
+    REQUIRE_FALSE(
+        glz::read_json(read, R"({"rows":[{"key":10,"from":2},{"key":7}],"failed":[{"key":4,"message":"Locked"}]})"));
     REQUIRE(read.rows.size() == 2);
     CHECK(read.rows[0].from == std::optional<morph::table::RowId>{std::int64_t{2}});
     CHECK_FALSE(read.rows[1].from.has_value());
@@ -1172,17 +1172,17 @@ ServedTable threeRowTable(bool keyed) {
     for (std::int64_t row = 0; row < 3; ++row) {
         cells.push_back({Cell{row}});
     }
-    auto description = TableDescription{.id = "t", .label = "T", .columns = {column("id", ColumnKind::Integer)},
-                                        .key = "id"};
+    auto description =
+        TableDescription{.id = "t", .label = "T", .columns = {column("id", ColumnKind::Integer)}, .key = "id"};
     description.capabilities.keys = keyed;
-    return detail::pinned(ServedTable{.description = describe(std::move(description)),
-                                      .source = tabletest::makeSource({tabletest::col("id", ColumnKind::Integer)},
-                                                                      std::move(cells)),
-                                      .levels = {},
-                                      .mayRead = {},
-                                      .scope = {},
-                                      .services = {},
-                                      .limits = {}});
+    return detail::pinned(
+        ServedTable{.description = describe(std::move(description)),
+                    .source = tabletest::makeSource({tabletest::col("id", ColumnKind::Integer)}, std::move(cells)),
+                    .levels = {},
+                    .mayRead = {},
+                    .scope = {},
+                    .services = {},
+                    .limits = {}});
 }
 
 }  // namespace
@@ -1250,18 +1250,19 @@ TEST_CASE("generic page: unloaded rows, undecided and indices round-trip", "[tab
 // Mutation: the writer emitting a sentinel string for Unloaded.
 TEST_CASE("generic page: an unloaded cell is null and named per level", "[table][description]") {
     using tabletest::levelCol;
-    auto const source = tabletest::makeSource(
-        {tabletest::col("id", ColumnKind::Integer), levelCol("r", ColumnKind::Text, "recipe"),
-         levelCol("s", ColumnKind::Text, "stock")},
-        {{Cell{std::int64_t{10}}, Cell{std::string{"a"}}, Cell{std::string{"x"}}},
-         {Cell{std::int64_t{11}}, Cell{Unloaded{}}, Cell{Unloaded{}}}});
+    auto const source =
+        tabletest::makeSource({tabletest::col("id", ColumnKind::Integer), levelCol("r", ColumnKind::Text, "recipe"),
+                               levelCol("s", ColumnKind::Text, "stock")},
+                              {{Cell{std::int64_t{10}}, Cell{std::string{"a"}}, Cell{std::string{"x"}}},
+                               {Cell{std::int64_t{11}}, Cell{Unloaded{}}, Cell{Unloaded{}}}});
     std::vector<std::string> const named{"id", "r"};
     auto const page = writeGenericPage(pageOf(2), *source, named);
     CHECK(page.unloadedRows ==
           std::vector<UnloadedRow>{UnloadedRow{.index = 1, .levels = {"recipe"}, .failed = {}}});  // not "stock"
     auto const json = toJson(page);
     CHECK(json.find(R"("rows":[[10,"a"],[11,null]])") != std::string::npos);
-    auto const back = readGenericPage(json, describedOf({column("id", ColumnKind::Integer), column("r", ColumnKind::Text)}));
+    auto const back =
+        readGenericPage(json, describedOf({column("id", ColumnKind::Integer), column("r", ColumnKind::Text)}));
     REQUIRE(back.has_value());
     REQUIRE(back->rows.size() == 2);
     CHECK(std::holds_alternative<std::monostate>(back->rows[1][1]));
@@ -1761,9 +1762,10 @@ namespace {
 // The distinct cases' first query: city oneOf Berlin, Paris; status eq closed; and a distinct request on status.
 TableQuery distinctStatusQuery() {
     TableQuery q;
-    q.filters.columns["city"] = ColumnFilter{
-        .combine = Combine::Any, .include = {FilterEntry{.oneOf = std::vector<std::string>{"Berlin", "Paris"}}},
-        .exclude = {}};
+    q.filters.columns["city"] =
+        ColumnFilter{.combine = Combine::Any,
+                     .include = {FilterEntry{.oneOf = std::vector<std::string>{"Berlin", "Paris"}}},
+                     .exclude = {}};
     q.filters.columns["status"] =
         ColumnFilter{.combine = Combine::Any, .include = {FilterEntry{.eq = "closed"}}, .exclude = {}};
     q.distinct = DistinctRequest{.column = "status"};
@@ -1771,12 +1773,12 @@ TableQuery distinctStatusQuery() {
 }
 
 ServedTable distinctTable(std::shared_ptr<VectorSource> source) {
-    auto description = TableDescription{
-        .id = "d",
-        .label = "D",
-        .columns = {column("status", ColumnKind::Text), column("city", ColumnKind::Text),
-                    column("qty", ColumnKind::Integer)},
-        .key = "qty"};
+    auto description =
+        TableDescription{.id = "d",
+                         .label = "D",
+                         .columns = {column("status", ColumnKind::Text), column("city", ColumnKind::Text),
+                                     column("qty", ColumnKind::Integer)},
+                         .key = "qty"};
     return detail::pinned(ServedTable{.description = describe(std::move(description)),
                                       .source = std::move(source),
                                       .levels = {},
@@ -1833,7 +1835,10 @@ std::shared_ptr<VectorSource> companyRows() {
     auto source = tabletest::makeSource(
         {tabletest::col("companyA", ColumnKind::Text), tabletest::col("companyB", ColumnKind::Text),
          tabletest::col("companyC", ColumnKind::Text)},
-        {{S{"F"}, S{"S"}, S{"X"}}, {S{"F"}, S{"F"}, S{"X"}}, {S{"S"}, S{"F"}, S{"F"}}, {S{"F"}, S{"X"}, S{"Y"}},
+        {{S{"F"}, S{"S"}, S{"X"}},
+         {S{"F"}, S{"F"}, S{"X"}},
+         {S{"S"}, S{"F"}, S{"F"}},
+         {S{"F"}, S{"X"}, S{"Y"}},
          {S{"X"}, S{"Y"}, S{"Z"}}});
     source->setGroups(
         {ColumnGroupInfo{.id = "company", .label = "Company", .columns = {"companyA", "companyB", "companyC"}}});
@@ -1842,12 +1847,12 @@ std::shared_ptr<VectorSource> companyRows() {
 
 // `slow`, when set, is a level the table serves.
 ServedTable companyTable(std::shared_ptr<DataSource const> source, std::shared_ptr<LevelSource> slow = nullptr) {
-    auto description = TableDescription{
-        .id = "companies",
-        .label = "Companies",
-        .columns = {column("companyA", ColumnKind::Text), column("companyB", ColumnKind::Text),
-                    column("companyC", ColumnKind::Text)},
-        .key = "companyA"};
+    auto description =
+        TableDescription{.id = "companies",
+                         .label = "Companies",
+                         .columns = {column("companyA", ColumnKind::Text), column("companyB", ColumnKind::Text),
+                                     column("companyC", ColumnKind::Text)},
+                         .key = "companyA"};
     std::vector<std::shared_ptr<LevelSource>> levels;
     if (slow != nullptr) {
         description.levels = {std::string{slow->level()}};
@@ -1871,8 +1876,9 @@ ServedTable companyTable(std::shared_ptr<DataSource const> source, std::shared_p
 TEST_CASE("answer query: a declared group filters and pools on the server", "[table][description][groups]") {
     auto const source = companyRows();
     TableQuery q;
-    q.filters.groups.push_back(
-        {.group = "company", .mode = GroupMode::Together, .include = {FilterEntry{.eq = "F"}, FilterEntry{.eq = "S"}}});
+    q.filters.groups.push_back({.group = "company",
+                                .mode = GroupMode::Together,
+                                .include = {FilterEntry{.eq = "F"}, FilterEntry{.eq = "S"}}});
     TableQuery pooled;
     pooled.distinct = DistinctRequest{.group = "company"};
     auto const expectedValues = distinctValues(*source, {}, *pooled.distinct);
@@ -1908,10 +1914,10 @@ BRIDGE_REGISTER_TABLE(tabledesc::GroupModel, "groupRows",
 std::shared_ptr<std::vector<tabletest::GroupRow> const> tabledesc::GroupModel::rows(
     morph::table::TableContext const& context) {
     static_cast<void>(context);
-    return std::make_shared<std::vector<tabletest::GroupRow> const>(std::vector<tabletest::GroupRow>{
-        {.companyA = "F", .companyB = "S", .companyC = "X", .name = "a"},
-        {.companyA = "F", .companyB = "F", .companyC = "X", .name = "b"},
-        {.companyA = "S", .companyB = "F", .companyC = "F", .name = "c"}});
+    return std::make_shared<std::vector<tabletest::GroupRow> const>(
+        std::vector<tabletest::GroupRow>{{.companyA = "F", .companyB = "S", .companyC = "X", .name = "a"},
+                                         {.companyA = "F", .companyB = "F", .companyC = "X", .name = "b"},
+                                         {.companyA = "S", .companyB = "F", .companyC = "F", .name = "c"}});
 }
 
 // Mutation: typedTable leaving description.groups empty.
@@ -1932,8 +1938,9 @@ TEST_CASE("typed: a row's column groups reach the description", "[table][registr
     REQUIRE(name != served.description.columns.end());
     CHECK(name->group.empty());
     TableQuery q;
-    q.filters.groups.push_back(
-        {.group = "company", .mode = GroupMode::Together, .include = {FilterEntry{.eq = "F"}, FilterEntry{.eq = "S"}}});
+    q.filters.groups.push_back({.group = "company",
+                                .mode = GroupMode::Together,
+                                .include = {FilterEntry{.eq = "F"}, FilterEntry{.eq = "S"}}});
     auto const page = detail::answerQuery(detail::pinned(served), q);
     REQUIRE(page);
     CHECK(page->keys == std::vector<RowId>{std::string{"a"}, std::string{"c"}});
@@ -1974,17 +1981,18 @@ TEST_CASE("answer query: a distinct request reads a slow column through its leve
         [snapshot](std::span<RowId const> keys) {
             std::vector<std::pair<RowId, std::vector<Cell>>> out;
             for (auto const& key : keys) {
-                out.emplace_back(key, std::vector<Cell>{snapshot->cell(static_cast<std::size_t>(std::get<std::int64_t>(key)), 0)});
+                out.emplace_back(
+                    key, std::vector<Cell>{snapshot->cell(static_cast<std::size_t>(std::get<std::int64_t>(key)), 0)});
             }
             return out;
         });
     auto log = std::make_shared<WantLog>(cache);
-    auto description = TableDescription{
-        .id = "d",
-        .label = "D",
-        .columns = {column("status", ColumnKind::Text), column("city", ColumnKind::Text),
-                    column("qty", ColumnKind::Integer)},
-        .key = "qty"};
+    auto description =
+        TableDescription{.id = "d",
+                         .label = "D",
+                         .columns = {column("status", ColumnKind::Text), column("city", ColumnKind::Text),
+                                     column("qty", ColumnKind::Integer)},
+                         .key = "qty"};
     description.columns[0].info.level = "slow";
     description.levels = {"slow"};
     auto const served = detail::pinned(ServedTable{.description = describe(std::move(description)),
@@ -2021,18 +2029,19 @@ TEST_CASE("answer query: a distinct request reads a slow column through its leve
 
 // Mutation: the distinct branch answered before the column-presence check: the first request is a partial list
 // over an unloaded column (SourceContract after it), the second a list that stays partial however often it is asked.
-TEST_CASE("answer query: a distinct request is refused a column the table cannot read", "[table][description][distinct]") {
+TEST_CASE("answer query: a distinct request is refused a column the table cannot read",
+          "[table][description][distinct]") {
     auto const q = [] {
         TableQuery out;
         out.distinct = DistinctRequest{.column = "status"};
         return out;
     }();
     // A description column the base source lacks.
-    auto missingBase = TableDescription{
-        .id = "d",
-        .label = "D",
-        .columns = {column("status", ColumnKind::Text), column("extra", ColumnKind::Text)},
-        .key = "status"};
+    auto missingBase =
+        TableDescription{.id = "d",
+                         .label = "D",
+                         .columns = {column("status", ColumnKind::Text), column("extra", ColumnKind::Text)},
+                         .key = "status"};
     auto const base = detail::pinned(ServedTable{.description = describe(std::move(missingBase)),
                                                  .source = tabletest::distinctSource(),
                                                  .levels = {},
@@ -2045,11 +2054,11 @@ TEST_CASE("answer query: a distinct request is refused a column the table cannot
     CHECK(refusedBase.error().code == TableErrorCode::UnknownColumn);
     CHECK(refusedBase.error().column == "extra");
     // A level column its level source does not serve: listed, it would stay unloaded for every row.
-    auto missingLevel = TableDescription{
-        .id = "d",
-        .label = "D",
-        .columns = {column("status", ColumnKind::Text), column("note", ColumnKind::Text)},
-        .key = "status"};
+    auto missingLevel =
+        TableDescription{.id = "d",
+                         .label = "D",
+                         .columns = {column("status", ColumnKind::Text), column("note", ColumnKind::Text)},
+                         .key = "status"};
     missingLevel.columns[1].info.level = "notes";
     missingLevel.levels = {"notes"};
     auto const levelled = detail::pinned(ServedTable{.description = describe(std::move(missingLevel)),
@@ -2175,8 +2184,8 @@ ServedTable fortyColumns(std::size_t bound) {
     for (int at = 0; at < 40; ++at) {
         columns.push_back(column(std::format("k{:02}", at), ColumnKind::Integer));
     }
-    ServedTable served{.description = TableDescription{.id = "forty", .label = "Forty", .columns = std::move(columns),
-                                                       .key = "k00"}};
+    ServedTable served{
+        .description = TableDescription{.id = "forty", .label = "Forty", .columns = std::move(columns), .key = "k00"}};
     served.source = std::make_shared<VectorSource>(columnInfos(served.description));
     served.limits.maxSortKeys = bound;
     return detail::pinned(std::move(served));
@@ -2428,8 +2437,8 @@ TEST_CASE("description: a served table with a bad companion is refused", "[table
     d.id = "samples";
     d.key = "id";
     d.columns = {TableColumn{.info = {.id = "id", .kind = ColumnKind::Integer}, .label = "Id"}};
-    ServedTable good{.description = d, .source = source, .levels = {}, .mayRead = {}, .scope = {}, .services = {},
-                     .limits = {}};
+    ServedTable good{
+        .description = d, .source = source, .levels = {}, .mayRead = {}, .scope = {}, .services = {}, .limits = {}};
     REQUIRE(detail::answerQuery(detail::pinned(good), TableQuery{}).has_value());
     ServedTable bad = good;
     bad.description.rowLock = "nope";
@@ -2491,7 +2500,8 @@ TEST_CASE("description: a column that shows its cells plainly writes no display"
 
 namespace {
 
-std::vector<BandInfo> const kMassBand{{.label = "Mass retained", .unit = "g", .columns = {"m8", "m4", "m2"}, .bands = {}}};
+std::vector<BandInfo> const kMassBand{
+    {.label = "Mass retained", .unit = "g", .columns = {"m8", "m4", "m2"}, .bands = {}}};
 
 std::vector<TableColumn> bandColumns() {
     std::vector<TableColumn> columns;
@@ -2521,8 +2531,9 @@ TEST_CASE("description: bands are checked", "[table][description][bands]") {
         refusedNaming({BandInfo{.label = "First", .unit = {}, .columns = {"m8"}, .bands = {second}}}, "Fourth");
         third.bands.clear();
         second.bands = {third};
-        CHECK(checkBands(std::vector<BandInfo>{BandInfo{.label = "First", .unit = {}, .columns = {"m8"}, .bands = {second}}},
-                         columns)
+        CHECK(checkBands(
+                  std::vector<BandInfo>{BandInfo{.label = "First", .unit = {}, .columns = {"m8"}, .bands = {second}}},
+                  columns)
                   .has_value());
     }
     SECTION("a band over no column") {
@@ -2534,7 +2545,8 @@ TEST_CASE("description: bands are checked", "[table][description][bands]") {
         refusedNaming({parent}, "Stray");
     }
     SECTION("a column in two bands of one level") {
-        refusedNaming({kMassBand.front(), BandInfo{.label = "Again", .unit = {}, .columns = {"m8"}, .bands = {}}}, "Again");
+        refusedNaming({kMassBand.front(), BandInfo{.label = "Again", .unit = {}, .columns = {"m8"}, .bands = {}}},
+                      "Again");
     }
     SECTION("a column the table does not have") {
         refusedNaming({BandInfo{.label = "Unknown", .unit = {}, .columns = {"m16"}, .bands = {}}}, "Unknown");
@@ -2591,47 +2603,57 @@ TEST_CASE("description: an edit whose field does not fit its column is a source 
     CHECK(refused.error().column == "count");
     CHECK(checkEdits(count, editSchemas(R"({"type":"integer","maximum":10})")).has_value());
 
-    auto const missing = describedOf(
-        {column("id", ColumnKind::Integer),
-         editedColumn("label", ColumnKind::Text, {.action = "Lims_EditSpecimenRow", .member = "nosuch"})});
+    auto const missing =
+        describedOf({column("id", ColumnKind::Integer),
+                     editedColumn("label", ColumnKind::Text, {.action = "Lims_EditSpecimenRow", .member = "nosuch"})});
     auto const lacking = checkEdits(missing, editSchemas(R"({"type":"integer"})"));
     REQUIRE_FALSE(lacking.has_value());
     CHECK(lacking.error().code == TableErrorCode::SourceContract);
     CHECK(lacking.error().message.find("nosuch") != std::string::npos);
 
-    auto const fits = describedOf(
-        {column("id", ColumnKind::Integer),
-         editedColumn("count", ColumnKind::Integer, {.action = "Lims_EditSpecimenCount"}),
-         editedColumn("label", ColumnKind::Text, {.action = "Lims_EditSpecimenRow", .member = "label"})});
+    auto const fits =
+        describedOf({column("id", ColumnKind::Integer),
+                     editedColumn("count", ColumnKind::Integer, {.action = "Lims_EditSpecimenCount"}),
+                     editedColumn("label", ColumnKind::Text, {.action = "Lims_EditSpecimenRow", .member = "label"})});
     CHECK(checkEdits(fits, editSchemas(R"({"type":"integer"})")).has_value());
     // An action the server does not know cannot edit a column.
-    auto const unknown =
-        describedOf({column("id", ColumnKind::Integer), editedColumn("count", ColumnKind::Integer, {.action = "Nope"})});
+    auto const unknown = describedOf(
+        {column("id", ColumnKind::Integer), editedColumn("count", ColumnKind::Integer, {.action = "Nope"})});
     CHECK_FALSE(checkEdits(unknown, editSchemas(R"({"type":"integer"})")).has_value());
 }
 
 // Mutation: checkEdits not checking a measure field's unit against the table's units (every cell would open in a unit
 // the table cannot convert into).
-TEST_CASE("description: a measure edited in a unit the table lacks is a source contract", "[table][description][edits]") {
+TEST_CASE("description: a measure edited in a unit the table lacks is a source contract",
+          "[table][description][edits]") {
     auto const schemas = [](std::string_view action) -> std::optional<std::string> {
         if (action != "Lims_EditWeight") {
             return std::nullopt;
         }
-        return std::string{R"({"type":"object","properties":{"key":{"type":"integer"},"value":{"type":["object","null"],)"
-                           R"("x-decimalPlaces":3,"ExtUnits":{"unitAscii":"kg","unitUnicode":"kg"}}},"required":["key"]})"};
+        return std::string{
+            R"({"type":"object","properties":{"key":{"type":"integer"},"value":{"type":["object","null"],)"
+            R"("x-decimalPlaces":3,"ExtUnits":{"unitAscii":"kg","unitUnicode":"kg"}}},"required":["key"]})"};
     };
     auto const measured = [](std::vector<UnitInfo> units) {
-        TableDescription description{.id = "t", .label = "T",
-                                     .columns = {column("id", ColumnKind::Integer),
-                                                 editedColumn("weight", ColumnKind::Measure, {.action = "Lims_EditWeight"})},
-                                     .key = "id"};
+        TableDescription description{
+            .id = "t",
+            .label = "T",
+            .columns = {column("id", ColumnKind::Integer),
+                        editedColumn("weight", ColumnKind::Measure, {.action = "Lims_EditWeight"})},
+            .key = "id"};
         description.units = std::move(units);
         return describe(std::move(description));
     };
-    UnitInfo const gram{.id = "g", .symbol = "g", .dimension = "mass",
-                        .toBase = Rational{Numerator{1}, Denominator{1000}, DecimalPlaces{3}}, .decimals = 1};
-    UnitInfo const kilogram{.id = "kg", .symbol = "kg", .dimension = "mass",
-                            .toBase = Rational{Numerator{1}, Denominator{1}, DecimalPlaces{0}}, .decimals = 3};
+    UnitInfo const gram{.id = "g",
+                        .symbol = "g",
+                        .dimension = "mass",
+                        .toBase = Rational{Numerator{1}, Denominator{1000}, DecimalPlaces{3}},
+                        .decimals = 1};
+    UnitInfo const kilogram{.id = "kg",
+                            .symbol = "kg",
+                            .dimension = "mass",
+                            .toBase = Rational{Numerator{1}, Denominator{1}, DecimalPlaces{0}},
+                            .decimals = 3};
     auto const lacking = checkEdits(measured({gram}), schemas);
     REQUIRE_FALSE(lacking.has_value());
     CHECK(lacking.error().code == TableErrorCode::SourceContract);
@@ -2641,10 +2663,10 @@ TEST_CASE("description: a measure edited in a unit the table lacks is a source c
 
 // Mutation: the TableColumn meta leaving `edit` out (the read column has none).
 TEST_CASE("description: a column's edit is on the wire, and absent when it has none", "[table][description][edits]") {
-    auto const described = describedOf(
-        {column("id", ColumnKind::Integer),
-         editedColumn("label", ColumnKind::Text,
-                      {.action = "Lims_EditSpecimenRow", .member = "label", .readonly = "frozen"})});
+    auto const described =
+        describedOf({column("id", ColumnKind::Integer),
+                     editedColumn("label", ColumnKind::Text,
+                                  {.action = "Lims_EditSpecimenRow", .member = "label", .readonly = "frozen"})});
     std::string const json = glz::write_json(described).value_or("");
     CHECK(json.find(R"("edit":{"action":"Lims_EditSpecimenRow","member":"label","readonly":"frozen"})") !=
           std::string::npos);

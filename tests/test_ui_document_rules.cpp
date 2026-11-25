@@ -141,8 +141,9 @@ TEST_CASE("ui document rules: table: maxSortKeys is a rows table's literal from 
     CHECK(refusal(rowsTable(R"(, "maxSortKeys": 0)")) == "/view/maxSortKeys: `maxSortKeys` is 1 to 32");
     CHECK(refusal(rowsTable(R"(, "maxSortKeys": {"ref": "n"})", R"("state": {"n": {"init": 12}},)")) ==
           "/view/maxSortKeys: `maxSortKeys` is 1 to 32");
-    CHECK(refusal(modelTable(R"(, "maxSortKeys": 12)")) ==
-          "/view/maxSortKeys: `maxSortKeys` is a `rows` table's; a model's table carries its bound in its description");
+    CHECK(
+        refusal(modelTable(R"(, "maxSortKeys": 12)")) ==
+        "/view/maxSortKeys: `maxSortKeys` is a `rows` table's; a model's table carries its bound in its description");
 }
 
 // Mutation: the loader accepting any `configurable` literal.

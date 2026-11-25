@@ -809,7 +809,8 @@ public:
         }
         // Focus that leaves a table and everything inside it tells the table, innermost first.
         std::vector<std::function<void()>> leaving;
-        for (auto found = _records.find(previous); found != _records.end(); found = _records.find(found->second.parent)) {
+        for (auto found = _records.find(previous); found != _records.end();
+             found = _records.find(found->second.parent)) {
             if (found->second.callbacks.focusOut && !within(widgetId, found->first)) {
                 leaving.push_back(found->second.callbacks.focusOut);
             }
@@ -824,7 +825,8 @@ public:
     /// @param container The container.
     /// @return `true` when @p container is @p widgetId or one of its ancestors.
     [[nodiscard]] bool within(int widgetId, int container) const {
-        for (auto found = _records.find(widgetId); found != _records.end(); found = _records.find(found->second.parent)) {
+        for (auto found = _records.find(widgetId); found != _records.end();
+             found = _records.find(found->second.parent)) {
             if (found->first == container) {
                 return true;
             }
@@ -2614,8 +2616,8 @@ public:
         set("columnGroups", formatList(groups, [](TableColumnGroup const& group) {
                 std::string const label = escape(
                     group.label, [](char character) { return std::string_view{"=,[]:+;"}.contains(character); });
-                return label + ":" + std::to_string(group.first) + "+" +
-                       std::to_string(group.count) + (group.filtered ? ";filtered=true" : "");
+                return label + ":" + std::to_string(group.first) + "+" + std::to_string(group.count) +
+                       (group.filtered ? ";filtered=true" : "");
             }));
     }
 
@@ -2625,8 +2627,8 @@ public:
     void setBands(std::vector<BandRun> const& runs) override {
         _bands = runs;
         set("bands", formatList(runs, [](BandRun const& run) {
-                std::string const label =
-                    escape(run.label, [](char character) { return std::string_view{"=,[]:+;@|"}.contains(character); });
+                std::string const label = escape(
+                    run.label, [](char character) { return std::string_view{"=,[]:+;@|"}.contains(character); });
                 return std::to_string(run.level) + ":" + label + (run.unit.empty() ? "" : "|" + run.unit) + "@" +
                        std::to_string(run.first) + "+" + std::to_string(run.count) + (run.pinned ? ";pinned" : "");
             }));
@@ -2898,8 +2900,8 @@ public:
     }
 
     /// @brief Records property `focusCell` as `<row>:<column>`, which `RecordingBackend::focusCell` reads, and adds
-    ///        the cell to the ones `RecordingBackend::focusCells` lists, and the key of the row at that view row now to
-    ///        the ones `RecordingBackend::focusKeys` lists.
+    ///        the cell to the ones `RecordingBackend::focusCells` lists, and the key of the row at that view row now
+    ///        to the ones `RecordingBackend::focusKeys` lists.
     /// @param viewRow The row.
     /// @param column  The column.
     void setFocusCell(std::size_t viewRow, std::size_t column) override {
@@ -2975,7 +2977,8 @@ public:
         store().set(rowId, "editor:" + std::to_string(column), shown);
     }
 
-    /// @brief Records property `cellSelection`: `r<firstRow>+<rowCount>,c<firstPosition>+<positionCount>`, `c` counting
+    /// @brief Records property `cellSelection`: `r<firstRow>+<rowCount>,c<firstPosition>+<positionCount>`, `c`
+    /// counting
     ///        visible positions, or empty for none.
     /// @param rect The rectangle, or nothing.
     void setCellSelection(std::optional<std::array<std::size_t, 4>> rect) override {
@@ -2986,8 +2989,7 @@ public:
 
     /// @brief Stores the handler `RecordingBackend::selectCells` calls.
     /// @param onSelect The handler.
-    void setOnCellSelect(
-        std::function<void(std::size_t, std::size_t, std::size_t, std::size_t)> onSelect) override {
+    void setOnCellSelect(std::function<void(std::size_t, std::size_t, std::size_t, std::size_t)> onSelect) override {
         _onCellSelect = std::move(onSelect);
     }
 
@@ -2997,7 +2999,8 @@ public:
     /// @param focusRow       The focus's view row.
     /// @param focusPosition  The focus's visible position.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): two corners, each a row and a position.
-    void selectCells(std::size_t anchorRow, std::size_t anchorPosition, std::size_t focusRow, std::size_t focusPosition) {
+    void selectCells(std::size_t anchorRow, std::size_t anchorPosition, std::size_t focusRow,
+                     std::size_t focusPosition) {
         if (_onCellSelect) {
             auto const handler = _onCellSelect;
             handler(anchorRow, anchorPosition, focusRow, focusPosition);
@@ -3140,9 +3143,7 @@ public:
 
     /// @brief The header cells drawn: one per column of the window once one is set, one per column before.
     /// @return The count.
-    [[nodiscard]] std::size_t headerCells() const noexcept {
-        return _windowSet ? _window.size() : _columns.size();
-    }
+    [[nodiscard]] std::size_t headerCells() const noexcept { return _windowSet ? _window.size() : _columns.size(); }
 
     /// @brief The last horizontal offset set.
     /// @return It, or nothing when never set.
@@ -3346,8 +3347,8 @@ private:
     std::function<void(Key const&, std::size_t, std::vector<std::size_t> const&)> _cellChosen;
     std::vector<std::string> _cellMenuKeys;
     mutable std::size_t _cellMenuAsks = 0;  // how many times the cell menu's entries were asked for
-    std::map<int, std::size_t> _viewRows;  // row id -> view index, as setRowIndex told it
-    bool _focusSet = false;                // whether setFocusCell ran
+    std::map<int, std::size_t> _viewRows;   // row id -> view index, as setRowIndex told it
+    bool _focusSet = false;                 // whether setFocusCell ran
     std::vector<std::size_t> _visible;
     std::function<void(std::size_t, std::size_t)> _onColumnMove;
     std::function<void(std::size_t, std::optional<int>)> _onColumnResize;
@@ -3360,7 +3361,8 @@ private:
     TableStatus _status;
     std::vector<TableColumn> _columns;
     std::map<std::pair<int, std::size_t>, CellLoad> _loads;  // (row id, column) -> state, as setCellLoad told it
-    std::map<std::pair<int, std::size_t>, CellAccent> _accents;  // (row id, column) -> accent, as setCellAccent told it
+    std::map<std::pair<int, std::size_t>, CellAccent>
+        _accents;                      // (row id, column) -> accent, as setCellAccent told it
     std::vector<std::size_t> _window;  // the column window, as setColumnWindow last gave it
     bool _windowSet = false;
     int _totalWidth = 0;
@@ -4145,9 +4147,8 @@ public:
         detail::Record const& record = expectKind(widgetId, "chooseStatusEntry", {"Table"});
         auto* const table = dynamic_cast<detail::FakeTable*>(record.widget);
         bool const shown =
-            table != nullptr &&
-            (std::ranges::contains(table->status().entries, entry, &StatusEntry::id) ||
-             std::ranges::contains(table->status().standingEntries, entry, &StatusEntry::id));
+            table != nullptr && (std::ranges::contains(table->status().entries, entry, &StatusEntry::id) ||
+                                 std::ranges::contains(table->status().standingEntries, entry, &StatusEntry::id));
         if (!shown || !table->onStatusEntry()) {
             throw std::logic_error{"RecordingBackend: chooseStatusEntry of " + entry + " on Table#" +
                                    std::to_string(widgetId) + ", whose status line shows no such entry"};
@@ -5028,8 +5029,9 @@ private:
                                                 std::string_view helper) {
         detail::FakeTable const& table = fakeTable(record);
         if (!table.headerShown(column)) {
-            throw std::logic_error{"RecordingBackend: " + std::string{helper} + " of column " + std::to_string(column) +
-                                   ", whose header Table#" + std::to_string(widgetId) + " does not draw"};
+            throw std::logic_error{"RecordingBackend: " + std::string{helper} + " of column " +
+                                   std::to_string(column) + ", whose header Table#" + std::to_string(widgetId) +
+                                   " does not draw"};
         }
         return table;
     }

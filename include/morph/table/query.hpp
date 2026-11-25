@@ -450,7 +450,7 @@ struct SetTally {
 /// @param groupId A group's id.
 /// @return Its columns, or nothing when no group has that id.
 [[nodiscard]] inline std::optional<std::span<std::string const>> groupColumns(std::span<ColumnGroupInfo const> groups,
-                                                                             std::string_view groupId) {
+                                                                              std::string_view groupId) {
     auto const found = std::ranges::find(groups, groupId, &ColumnGroupInfo::id);
     if (found == groups.end()) {
         return std::nullopt;
@@ -772,10 +772,10 @@ namespace detail {
         }
     }
     if (query.distinct) {
-        auto const named = query.distinct->group.empty()
-                               ? std::span<std::string const>{&query.distinct->column, 1}
-                               : detail::groupColumns(groups, query.distinct->group)
-                                     .value_or(std::span<std::string const>{});
+        auto const named =
+            query.distinct->group.empty()
+                ? std::span<std::string const>{&query.distinct->column, 1}
+                : detail::groupColumns(groups, query.distinct->group).value_or(std::span<std::string const>{});
         for (auto const& columnId : named) {
             add(order, columnId);
         }
@@ -1032,8 +1032,7 @@ struct MergedView {
 /// @param keyOf         A source row's key.
 /// @return The merged view.
 [[nodiscard]] inline MergedView mergeRetained(std::span<std::uint32_t const> baseOrder, std::int64_t baseUndecided,
-                                              MembershipDigest baseDigest,
-                                              std::span<std::uint32_t const> retainedRows,
+                                              MembershipDigest baseDigest, std::span<std::uint32_t const> retainedRows,
                                               std::function<bool(std::uint32_t, std::uint32_t)> const& before,
                                               std::function<Match(std::uint32_t)> const& match,
                                               std::function<RowId(std::uint32_t)> const& keyOf) {
@@ -1134,12 +1133,9 @@ struct RetainedView {
 /// @param options     The services; `validate` applied its limits and `mayRead`.
 /// @param sourceRowOf A key's source row; when empty, the snapshot's row ids are scanned once.
 /// @return The merged view, or the filter's compile error.
-[[nodiscard]] inline std::expected<RetainedView, TableError> retainedView(ComputedView const& base,
-                                                                          DataSource const& source,
-                                                                          RowSnapshot const& snapshot,
-                                                                          TableQuery const& validated,
-                                                                          ApplyOptions const& options,
-                                                                          SourceRowOf const& sourceRowOf = {}) {
+[[nodiscard]] inline std::expected<RetainedView, TableError> retainedView(
+    ComputedView const& base, DataSource const& source, RowSnapshot const& snapshot, TableQuery const& validated,
+    ApplyOptions const& options, SourceRowOf const& sourceRowOf = {}) {
     std::vector<std::uint32_t> rows;
     if (sourceRowOf) {
         for (auto const& key : validated.retain) {
@@ -1191,8 +1187,8 @@ struct RetainedView {
         auto const at = keys.local(row);
         return filter->evaluateRow(keys.pointers(), at);
     };
-    auto merged = mergeRetained(base.rows, static_cast<std::int64_t>(base.undecided.size()), base.digest, rows,
-                                before, match, [&snapshot](std::uint32_t row) { return snapshot.rowId(row); });
+    auto merged = mergeRetained(base.rows, static_cast<std::int64_t>(base.undecided.size()), base.digest, rows, before,
+                                match, [&snapshot](std::uint32_t row) { return snapshot.rowId(row); });
     std::ranges::sort(rows);
     RetainedView out;
     out.view.rows = std::move(merged.order);
@@ -1226,12 +1222,9 @@ inline void markUnmatched(PageRows& page, std::span<std::int64_t const> unmatche
 /// @param viewRowOf   As for `pageRows`; read only when the query retains nothing, since a merged view has its own.
 /// @param sourceRowOf As for `pageRows`.
 /// @return The page, or the filter's compile error.
-[[nodiscard]] inline std::expected<PageRows, TableError> viewPage(ComputedView const& view, DataSource const& source,
-                                                                  RowSnapshot const& snapshot,
-                                                                  TableQuery const& validated,
-                                                                  ApplyOptions const& options,
-                                                                  std::span<std::uint32_t const> viewRowOf = {},
-                                                                  SourceRowOf const& sourceRowOf = {}) {
+[[nodiscard]] inline std::expected<PageRows, TableError> viewPage(
+    ComputedView const& view, DataSource const& source, RowSnapshot const& snapshot, TableQuery const& validated,
+    ApplyOptions const& options, std::span<std::uint32_t const> viewRowOf = {}, SourceRowOf const& sourceRowOf = {}) {
     if (validated.retain.empty()) {
         return pageRows(view, snapshot, validated, options.limits, viewRowOf, sourceRowOf);
     }
@@ -1674,12 +1667,11 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
         auto const begin = std::min(validated.offset, count);
         auto const end = validated.limit >= count - begin ? count : begin + validated.limit;
         // Only the values up to the page's end are put in order: a menu's first page of 50,000 values sorts 200.
-        std::ranges::partial_sort(groups, groups.begin() + end,
-                                  [&listedKeys](DistinctGroup const& a, DistinctGroup const& b) {
-                                      int const order = compareValues(*listedKeys[a.column], a.first,
-                                                                      *listedKeys[b.column], b.first);
-                                      return order != 0 ? order < 0 : a.first < b.first;
-                                  });
+        std::ranges::partial_sort(
+            groups, groups.begin() + end, [&listedKeys](DistinctGroup const& a, DistinctGroup const& b) {
+                int const order = compareValues(*listedKeys[a.column], a.first, *listedKeys[b.column], b.first);
+                return order != 0 ? order < 0 : a.first < b.first;
+            });
         for (auto at = begin; at < end; ++at) {
             auto const& group = groups[static_cast<std::size_t>(at)];
             auto value = describe(group);
@@ -1755,15 +1747,15 @@ inline std::expected<DistinctValues, TableError> Engine::distinctValues(Distinct
     }
     auto filters = _filterSpec;
     detail::withoutOwnFilter(filters, validated);
-    detail::DistinctInput const input{
-        .snapshot = _snapshot,
-        .columns = _columns,
-        .keys = _keysSnapshot == _snapshot ? std::span<std::shared_ptr<KeyColumn const> const>{_keys}
-                                           : std::span<std::shared_ptr<KeyColumn const> const>{},
-        .filters = std::move(filters),
-        .services = _options.services.forTask(),
-        .limits = limits,
-        .groups = groups};
+    detail::DistinctInput const input{.snapshot = _snapshot,
+                                      .columns = _columns,
+                                      .keys = _keysSnapshot == _snapshot
+                                                  ? std::span<std::shared_ptr<KeyColumn const> const>{_keys}
+                                                  : std::span<std::shared_ptr<KeyColumn const> const>{},
+                                      .filters = std::move(filters),
+                                      .services = _options.services.forTask(),
+                                      .limits = limits,
+                                      .groups = groups};
     return detail::distinctOver(input, validated);
 }
 
@@ -3046,10 +3038,9 @@ private:
     [[nodiscard]] bool exactTotal() const noexcept { return _total && _totalKind == TotalKind::Exact; }
 
     [[nodiscard]] static UnloadedRow const* unloadedOf(WindowReply const& reply, std::size_t row) {
-        auto const found = std::ranges::lower_bound(reply.unloadedRows, static_cast<std::int64_t>(row), {},
-                                                    &UnloadedRow::index);
-        return found != reply.unloadedRows.end() && found->index == static_cast<std::int64_t>(row) ? &*found
-                                                                                                    : nullptr;
+        auto const found =
+            std::ranges::lower_bound(reply.unloadedRows, static_cast<std::int64_t>(row), {}, &UnloadedRow::index);
+        return found != reply.unloadedRows.end() && found->index == static_cast<std::int64_t>(row) ? &*found : nullptr;
     }
 
     [[nodiscard]] bool sameKeys(Held const& held, WindowReply const& reply) const {
@@ -3097,8 +3088,8 @@ private:
     }
 
     void adoptTotals(std::int64_t index, std::uint64_t revision, WindowReply const& reply) {
-        bool const differs = (reply.total && (reply.total != _total || reply.totalKind != _totalKind)) ||
-                             reply.undecided != _undecided;
+        bool const differs =
+            (reply.total && (reply.total != _total || reply.totalKind != _totalKind)) || reply.undecided != _undecided;
         _totalsRevision = revision;
         _undecided = reply.undecided;
         _awaiting.assign(reply.awaiting.begin(), reply.awaiting.end());
@@ -3212,9 +3203,9 @@ private:
             }
         }
         _latestKeyed = sequence;
-        return RefreshPlan{.kind = Refresh::Rows,
-                           .rows = RowsFetch{.keys = std::move(asked), .columns = _columns, .query = _query,
-                                             .sequence = sequence}};
+        return RefreshPlan{
+            .kind = Refresh::Rows,
+            .rows = RowsFetch{.keys = std::move(asked), .columns = _columns, .query = _query, .sequence = sequence}};
     }
 
     std::int64_t _pageSize;
@@ -3301,19 +3292,17 @@ public:
     ///         flight for its page.
     bool accept(PageFetch const& fetch, Page<Row> page) {
         auto const keys = keysOf(page);
-        return this->acceptReply(fetch, replyOf(page, keys),
-                                 [&page](detail::TypedWindowRows<Row>& content, detail::WindowFetchKind kind,
-                                         std::size_t take) {
-                                     auto const end = page.rows.begin() + static_cast<std::ptrdiff_t>(take);
-                                     if (kind == detail::WindowFetchKind::Whole) {
-                                         content.rows.assign(std::make_move_iterator(page.rows.begin()),
-                                                             std::make_move_iterator(end));
-                                     } else if (kind == detail::WindowFetchKind::Rest) {
-                                         content.rows.insert(content.rows.end(),
-                                                             std::make_move_iterator(page.rows.begin()),
-                                                             std::make_move_iterator(end));
-                                     }
-                                 });
+        return this->acceptReply(
+            fetch, replyOf(page, keys),
+            [&page](detail::TypedWindowRows<Row>& content, detail::WindowFetchKind kind, std::size_t take) {
+                auto const end = page.rows.begin() + static_cast<std::ptrdiff_t>(take);
+                if (kind == detail::WindowFetchKind::Whole) {
+                    content.rows.assign(std::make_move_iterator(page.rows.begin()), std::make_move_iterator(end));
+                } else if (kind == detail::WindowFetchKind::Rest) {
+                    content.rows.insert(content.rows.end(), std::make_move_iterator(page.rows.begin()),
+                                        std::make_move_iterator(end));
+                }
+            });
     }
 
     /// @brief Patches held rows from the reply to a `RowsFetch`.

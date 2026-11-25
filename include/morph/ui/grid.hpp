@@ -74,10 +74,12 @@ struct GridColumn {
     std::function<std::string(forms::RowState const&)> fieldOf;
     /// @brief The entry places of the row's member, which are also its wire `dp`; nothing keeps the field's. Tracked.
     std::function<std::optional<std::uint32_t>(forms::RowState const&)> decimals;
-    /// @brief The unit the row's member is entered in, an id of its `FieldSpec::units`: applied, converting the draft as the
-    ///        editor's unit select does, when it first gives a unit for the row or gives another one, so a unit the user
-    ///        picks afterwards stays; nothing, or an id the field does not have, after a unit restores the field's entry
-    ///        unit. The first unit a loaded row's member takes, while the overlay had given none before, counts as loaded
+    /// @brief The unit the row's member is entered in, an id of its `FieldSpec::units`: applied, converting the draft
+    /// as the
+    ///        editor's unit select does, when it first gives a unit for the row or gives another one, so a unit the
+    ///        user picks afterwards stays; nothing, or an id the field does not have, after a unit restores the
+    ///        field's entry unit. The first unit a loaded row's member takes, while the overlay had given none before,
+    ///        counts as loaded
     ///        (`forms::FormSession::switchUnitsAsLoaded`): the cell is not modified by it, and a revert returns to it.
     ///        Tracked.
     std::function<std::optional<std::string>(forms::RowState const&)> unit;
@@ -273,14 +275,14 @@ public:
     [[nodiscard]] Node cellContent(std::string const& column, reactive::Signal<Value> const& row) {
         reactive::Signal<Value> const* const record = &row;
         Node content = ui::text(Text{.text = Prop<std::string>{[this, record, column] {
-            std::optional<Key> const key = keyOf(record->get());
-            return key ? text(*key, column) : std::string{};
-        }}});
+                                         std::optional<Key> const key = keyOf(record->get());
+                                         return key ? text(*key, column) : std::string{};
+                                     }}});
         Prop<CellAccent> accent{[this, record, column] {
             std::optional<Key> const key = keyOf(record->get());
             std::optional<std::string> const failed = key ? error(*key, column) : std::nullopt;
-            return CellAccent{.tone = std::nullopt, .tooltip = failed.value_or(std::string{}),
-                              .invalid = failed.has_value()};
+            return CellAccent{
+                .tone = std::nullopt, .tooltip = failed.value_or(std::string{}), .invalid = failed.has_value()};
         }};
         return accentedCell(std::move(content), std::move(accent));
     }
@@ -372,7 +374,8 @@ public:
         static_cast<void>(column);
     }
 
-    /// @brief Whether the derived values are the last ones loaded before a failed round, until a round succeeds: what the
+    /// @brief Whether the derived values are the last ones loaded before a failed round, until a round succeeds: what
+    /// the
     ///        status line offers to recalculate. Tracked.
     /// @return `true` while it holds; `false` for a source with no derived values.
     [[nodiscard]] virtual bool deriveFailed() const { return false; }
@@ -391,7 +394,9 @@ public:
 
     /// @brief The fewest and the most rows the record holds.
     /// @return `{minItems, maxItems}`; `{0, nothing}` for a source with no bound.
-    [[nodiscard]] virtual std::pair<std::size_t, std::optional<std::size_t>> bounds() const { return {0, std::nullopt}; }
+    [[nodiscard]] virtual std::pair<std::size_t, std::optional<std::size_t>> bounds() const {
+        return {0, std::nullopt};
+    }
 
     /// @brief Appends a blank row to the record. A source whose rows are not its own adds none.
     /// @return The new row's key; nothing when no row was added.
@@ -447,8 +452,8 @@ public:
     }
 
     /// @brief Whether the grid selects rectangles of cells, and so takes a paste and a fill: a source whose rows are
-    ///        selected as rows takes neither, and its `Shift`+arrows and `Ctrl+A` are the table's row selection. `Delete`
-    ///        on the focused cell blanks it either way.
+    ///        selected as rows takes neither, and its `Shift`+arrows and `Ctrl+A` are the table's row selection.
+    ///        `Delete` on the focused cell blanks it either way.
     /// @return `true` unless a source says otherwise.
     [[nodiscard]] virtual bool selectsCells() const { return true; }
 
@@ -501,8 +506,8 @@ public:
             }
             table::ViewChange out;
             if (keys() == before) {
-                out.ops.push_back(table::ViewOp{
-                    .kind = table::ViewOp::Kind::Changed, .first = 0, .count = _items.size(), .to = 0});
+                out.ops.push_back(
+                    table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = 0, .count = _items.size(), .to = 0});
             } else {
                 out.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0});
             }
@@ -536,7 +541,8 @@ public:
     /// @brief Every row of the view, counted exactly.
     /// @return The total.
     [[nodiscard]] TableTotal total() const override {
-        return TableTotal{.rows = static_cast<std::int64_t>(_items.size()), .kind = table::TotalKind::Exact, .known = true};
+        return TableTotal{
+            .rows = static_cast<std::int64_t>(_items.size()), .kind = table::TotalKind::Exact, .known = true};
     }
 
     /// @brief The row at a view index.
@@ -579,8 +585,8 @@ public:
     /// @param first The first view row.
     /// @param count The rows.
     /// @return The keys; `InvalidSpec` for a range outside the view.
-    async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(std::int64_t first,
-                                                                                       std::int64_t count) override {
+    async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(
+        std::int64_t first, std::int64_t count) override {
         using Result = std::expected<std::vector<table::RowId>, table::TableError>;
         auto [completion, promise] = async::Completion<Result>::makeSettleable(&_source->form().runtime().owner());
         auto const rows = static_cast<std::int64_t>(_items.size());
@@ -898,7 +904,10 @@ public:
     /// @throws std::invalid_argument when @p data is null.
     SummaryRows(std::shared_ptr<TableRows> data, std::vector<SummarySpec> table, std::vector<SummarySpec> perRun,
                 Runs runs)
-        : _data{checked(std::move(data))}, _table{std::move(table)}, _perRun{std::move(perRun)}, _runs{std::move(runs)} {
+        : _data{checked(std::move(data))},
+          _table{std::move(table)},
+          _perRun{std::move(perRun)},
+          _runs{std::move(runs)} {
         rebuild();
         _data->onChange([this](table::ViewChange const& change) { heard(change); });
     }
@@ -1018,8 +1027,8 @@ public:
     /// @param first The first mounted row.
     /// @param count The rows.
     /// @return The data rows' answer.
-    async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(std::int64_t first,
-                                                                                       std::int64_t count) override {
+    async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(
+        std::int64_t first, std::int64_t count) override {
         auto const [from, rows] = dataRange(first, count);
         return _data->keysOf(from, rows);
     }
@@ -1268,8 +1277,8 @@ private:
     // row changed after it. A change whose rows a run's rows move among is a reset.
     void heard(table::ViewChange const& change) {
         std::vector<Entry> const before = std::move(_entries);
-        auto const lead = static_cast<std::size_t>(
-            std::ranges::count_if(_table, [](SummarySpec const& spec) { return spec.top; }));
+        auto const lead =
+            static_cast<std::size_t>(std::ranges::count_if(_table, [](SummarySpec const& spec) { return spec.top; }));
         ++_version;
         rebuild();
         if (!_onChange) {
@@ -1288,14 +1297,15 @@ private:
                 out.ops.push_back(op);
             }
         } else {
-            bool const sameShape =
-                !reset && before.size() == _entries.size() &&
-                std::ranges::equal(before, _entries,
-                                   [](Entry const& left, Entry const& right) {
-                                       return left.kind == right.kind && left.data == right.data && left.key == right.key;
-                                   }) &&
-                std::ranges::all_of(change.ops,
-                                    [](table::ViewOp const& op) { return op.kind == table::ViewOp::Kind::Changed; });
+            bool const sameShape = !reset && before.size() == _entries.size() &&
+                                   std::ranges::equal(before, _entries,
+                                                      [](Entry const& left, Entry const& right) {
+                                                          return left.kind == right.kind && left.data == right.data &&
+                                                                 left.key == right.key;
+                                                      }) &&
+                                   std::ranges::all_of(change.ops, [](table::ViewOp const& op) {
+                                       return op.kind == table::ViewOp::Kind::Changed;
+                                   });
             if (!sameShape) {
                 out.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0});
                 _onChange(out);
@@ -1314,7 +1324,8 @@ private:
         }
         for (std::size_t at = 0; at < _entries.size(); ++at) {
             if (_entries.at(at).kind != Entry::Kind::Data) {
-                out.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = at, .count = 1, .to = 0});
+                out.ops.push_back(
+                    table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = at, .count = 1, .to = 0});
             }
         }
         _onChange(out);
@@ -1412,8 +1423,8 @@ inline void applyUnitOverlay(std::unordered_map<std::string, std::optional<std::
 
 /// @brief A grid of a form's `ObjectArray` field: its rows are the field's, and each cell is a member's field.
 ///
-/// Every row of a form is fetched, so `keyAt` is never empty below `rowCount`. A cell's text is its draft while blank or
-/// not encoding, else its value shown at the places its field takes.
+/// Every row of a form is fetched, so `keyAt` is never empty below `rowCount`. A cell's text is its draft while blank
+/// or not encoding, else its value shown at the places its field takes.
 class FormGridSource final : public GridSource {
 public:
     /// @brief A grid of a form's collection.
@@ -1438,8 +1449,9 @@ public:
         }
         for (GridColumn const& column : _columns) {
             if (!column.fieldOf && !column.field.empty() &&
-                std::ranges::none_of(array.spec().children,
-                                     [&column](forms::FieldSpec const& member) { return member.name == column.field; })) {
+                std::ranges::none_of(array.spec().children, [&column](forms::FieldSpec const& member) {
+                    return member.name == column.field;
+                })) {
                 throw std::invalid_argument{"morph::ui::FormGridSource: no member `" + column.field + "` in `" +
                                             _arrayPath + "`"};
             }
@@ -1465,8 +1477,8 @@ public:
                 perRow.emplace_back();
             }
         }
-        _rowsSource =
-            std::make_shared<FormRowsSource>(form, _arrayPath, std::move(infos), std::move(members), std::move(perRow));
+        _rowsSource = std::make_shared<FormRowsSource>(form, _arrayPath, std::move(infos), std::move(members),
+                                                       std::move(perRow));
         _rows = std::make_unique<GridRows>(_rowsSource);
         if (std::ranges::any_of(_columns, [](GridColumn const& column) {
                 return column.decimals || column.unit || column.options || column.placeholder;
@@ -1745,12 +1757,10 @@ public:
         std::size_t place = _form->runtime().untracked([&] { return array.rows().size(); });
         if (std::optional<Key> const before = keyAt(position)) {
             std::int64_t const* const number = std::get_if<std::int64_t>(&*before);
-            std::vector<std::shared_ptr<forms::RowState>> const& rows = _form->runtime().untracked([&] -> auto const& {
-                return array.rows();
-            });
-            auto const found = std::ranges::find_if(rows, [number](auto const& row) {
-                return number != nullptr && std::cmp_equal(row->key(), *number);
-            });
+            std::vector<std::shared_ptr<forms::RowState>> const& rows =
+                _form->runtime().untracked([&] -> auto const& { return array.rows(); });
+            auto const found = std::ranges::find_if(
+                rows, [number](auto const& row) { return number != nullptr && std::cmp_equal(row->key(), *number); });
             place = static_cast<std::size_t>(found - rows.begin());
         }
         std::uint64_t const key = array.insertRow(place);
@@ -1823,7 +1833,8 @@ public:
     /// @return `true` when modified.
     [[nodiscard]] bool rowModified(Key const& key) const override {
         std::int64_t const* const number = std::get_if<std::int64_t>(&key);
-        return number != nullptr && *number >= 0 && _form->rowModified(_arrayPath, static_cast<std::uint64_t>(*number));
+        return number != nullptr && *number >= 0 &&
+               _form->rowModified(_arrayPath, static_cast<std::uint64_t>(*number));
     }
 
     /// @brief The grid's rows.
@@ -1895,7 +1906,7 @@ public:
     /// @return The cell and its column, the column's id that of the rows' column; nothing for a display column or a
     ///         row the field does not hold.
     [[nodiscard]] std::optional<std::pair<table::Cell, table::TableColumn>> filterCell(Key const& key,
-                                                                                      std::string_view column) const {
+                                                                                       std::string_view column) const {
         forms::FieldState const* const state = field(key, column);
         if (state == nullptr) {
             return std::nullopt;
@@ -1957,8 +1968,7 @@ private:
                 }
                 std::optional<std::uint32_t> const places = column.decimals ? column.decimals(*row) : std::nullopt;
                 std::optional<std::string> const unit = column.unit ? column.unit(*row) : std::nullopt;
-                std::optional<std::vector<std::string>> options =
-                    column.options ? column.options(*row) : std::nullopt;
+                std::optional<std::vector<std::string>> options = column.options ? column.options(*row) : std::nullopt;
                 std::string placeholder = column.placeholder ? column.placeholder(*row) : std::string{};
                 _form->runtime().untracked([&] {
                     if (column.decimals && state->places().peek() != places) {
@@ -2012,7 +2022,8 @@ private:
         _rows->sync();
         std::shared_ptr<table::RowSnapshot const> const snapshot = _rowsSource->snapshot();
         bool const sorted = _rows->sorted();
-        if (_coverage && _coverage->snapshot == snapshot && _coverage->layout == _layout && _coverage->sorted == sorted) {
+        if (_coverage && _coverage->snapshot == snapshot && _coverage->layout == _layout &&
+            _coverage->sorted == sorted) {
             return *_coverage;
         }
         Coverage next{.snapshot = snapshot, .layout = _layout, .sorted = sorted, .covered = {}, .given = {}};
@@ -2101,19 +2112,22 @@ struct FixedCell {
     std::size_t rows = 1;
     /// @brief How many columns the cell covers, its own included, to the right in the layout.
     std::size_t columns = 1;
-    /// @brief Whether the cell is read-only beyond its field (`CellFacts::overlayReadOnly`), read with the block's row,
+    /// @brief Whether the cell is read-only beyond its field (`CellFacts::overlayReadOnly`), read with the block's
+    /// row,
     ///        null outside a block. Tracked.
     std::function<bool(forms::RowState const*)> readonly;
     /// @brief The entry places of the cell's field, which are also its wire `dp`, read with the block's row, null
     ///        outside a block; nothing keeps the field's. Tracked.
     std::function<std::optional<std::uint32_t>(forms::RowState const*)> decimals;
-    /// @brief The unit the cell's field is entered in, an id of its `FieldSpec::units`, read with the block's row, null
+    /// @brief The unit the cell's field is entered in, an id of its `FieldSpec::units`, read with the block's row,
+    /// null
     ///        outside a block; applied as a grid column's `unit` overlay is (`GridColumn::unit`). Tracked.
     std::function<std::optional<std::string>(forms::RowState const*)> unit;
     /// @brief The options the cell's field offers, as their values' JSON literals, narrowing a choice's, read with the
     ///        block's row, null outside a block; nothing offers every option. Tracked.
     std::function<std::optional<std::vector<std::string>>(forms::RowState const*)> options;
-    /// @brief The cell's field's placeholder, read with the block's row, null outside a block; empty keeps the field's.
+    /// @brief The cell's field's placeholder, read with the block's row, null outside a block; empty keeps the
+    /// field's.
     ///        Tracked.
     std::function<std::string(forms::RowState const*)> placeholder;
 };
@@ -2140,9 +2154,9 @@ struct FixedBlock {
 ///        places and editor.
 ///
 /// Every row is held, so `keyAt` is never empty below `rowCount`. A fixed row's key is its `FixedRow::key`; a block
-/// row's is the collection row's key and the part's joined, `"<row key>/<key>"`, so it stays the same while rows of the
-/// collection are added and removed. The rows are in the parts' order, a block's in its collection's order, and are
-/// never sorted, filtered or rearranged; the columns may be hidden and resized. Spans always apply. A cell with no
+/// row's is the collection row's key and the part's joined, `"<row key>/<key>"`, so it stays the same while rows of
+/// the collection are added and removed. The rows are in the parts' order, a block's in its collection's order, and
+/// are never sorted, filtered or rearranged; the columns may be hidden and resized. Spans always apply. A cell with no
 /// field is read-only.
 class FixedGridSource final : public GridSource {
 public:
@@ -2151,7 +2165,8 @@ public:
 
     /// @brief A fixed grid.
     /// @param runtime The runtime its state is tracked on, and whose owner its rows are delivered on. Borrowed.
-    /// @param form    The form whose fields the cells edit; null for a grid of `value` and `text` cells only. Borrowed:
+    /// @param form    The form whose fields the cells edit; null for a grid of `value` and `text` cells only.
+    /// Borrowed:
     ///                it must outlive the source.
     /// @param rows    The parts, in order.
     /// @param columns The columns, each id once: only their ids and labels are read.
@@ -2168,9 +2183,8 @@ public:
           _format{std::move(format)},
           _formatVersion{runtime, std::uint64_t{0}},
           _layoutVersion{runtime, std::uint64_t{0}},
-          _data{std::make_shared<table::VectorSource>(
-              std::vector<table::ColumnInfo>{table::ColumnInfo{.id = std::string{kGridKeyField},
-                                                               .kind = table::ColumnKind::Text}})} {
+          _data{std::make_shared<table::VectorSource>(std::vector<table::ColumnInfo>{
+              table::ColumnInfo{.id = std::string{kGridKeyField}, .kind = table::ColumnKind::Text}})} {
         for (GridColumn const& column : _columns) {
             _layout.push_back(column.id);
         }
@@ -2343,9 +2357,8 @@ public:
     [[nodiscard]] bool spanning() const override {
         return std::ranges::any_of(_parts, [](Part const& part) {
             return std::ranges::any_of(rowsOf(part), [](FixedRow const& row) {
-                return std::ranges::any_of(row.cells, [](auto const& cell) {
-                    return cell.second.rows > 1 || cell.second.columns > 1;
-                });
+                return std::ranges::any_of(
+                    row.cells, [](auto const& cell) { return cell.second.rows > 1 || cell.second.columns > 1; });
             });
         });
     }
@@ -2733,7 +2746,7 @@ private:
 
     // A cell's part and its block's collection row; null for no cell.
     [[nodiscard]] std::pair<FixedCell const*, forms::RowState const*> cellOf(Key const& key,
-                                                                            std::string_view column) const {
+                                                                             std::string_view column) const {
         Expanded const* const row = expandedOf(key);
         if (row == nullptr) {
             return {nullptr, nullptr};
@@ -2947,11 +2960,13 @@ public:
                         return async::Completion<std::string>::makeSettleable(owner).first;
                     },
                     _context.choices, _context.session);
-                _sessions.insert_or_assign(column.id, Session{.form = std::move(session), .loadedFor = {}, .base = {}});
+                _sessions.insert_or_assign(column.id,
+                                           Session{.form = std::move(session), .loadedFor = {}, .base = {}});
             }
         }
         _view = std::make_unique<Rows>(*this);
-        _edits->onRowSettled(_alive.guard([this](table::RowId const& row, bool refused) { rowSettled(row, refused); }));
+        _edits->onRowSettled(
+            _alive.guard([this](table::RowId const& row, bool refused) { rowSettled(row, refused); }));
     }
 
     ModelGridSource(ModelGridSource const&) = delete;
@@ -2975,7 +2990,8 @@ public:
         }
         _edits->keepColumns(ids);
         for (auto& [row, cells] : _held) {
-            std::erase_if(cells, [&ids](table::EditCell const& cell) { return !std::ranges::contains(ids, cell.column); });
+            std::erase_if(cells,
+                          [&ids](table::EditCell const& cell) { return !std::ranges::contains(ids, cell.column); });
         }
         std::erase_if(_resend, [&ids](CellRef const& cell) { return !std::ranges::contains(ids, cell.column); });
         _positionsVersion.reset();
@@ -3378,7 +3394,8 @@ public:
     /// @param column The column's id.
     /// @return `true` until the cell is committed again.
     [[nodiscard]] bool resends(Key const& key, std::string_view column) const override {
-        return std::ranges::any_of(_resend, [&](CellRef const& cell) { return cell.key == key && cell.column == column; });
+        return std::ranges::any_of(_resend,
+                                   [&](CellRef const& cell) { return cell.key == key && cell.column == column; });
     }
 
     /// @brief A held cell's refusal when its row became read-only for no reason the cell can name.
@@ -3470,7 +3487,9 @@ private:
             return _inner->heldRanges();
         }
         void moveKey(table::RowId const& from, table::RowId const& to) override { _source->moveKey(from, to); }
-        void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
+        void onChange(std::function<void(table::ViewChange const&)> handler) override {
+            _handler = std::move(handler);
+        }
 
     private:
         // The rows a change brought are fetched: their modified marks end before anything reads the rows, then the
@@ -3552,8 +3571,8 @@ private:
         if (!_description) {
             return nullptr;
         }
-        auto const found = std::ranges::find_if(_description->columns,
-                                                [id](table::TableColumn const& column) { return column.info.id == id; });
+        auto const found = std::ranges::find_if(
+            _description->columns, [id](table::TableColumn const& column) { return column.info.id == id; });
         return found == _description->columns.end() ? nullptr : &*found;
     }
 
@@ -3588,7 +3607,8 @@ private:
         ModelColumn const* const described = columnOf(column);
         CellFacts facts;
         facts.field = fieldOf(column);
-        facts.hasEdit = described != nullptr && described->edit && (!_context.may || _context.may(described->edit->action));
+        facts.hasEdit =
+            described != nullptr && described->edit && (!_context.may || _context.may(described->edit->action));
         std::optional<Located> const row = locate(key);
         if (!row) {
             facts.unloaded = true;
@@ -3600,7 +3620,8 @@ private:
             facts.companionReadOnly = frozen != nullptr && *frozen;
         }
         facts.busy = _rows->states().isBusy(key);
-        facts.locked = _description && lockText(TableRowRef{.key = key, .row = row->record}, *_description).has_value();
+        facts.locked =
+            _description && lockText(TableRowRef{.key = key, .row = row->record}, *_description).has_value();
         table::TableColumn const* const shown = describedColumn(column);
         table::UnloadedLevels const levels = _rows->unloadedLevels(row->index);
         Value const* const value = row->record.field(std::string{column});
@@ -3628,8 +3649,7 @@ private:
         _rt->untracked([&] {
             std::optional<Located> const row = locate(key);
             Value const* const value = row ? row->record.field(std::string{column}) : nullptr;
-            std::string const json =
-                value == nullptr ? std::string{"null"} : wireOf(*value, fieldOf(column)->spec());
+            std::string const json = value == nullptr ? std::string{"null"} : wireOf(*value, fieldOf(column)->spec());
             std::string const body = described->edit->member.empty()
                                          ? R"({"value":)" + json + "}"
                                          : R"({"values":{")" + described->edit->member + R"(":)" + json + "}}";
@@ -3686,10 +3706,10 @@ private:
         }
         forms::Encoding const encoding = _rt->untracked([&] { return fieldOf(column)->encoded().get(); });
         ModelColumn const* const described = columnOf(column);
-        return table::EditCell{.column = column,
-                               .json = encoding && encoding->has_value() ? (*encoding)->json : std::string{"null"},
-                               .member = described->edit->member.empty() ? std::string{"value"}
-                                                                         : described->edit->member};
+        return table::EditCell{
+            .column = column,
+            .json = encoding && encoding->has_value() ? (*encoding)->json : std::string{"null"},
+            .member = described->edit->member.empty() ? std::string{"value"} : described->edit->member};
     }
 
     // Sends a row's held cells as one request. A cell that became read-only since it was held (its row busy with
@@ -3751,7 +3771,8 @@ private:
         if (Quantity const* const measure = value.asQuantity();
             measure != nullptr && kind == forms::FieldKind::Quantity) {
             std::optional<math::Rational> const amount = inFieldUnit(*measure, spec);
-            return amount ? glz::write_json(valueToJson(Value{Decimal{*amount}})).value_or("null") : std::string{"null"};
+            return amount ? glz::write_json(valueToJson(Value{Decimal{*amount}})).value_or("null")
+                          : std::string{"null"};
         }
         if (kind == forms::FieldKind::EpochDate) {
             std::string const* const text = value.asString();
@@ -3781,7 +3802,8 @@ private:
 
     // A measure's amount in its `Quantity` field's canonical unit, through the description's units; nothing when they
     // cannot convert it (a unit they lack, another dimension), so the cell is read-only.
-    [[nodiscard]] std::optional<math::Rational> inFieldUnit(Quantity const& measure, forms::FieldSpec const& spec) const {
+    [[nodiscard]] std::optional<math::Rational> inFieldUnit(Quantity const& measure,
+                                                            forms::FieldSpec const& spec) const {
         std::optional<table::UnitId> const from = _units ? _units->find(measure.unit) : std::nullopt;
         std::optional<table::UnitId> const to = _units ? _units->find(spec.unitAscii) : std::nullopt;
         if (!from || !to || _units->info(*from).dimension != _units->info(*to).dimension) {
@@ -3848,8 +3870,8 @@ private:
 ///
 /// The editor's text is the cell's draft, live: an opening keeps the draft the cell held, a commit closes the editor
 /// and calls `GridSource::committed` once when the draft changed, and `Escape` writes the kept draft back. A paste, a
-/// fill, a clear and each row operation is one change too: it calls `GridSource::committed` once, however many cells or
-/// rows it touches.
+/// fill, a clear and each row operation is one change too: it calls `GridSource::committed` once, however many cells
+/// or rows it touches.
 class GridController : public std::enable_shared_from_this<GridController> {
 public:
     /// @brief A controller over a source.
@@ -3897,7 +3919,8 @@ public:
     }
 
     /// @brief The focus as the mount shows it, what `Table::gridFocus` binds. Tracked.
-    /// @return `{key, view position, column}` for a focused cell, `{none, view row, column}` while the walk stopped at a
+    /// @return `{key, view position, column}` for a focused cell, `{none, view row, column}` while the walk stopped at
+    /// a
     ///         row not fetched yet, which takes its key once the source answers for it.
     [[nodiscard]] std::optional<GridFocus> place() const {
         std::optional<GridFocus> shown = _place.get();
@@ -3983,11 +4006,12 @@ public:
             return {"Enter", "Tab", "Shift+Tab", "Escape", "Ctrl+Enter"};
         }
         if (!_source->selectsCells()) {
-            return {"Tab", "Shift+Tab", "Enter", "F2", "Space", "Delete", "Escape", "Ctrl+Enter", "Ctrl+Shift+=", "Ctrl+-"};
+            return {"Tab",    "Shift+Tab", "Enter",      "F2",           "Space",
+                    "Delete", "Escape",    "Ctrl+Enter", "Ctrl+Shift+=", "Ctrl+-"};
         }
-        return {"Tab",         "Shift+Tab", "Enter",  "F2",     "Space",  "Delete",       "Escape",
-                "Ctrl+Enter",  "Shift+Up",  "Shift+Down", "Shift+Left", "Shift+Right", "Ctrl+A", "Ctrl+V",
-                "Ctrl+D",      "Ctrl+Shift+=", "Ctrl+-"};
+        return {"Tab",    "Shift+Tab",  "Enter",    "F2",           "Space",      "Delete",
+                "Escape", "Ctrl+Enter", "Shift+Up", "Shift+Down",   "Shift+Left", "Shift+Right",
+                "Ctrl+A", "Ctrl+V",     "Ctrl+D",   "Ctrl+Shift+=", "Ctrl+-"};
     }
 
     /// @brief A chord pressed while the table has focus.
@@ -4144,7 +4168,8 @@ public:
     /// @return The entries.
     [[nodiscard]] std::vector<StatusEntry> const& messageEntries() const { return _messageEntries.get(); }
 
-    /// @brief A state that lasts while its source holds: `kDeriveFailedText` from a failed round of derived values until
+    /// @brief A state that lasts while its source holds: `kDeriveFailedText` from a failed round of derived values
+    /// until
     ///        a round succeeds, a retry in flight included. Tracked.
     /// @return The text; empty for none.
     [[nodiscard]] std::string standing() const {
@@ -4175,9 +4200,10 @@ public:
         }
     }
 
-    /// @brief The grid's entries of a cell's menu: "Revert cell", enabled while the cell is modified, and "Revert row",
-    ///        enabled while the row is modified, each restoring the loaded value and then committing once; then, unless
-    ///        the rows are fixed, a separator and the row entries (`rowEntries`).
+    /// @brief The grid's entries of a cell's menu: "Revert cell", enabled while the cell is modified, and "Revert
+    /// row",
+    ///        enabled while the row is modified, each restoring the loaded value and then committing once; then,
+    ///        unless the rows are fixed, a separator and the row entries (`rowEntries`).
     /// @param row    The row's key.
     /// @param column The column's id.
     /// @return The entries.
@@ -4254,7 +4280,8 @@ public:
     /// @return The range by its corners; none while no cell range is selected.
     [[nodiscard]] std::optional<CellRange> selection() const { return _selection.get(); }
 
-    /// @brief Copies the summary rows a rectangle spans with the data rows (`copy`): the rows the grid is mounted over,
+    /// @brief Copies the summary rows a rectangle spans with the data rows (`copy`): the rows the grid is mounted
+    /// over,
     ///        and a summary cell's text.
     /// @param rows The summary rows over this grid's rows; null copies data rows only.
     /// @param text A summary row's cell text, by its record and its column's id.
@@ -4339,10 +4366,10 @@ public:
     /// Lines split on a line feed, a trailing carriage return removed from each and a final empty line dropped; values
     /// split on tabs, each trimmed of spaces. With no focus the block starts at the first row and the first visible
     /// column, in a grid with no rows at the first row the paste adds. A line past the last row appends a row while
-    /// `appendRows` allows and the record holds fewer than `maxItems`, else each of its values is dropped. A value past
-    /// the last visible column, or on a read-only or covered cell, is dropped. Every other value is written as the
-    /// cell's draft (`GridSource::write`), all in one batch, then `GridSource::committed` is called once. A block of
-    /// more than `GridOptions::maxPasteCells` values is refused whole, and nothing is written.
+    /// `appendRows` allows and the record holds fewer than `maxItems`, else each of its values is dropped. A value
+    /// past the last visible column, or on a read-only or covered cell, is dropped. Every other value is written as
+    /// the cell's draft (`GridSource::write`), all in one batch, then `GridSource::committed` is called once. A block
+    /// of more than `GridOptions::maxPasteCells` values is refused whole, and nothing is written.
     /// @param text The text.
     /// @return What the paste did with each value.
     PasteResult paste(std::string_view text) {
@@ -4491,7 +4518,8 @@ public:
         }
     }
 
-    /// @brief Deletes the rows the cell selection spans, else the focused row, as one change, at once. When one of them
+    /// @brief Deletes the rows the cell selection spans, else the focused row, as one change, at once. When one of
+    /// them
     ///        held a value the status line says `Deleted {n} rows` (`Deleted 1 row`) with the entry "Undo" (`undo`).
     void deleteRows() {
         std::vector<Key> doomed = _rt->untracked([&] { return selectedRows(); });
@@ -4503,7 +4531,8 @@ public:
         removeKeys(doomed);
     }
 
-    /// @brief Puts back the rows the last deletion removed, each where it stood, as one change, while the offer to undo
+    /// @brief Puts back the rows the last deletion removed, each where it stood, as one change, while the offer to
+    /// undo
     ///        it stands: until the grid's next change, or `GridOptions::undoHold` after the deletion, whichever comes
     ///        first. Once the offer ends it does nothing.
     void undo() {
@@ -4529,7 +4558,8 @@ public:
         std::string const insert = insertRefusal();
         std::string const remove = removeRefusal(1);
         bool const anyRow = _source->heldRows() > 0;
-        return RowOps{.insert = insert.empty(), .remove = remove.empty() && anyRow, .why = !insert.empty() ? insert : remove};
+        return RowOps{
+            .insert = insert.empty(), .remove = remove.empty() && anyRow, .why = !insert.empty() ? insert : remove};
     }
 
     /// @brief Appends a row and focuses its first editable cell, as one change: what "Add row" under the grid does.
@@ -4577,9 +4607,7 @@ public:
         for (TableColumn const& column : columns) {
             ids->push_back(column.id);
         }
-        auto const idOf = [ids](std::size_t column) {
-            return column < ids->size() ? ids->at(column) : std::string{};
-        };
+        auto const idOf = [ids](std::size_t column) { return column < ids->size() ? ids->at(column) : std::string{}; };
         auto const marksOf = [source](reactive::Signal<Value> const* row, std::string id) {
             return Prop<CellMarks>{[source, row, id] {
                 std::optional<Key> const key = source->keyOf(row->get());
@@ -4750,9 +4778,8 @@ public:
         add.common.tooltip = Prop<std::string>{[self] { return self->insertRefusal(); }};
         std::vector<Node> under;
         under.push_back(ui::button(std::move(add)));
-        return besideTable(options.common, std::move(under), [&] {
-            return ui::table(std::move(columns), std::move(made), std::move(options));
-        });
+        return besideTable(options.common, std::move(under),
+                           [&] { return ui::table(std::move(columns), std::move(made), std::move(options)); });
     }
 
     /// @brief The status line's refusal of typing on a read-only cell.
@@ -4799,7 +4826,8 @@ private:
     // Whether a cell lies in the selection's rectangle.
     [[nodiscard]] bool inBlock(CellRef const& cell) const {
         std::optional<Block> const cells = _rt->untracked([&] { return block(); });
-        return cells && std::ranges::contains(cells->keys, cell.key) && std::ranges::contains(cells->columns, cell.column);
+        return cells && std::ranges::contains(cells->keys, cell.key) &&
+               std::ranges::contains(cells->columns, cell.column);
     }
 
     // The rows the selection spans, in view order; none without a selection.
@@ -4837,8 +4865,8 @@ private:
         if (!key) {
             return;
         }
-        range.focus = CellRef{.key = *key,
-                              .column = ids.at(clamp(static_cast<std::size_t>(column - ids.begin()), columns, ids.size()))};
+        range.focus = CellRef{
+            .key = *key, .column = ids.at(clamp(static_cast<std::size_t>(column - ids.begin()), columns, ids.size()))};
         setSelection(std::move(range));
     }
 
@@ -4856,7 +4884,7 @@ private:
         std::optional<Key> const last = _source->keyAt(count - 1);
         if (first && last) {
             setSelection(CellRange{.anchor = CellRef{.key = *first, .column = ids.front()},
-                                     .focus = CellRef{.key = *last, .column = ids.back()}});
+                                   .focus = CellRef{.key = *last, .column = ids.back()}});
         }
     }
 
@@ -4941,8 +4969,7 @@ private:
     void removeKeys(std::vector<Key> const& keys) {
         commit();
         letGo();
-        if (fixedRows() || keys.empty() ||
-            !_rt->untracked([&] { return removeRefusal(keys.size()); }).empty()) {
+        if (fixedRows() || keys.empty() || !_rt->untracked([&] { return removeRefusal(keys.size()); }).empty()) {
             return;
         }
         std::optional<GridFocus> const shown = _rt->untracked([&] { return place(); });
@@ -5041,7 +5068,8 @@ private:
             return;
         }
         _focusedRow = to;
-        _place.set(GridFocus{.key = to, .viewRow = _source->positionOf(to).value_or(shown->viewRow), .column = shown->column});
+        _place.set(GridFocus{
+            .key = to, .viewRow = _source->positionOf(to).value_or(shown->viewRow), .column = shown->column});
     }
 
     // Moves the focus, and tells the source when the row it is on changed.
@@ -5063,9 +5091,8 @@ private:
 
     // A cell a walk may stop on: editable and not covered.
     [[nodiscard]] bool editable(CellRef const& cell) const {
-        return _rt->untracked([&] {
-            return !_source->readOnly(cell.key, cell.column) && !_source->covered(cell.key, cell.column);
-        });
+        return _rt->untracked(
+            [&] { return !_source->readOnly(cell.key, cell.column) && !_source->covered(cell.key, cell.column); });
     }
 
     // Commits an open editor: it closes, and an edit is meant when its draft differs from the one it opened on.
@@ -5208,7 +5235,8 @@ private:
                     return;
                 }
             }
-            // Enter down from the last row adds a row with `appendRows`, focused in the same column when it is editable.
+            // Enter down from the last row adds a row with `appendRows`, focused in the same column when it is
+            // editable.
             if (*row + 1 >= rows && _options.appendRows && !fixedRows() &&
                 _rt->untracked([&] { return insertRefusal(); }).empty()) {
                 if (std::optional<Key> const key = _source->appendRow()) {

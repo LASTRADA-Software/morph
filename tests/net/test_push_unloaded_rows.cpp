@@ -762,21 +762,22 @@ TEST_CASE("table over the bridge: exactly the arrived rows update, without polli
     std::optional<ui::WatchHolder> watch;
     std::vector<std::vector<RowId>> events;
     {
-        auto watching = client.session->watchRecord("WideTableModel.small", [&](morph::effects::RecordChange const& change) {
-            std::vector<RowId> keys;
-            for (auto const& key : change.keys.value_or(std::vector<glz::raw_json>{})) {
-                if (auto id = morph::table::rowIdOf(key)) {
-                    keys.push_back(*id);
+        auto watching =
+            client.session->watchRecord("WideTableModel.small", [&](morph::effects::RecordChange const& change) {
+                std::vector<RowId> keys;
+                for (auto const& key : change.keys.value_or(std::vector<glz::raw_json>{})) {
+                    if (auto id = morph::table::rowIdOf(key)) {
+                        keys.push_back(*id);
+                    }
                 }
-            }
-            events.push_back(std::move(keys));
-        });
+                events.push_back(std::move(keys));
+            });
         watching.then([&watch](ui::WatchHolder const& holder) { watch = holder; });
         REQUIRE(client.pumpUntil([&] { return watch.has_value(); }));
     }
     morph::table::TableDescription description;
-    REQUIRE_FALSE(glz::read<glz::opts{.error_on_unknown_keys = false}>(
-        description, client.read("Table.small.describe", "{}")));
+    REQUIRE_FALSE(
+        glz::read<glz::opts{.error_on_unknown_keys = false}>(description, client.read("Table.small.describe", "{}")));
     morph::table::PageWindow<morph::table::GenericRow> window{200, 8};
     std::vector<std::string> const columns{"id", "d000"};
     auto const fetches = window.visible(0, 30, columns);
@@ -927,19 +928,20 @@ TEST_CASE("table benchmark: E1 E2 a window over the bridge", "[.benchmark][net]"
     bench::WideTableModel::recipeGate().hold();
     SessionClient client{server.url};
     morph::table::TableDescription description;
-    REQUIRE_FALSE(glz::read<glz::opts{.error_on_unknown_keys = false}>(
-        description, client.read("Table.wide.describe", "{}")));
+    REQUIRE_FALSE(
+        glz::read<glz::opts{.error_on_unknown_keys = false}>(description, client.read("Table.wide.describe", "{}")));
     std::optional<ui::WatchHolder> watch;
     std::vector<std::vector<RowId>> events;
-    auto watching = client.session->watchRecord("WideTableModel.wide", [&](morph::effects::RecordChange const& change) {
-        std::vector<RowId> keys;
-        for (auto const& key : change.keys.value_or(std::vector<glz::raw_json>{})) {
-            if (auto id = morph::table::rowIdOf(key)) {
-                keys.push_back(*id);
+    auto watching =
+        client.session->watchRecord("WideTableModel.wide", [&](morph::effects::RecordChange const& change) {
+            std::vector<RowId> keys;
+            for (auto const& key : change.keys.value_or(std::vector<glz::raw_json>{})) {
+                if (auto id = morph::table::rowIdOf(key)) {
+                    keys.push_back(*id);
+                }
             }
-        }
-        events.push_back(std::move(keys));
-    });
+            events.push_back(std::move(keys));
+        });
     watching.then([&watch](ui::WatchHolder const& holder) { watch = holder; });
     REQUIRE(client.pumpUntil([&] { return watch.has_value(); }));
     morph::table::PageWindow<morph::table::GenericRow> window{200, 8};
@@ -971,7 +973,8 @@ TEST_CASE("table benchmark: E1 E2 a window over the bridge", "[.benchmark][net]"
         auto reply = morph::table::readGenericPage(client.read("Table.wide", keyedBody(plan.rows)), description);
         REQUIRE(reply.has_value());
         static_cast<void>(window.patch(plan.rows, std::move(*reply)));
-        samples.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - returned).count());
+        samples.push_back(
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - returned).count());
     }
     REQUIRE_FALSE(samples.empty());
     std::ranges::sort(samples);

@@ -25,8 +25,9 @@
 // windows.h first: psapi.h needs its types.
 #include <psapi.h>
 #elif defined(__linux__)
-#include <fstream>
 #include <unistd.h>
+
+#include <fstream>
 #endif
 
 namespace bench {
@@ -52,6 +53,7 @@ struct ColumnData {
 
 namespace {
 
+using detail::ColumnData;
 using morph::math::DecimalPlaces;
 using morph::math::Denominator;
 using morph::math::Numerator;
@@ -60,7 +62,6 @@ using morph::table::Cell;
 using morph::table::ColumnInfo;
 using morph::table::ColumnKind;
 using morph::table::QuantityCell;
-using detail::ColumnData;
 
 constexpr std::int64_t kDecimalScale = 100;
 // The fixture registry's units: "", kg, g, mg, t, l, ml, m3, percent, permille, numbered 0 to 9.
@@ -70,9 +71,10 @@ constexpr std::int64_t kKilogramScale = 1'000'000;
 
 // Each entry is one code point, so a text of n entries is n code points long.
 constexpr std::array<std::string_view, 32> kSyllables{
-    "a", "e", "i", "o", "u", "b", "c", "d", "f", "g", "k", "l", "m", "n", "p", "r",
-    "s", "t", "v", "z", "\xC3\x89", "\xC3\xA9", "\xC3\x84", "\xC3\xA4", "\xC3\x96", "\xC3\xB8", "\xC3\x9C",
-    "\xC3\xA7", "\xC3\x9F", "Z", "K", "M"};
+    "a",        "e",        "i",        "o",        "u",        "b",        "c",        "d",
+    "f",        "g",        "k",        "l",        "m",        "n",        "p",        "r",
+    "s",        "t",        "v",        "z",        "\xC3\x89", "\xC3\xA9", "\xC3\x84", "\xC3\xA4",
+    "\xC3\x96", "\xC3\xB8", "\xC3\x9C", "\xC3\xA7", "\xC3\x9F", "Z",        "K",        "M"};
 
 [[nodiscard]] constexpr std::uint64_t splitmix64(std::uint64_t z) noexcept {
     z += 0x9E3779B97F4A7C15ULL;
@@ -506,8 +508,7 @@ std::size_t approximateCellBytes(Cell const& cell) noexcept {
     return bytes;
 }
 
-WideTableSource::WideTableSource(WideTableOptions options)
-    : _options{options}, _layout{wideColumns(options.columns)} {
+WideTableSource::WideTableSource(WideTableOptions options) : _options{options}, _layout{wideColumns(options.columns)} {
     if (options.rows < 0) {
         throw std::invalid_argument{"wide table: a negative row count"};
     }
@@ -571,8 +572,8 @@ void WideTableSource::setCell(std::int64_t row, std::string_view column, Cell va
         _data = std::move(data);
         _snapshot = std::move(snapshot);
     }
-    _listeners.notify(morph::table::RowChange{.kind = morph::table::ChangeKind::Updated,
-                                              .rows = {static_cast<std::size_t>(row)}});
+    _listeners.notify(
+        morph::table::RowChange{.kind = morph::table::ChangeKind::Updated, .rows = {static_cast<std::size_t>(row)}});
 }
 
 void WideTableSource::regenerate(std::uint64_t seed) {
@@ -1057,9 +1058,8 @@ morph::table::ServedTable WideTableModel::scoped(morph::table::TableContext cons
     // Principals see different columns, so their views are kept apart.
     out.scope = context.session.principal;
     out.mayRead = [&description](std::string_view column) {
-        return std::ranges::any_of(description.columns, [&](morph::table::TableColumn const& entry) {
-            return entry.info.id == column;
-        });
+        return std::ranges::any_of(description.columns,
+                                   [&](morph::table::TableColumn const& entry) { return entry.info.id == column; });
     };
     return out;
 }

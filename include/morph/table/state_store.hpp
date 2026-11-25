@@ -215,9 +215,9 @@ struct StoredViews {
     /// @brief The JSON member names: `defaultView` is `default`.
     struct glaze {
         /// @brief The members.
-        static constexpr auto value = glz::object("version", &StoredViews::version, "default",
-                                                  &StoredViews::defaultView, "defaultOnMount",
-                                                  &StoredViews::defaultOnMount, "views", &StoredViews::views);
+        static constexpr auto value =
+            glz::object("version", &StoredViews::version, "default", &StoredViews::defaultView, "defaultOnMount",
+                        &StoredViews::defaultOnMount, "views", &StoredViews::views);
     };
 };
 
@@ -246,8 +246,10 @@ inline constexpr glz::opts kViewsRead{.error_on_unknown_keys = false};
 /// @param stored The stored shape.
 /// @return The view.
 [[nodiscard]] inline SavedView savedView(StoredView stored) {
-    SavedView out{
-        .name = std::move(stored.name), .layout = std::move(stored.layout), .sort = {}, .filters = std::move(stored.filters)};
+    SavedView out{.name = std::move(stored.name),
+                  .layout = std::move(stored.layout),
+                  .sort = {},
+                  .filters = std::move(stored.filters)};
     out.sort.reserve(stored.sort.size());
     for (auto& key : stored.sort) {
         out.sort.push_back(SortKey{.column = std::move(key.column), .dir = key.direction});
@@ -259,7 +261,8 @@ inline constexpr glz::opts kViewsRead{.error_on_unknown_keys = false};
 /// @param message What is wrong.
 /// @return The error.
 [[nodiscard]] inline std::unexpected<TableError> viewsError(std::string message) {
-    return std::unexpected(TableError{.code = TableErrorCode::InvalidSpec, .column = {}, .message = std::move(message)});
+    return std::unexpected(
+        TableError{.code = TableErrorCode::InvalidSpec, .column = {}, .message = std::move(message)});
 }
 
 /// @brief @p value as JSON text.
@@ -631,8 +634,7 @@ public:
         auto [completion, promise] = async::Completion<std::optional<StoredTableState>>::makeSettleable(&_strand);
         _strand.postTask([this, entry = tie(key), settle = std::move(promise)] mutable {
             auto const found = _documents.find(entry);
-            settle.resolve(found == _documents.end() ? std::nullopt
-                                                     : std::optional<StoredTableState>{found->second});
+            settle.resolve(found == _documents.end() ? std::nullopt : std::optional<StoredTableState>{found->second});
         });
         return std::move(completion);
     }
@@ -645,8 +647,9 @@ public:
     [[nodiscard]] async::Completion<SaveResult> save(TableStateKey const& key, std::string json,
                                                      std::string expected = {}) override {
         auto [completion, promise] = async::Completion<SaveResult>::makeSettleable(&_strand);
-        _strand.postTask([this, entry = tie(key), text = std::move(json), wanted = std::move(expected),
-                          settle = std::move(promise)] mutable { settle.resolve(store(entry, std::move(text), wanted)); });
+        _strand.postTask(
+            [this, entry = tie(key), text = std::move(json), wanted = std::move(expected),
+             settle = std::move(promise)] mutable { settle.resolve(store(entry, std::move(text), wanted)); });
         return std::move(completion);
     }
 
@@ -665,8 +668,8 @@ public:
         _strand.postTask([this, entry = tie(key), part = key.part, change = operation, wanted = std::move(expected),
                           settle = std::move(promise)] mutable {
             auto const refuse = [&settle](std::string current, std::string reason) {
-                settle.resolve(
-                    SaveResult{.outcome = SaveOutcome::Refused, .revision = std::move(current), .reason = std::move(reason)});
+                settle.resolve(SaveResult{
+                    .outcome = SaveOutcome::Refused, .revision = std::move(current), .reason = std::move(reason)});
             };
             auto const found = _documents.find(entry);
             std::string const current = found == _documents.end() ? std::string{} : found->second.revision;
@@ -721,7 +724,8 @@ private:
     }
 
     /// The `Conflict` @p wanted answers over @p found, or nothing when it holds.
-    [[nodiscard]] std::optional<SaveResult> conflictOf(Documents::const_iterator found, std::string const& wanted) const {
+    [[nodiscard]] std::optional<SaveResult> conflictOf(Documents::const_iterator found,
+                                                       std::string const& wanted) const {
         bool const stored = found != _documents.end();
         std::string const current = stored ? found->second.revision : std::string{};
         bool const holds = wanted.empty() || (wanted == kNoDocument ? !stored : stored && wanted == current);

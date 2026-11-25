@@ -178,9 +178,9 @@ struct FilterMenuState {
                                       return a.search == b.search && a.operand == b.operand && a.ticked == b.ticked;
                                   }) &&
                dates == other.dates && conditions == other.conditions && matchCase == other.matchCase &&
-               combine == other.combine && match == other.match && count == other.count &&
-               refusal == other.refusal && target.column == other.target.column &&
-               target.group == other.target.group && target.columns == other.target.columns;
+               combine == other.combine && match == other.match && count == other.count && refusal == other.refusal &&
+               target.column == other.target.column && target.group == other.target.group &&
+               target.columns == other.target.columns;
     }
 };
 
@@ -212,7 +212,8 @@ namespace detail::filtermenu {
     unsigned month = 0;
     unsigned day = 0;
     char const* const at = text.data();
-    if (std::from_chars(at, at + 4, year).ec != std::errc{} || std::from_chars(at + 5, at + 7, month).ec != std::errc{} ||
+    if (std::from_chars(at, at + 4, year).ec != std::errc{} ||
+        std::from_chars(at + 5, at + 7, month).ec != std::errc{} ||
         std::from_chars(at + 8, at + 10, day).ec != std::errc{}) {
         return std::nullopt;
     }
@@ -263,7 +264,8 @@ namespace detail::filtermenu {
             own = true;
             continue;
         }
-        if (auto const held = rangeOf(ticked); held && range && held->first <= range->first && range->second <= held->second) {
+        if (auto const held = rangeOf(ticked);
+            held && range && held->first <= range->first && range->second <= held->second) {
             covered = true;
         }
     }
@@ -371,7 +373,8 @@ namespace detail::filtermenu {
 /// @param entries The include entries.
 /// @return Up to two drafts, the rest of the array empty; nothing when an entry is one the menu cannot show or
 ///         there are more than two.
-[[nodiscard]] inline std::optional<std::array<ConditionDraft, 2>> draftsOf(std::span<table::FilterEntry const> entries) {
+[[nodiscard]] inline std::optional<std::array<ConditionDraft, 2>> draftsOf(
+    std::span<table::FilterEntry const> entries) {
     if (entries.size() > 2) {
         return std::nullopt;
     }
@@ -550,9 +553,8 @@ public:
             } else if (auto drafts = draftsOf(held->second.include); drafts && held->second.exclude.empty()) {
                 next.conditions = std::move(*drafts);
                 next.combine = held->second.combine;
-                next.matchCase = std::ranges::any_of(held->second.include, [](table::FilterEntry const& entry) {
-                    return entry.caseSensitive == true;
-                });
+                next.matchCase = std::ranges::any_of(
+                    held->second.include, [](table::FilterEntry const& entry) { return entry.caseSensitive == true; });
             }
         }
         // A date tree is include-only: no bucket starts ticked, and neither does "(Blanks)" unless the stored
@@ -716,8 +718,8 @@ public:
         request.offset = 0;
         std::uint64_t const serial = _serial;
         std::string const operand = entry.value.operand;
-        ask(request, [this, serial, operand, bucket, depth = entry.depth + 1](
-                         std::expected<table::DistinctValues, table::TableError> const& reply) {
+        ask(request, [this, serial, operand, bucket,
+                      depth = entry.depth + 1](std::expected<table::DistinctValues, table::TableError> const& reply) {
             if (serial != _serial || !reply) {
                 return;
             }
@@ -731,7 +733,8 @@ public:
                 at->opened = true;
                 std::vector<FilterListEntry> children;
                 for (table::DistinctValue const& value : reply->values) {
-                    children.push_back(FilterListEntry{.value = value, .bucket = bucket, .depth = depth, .opened = false});
+                    children.push_back(
+                        FilterListEntry{.value = value, .bucket = bucket, .depth = depth, .opened = false});
                 }
                 state.list.insert(at + 1, children.begin(), children.end());
             });
@@ -841,7 +844,8 @@ public:
         }
         _state.mutate([](FilterMenuState& state) {
             clearConditions(state);
-            state.ticks = ValueTicks{.ticked = !dates(state) && !state.target.column.empty(), .ops = {},
+            state.ticks = ValueTicks{.ticked = !dates(state) && !state.target.column.empty(),
+                                     .ops = {},
                                      .blanks = state.blanks > 0 ? std::optional{!dates(state)} : std::nullopt};
             state.dates.clear();
             state.refusal.clear();
@@ -920,22 +924,21 @@ public:
         if (state.target.formed) {
             return false;
         }
-        if (state.ticks.blanks == true ||
-            std::ranges::any_of(state.list, [&](FilterListEntry const& entry) { return tickedNow(state, entry.value); })) {
+        if (state.ticks.blanks == true || std::ranges::any_of(state.list, [&](FilterListEntry const& entry) {
+                return tickedNow(state, entry.value);
+            })) {
             return true;
         }
         // No listed value is ticked; one the list does not show may be: every value is, after the last operation
         // that set them all, unless the list shows them all; and a "(Select all)" under a search since may tick
         // values past the page.
-        auto const last = std::ranges::find_if(state.ticks.ops.rbegin(), state.ticks.ops.rend(), [](TickOp const& op) {
-            return !op.operand && op.search.empty();
-        });
+        auto const last = std::ranges::find_if(state.ticks.ops.rbegin(), state.ticks.ops.rend(),
+                                               [](TickOp const& op) { return !op.operand && op.search.empty(); });
         bool const base = last == state.ticks.ops.rend() ? state.ticks.ticked : last->ticked;
-        bool const unlisted = !state.search.empty() || state.total < 0 ||
-                              static_cast<std::int64_t>(state.list.size()) < state.total;
-        return (base && unlisted) || std::any_of(state.ticks.ops.rbegin(), last, [](TickOp const& op) {
-                   return !op.operand && op.ticked;
-               });
+        bool const unlisted =
+            !state.search.empty() || state.total < 0 || static_cast<std::int64_t>(state.list.size()) < state.total;
+        return (base && unlisted) ||
+               std::any_of(state.ticks.ops.rbegin(), last, [](TickOp const& op) { return !op.operand && op.ticked; });
     }
 
     /// @brief The note under the list: that it may grow, how many cells could not be read, and why the last Apply
@@ -965,7 +968,8 @@ public:
     /// @param state The menu's state.
     /// @return `false` for a group the user formed, a `Custom` column, and rows that list no values.
     [[nodiscard]] static bool valuesListed(FilterMenuState const& state) {
-        return !state.target.formed && state.target.listed && state.target.shown.info.kind != table::ColumnKind::Custom;
+        return !state.target.formed && state.target.listed &&
+               state.target.shown.info.kind != table::ColumnKind::Custom;
     }
 
     /// @brief Whether the open target's list is a date tree.
@@ -973,7 +977,8 @@ public:
     /// @return `true` on a `Date` or `DateTime` column.
     [[nodiscard]] static bool dates(FilterMenuState const& state) {
         table::ColumnKind const kind = state.target.shown.info.kind;
-        return !state.target.column.empty() && (kind == table::ColumnKind::Date || kind == table::ColumnKind::DateTime);
+        return !state.target.column.empty() &&
+               (kind == table::ColumnKind::Date || kind == table::ColumnKind::DateTime);
     }
 
 private:
@@ -1001,8 +1006,8 @@ private:
     // back to its default.
     static void leaveTogether(FilterMenuState& state) {
         if (state.match == GroupMatch::Together &&
-            std::ranges::count_if(state.list, [&](FilterListEntry const& listed) { return tickedNow(state, listed.value); }) <
-                2) {
+            std::ranges::count_if(state.list,
+                                  [&](FilterListEntry const& listed) { return tickedNow(state, listed.value); }) < 2) {
             state.match = GroupMatch::AnyColumn;
         }
     }
@@ -1116,7 +1121,8 @@ private:
         _state.mutate([&](FilterMenuState& state) {
             std::forward<F>(edit)(state);
             // Editing a condition leaves the values part: its ticks start again.
-            state.ticks = ValueTicks{.ticked = !dates(state) && !state.target.column.empty(), .ops = {},
+            state.ticks = ValueTicks{.ticked = !dates(state) && !state.target.column.empty(),
+                                     .ops = {},
                                      .blanks = state.blanks > 0 ? std::optional{!dates(state)} : std::nullopt};
             state.dates.clear();
             state.refusal.clear();
@@ -1182,11 +1188,11 @@ private:
                     state.list.clear();
                 }
                 for (table::DistinctValue const& value : reply->values) {
-                    state.list.push_back(FilterListEntry{
-                        .value = value,
-                        .bucket = dates(state) ? table::DateBucket::Year : table::DateBucket::Value,
-                        .depth = 0,
-                        .opened = false});
+                    state.list.push_back(
+                        FilterListEntry{.value = value,
+                                        .bucket = dates(state) ? table::DateBucket::Year : table::DateBucket::Value,
+                                        .depth = 0,
+                                        .opened = false});
                 }
                 state.distinct = reply->distinct;
                 if (!searched) {
@@ -1206,9 +1212,10 @@ private:
     }
 
     // Every value a search shows, every page of them, asked at `maxLimit` a request.
-    void pageAll(std::string search, std::function<void(std::expected<std::vector<table::DistinctValue>, std::string>,
-                                                        std::int64_t distinct)>
-                                         done) {
+    void pageAll(
+        std::string search,
+        std::function<void(std::expected<std::vector<table::DistinctValue>, std::string>, std::int64_t distinct)>
+            done) {
         struct Paging {
             table::DistinctRequest request;
             std::vector<table::DistinctValue> values;
@@ -1254,7 +1261,8 @@ private:
         }
         auto reached = std::make_shared<std::map<std::string, std::vector<std::string>, std::less<>>>();
         auto finish = [reached, ticks = now.ticks, done](std::int64_t distinct) {
-            ResolvedTicks resolved = resolveTicks(ticks, [&](std::string const& search) { return reached->at(search); });
+            ResolvedTicks resolved =
+                resolveTicks(ticks, [&](std::string const& search) { return reached->at(search); });
             done(std::pair{std::move(resolved), distinct});
         };
         auto counted = [this, total = now.total, finish, done] {
@@ -1281,21 +1289,21 @@ private:
                 counted();
                 return;
             }
-            pageAll(searches->at(at), [reached, searches, at, done, self = weakStep.lock()](
-                                          std::expected<std::vector<table::DistinctValue>, std::string> values,
-                                          std::int64_t) {
-                if (!values) {
-                    done(std::unexpected(values.error()));
-                    return;
-                }
-                std::vector<std::string>& operands = (*reached)[searches->at(at)];
-                for (table::DistinctValue const& value : *values) {
-                    operands.push_back(value.operand);
-                }
-                if (self) {
-                    (*self)(at + 1);
-                }
-            });
+            pageAll(searches->at(at),
+                    [reached, searches, at, done, self = weakStep.lock()](
+                        std::expected<std::vector<table::DistinctValue>, std::string> values, std::int64_t) {
+                        if (!values) {
+                            done(std::unexpected(values.error()));
+                            return;
+                        }
+                        std::vector<std::string>& operands = (*reached)[searches->at(at)];
+                        for (table::DistinctValue const& value : *values) {
+                            operands.push_back(value.operand);
+                        }
+                        if (self) {
+                            (*self)(at + 1);
+                        }
+                    });
         };
         (*step)(0);
     }
@@ -1434,8 +1442,8 @@ private:
                 write(std::move(ordered));
                 return;
             }
-            pageAll({}, [this, serial, ticks, write](std::expected<std::vector<table::DistinctValue>, std::string> values,
-                                                     std::int64_t) {
+            pageAll({}, [this, serial, ticks, write](
+                            std::expected<std::vector<table::DistinctValue>, std::string> values, std::int64_t) {
                 if (serial != _serial) {
                     return;
                 }
@@ -1558,9 +1566,9 @@ private:
         } else if (entries.empty()) {
             spec.columns.erase(target.column);
         } else {
-            spec.columns.insert_or_assign(target.column, table::ColumnFilter{.combine = now.combine,
-                                                                              .include = std::move(entries),
-                                                                              .exclude = {}});
+            spec.columns.insert_or_assign(
+                target.column,
+                table::ColumnFilter{.combine = now.combine, .include = std::move(entries), .exclude = {}});
         }
         if (_host.filters && spec == _host.filters()) {
             return true;
@@ -1603,8 +1611,8 @@ namespace detail::filtermenu {
         static_cast<void>(std::from_chars(at + 17, at + 19, second));
         seconds = (hour * 3600) + (minute * 60) + second;
     }
-    return time::Timestamp{time::DateTime{std::chrono::sys_time<std::chrono::milliseconds>{days} +
-                                          std::chrono::seconds{seconds}}};
+    return time::Timestamp{
+        time::DateTime{std::chrono::sys_time<std::chrono::milliseconds>{days} + std::chrono::seconds{seconds}}};
 }
 
 /// @brief The operand a picked instant is.
@@ -1614,7 +1622,8 @@ namespace detail::filtermenu {
 [[nodiscard]] inline std::string operandOfInstant(time::DateTime const& instant, bool dateTime) {
     std::int64_t const seconds =
         std::chrono::duration_cast<std::chrono::seconds>(instant.value.time_since_epoch()).count();
-    return dateTime ? table::detail::isoDateTime(seconds) : table::detail::isoDate(table::detail::dayOfSeconds(seconds));
+    return dateTime ? table::detail::isoDateTime(seconds)
+                    : table::detail::isoDate(table::detail::dayOfSeconds(seconds));
 }
 
 /// @brief One condition's line: the condition select, the operand (a text input, or the date picker), `between`'s
@@ -1632,21 +1641,22 @@ namespace detail::filtermenu {
         options.push_back(SelectOption{.key = Key{label}, .label = label});
     }
     Select ops{.options = options,
-                  .selected = [&menu, which, kind]() -> std::optional<Key> {
-                      ConditionDraft const& draft = menu.state().conditions.at(which);
-                      if (!draft.op) {
-                          return std::nullopt;
-                      }
-                      return Key{std::string{conditionLabel(*draft.op, kind)}};
-                  },
-                  .onSelect = [&menu, which, kind](Key const& key) {
-                      std::string const* const label = std::get_if<std::string>(&key);
-                      for (ConditionOp const op : conditionOps(kind)) {
-                          if (label != nullptr && conditionLabel(op, kind) == *label) {
-                              menu.setOp(which, op);
-                          }
-                      }
-                  }};
+               .selected = [&menu, which, kind]() -> std::optional<Key> {
+                   ConditionDraft const& draft = menu.state().conditions.at(which);
+                   if (!draft.op) {
+                       return std::nullopt;
+                   }
+                   return Key{std::string{conditionLabel(*draft.op, kind)}};
+               },
+               .onSelect =
+                   [&menu, which, kind](Key const& key) {
+                       std::string const* const label = std::get_if<std::string>(&key);
+                       for (ConditionOp const op : conditionOps(kind)) {
+                           if (label != nullptr && conditionLabel(op, kind) == *label) {
+                               menu.setOp(which, op);
+                           }
+                       }
+                   }};
     ops.label = std::string{"Condition"};
     ops.common.testId = "table_filter_op_" + at;
     auto const takes = [&menu, which] {
@@ -1675,12 +1685,13 @@ namespace detail::filtermenu {
         };
         if (dated) {
             bool const dateTime = kind == table::ColumnKind::DateTime;
-            DateTimeInput picker{.value = [text] { return instantOf(text()); },
-                                 .onChange = [set, dateTime](std::optional<time::Timestamp> const& picked) {
-                                     set(picked && picked->hasValue() ? operandOfInstant(**picked, dateTime)
-                                                                      : std::string{});
-                                 },
-                                 .mode = dateTime ? DateMode::DateTime : DateMode::Date};
+            DateTimeInput picker{
+                .value = [text] { return instantOf(text()); },
+                .onChange =
+                    [set, dateTime](std::optional<time::Timestamp> const& picked) {
+                        set(picked && picked->hasValue() ? operandOfInstant(**picked, dateTime) : std::string{});
+                    },
+                .mode = dateTime ? DateMode::DateTime : DateMode::Date};
             picker.common.testId = testId;
             picker.common.visible = upper ? Prop<bool>{between} : Prop<bool>{takes};
             picker.field.errors = errors;
@@ -1703,11 +1714,12 @@ namespace detail::filtermenu {
                         std::string const& chosen = menu.state().conditions.at(which).unit;
                         return chosen.empty() ? std::nullopt : std::optional<Key>{Key{chosen}};
                     },
-                    .onSelect = [&menu, which](Key const& key) {
-                        if (std::string const* const id = std::get_if<std::string>(&key)) {
-                            menu.setUnit(which, *id);
-                        }
-                    }};
+                    .onSelect =
+                        [&menu, which](Key const& key) {
+                            if (std::string const* const id = std::get_if<std::string>(&key)) {
+                                menu.setUnit(which, *id);
+                            }
+                        }};
         unit.label = std::string{"Unit"};
         unit.common.testId = "table_filter_unit_" + at;
         children.push_back(select(std::move(unit)));
@@ -1783,7 +1795,8 @@ namespace detail::filtermenu {
         more.common.testId = "table_filter_more";
         more.common.visible = [&menu] {
             FilterMenuState const& state = menu.state();
-            auto const top = std::ranges::count_if(state.list, [](FilterListEntry const& entry) { return entry.depth == 0; });
+            auto const top =
+                std::ranges::count_if(state.list, [](FilterListEntry const& entry) { return entry.depth == 0; });
             return FilterMenu::valuesListed(state) && top < state.distinct;
         };
         parts.push_back(button(std::move(more)));
@@ -1793,18 +1806,20 @@ namespace detail::filtermenu {
     parts.push_back(ui::text(std::move(note)));
     if (!conditionOps(kind).empty()) {
         parts.push_back(conditionLine(menu, 0, target));
-        Select combine{
-            .options = std::vector<SelectOption>{{.key = Key{std::string{"and"}}, .label = "and"},
-                                                 {.key = Key{std::string{"or"}}, .label = "or"}},
-            .selected = [&menu] {
-                return std::optional<Key>{Key{std::string{menu.state().combine == table::Combine::All ? "and" : "or"}}};
-            },
-            .onSelect = [&menu](Key const& key) {
-                std::string const* const name = std::get_if<std::string>(&key);
-                if (name != nullptr) {
-                    menu.setCombine(*name == "and" ? table::Combine::All : table::Combine::Any);
-                }
-            }};
+        Select combine{.options = std::vector<SelectOption>{{.key = Key{std::string{"and"}}, .label = "and"},
+                                                            {.key = Key{std::string{"or"}}, .label = "or"}},
+                       .selected =
+                           [&menu] {
+                               return std::optional<Key>{
+                                   Key{std::string{menu.state().combine == table::Combine::All ? "and" : "or"}}};
+                           },
+                       .onSelect =
+                           [&menu](Key const& key) {
+                               std::string const* const name = std::get_if<std::string>(&key);
+                               if (name != nullptr) {
+                                   menu.setCombine(*name == "and" ? table::Combine::All : table::Combine::Any);
+                               }
+                           }};
         combine.label = std::string{"Join"};
         combine.common.testId = "table_filter_combine";
         parts.push_back(select(std::move(combine)));
@@ -1820,34 +1835,37 @@ namespace detail::filtermenu {
     if (isGroup) {
         std::size_t const columns = target.columns.size();
         bool const formed = target.formed;
-        Select match{.options = [&menu, columns, formed] {
-                         std::vector<SelectOption> out;
-                         for (GroupMatch const choice : {GroupMatch::AnyColumn, GroupMatch::EveryColumn,
-                                                         GroupMatch::AtLeast, GroupMatch::Exactly}) {
-                             out.push_back(SelectOption{.key = Key{std::string{matchLabel(choice)}},
-                                                        .label = std::string{matchLabel(choice)}});
-                         }
-                         // "all of them, each in a column" takes ticked values: 2 to k of them.
-                         std::size_t ticked = 0;
-                         for (FilterListRow const& row : menu.rows()) {
-                             ticked += row.kind == FilterListRow::Kind::Value && row.checked ? 1U : 0U;
-                         }
-                         if (!formed && ticked >= 2 && ticked <= columns) {
-                             std::string const label{matchLabel(GroupMatch::Together)};
-                             out.push_back(SelectOption{.key = Key{label}, .label = label});
-                         }
-                         return out;
-                     },
-                     .selected = [&menu] { return std::optional<Key>{Key{std::string{matchLabel(menu.state().match)}}}; },
-                     .onSelect = [&menu](Key const& key) {
-                         std::string const* const label = std::get_if<std::string>(&key);
-                         for (GroupMatch const choice : {GroupMatch::AnyColumn, GroupMatch::EveryColumn,
-                                                         GroupMatch::AtLeast, GroupMatch::Exactly, GroupMatch::Together}) {
-                             if (label != nullptr && matchLabel(choice) == *label) {
-                                 menu.setMatch(choice);
-                             }
-                         }
-                     }};
+        Select match{
+            .options =
+                [&menu, columns, formed] {
+                    std::vector<SelectOption> out;
+                    for (GroupMatch const choice :
+                         {GroupMatch::AnyColumn, GroupMatch::EveryColumn, GroupMatch::AtLeast, GroupMatch::Exactly}) {
+                        out.push_back(SelectOption{.key = Key{std::string{matchLabel(choice)}},
+                                                   .label = std::string{matchLabel(choice)}});
+                    }
+                    // "all of them, each in a column" takes ticked values: 2 to k of them.
+                    std::size_t ticked = 0;
+                    for (FilterListRow const& row : menu.rows()) {
+                        ticked += row.kind == FilterListRow::Kind::Value && row.checked ? 1U : 0U;
+                    }
+                    if (!formed && ticked >= 2 && ticked <= columns) {
+                        std::string const label{matchLabel(GroupMatch::Together)};
+                        out.push_back(SelectOption{.key = Key{label}, .label = label});
+                    }
+                    return out;
+                },
+            .selected = [&menu] { return std::optional<Key>{Key{std::string{matchLabel(menu.state().match)}}}; },
+            .onSelect =
+                [&menu](Key const& key) {
+                    std::string const* const label = std::get_if<std::string>(&key);
+                    for (GroupMatch const choice : {GroupMatch::AnyColumn, GroupMatch::EveryColumn,
+                                                    GroupMatch::AtLeast, GroupMatch::Exactly, GroupMatch::Together}) {
+                        if (label != nullptr && matchLabel(choice) == *label) {
+                            menu.setMatch(choice);
+                        }
+                    }
+                }};
         match.label = std::string{"Match"};
         match.common.testId = "table_filter_match";
         parts.push_back(select(std::move(match)));
@@ -1861,7 +1879,8 @@ namespace detail::filtermenu {
         };
         parts.push_back(textInput(std::move(count)));
     }
-    Button apply{.label = std::string{"Apply"}, .emphasis = ButtonEmphasis::Primary, .onClick = [&menu] { menu.apply(); }};
+    Button apply{
+        .label = std::string{"Apply"}, .emphasis = ButtonEmphasis::Primary, .onClick = [&menu] { menu.apply(); }};
     apply.common.testId = "table_filter_apply";
     apply.common.enabled = [&menu] { return menu.canApply(); };
     Button clear{.label = std::string{"Clear filter"}, .onClick = [&menu] { menu.clearFilter(); }};

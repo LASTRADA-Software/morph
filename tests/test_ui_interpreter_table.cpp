@@ -65,7 +65,8 @@ TEST_CASE("table: a column's align and valign reach the view, the table's valign
                 "columns": [ { "id": "id", "label": "Sample" },
                              { "id": "area", "label": "Area", "align": "end", "valign": "end" } ] } })");
     int const table = h.backend.all("Table").front();
-    CHECK(h.backend.prop(table, "columns") == "[Sample:content;valign=start;filterable=true,Area:content;align=end;valign=end;filterable=true]");
+    CHECK(h.backend.prop(table, "columns") ==
+          "[Sample:content;valign=start;filterable=true,Area:content;align=end;valign=end;filterable=true]");
 }
 
 // Mutation: leave `wrap` out of the column the interpreter lowers (the column records no `wrap=false`).
@@ -78,7 +79,8 @@ TEST_CASE("table: a column's wrap: false reaches the view, and a column without 
                 "columns": [ { "id": "id", "label": "Sample" },
                              { "id": "area", "label": "Area", "wrap": false } ] } })");
     int const table = h.backend.all("Table").front();
-    CHECK(h.backend.prop(table, "columns") == "[Sample:content;filterable=true,Area:content;filterable=true;wrap=false]");
+    CHECK(h.backend.prop(table, "columns") ==
+          "[Sample:content;filterable=true,Area:content;filterable=true;wrap=false]");
 }
 
 // Mutation: leave `shrink` out of the column the interpreter lowers, or let it through on a column that does not
@@ -93,7 +95,8 @@ TEST_CASE("table: shrink reaches a stretch column and is reported on any other",
                              { "id": "area", "label": "Area", "width": { "lit": { "stretch": 1 } },
                                "shrink": true } ] } })");
     int const table = h.backend.all("Table").front();
-    CHECK(h.backend.prop(table, "columns") == "[Sample:content;filterable=true,Area:stretch(1);filterable=true;shrink=true]");
+    CHECK(h.backend.prop(table, "columns") ==
+          "[Sample:content;filterable=true,Area:stretch(1);filterable=true;shrink=true]");
     auto const reports = std::ranges::count_if(
         h.diagnostics, [](ui::Refusal const& refusal) { return refusal.reason.contains("`shrink` lets a stretch"); });
     CHECK(reports == 1);
@@ -273,7 +276,8 @@ TEST_CASE(
         CHECK(rowOrder(h, table) == "z y x");
         CHECK(readJson(*screen, R"({"ref":"t.sort"})") == R"([{"column":"id","direction":"desc"}])");
         CHECK(h.backend.prop(table, "sort") == "0:Descending");
-        CHECK(h.backend.prop(table, "columns") == "[Id:content;sortable=true;filterable=true,Other:content;filterable=true]");
+        CHECK(h.backend.prop(table, "columns") ==
+              "[Id:content;sortable=true;filterable=true,Other:content;filterable=true]");
     }
     Harness h;
     auto screen = h.mount(sortTable(R"(, "order": { "init": { "lit": { "column": "id", "direction": "desc" } } })",
@@ -396,7 +400,7 @@ TEST_CASE("table: a sort of two keys orders by each in turn, and a header click 
                              { "id": "due", "label": "Due", "sortable": true } ] } })");
     int const table = h.backend.all("Table").front();
     CHECK(rowOrder(h, table) == "s q r p");
-    CHECK(h.backend.prop(table, "sort") == "0:Ascending,1:Ascending");          // every key marks its header
+    CHECK(h.backend.prop(table, "sort") == "0:Ascending,1:Ascending");  // every key marks its header
     h.backend.clickHeader(table, 1);
     h.settle();
     CHECK(readJson(*screen, R"({"ref":"order"})") == R"([{"column":"due","direction":"asc"}])");

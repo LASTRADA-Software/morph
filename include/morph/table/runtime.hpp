@@ -21,11 +21,11 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
-#include <string>
-#include <string_view>
 #include <morph/attributes.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/export.hpp>
+#include <string>
+#include <string_view>
 
 namespace morph::table {
 

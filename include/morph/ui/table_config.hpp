@@ -1364,8 +1364,7 @@ namespace detail {
 /// @return The entry; its argument is the name.
 [[nodiscard]] inline TableMenuEntry viewEntry(std::string const& name, MenuCommand command, bool current,
                                               bool modified) {
-    TableMenuEntry entry =
-        detail::command(current && modified ? name + " (modified)" : name, command, true, {}, name);
+    TableMenuEntry entry = detail::command(current && modified ? name + " (modified)" : name, command, true, {}, name);
     entry.entry.checked = current;
     return entry;
 }
@@ -1390,7 +1389,8 @@ namespace detail {
         input.current.has_value() && input.currentShared && std::ranges::contains(input.shared, *input.current);
     std::vector<TableMenuEntry> own;
     for (std::string const& name : input.own) {
-        own.push_back(detail::viewEntry(name, MenuCommand::ApplyView, onOwn && name == *input.current, input.modified));
+        own.push_back(
+            detail::viewEntry(name, MenuCommand::ApplyView, onOwn && name == *input.current, input.modified));
     }
     std::vector<TableMenuEntry> manage;
     manage.push_back(command("Save view…", MenuCommand::SaveView));
@@ -1404,8 +1404,8 @@ namespace detail {
     if (!input.shared.empty()) {
         shared.push_back(detail::heading("Shared views"));
         for (std::string const& name : input.shared) {
-            shared.push_back(
-                detail::viewEntry(name, MenuCommand::ApplySharedView, onShared && name == *input.current, input.modified));
+            shared.push_back(detail::viewEntry(name, MenuCommand::ApplySharedView, onShared && name == *input.current,
+                                               input.modified));
         }
     }
     std::vector<TableMenuEntry> sharing;

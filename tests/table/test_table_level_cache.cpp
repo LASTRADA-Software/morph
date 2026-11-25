@@ -809,8 +809,8 @@ TEST_CASE("level cache: an invalidation waits for one chunk of a large want at m
 TEST_CASE("level cache: a key stored while an order want runs is leased on its slot", "[table][levels]") {
     Rig rig;
     auto const chunk = static_cast<std::int64_t>(detail::kWantChunk);
-    auto const beforeFirst = keyRange(0, 10);              // stored after the fit, before their chunk
-    auto const afterFirst = keyRange(10, 20);              // stored after their chunk gave them a pending lease
+    auto const beforeFirst = keyRange(0, 10);               // stored after the fit, before their chunk
+    auto const afterFirst = keyRange(10, 20);               // stored after their chunk gave them a pending lease
     auto const beforeSecond = keyRange(chunk, chunk + 10);  // stored before the second chunk
     detail::LevelCacheAccess::onWantChunk(rig.cache, [&](std::size_t index) {
         if (index == 0) {
@@ -972,8 +972,8 @@ struct HeldSet {
     }
 
     [[nodiscard]] bool othersFit() {
-        auto const fitted = rig.cache.want(keyRange(10'000, 10'000 + static_cast<std::int64_t>(set->size())),
-                                           LevelUse::Order);
+        auto const fitted =
+            rig.cache.want(keyRange(10'000, 10'000 + static_cast<std::int64_t>(set->size())), LevelUse::Order);
         return fitted.has_value();
     }
 
@@ -986,7 +986,7 @@ struct HeldSet {
 // Mutation: a set's last-but-one holder leaving ending the set's protection (the two refusals unprotect the keys the
 // third query still orders by).
 TEST_CASE("level cache: two refusals of one set leave a third holder's lease", "[table][levels][threads]") {
-    HeldSet held;  // query A
+    HeldSet held;                                                // query A
     REQUIRE(held.rig.cache.wantSet(held.set, LevelUse::Order));  // query B
     REQUIRE(held.rig.cache.wantSet(held.set, LevelUse::Order));  // query C
     std::atomic<bool> paused{false};
@@ -1091,8 +1091,8 @@ TEST_CASE("level cache: a protected key invalidated in flight is queued again on
     rig.drain();
     REQUIRE(rig.cache.wantSet(setX, LevelUse::Order));  // wanted at the current generation, so SY's fit keeps it
     REQUIRE(rig.cache.wantSet(setY, LevelUse::Order));  // the key is posted to load
-    rig.cache.invalidate(std::vector<RowId>{flying});    // in flight, not held: nothing is published
-    rig.drain();                                         // its stale load is dropped
+    rig.cache.invalidate(std::vector<RowId>{flying});   // in flight, not held: nothing is published
+    rig.drain();                                        // its stale load is dropped
     REQUIRE(stateOf(*rig.cache.snapshot(), flying) == LevelRead::Unloaded);
     REQUIRE(rig.cache.stats().droppedLoads == 1);
     REQUIRE(detail::LevelCacheAccess::acceptedSets(rig.cache) == 2);

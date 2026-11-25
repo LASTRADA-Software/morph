@@ -715,8 +715,9 @@ public:
     /// key on the focused cell): its entries are asked for then, and handed to MorphTable's `showCellMenu`, which
     /// shows them in the header menu's popup under the cell; a choice comes back as `menuChoose` with the column
     /// `kCellMenuColumn`. A key the table leaves is offered to the focused cell's entries through `cellKey`.
-    void setCellMenu(std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> entries,
-                     std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> chosen) override;
+    void setCellMenu(
+        std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> entries,
+        std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> chosen) override;
     void setCellMenuKeys(std::vector<std::string> const& chords) override { _cellMenuKeys = chords; }
     void setVisibleColumns(std::vector<std::size_t> const& visible) override;
     void setOnColumnMove(std::function<void(std::size_t, std::size_t)> handler) override;
@@ -764,7 +765,8 @@ public:
     /// MorphTable reports printable text typed on its focused cell, while no editor is open, as its `text` event.
     void setOnText(std::function<void(std::string)> onText) override;
     /// A row reports a tap on a cell as its `cellClick` event, `{column, double}`.
-    void setOnCellClick(std::function<void(std::size_t viewRow, std::size_t column, bool doubleClick)> onClick) override;
+    void setOnCellClick(
+        std::function<void(std::size_t viewRow, std::size_t column, bool doubleClick)> onClick) override;
     /// MorphTable reports its `focusOut` event once the active focus is outside the table, its editor and its popups.
     void setOnFocusOut(std::function<void()> onFocusOut) override;
     /// The editor's item takes the cell's column, the cell in that column is covered, and the row places the editor

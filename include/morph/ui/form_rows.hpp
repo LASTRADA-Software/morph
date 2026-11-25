@@ -16,11 +16,11 @@
 #include <map>
 #include <memory>
 #include <optional>
-#include <unordered_map>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -156,8 +156,8 @@ namespace detail {
 }
 
 /// @brief The cell of a member a column edits per row, whose kind varies by row: text, so the column sorts and filters
-///        as one kind. A member that encodes a string (an Enum's or a Choice's option, a text) gives the string, not the
-///        draft's JSON literal; any other gives its draft.
+///        as one kind. A member that encodes a string (an Enum's or a Choice's option, a text) gives the string, not
+///        the draft's JSON literal; any other gives its draft.
 /// @param field The member. Read untracked by the caller.
 /// @return The cell; empty while the draft is blank.
 [[nodiscard]] inline table::Cell perRowCell(forms::FieldState const& field) {
@@ -253,7 +253,8 @@ public:
     /// @param columns   The columns.
     /// @param members   The member of the row type each column reads, by index into @p columns; empty: each column's
     ///                  id names its member.
-    /// @param perRow    For a column whose member varies by row, by index into @p columns, the member's name for a row;
+    /// @param perRow    For a column whose member varies by row, by index into @p columns, the member's name for a
+    /// row;
     ///                  its member in @p members is then empty, and its cell is text (`detail::perRowCell`, a `Text`
     ///                  column).
     ///                  Empty: no column varies.
@@ -379,7 +380,8 @@ public:
         bool const listed = _group != nullptr;
         _group = std::move(by);
         if (_group && !listed) {
-            _columns.push_back(table::ColumnInfo{.id = std::string{kGroupRunColumn}, .kind = table::ColumnKind::Integer});
+            _columns.push_back(
+                table::ColumnInfo{.id = std::string{kGroupRunColumn}, .kind = table::ColumnKind::Integer});
             _members.emplace_back();
             _perRow.emplace_back();
         } else if (!_group && listed) {
@@ -401,13 +403,15 @@ public:
     /// @return The count.
     [[nodiscard]] std::size_t builds() const noexcept { return _builds; }
 
-    /// @brief What `EngineRows` reads a row's key and record through: the grid's own record, `{"<member>": the member's
+    /// @brief What `EngineRows` reads a row's key and record through: the grid's own record, `{"<member>": the
+    /// member's
     ///        encoded value, null when blank or not encoding, …, "#key": the row's key}`.
     /// @return The reader; it holds nothing of the source.
     [[nodiscard]] RecordOf recordOf() const {
         return [](table::RowSnapshot const& snapshot, std::size_t sourceRow) {
             auto const* const rows = dynamic_cast<detail::FormRowsSnapshot const*>(&snapshot);
-            return RowRecord{.key = snapshot.rowId(sourceRow), .row = rows == nullptr ? Value{} : rows->record(sourceRow)};
+            return RowRecord{.key = snapshot.rowId(sourceRow),
+                             .row = rows == nullptr ? Value{} : rows->record(sourceRow)};
         };
     }
 
@@ -505,8 +509,8 @@ private:
                 for (auto const& member : row->fields()) {
                     forms::Encoding const& encoding = member->encoded().get();
                     record.insert_or_assign(member->spec().name, encoding.has_value() && encoding->has_value()
-                                                                      ? (*encoding)->value
-                                                                      : Value{});
+                                                                     ? (*encoding)->value
+                                                                     : Value{});
                 }
                 record.insert_or_assign(std::string{kGridKeyField}, Value{static_cast<std::int64_t>(row->key())});
                 records.emplace_back(std::move(record));

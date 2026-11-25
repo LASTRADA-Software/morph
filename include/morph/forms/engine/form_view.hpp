@@ -112,7 +112,8 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
     if (spec.kind == FieldKind::ObjectArray && spec.widget == "grid") {
         std::vector<ui::GridColumn> columns;
         for (FieldSpec const& member : spec.children) {
-            columns.push_back(ui::GridColumn{.id = member.name, .label = member.title, .field = member.name, .value = {}});
+            columns.push_back(
+                ui::GridColumn{.id = member.name, .label = member.title, .field = member.name, .value = {}});
         }
         return ui::formGrid(session, state, std::move(columns), {}, ui::formatOf(session));
     }

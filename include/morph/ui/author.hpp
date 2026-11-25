@@ -238,17 +238,19 @@ struct CatalogFacts {
     void action() {
         model<Model>();
         auto const actionId = std::string{::morph::model::ActionTraits<Action>::typeId()};
-        actions.emplace(actionId, ActionInfo{
-                                      .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
-                                      .calculatedFields = ActionFacts<Action>::calculatedFields(),
-                                      .secretFields = ActionFacts<Action>::secretFields(),
-                                      .credential = ActionFacts<Action>::credential,
-                                      .listFields = detail::listFields<
-                                          ::morph::model::HandlerResultT<decltype(::morph::model::detail::invokeExecute(
-                                              std::declval<Model&>(), std::declval<Action&>()))>>(),
-                                      .effects = detail::effectsInfo(actionId),
-                                      .records = detail::recordsInfo(actionId),
-                                  });
+        actions.emplace(
+            actionId,
+            ActionInfo{
+                .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
+                .calculatedFields = ActionFacts<Action>::calculatedFields(),
+                .secretFields = ActionFacts<Action>::secretFields(),
+                .credential = ActionFacts<Action>::credential,
+                .listFields =
+                    detail::listFields<::morph::model::HandlerResultT<decltype(::morph::model::detail::invokeExecute(
+                        std::declval<Model&>(), std::declval<Action&>()))>>(),
+                .effects = detail::effectsInfo(actionId),
+                .records = detail::recordsInfo(actionId),
+            });
     }
 
     /// @brief The facts as a `ui::Catalog`.

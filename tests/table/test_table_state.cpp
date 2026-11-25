@@ -163,10 +163,11 @@ TEST_CASE("table state: a user group and its filter are fitted together", "[tabl
     CHECK(fitted.carried.groupFilters.front().columns == std::vector<std::string>{"name", "gone"});
 
     // A user group left with one column, every column present, is gone, and its filter with it.
-    StateDocument const single = readState(
-                                     R"({"version":1,"layout":{"groups":[{"id":"u3","label":"Three","columns":["weight"]}]},
+    StateDocument const single =
+        readState(
+            R"({"version":1,"layout":{"groups":[{"id":"u3","label":"Three","columns":["weight"]}]},
         "filters":{"groups":[{"columns":["weight"],"include":[{"isEmpty":true}]}]}})")
-                                     .value();
+            .value();
     FitReport dropped;
     StateDocument const alone = fitState(single, describedSamples(), dropped);
     CHECK(alone.layout->groups.empty());
@@ -177,13 +178,14 @@ TEST_CASE("table state: a user group and its filter are fitted together", "[tabl
 // The parser's half of a stored document of an unknown version. Mutation: readState accepting an unknown version.
 // Mutation: `writeState` rebuilding `hidden` by walking `order` alone (`c3` is dropped).
 TEST_CASE("table state: a hidden column the stored order does not name is written back", "[table][state]") {
-    auto const read = readState(R"({"version":1,"layout":{"order":["c2","c1"],"hidden":["c3","c1"],"pinned":0,"widths":{}}})");
+    auto const read =
+        readState(R"({"version":1,"layout":{"order":["c2","c1"],"hidden":["c3","c1"],"pinned":0,"widths":{}}})");
     REQUIRE(read.has_value());
     auto const again = readState(writeState(*read));
     REQUIRE(again.has_value());
     REQUIRE(again->layout.has_value());
     CHECK(again->layout->order == std::vector<std::string>{"c2", "c1"});
-    CHECK(again->layout->hidden == std::vector<std::string>{"c1", "c3"});   // `order`'s first, then the rest as listed
+    CHECK(again->layout->hidden == std::vector<std::string>{"c1", "c3"});  // `order`'s first, then the rest as listed
 }
 
 TEST_CASE("table state: a document that is not JSON or of an unknown version is refused", "[table][state]") {
@@ -195,8 +197,11 @@ TEST_CASE("table state: a document that is not JSON or of an unknown version is 
 // Mutation: save ignoring `expected` (the third save answers Saved).
 TEST_CASE("memory table state store: a save with a stale revision is a conflict", "[table][state]") {
     MemoryTableStateStore store{executor};
-    TableStateKey const key{
-        .application = "lims", .model = "Lims_SampleModel", .table = "samples", .qualifier = "samples", .part = "views"};
+    TableStateKey const key{.application = "lims",
+                            .model = "Lims_SampleModel",
+                            .table = "samples",
+                            .qualifier = "samples",
+                            .part = "views"};
     CHECK_FALSE(loadNow(store, key).has_value());
     SaveResult const first = saveNow(store, key, R"({"a":1})");
     CHECK(first.outcome == SaveOutcome::Saved);
@@ -207,7 +212,7 @@ TEST_CASE("memory table state store: a save with a stale revision is a conflict"
     SaveResult const stale = saveNow(store, key, R"({"c":1})", "1");
     CHECK(stale.outcome == SaveOutcome::Conflict);
     CHECK(stale.revision == "2");
-    CHECK(loadNow(store, key)->json == R"({"b":1})");  // the conflict wrote nothing
+    CHECK(loadNow(store, key)->json == R"({"b":1})");                        // the conflict wrote nothing
     CHECK(saveNow(store, key, R"({"d":1})").outcome == SaveOutcome::Saved);  // no `expected`: replaces
 }
 
@@ -224,8 +229,9 @@ TEST_CASE("views document: operations apply to what is stored, and names stay un
     CHECK_FALSE(doc.defaultView);
     CHECK(applyViewOperation(doc, SetDefaultOnMount{true}, ViewsPart::Shared) ==
           std::unexpected(ViewError::NotShared));
-    CHECK(writeViews(doc, ViewsPart::Shared) ==
-          R"({"version":1,"views":[{"name":"Late","layout":{"order":[],"hidden":[],"pinned":0,"widths":{},"groups":[],"units":{}},"sort":[],"filters":{"columns":{},"groups":[]}}]})");
+    CHECK(
+        writeViews(doc, ViewsPart::Shared) ==
+        R"({"version":1,"views":[{"name":"Late","layout":{"order":[],"hidden":[],"pinned":0,"widths":{},"groups":[],"units":{}},"sort":[],"filters":{"columns":{},"groups":[]}}]})");
     auto const unknown = readViews(R"({"version":2,"views":[]})");
     REQUIRE_FALSE(unknown.has_value());
     CHECK(unknown.error().code == TableErrorCode::InvalidSpec);
@@ -234,12 +240,13 @@ TEST_CASE("views document: operations apply to what is stored, and names stay un
 // Mutation: a view operation written with the wrong member (`{"name": …}` for remove) does not read back.
 TEST_CASE("views document: what is written reads back, and so does every operation", "[table][state]") {
     ViewsDocument doc;
-    doc = *applyViewOperation(doc, AddView{SavedView{.name = "Late",
-                                                     .layout = {},
-                                                     .sort = SortChain{SortKey{.column = "name",
-                                                                               .dir = SortDirection::Descending}},
-                                                     .filters = {}}},
-                              ViewsPart::Own);
+    doc = *applyViewOperation(
+        doc,
+        AddView{SavedView{.name = "Late",
+                          .layout = {},
+                          .sort = SortChain{SortKey{.column = "name", .dir = SortDirection::Descending}},
+                          .filters = {}}},
+        ViewsPart::Own);
     doc = *applyViewOperation(doc, SetDefaultView{"Late"}, ViewsPart::Own);
     doc = *applyViewOperation(doc, SetDefaultOnMount{true}, ViewsPart::Own);
     std::string const own = writeViews(doc, ViewsPart::Own);

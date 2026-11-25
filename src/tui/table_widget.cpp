@@ -1135,8 +1135,8 @@ void TableImpl::paintBands(::core::tui::Canvas& canvas, std::vector<DrawnColumn>
         if (left < 0 || right <= left) {
             continue;
         }
-        auto span = canvas.subcanvas(
-            {.x = left, .y = static_cast<int>(run.level), .width = right - left, .height = 1});
+        auto span =
+            canvas.subcanvas({.x = left, .y = static_cast<int>(run.level), .width = right - left, .height = 1});
         span.putString(0, 0, ui::headerText(run.label, run.unit), theme.textBold);
     }
 }
@@ -1570,8 +1570,7 @@ void TableImpl::setCellSelection(std::optional<std::array<std::size_t, 4>> rect)
     refresh();
 }
 
-void TableImpl::setOnCellSelect(
-    std::function<void(std::size_t, std::size_t, std::size_t, std::size_t)> onSelect) {
+void TableImpl::setOnCellSelect(std::function<void(std::size_t, std::size_t, std::size_t, std::size_t)> onSelect) {
     _onCellSelect = std::move(onSelect);
 }
 
@@ -2342,8 +2341,7 @@ void TableImpl::paintStatus(::core::tui::Canvas& canvas) {
     // What stays while its cause lasts, then each choice as `[Alt+<n> label]`, the key that chooses it.
     auto const entries = [&](std::vector<ui::StatusEntry> const& list) {
         for (ui::StatusEntry const& entry : list) {
-            std::string const drawn =
-                "[Alt+" + std::to_string(_entriesDrawn.size() + 1) + " " + entry.label + "]";
+            std::string const drawn = "[Alt+" + std::to_string(_entriesDrawn.size() + 1) + " " + entry.label + "]";
             x += x == 0 ? 0 : displayWidth(kStatusGap);
             canvas.putString(line, x, drawn, theme.textAccent);
             _entriesDrawn.push_back(DrawnEntry{.x = x, .width = displayWidth(drawn), .id = entry.id});

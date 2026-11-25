@@ -451,7 +451,8 @@ TEST_CASE("table baseline: S8 resident bytes", "[.benchmark][baseline]") {
     cellsSource.setRows(std::move(ids), std::move(rows));
     REQUIRE(cellsSource.snapshot()->rowCount() == static_cast<std::size_t>(kWideRows));
     std::println(
-        "\nS8: resident bytes of the wide table, 100,000 x 300\n\n| held as | rows | bytes | MiB |\n|---|---:|---:|---:|");
+        "\nS8: resident bytes of the wide table, 100,000 x 300\n\n| held as | rows | bytes | MiB "
+        "|\n|---|---:|---:|---:|");
     printBytes("S8: the fixture's column store (residentBytes)", snapshot->rowCount(), wide.residentBytes());
     printBytes("S8: a VectorSource of the same rows (approximateCellBytes)", snapshot->rowCount(), cellBytes);
 }
@@ -459,8 +460,10 @@ TEST_CASE("table baseline: S8 resident bytes", "[.benchmark][baseline]") {
 
 TEST_CASE("table baseline: B1 client mode with no worker", "[.benchmark][baseline]") {
     std::println(
-        "\nB1: client mode, an owner and no worker, WideTableSource of 30 columns (sort a000 asc, d000 desc, i001 asc, "
-        "then filter t001 contains \"ka\")\n\n| rows | request to result ms (median) | p10-p90 ms | worst owner step ms "
+        "\nB1: client mode, an owner and no worker, WideTableSource of 30 columns (sort a000 asc, d000 desc, i001 "
+        "asc, "
+        "then filter t001 contains \"ka\")\n\n| rows | request to result ms (median) | p10-p90 ms | worst owner step "
+        "ms "
         "(median of runs) | p10-p90 ms |\n|---:|---:|---:|---:|---:|");
     for (std::int64_t const rows : {std::int64_t{10'000}, std::int64_t{20'000}, kWideRows}) {
         auto const source =
@@ -484,8 +487,8 @@ TEST_CASE("table baseline: B1 client mode with no worker", "[.benchmark][baselin
         }
         auto const l = spreadOf(latency);
         auto const w = spreadOf(worst);
-        std::println("| {} | {:.2f} | {:.2f}-{:.2f} | {:.2f} | {:.2f}-{:.2f} |", rows, l.median, l.p10, l.p90, w.median,
-                     w.p10, w.p90);
+        std::println("| {} | {:.2f} | {:.2f}-{:.2f} | {:.2f} | {:.2f}-{:.2f} |", rows, l.median, l.p10, l.p90,
+                     w.median, w.p10, w.p90);
         static_cast<void>(std::fflush(stdout));
     }
 }
@@ -975,8 +978,9 @@ TEST_CASE("table benchmark: partial pages and keyed replies", "[.benchmark][tabl
     auto const rows = firstRows(200, 1'000);
     auto const partial = writeGenericPage(rows, *unloaded, named, wide->units().get());
     REQUIRE(partial.unloadedRows.size() == 200);
-    REQUIRE(std::ranges::all_of(partial.unloadedRows,
-                                [](UnloadedRow const& row) { return row.levels == std::vector<std::string>{"recipe"}; }));
+    REQUIRE(std::ranges::all_of(partial.unloadedRows, [](UnloadedRow const& row) {
+        return row.levels == std::vector<std::string>{"recipe"};
+    }));
     auto bare = partial;
     bare.unloadedRows.clear();
     auto const withRows = morph::wire::encode(morph::wire::makeOk(1, jsonOf(partial))).size();
@@ -1364,7 +1368,8 @@ TEST_CASE("table benchmark: K1 K2 K3 the window", "[.benchmark][window]") {
         accepts.push_back(std::chrono::duration<double, std::milli>(Clock::now() - began).count());
     }
     auto spread = spreadOf(accepts);
-    std::println("| K1 | accept of a 200 x 300 page | {:.3f} ({:.3f}-{:.3f}) |", spread.median, spread.p10, spread.p90);
+    std::println("| K1 | accept of a 200 x 300 page | {:.3f} ({:.3f}-{:.3f}) |", spread.median, spread.p10,
+                 spread.p90);
 
     auto const narrow = windowColumns(1);
     PageWindow<GenericRow> held{200, 8};
@@ -1415,7 +1420,8 @@ TEST_CASE("table benchmark: K1 K2 K3 the window", "[.benchmark][window]") {
         REQUIRE(replaced.size() == 207);
     }
     spread = spreadOf(patches);
-    std::println("| K3 | patch of 200 rows and seven probes | {:.3f} ({:.3f}-{:.3f}) |", spread.median, spread.p10, spread.p90);
+    std::println("| K3 | patch of 200 rows and seven probes | {:.3f} ({:.3f}-{:.3f}) |", spread.median, spread.p10,
+                 spread.p90);
     static_cast<void>(std::fflush(stdout));
 }
 
@@ -1505,8 +1511,8 @@ TEST_CASE("table benchmark: C1 C2 C3 many requests through an in-process server"
                                 column)));
     }
     auto const stats = server->viewStats();
-    std::println("| C3 | after fifty sorts | {} bytes held of a {} bound, {} evictions |", stats.bytes,
-                 kBound, stats.evictions);
+    std::println("| C3 | after fifty sorts | {} bytes held of a {} bound, {} evictions |", stats.bytes, kBound,
+                 stats.evictions);
     CHECK(stats.bytes <= kBound);
     std::println("| C1 | the server strand's longest task | not measured in process |");
     static_cast<void>(std::fflush(stdout));
@@ -1739,7 +1745,8 @@ TEST_CASE("table benchmark: column groups", "[.benchmark][table][groups]") {
 
 // T1: a stored state for 300 columns with 8 sort keys and 32 filters, read, fitted and applied to a layout; no store
 // is involved. Bound 2 ms. Mutation: fitState dropping every filter (the survival REQUIREs fail).
-TEST_CASE("table state benchmark: parse, fit and apply 300 columns, 8 keys, 32 filters", "[.benchmark][table][state]") {
+TEST_CASE("table state benchmark: parse, fit and apply 300 columns, 8 keys, 32 filters",
+          "[.benchmark][table][state]") {
     constexpr std::size_t kColumns = 300;
     TableDescription description{.id = "wide", .label = "Wide", .columns = {}, .key = "c000"};
     std::vector<std::string> ids;
@@ -1770,7 +1777,8 @@ TEST_CASE("table state benchmark: parse, fit and apply 300 columns, 8 keys, 32 f
         auto const& id = ids[at * 9];
         FilterEntry entry = description.columns[at * 9].info.kind == ColumnKind::Text ? FilterEntry{.contains = "a"}
                                                                                       : FilterEntry{.gt = "5"};
-        filters.columns.emplace(id, ColumnFilter{.combine = Combine::Any, .include = {std::move(entry)}, .exclude = {}});
+        filters.columns.emplace(id,
+                                ColumnFilter{.combine = Combine::Any, .include = {std::move(entry)}, .exclude = {}});
     }
     stored.filters = std::move(filters);
     std::string const json = writeState(stored);

@@ -13,15 +13,15 @@
 #include <expected>
 #include <functional>
 #include <memory>
-#include <optional>
-#include <set>
-#include <span>
 #include <morph/forms/derive.hpp>
 #include <morph/forms/engine/form_session.hpp>
 #include <morph/reactive/testing/manual_scheduler.hpp>
 #include <morph/table/edits.hpp>
 #include <morph/ui/grid.hpp>
 #include <morph/ui/locale_table.hpp>
+#include <optional>
+#include <set>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -88,8 +88,8 @@ inline std::string specimensWithChoices() {
     return schema;
 }
 
-// Rows whose `value` column edits `choice` or `amount` by the row's `isChoice`, and whose `mass` takes one place in row 1
-// and three in row 2 (`kindPerRowColumns`).
+// Rows whose `value` column edits `choice` or `amount` by the row's `isChoice`, and whose `mass` takes one place in
+// row 1 and three in row 2 (`kindPerRowColumns`).
 inline constexpr std::string_view kKindPerRow = R"({"type":"object","title":"Rows","properties":{
   "rows":{"type":"array","title":"Rows","x-order":0,"items":{"type":"object","properties":{
     "isChoice":{"type":"boolean","title":"Is choice","x-order":0},
@@ -100,12 +100,15 @@ inline constexpr std::string_view kKindPerRow = R"({"type":"object","title":"Row
 // The columns over `kKindPerRow`: `value`, a member per row, and `mass`, with places per row.
 inline std::vector<ui::GridColumn> kindPerRowColumns() {
     std::vector<ui::GridColumn> columns;
-    columns.push_back(ui::GridColumn{.id = "value", .label = "Value", .field = {}, .value = {},
-                                     .fieldOf = [](forms::RowState const& row) {
-                                         return row.field("isChoice")->draft() == "true" ? std::string{"choice"}
-                                                                                          : std::string{"amount"};
-                                     }});
-    columns.push_back(ui::GridColumn{.id = "mass", .label = "Mass", .field = "mass", .value = {}, .fieldOf = {},
+    columns.push_back(ui::GridColumn{
+        .id = "value", .label = "Value", .field = {}, .value = {}, .fieldOf = [](forms::RowState const& row) {
+            return row.field("isChoice")->draft() == "true" ? std::string{"choice"} : std::string{"amount"};
+        }});
+    columns.push_back(ui::GridColumn{.id = "mass",
+                                     .label = "Mass",
+                                     .field = "mass",
+                                     .value = {},
+                                     .fieldOf = {},
                                      .decimals = [](forms::RowState const& row) {
                                          return std::optional<std::uint32_t>{row.key() == 1 ? 1U : 3U};
                                      }});
@@ -132,7 +135,10 @@ inline std::string blankSpecimens(std::size_t rows) {
 }
 
 inline GridFixture::GridFixture(std::size_t rows, ui::GridOptions options, std::string schema)
-    : GridFixture{GridSpec{.schema = std::move(schema), .body = blankSpecimens(rows), .array = "specimens", .columns = {},
+    : GridFixture{GridSpec{.schema = std::move(schema),
+                           .body = blankSpecimens(rows),
+                           .array = "specimens",
+                           .columns = {},
                            .options = std::move(options)}} {}
 
 inline GridFixture::GridFixture(GridSpec spec) {
@@ -145,14 +151,15 @@ inline GridFixture::GridFixture(GridSpec spec) {
     std::vector<ui::GridColumn> columns = std::move(spec.columns);
     if (columns.empty()) {
         for (forms::FieldSpec const& member : form->field(spec.array).spec().children) {
-            columns.push_back(ui::GridColumn{.id = member.name, .label = member.name, .field = member.name, .value = {}});
+            columns.push_back(
+                ui::GridColumn{.id = member.name, .label = member.name, .field = member.name, .value = {}});
         }
     }
     source = std::make_unique<ui::FormGridSource>(
         *form, spec.array, std::move(columns),
         ui::FormatContext{.locale = "de", .numeric = ui::withoutGrouping(ui::localeFacts("de").numeric)});
     if (spec.options.scheduler == nullptr) {
-        spec.options.scheduler = &scheduler;   // the undo offer's hold
+        spec.options.scheduler = &scheduler;  // the undo offer's hold
     }
     grid = std::make_unique<ui::GridController>(h.rt, *source, std::move(spec.options));
     source->onBeforeSubmit([controller = grid.get()] { controller->leave(); });
@@ -259,7 +266,8 @@ inline std::vector<std::string> labelsOf(std::vector<ui::MenuItem> const& items)
 
 // The entry with a label; it must exist.
 inline ui::MenuItem const& entry(std::vector<ui::MenuItem> const& items, std::string_view label) {
-    auto const found = std::ranges::find_if(items, [label](ui::MenuItem const& item) { return item.label.evaluate() == label; });
+    auto const found =
+        std::ranges::find_if(items, [label](ui::MenuItem const& item) { return item.label.evaluate() == label; });
     REQUIRE(found != items.end());
     return *found;
 }
@@ -279,9 +287,9 @@ public:
         table::RowId key;
         ui::Value record;
         bool fetched = true;
-        std::set<std::string> unloaded;   // the levels the row has not loaded
+        std::set<std::string> unloaded;  // the levels the row has not loaded
     };
-    std::vector<Row> view;                                     // in view order
+    std::vector<Row> view;  // in view order
     ui::RowStates rowStates;
     std::vector<std::pair<table::RowId, table::RowId>> moved;  // moveKey's calls
 
@@ -325,7 +333,7 @@ public:
         auto const index = static_cast<std::size_t>(at - view.begin());
         announce({table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = index, .count = 1, .to = 0}});
     }
-    [[nodiscard]] std::size_t handlers() const { return _handlerSets; }   // how often onChange was set
+    [[nodiscard]] std::size_t handlers() const { return _handlerSets; }  // how often onChange was set
     // Gives a row a new key; reports it changed.
     void rekey(table::RowId const& from, table::RowId const& to) {
         auto const at = std::ranges::find(view, from, &Row::key);
@@ -354,7 +362,8 @@ public:
     mutable std::size_t rowReads = 0;
 
     [[nodiscard]] ui::TableTotal total() const override {
-        return {.rows = static_cast<std::int64_t>(view.size()) + unheld, .kind = table::TotalKind::Exact, .known = true};
+        return {
+            .rows = static_cast<std::int64_t>(view.size()) + unheld, .kind = table::TotalKind::Exact, .known = true};
     }
     [[nodiscard]] std::vector<std::pair<std::int64_t, std::int64_t>> heldRanges() const override {
         return {{0, static_cast<std::int64_t>(view.size())}};
@@ -374,7 +383,7 @@ public:
     }
     void visible(std::int64_t, std::int64_t, std::span<std::string const>) override {}
     async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(std::int64_t,
-                                                                                       std::int64_t) override {
+                                                                                          std::int64_t) override {
         return async::Completion<std::expected<std::vector<table::RowId>, table::TableError>>::makeSettleable(nullptr)
             .first;
     }
@@ -383,14 +392,16 @@ public:
     }
     async::Completion<std::expected<std::vector<ui::FetchedRow>, table::TableError>> fetchRows(
         std::vector<table::RowId>, std::vector<std::string>) override {
-        return async::Completion<std::expected<std::vector<ui::FetchedRow>, table::TableError>>::makeSettleable(nullptr)
+        return async::Completion<std::expected<std::vector<ui::FetchedRow>, table::TableError>>::makeSettleable(
+                   nullptr)
             .first;
     }
     std::expected<void, table::TableError> setSort(ui::SortChain) override { return {}; }
     std::expected<void, table::TableError> setFilter(table::FilterSpec) override { return {}; }
     async::Completion<std::expected<table::DistinctValues, table::TableError>> distinctValues(
         table::DistinctRequest) override {
-        return async::Completion<std::expected<table::DistinctValues, table::TableError>>::makeSettleable(nullptr).first;
+        return async::Completion<std::expected<table::DistinctValues, table::TableError>>::makeSettleable(nullptr)
+            .first;
     }
     [[nodiscard]] ui::TableCountsView counts() const override { return ui::TableCountsView{.view = total()}; }
     [[nodiscard]] ui::RowStates& states() override { return rowStates; }
@@ -460,18 +471,25 @@ inline table::TableDescription specimenTableDescription() {
     add("mass", table::ColumnKind::Decimal, table::EditInfo{.action = "Lims_EditSpecimenRow", .member = "mass"});
     // A measure, each cell in its own unit of mass: the field's value is in kg.
     add("weight", table::ColumnKind::Measure, table::EditInfo{.action = "Lims_EditSpecimenRow", .member = "weight"});
-    d.units = {table::UnitInfo{.id = "kg", .symbol = "kg", .dimension = "mass",
-                               .toBase = morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1},
-                                                               morph::math::DecimalPlaces{0}},
-                               .decimals = 3},
-               table::UnitInfo{.id = "g", .symbol = "g", .dimension = "mass",
-                               .toBase = morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000},
-                                                               morph::math::DecimalPlaces{3}},
-                               .decimals = 1},
-               table::UnitInfo{.id = "percent", .symbol = "%", .dimension = "ratio",
-                               .toBase = morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{100},
-                                                               morph::math::DecimalPlaces{2}},
-                               .decimals = 1}};
+    d.units = {
+        table::UnitInfo{.id = "kg",
+                        .symbol = "kg",
+                        .dimension = "mass",
+                        .toBase = morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1},
+                                                        morph::math::DecimalPlaces{0}},
+                        .decimals = 3},
+        table::UnitInfo{.id = "g",
+                        .symbol = "g",
+                        .dimension = "mass",
+                        .toBase = morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000},
+                                                        morph::math::DecimalPlaces{3}},
+                        .decimals = 1},
+        table::UnitInfo{.id = "percent",
+                        .symbol = "%",
+                        .dimension = "ratio",
+                        .toBase = morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{100},
+                                                        morph::math::DecimalPlaces{2}},
+                        .decimals = 1}};
     d.rowLock = "lockedBy";
     return table::describe(std::move(d));
 }
@@ -493,7 +511,8 @@ inline ui::Value specimenRecord(std::int64_t key, std::int64_t count = -1) {
     record.insert_or_assign("day", ui::Value{std::string{"2026-11-20"}});
     record.insert_or_assign("at", instant);
     record.insert_or_assign("mass", ui::Value{ui::Decimal{table::parseDecimal("12.50").value()}});
-    record.insert_or_assign("weight", ui::Value{ui::Quantity{.value = table::parseDecimal("200").value(), .unit = "g"}});
+    record.insert_or_assign("weight",
+                            ui::Value{ui::Quantity{.value = table::parseDecimal("200").value(), .unit = "g"}});
     return ui::Value{std::move(record)};
 }
 
@@ -525,8 +544,8 @@ struct ModelGridFixture {
 
 inline ModelGridFixture::ModelGridFixture(std::vector<std::int64_t> keys, ui::EditMode mode) {
     for (std::int64_t const key : keys) {
-        rows->view.push_back(FakeRows::Row{.key = table::RowId{key}, .record = specimenRecord(key), .fetched = true,
-                                           .unloaded = {}});
+        rows->view.push_back(
+            FakeRows::Row{.key = table::RowId{key}, .record = specimenRecord(key), .fetched = true, .unloaded = {}});
     }
     auto const count = std::make_shared<forms::FormModel const>(
         morph::test::formsengine::modelOf("Lims_EditSpecimenCount", kEditSpecimenCount));
@@ -534,8 +553,8 @@ inline ModelGridFixture::ModelGridFixture(std::vector<std::int64_t> keys, ui::Ed
         morph::test::formsengine::modelOf("Lims_EditSpecimenRow", kEditSpecimenRow));
     table::TableDescription const description = specimenTableDescription();
     auto const editOf = [&description](std::string_view id) {
-        auto const found = std::ranges::find_if(description.columns,
-                                                [id](table::TableColumn const& column) { return column.info.id == id; });
+        auto const found = std::ranges::find_if(
+            description.columns, [id](table::TableColumn const& column) { return column.info.id == id; });
         return found->edit;
     };
     std::vector<ui::ModelColumn> columns;
@@ -545,7 +564,8 @@ inline ModelGridFixture::ModelGridFixture(std::vector<std::int64_t> keys, ui::Ed
     columns.push_back(ui::ModelColumn{.id = "count", .edit = editOf("count"), .model = count, .path = "value"});
     columns.push_back(ui::ModelColumn{.id = "note", .edit = std::nullopt, .model = nullptr, .path = {}});
     for (std::string const member : {"sampled", "taken", "day", "at", "mass", "weight"}) {
-        columns.push_back(ui::ModelColumn{.id = member, .edit = editOf(member), .model = row, .path = "values." + member});
+        columns.push_back(
+            ui::ModelColumn{.id = member, .edit = editOf(member), .model = row, .path = "values." + member});
     }
     source = std::make_unique<ui::ModelGridSource>(
         rows, edits, std::move(columns), mode,
@@ -563,8 +583,8 @@ inline ModelGridFixture::ModelGridFixture(std::vector<std::int64_t> keys, ui::Ed
 }
 
 inline std::vector<ui::TableColumn> ModelGridFixture::tableColumns() {
-    return {ui::TableColumn{.id = "label", .label = "label"}, ui::TableColumn{.id = "remark", .label = "remark"},
-            ui::TableColumn{.id = "count", .label = "count"}, ui::TableColumn{.id = "note", .label = "note"},
+    return {ui::TableColumn{.id = "label", .label = "label"},     ui::TableColumn{.id = "remark", .label = "remark"},
+            ui::TableColumn{.id = "count", .label = "count"},     ui::TableColumn{.id = "note", .label = "note"},
             ui::TableColumn{.id = "sampled", .label = "sampled"}, ui::TableColumn{.id = "taken", .label = "taken"},
             ui::TableColumn{.id = "day", .label = "day"},         ui::TableColumn{.id = "at", .label = "at"},
             ui::TableColumn{.id = "mass", .label = "mass"},       ui::TableColumn{.id = "weight", .label = "weight"}};

@@ -100,8 +100,8 @@ struct ChooserState {
 /// @param columns The table's columns.
 /// @param allowed What the table lets its user change.
 /// @return The columns in the layout's order, with what each can do, and the user-formed groups.
-[[nodiscard]] inline ChooserState chooserState(table::ColumnLayout const& layout, std::span<LayoutColumn const> columns,
-                                               Configure allowed) {
+[[nodiscard]] inline ChooserState chooserState(table::ColumnLayout const& layout,
+                                               std::span<LayoutColumn const> columns, Configure allowed) {
     ChooserState out;
     out.reorder = allows(allowed, Configure::Reorder);
     out.hide = allows(allowed, Configure::Hide);
@@ -237,11 +237,12 @@ struct ColumnChooserView {
     group.common.visible = [v] { return v->state().grouping && !v->draft().open; };
 
     TextInput label{.value = [v] { return v->draft().label; },
-                    .onChange = [v](std::string text) {
-                        GroupDraft draft = v->draft();
-                        draft.label = std::move(text);
-                        v->setDraft(std::move(draft));
-                    },
+                    .onChange =
+                        [v](std::string text) {
+                            GroupDraft draft = v->draft();
+                            draft.label = std::move(text);
+                            v->setDraft(std::move(draft));
+                        },
                     .placeholder = std::string{"Group name"}};
     label.label = std::string{"Group name"};
     label.common.testId = "table_group_label";
@@ -251,14 +252,15 @@ struct ColumnChooserView {
             std::string const id = row.peek().id;
             Checkbox tick{.label = [&row] { return row.get().label; },
                           .checked = [v, id] { return std::ranges::contains(v->draft().ticked, id); },
-                          .onToggle = [v, id](bool checked) {
-                              GroupDraft draft = v->draft();
-                              std::erase(draft.ticked, id);
-                              if (checked) {
-                                  draft.ticked.push_back(id);
-                              }
-                              v->setDraft(std::move(draft));
-                          }};
+                          .onToggle =
+                              [v, id](bool checked) {
+                                  GroupDraft draft = v->draft();
+                                  std::erase(draft.ticked, id);
+                                  if (checked) {
+                                      draft.ticked.push_back(id);
+                                  }
+                                  v->setDraft(std::move(draft));
+                              }};
             // Once a column is ticked, only columns of its kind can join it.
             tick.common.enabled = [v, &row] {
                 GroupDraft const draft = v->draft();
@@ -309,9 +311,8 @@ struct ColumnChooserView {
     Button done{.label = std::string{"Done"}, .emphasis = ButtonEmphasis::Primary, .onClick = [v] { v->onClose(); }};
     done.common.testId = "table_columns_done";
     Node const actions = ui::row(Row{.children = {button(std::move(reset)), button(std::move(group))}, .gap = 1});
-    Node const content =
-        ui::column(Column{.children = {rows, actions, ui::column(std::move(form)), groups, button(std::move(done))},
-                          .gap = 2});
+    Node const content = ui::column(
+        Column{.children = {rows, actions, ui::column(std::move(form)), groups, button(std::move(done))}, .gap = 2});
     Dialog dialog{.open = [v] { return v->open(); },
                   .title = std::string{"Columns"},
                   .child = content,
@@ -392,8 +393,9 @@ using SortEdit = std::variant<SetSortColumn, SetSortDirection, MoveSortKey, Remo
                 if constexpr (std::is_same_v<E, RemoveSortKey>) {
                     return applySortGesture(chain, key.column, SortGesture::Remove, maxSortKeys);
                 } else if constexpr (std::is_same_v<E, SetSortDirection>) {
-                    return key.dir == e.direction ? same
-                                                  : applySortGesture(chain, key.column, SortGesture::Extend, maxSortKeys);
+                    return key.dir == e.direction
+                               ? same
+                               : applySortGesture(chain, key.column, SortGesture::Extend, maxSortKeys);
                 } else if constexpr (std::is_same_v<E, MoveSortKey>) {
                     auto const to = static_cast<std::ptrdiff_t>(e.index) + e.by;
                     if (e.by == 0 || to < 0 || static_cast<std::size_t>(to) >= chain.size()) {
@@ -405,7 +407,8 @@ using SortEdit = std::variant<SetSortColumn, SetSortDirection, MoveSortKey, Remo
                 } else {
                     bool const sorts = std::ranges::contains(sortable, e.column);
                     auto const held = std::ranges::find(chain, e.column, &table::SortKey::column);
-                    if (!sorts || (held != chain.end() && held != chain.begin() + static_cast<std::ptrdiff_t>(e.index))) {
+                    if (!sorts ||
+                        (held != chain.end() && held != chain.begin() + static_cast<std::ptrdiff_t>(e.index))) {
                         return same;
                     }
                     SortChain out = chain;
@@ -510,42 +513,48 @@ struct SortDialogView {
             std::string const at = std::to_string(index);
             Select column{.options = [&row] { return row.get().columns; },
                           .selected = [&row] { return std::optional<Key>{Key{row.get().column}}; },
-                          .onSelect = [v, index](Key const& key) {
-                              if (std::string const* const id = std::get_if<std::string>(&key)) {
-                                  v->onEdit(SetSortColumn{.index = index, .column = *id});
-                              }
-                          }};
+                          .onSelect =
+                              [v, index](Key const& key) {
+                                  if (std::string const* const id = std::get_if<std::string>(&key)) {
+                                      v->onEdit(SetSortColumn{.index = index, .column = *id});
+                                  }
+                              }};
             column.label = std::string{"Column"};
             column.common.testId = "table_sort_column_" + at;
             column.common.layout.width = Sizing::stretch();
             Select direction{
                 .options = std::vector<SelectOption>{{.key = Key{std::string{"ascending"}}, .label = "ascending"},
                                                      {.key = Key{std::string{"descending"}}, .label = "descending"}},
-                .selected = [&row] {
-                    return std::optional<Key>{Key{std::string{
-                        row.get().direction == table::SortDirection::Descending ? "descending" : "ascending"}}};
-                },
-                .onSelect = [v, index](Key const& key) {
-                    std::string const* const name = std::get_if<std::string>(&key);
-                    if (name != nullptr && (*name == "ascending" || *name == "descending")) {
-                        v->onEdit(SetSortDirection{.index = index,
-                                                   .direction = *name == "descending" ? table::SortDirection::Descending
-                                                                                      : table::SortDirection::Ascending});
-                    }
-                }};
+                .selected =
+                    [&row] {
+                        return std::optional<Key>{Key{std::string{
+                            row.get().direction == table::SortDirection::Descending ? "descending" : "ascending"}}};
+                    },
+                .onSelect =
+                    [v, index](Key const& key) {
+                        std::string const* const name = std::get_if<std::string>(&key);
+                        if (name != nullptr && (*name == "ascending" || *name == "descending")) {
+                            v->onEdit(SetSortDirection{.index = index,
+                                                       .direction = *name == "descending"
+                                                                        ? table::SortDirection::Descending
+                                                                        : table::SortDirection::Ascending});
+                        }
+                    }};
             direction.label = std::string{"Direction"};
             direction.common.testId = "table_sort_direction_" + at;
-            Button up{.label = std::string{"Move up"}, .onClick = [v, index] { v->onEdit(MoveSortKey{.index = index, .by = -1}); }};
+            Button up{.label = std::string{"Move up"},
+                      .onClick = [v, index] { v->onEdit(MoveSortKey{.index = index, .by = -1}); }};
             up.common.enabled = [&row] { return row.get().up; };
             up.common.testId = "table_sort_up_" + at;
             Button down{.label = std::string{"Move down"},
                         .onClick = [v, index] { v->onEdit(MoveSortKey{.index = index, .by = 1}); }};
             down.common.enabled = [&row] { return row.get().down; };
             down.common.testId = "table_sort_down_" + at;
-            Button remove{.label = std::string{"Remove"}, .onClick = [v, index] { v->onEdit(RemoveSortKey{.index = index}); }};
+            Button remove{.label = std::string{"Remove"},
+                          .onClick = [v, index] { v->onEdit(RemoveSortKey{.index = index}); }};
             remove.common.testId = "table_sort_remove_" + at;
-            return ui::row(Row{.children = {select(std::move(column)), select(std::move(direction)), button(std::move(up)),
-                                            button(std::move(down)), button(std::move(remove))},
+            return ui::row(Row{.children = {select(std::move(column)), select(std::move(direction)),
+                                            button(std::move(up)), button(std::move(down)), button(std::move(remove))},
                                .gap = 1});
         },
         Axis::Vertical, 1);
@@ -559,7 +568,8 @@ struct SortDialogView {
     };
     Button done{.label = std::string{"Done"}, .emphasis = ButtonEmphasis::Primary, .onClick = [v] { v->onClose(); }};
     done.common.testId = "table_sort_done";
-    Node const content = ui::column(Column{.children = {keys, button(std::move(add)), button(std::move(done))}, .gap = 2});
+    Node const content =
+        ui::column(Column{.children = {keys, button(std::move(add)), button(std::move(done))}, .gap = 2});
     Dialog dialog{.open = [v] { return v->open(); },
                   .title = std::string{"Sort"},
                   .child = content,
@@ -620,10 +630,10 @@ struct ViewNameDialogView {
     save.common.enabled = [v] { return !blankViewName(v->name()); };
     Button cancel{.label = std::string{"Cancel"}, .onClick = [v] { v->onClose(); }};
     cancel.common.testId = "table_view_cancel";
-    Node const content = ui::column(Column{
-        .children = {textInput(std::move(name)), ui::row(Row{.children = {button(std::move(save)), button(std::move(cancel))},
-                                                             .gap = 1})},
-        .gap = 2});
+    Node const content = ui::column(
+        Column{.children = {textInput(std::move(name)),
+                            ui::row(Row{.children = {button(std::move(save)), button(std::move(cancel))}, .gap = 1})},
+               .gap = 2});
     Dialog dialog{.open = [v] { return v->open(); },
                   .title = [v] { return v->title(); },
                   .child = content,

@@ -200,8 +200,8 @@ TEST_CASE("qt_quick theme: Theme's table row defaults are the token defaults", "
         scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     REQUIRE(theme != nullptr);
     ui::ThemeValues const defaults = ui::themeValues();
-    for (auto const& [path, property] : {std::pair{"color.table.busy", "tableBusy"},
-                                         std::pair{"color.table.locked", "tableLocked"}}) {
+    for (auto const& [path, property] :
+         {std::pair{"color.table.busy", "tableBusy"}, std::pair{"color.table.locked", "tableLocked"}}) {
         INFO(path);
         ui::Rgba const& token = defaults.colors.at(path);
         CHECK(theme->property(property).value<QColor>() == QColor{token.r, token.g, token.b, token.a});

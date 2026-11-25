@@ -14,13 +14,13 @@
 /// See `docs/spec/table/table.md`, "A selection of the view".
 
 #include <algorithm>
+#include <core/async/ExecutorContext.hpp>
+#include <core/async/Task.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <expected>
 #include <functional>
-#include <core/async/ExecutorContext.hpp>
-#include <core/async/Task.hpp>
 #include <glaze/glaze.hpp>
 #include <memory>
 #include <morph/core/action_refusal.hpp>
@@ -266,8 +266,8 @@ struct Membership {
     std::shared_ptr<ViewEntry const> entry;
     // A filter that reads a level is computed here: a cached entry of it also holds what its levels want, which
     // only a page query computes.
-    auto const viewQuery = views != nullptr && !record.empty() && needed.order.empty() ? viewQueryOf(*checked)
-                                                                                         : std::nullopt;
+    auto const viewQuery =
+        views != nullptr && !record.empty() && needed.order.empty() ? viewQueryOf(*checked) : std::nullopt;
     if (viewQuery) {
         auto const* const pinnedSource = dynamic_cast<PinnedSource const*>(served.source.get());
         auto found = views->find(ViewKey{.record = std::string{record}, .scope = served.scope, .query = *viewQuery},
@@ -303,11 +303,10 @@ struct Membership {
         std::inplace_merge(out.rows.begin(), out.rows.begin() + middle, out.rows.end());
     }
     if (static_cast<std::int64_t>(out.rows.size()) > served.limits.maxSelectedRows) {
-        return std::unexpected(TableError{
-            .code = TableErrorCode::LimitExceeded,
-            .column = {},
-            .message = "a selection of the view holds at most " + std::to_string(served.limits.maxSelectedRows) +
-                       " rows"});
+        return std::unexpected(TableError{.code = TableErrorCode::LimitExceeded,
+                                          .column = {},
+                                          .message = "a selection of the view holds at most " +
+                                                     std::to_string(served.limits.maxSelectedRows) + " rows"});
     }
     return out;
 }
@@ -322,8 +321,7 @@ struct Membership {
 /// @return The keys in source order, or the error: `SourceContract` for a row-scoped table with no scope.
 [[nodiscard]] inline std::expected<SelectedRows, TableError> resolveSelection(ServedTable const& served,
                                                                               PlainSelection const& selection,
-                                                                              SelectionPolicy policy,
-                                                                              ViewCache* views,
+                                                                              SelectionPolicy policy, ViewCache* views,
                                                                               std::string_view record,
                                                                               bool rowScoped = false) {
     // A row-scoped table with no scope would let callers share views of different rows.
@@ -339,10 +337,10 @@ struct Membership {
     if (!selection.isView) {
         std::unordered_set<RowId> const wanted(selection.keys.begin(), selection.keys.end());
         if (static_cast<std::int64_t>(wanted.size()) > served.limits.maxSelectedRows) {
-            return std::unexpected(TableError{.code = TableErrorCode::LimitExceeded,
-                                              .column = {},
-                                              .message = "a selection holds at most " +
-                                                         std::to_string(served.limits.maxSelectedRows) + " rows"});
+            return std::unexpected(TableError{
+                .code = TableErrorCode::LimitExceeded,
+                .column = {},
+                .message = "a selection holds at most " + std::to_string(served.limits.maxSelectedRows) + " rows"});
         }
         auto const snapshot = served.source->snapshot();
         for (std::size_t row = 0; row < snapshot->rowCount() && out.keys.size() < wanted.size(); ++row) {
@@ -545,8 +543,8 @@ struct glz::meta<morph::table::RowSelection<Function>> {
     /// @brief The selection type.
     using T = morph::table::RowSelection<Function>;
     /// @brief Read from the wire shape, written by `detail::selectionJson`.
-    static constexpr auto value = glz::custom<
-        [](T& selection, morph::table::detail::SelectionWire const& wire) {
+    static constexpr auto value =
+        glz::custom<[](T& selection, morph::table::detail::SelectionWire const& wire) {
             selection.keys = wire.keys;
             selection.except = wire.except;
             selection.view.reset();
@@ -555,13 +553,14 @@ struct glz::meta<morph::table::RowSelection<Function>> {
                     .filters = wire.view->filters, .retained = wire.view->retained, .revision = wire.view->revision};
             }
         },
-        [](T const& selection) {
-            return glz::raw_json{morph::table::detail::selectionJson(
-                selection.keys, selection.view ? &selection.view->filters : nullptr,
-                selection.view ? std::span<morph::table::RowId const>{selection.view->retained}
-                               : std::span<morph::table::RowId const>{},
-                selection.view ? std::string_view{selection.view->revision} : std::string_view{}, selection.except)};
-        }>;
+                    [](T const& selection) {
+                        return glz::raw_json{morph::table::detail::selectionJson(
+                            selection.keys, selection.view ? &selection.view->filters : nullptr,
+                            selection.view ? std::span<morph::table::RowId const>{selection.view->retained}
+                                           : std::span<morph::table::RowId const>{},
+                            selection.view ? std::string_view{selection.view->revision} : std::string_view{},
+                            selection.except)};
+                    }>;
 };
 
 /// @brief The JSON of `morph::table::RowRef`: its key.

@@ -1118,8 +1118,7 @@ private:
             }
             std::size_t ownLeased = 0;
             for (auto const& key : keys) {
-                if (auto const slot = findIn(*base, key);
-                    slot != nullptr && slot->value && kept(*slot, nowTicks)) {
+                if (auto const slot = findIn(*base, key); slot != nullptr && slot->value && kept(*slot, nowTicks)) {
                     ownLeased += slot->bytes;
                 }
             }
@@ -1129,10 +1128,10 @@ private:
                 return {};
             }
             refusedOrders.fetch_add(1);
-            return std::unexpected(TableError{.code = TableErrorCode::Unavailable,
-                                              .column = {},
-                                              .message = "the level " + options.level +
-                                                         " cannot hold every row this order needs"});
+            return std::unexpected(
+                TableError{.code = TableErrorCode::Unavailable,
+                           .column = {},
+                           .message = "the level " + options.level + " cannot hold every row this order needs"});
         }
 
         // Whether an order use keeps a slot from eviction: its own lease runs, or an accepted set protects it.
@@ -1418,8 +1417,8 @@ private:
         }
 
         // When the leased and protected values, with the accepted sets' keys, exceed the bound, stops loading for
-        // order, drops every lease and ends every accepted set. The bytes are summed and the slots cleared over the published state with no lock
-        // held; the queue, the pending leases and the sets are changed under it.
+        // order, drops every lease and ends every accepted set. The bytes are summed and the slots cleared over the
+        // published state with no lock held; the queue, the pending leases and the sets are changed under it.
         bool dropLeasesOverBound(Clock::time_point at) {
             endExpiredSets(ticks(at));
             auto const table = publishedTable();

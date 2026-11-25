@@ -238,8 +238,8 @@ public:
         settle();
         QVariantList const visible = Backend::itemOf(table)->property("visibleColumns").toList();
         qsizetype const place = static_cast<qsizetype>(position);
-        int const target = visible.isEmpty() ? static_cast<int>(position)
-                                             : (place < visible.size() ? visible.at(place).toInt() : -1);
+        int const target =
+            visible.isEmpty() ? static_cast<int>(position) : (place < visible.size() ? visible.at(place).toInt() : -1);
         QQuickItem const* const from = named(table, QStringLiteral("header%1").arg(column));
         QQuickItem const* const to = target < 0 ? nullptr : named(table, QStringLiteral("header%1").arg(target));
         if (from == nullptr || to == nullptr || !from->isVisible() || _fault == Fault::DeadInput) {
@@ -499,8 +499,8 @@ private:
             mouseClick(named(table, QStringLiteral("tableMenuButton")));
         }
         QObject* const menu = Backend::itemOf(table)->findChild<QObject*>(QStringLiteral("configMenu"));
-        bool const open = menu != nullptr && menu->property("opened").toBool() &&
-                          !listOf(menu->property("level")).isEmpty();
+        bool const open =
+            menu != nullptr && menu->property("opened").toBool() && !listOf(menu->property("level")).isEmpty();
         return open ? menu : nullptr;
     }
 

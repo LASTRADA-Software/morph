@@ -17,6 +17,7 @@
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
+#include <morph/core/callback_scope.hpp>
 #include <morph/core/completion.hpp>
 #include <morph/core/logger.hpp>
 #include <morph/core/wire.hpp>
@@ -31,7 +32,6 @@
 #include <morph/reactive/scheduler.hpp>
 #include <morph/reactive/scope.hpp>
 #include <morph/reactive/signal.hpp>
-#include <morph/core/callback_scope.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/description.hpp>
 #include <morph/table/filter.hpp>
@@ -40,11 +40,11 @@
 #include <morph/table/view_change.hpp>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/cell_format.hpp>
-#include <morph/ui/grid.hpp>
 #include <morph/ui/chart_scale.hpp>
 #include <morph/ui/dev_tools.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/expression.hpp>
+#include <morph/ui/grid.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/locale_table.hpp>
 #include <morph/ui/message.hpp>
@@ -53,8 +53,8 @@
 #include <morph/ui/table_dialogs.hpp>
 #include <morph/ui/table_filter_menu.hpp>
 #include <morph/ui/table_rows.hpp>
-#include <morph/ui/table_views.hpp>
 #include <morph/ui/table_state.hpp>
+#include <morph/ui/table_views.hpp>
 #include <morph/ui/value.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
@@ -187,8 +187,8 @@ namespace {
 // a decimal can hold is read as one. The buffer holds the longest fixed form of a double (about 330 characters).
 Value decimalOrText(double number) {
     std::array<char, 512> buffer{};
-    auto const [end, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), number,
-                                            std::chars_format::fixed);
+    auto const [end, error] =
+        std::to_chars(buffer.data(), buffer.data() + buffer.size(), number, std::chars_format::fixed);
     if (error == std::errc{}) {
         if (auto const decimal = ::morph::table::parseDecimal(std::string_view{buffer.data(), end})) {
             return Value{Decimal{*decimal}};
@@ -292,8 +292,8 @@ public:
         }
         send();
     }
-    async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(std::int64_t first,
-                                                                                       std::int64_t count) override {
+    async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(
+        std::int64_t first, std::int64_t count) override {
         return _inner->keysOf(first, count);
     }
     void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
@@ -303,7 +303,9 @@ public:
         std::vector<table::RowId> keys, std::vector<std::string> columns) override {
         return _inner->fetchRows(std::move(keys), std::move(columns));
     }
-    std::expected<void, table::TableError> setSort(SortChain sort) override { return _inner->setSort(std::move(sort)); }
+    std::expected<void, table::TableError> setSort(SortChain sort) override {
+        return _inner->setSort(std::move(sort));
+    }
     /// A filter set here is the user's, from the table's own gestures.
     std::expected<void, table::TableError> setFilter(table::FilterSpec filter) override {
         auto set = _inner->setFilter(std::move(filter));
@@ -440,9 +442,9 @@ struct HeldCell {
 /// What a table keeps of its configuring across every mount of it: the columns its layout arranges, in the order of
 /// `Table::columns`, what the user may change of them, the layout it holds, and what a change does beyond that.
 ///
-/// The slots a mount sets (`filterTarget`, `dimensions`, `gather`, `heldCell`) belong to that mount: `beginMount` starts one,
-/// and the token `mountSlots` gives clears them when the mount's handlers go, unless a later mount has set them
-/// since. A slot may then hold the mount's scope: the element keeps the configuring, so a slot that outlived its
+/// The slots a mount sets (`filterTarget`, `dimensions`, `gather`, `heldCell`) belong to that mount: `beginMount`
+/// starts one, and the token `mountSlots` gives clears them when the mount's handlers go, unless a later mount has set
+/// them since. A slot may then hold the mount's scope: the element keeps the configuring, so a slot that outlived its
 /// mount would keep the scope that keeps the element.
 struct TableConfig {
     explicit TableConfig(reactive::Runtime& runtime)
@@ -737,7 +739,8 @@ std::vector<std::string> chordsOf(std::span<DocNodePtr const> parts, std::vector
 /// The arrangement a mount takes from a layout, by index into @p columns; the default one while the layout is the
 /// declared order with every column shown, none pinned and no width set, so such a table is laid out as one with
 /// no layout is.
-[[nodiscard]] TableArrangement arrangementOf(std::span<LayoutColumn const> columns, table::ColumnLayout const& layout) {
+[[nodiscard]] TableArrangement arrangementOf(std::span<LayoutColumn const> columns,
+                                             table::ColumnLayout const& layout) {
     std::vector<std::string> const visible = layout.visible();
     bool plain = visible.size() == columns.size() && layout.pinned() == 0 && layout.widths().empty();
     for (std::size_t at = 0; plain && at < visible.size(); ++at) {
@@ -1041,8 +1044,8 @@ public:
         if (_engine->restoring()) {
             return _engine->total();
         }
-        return TableTotal{.rows = static_cast<std::int64_t>(_entries.size()), .kind = table::TotalKind::Exact,
-                          .known = true};
+        return TableTotal{
+            .rows = static_cast<std::int64_t>(_entries.size()), .kind = table::TotalKind::Exact, .known = true};
     }
     [[nodiscard]] std::optional<TableRowRef> row(std::int64_t index) const override {
         if (_engine->restoring() || index < 0 || static_cast<std::size_t>(index) >= _entries.size()) {
@@ -1061,8 +1064,8 @@ public:
         static_cast<void>(columns);
     }
     /// The keys of a range of the page's entries, headings included, at once.
-    async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(std::int64_t first,
-                                                                                       std::int64_t count) override {
+    async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(
+        std::int64_t first, std::int64_t count) override {
         using Result = std::expected<std::vector<table::RowId>, table::TableError>;
         auto [completion, promise] = async::Completion<Result>::makeSettleable(_owner);
         auto const size = static_cast<std::int64_t>(_entries.size());
@@ -1085,8 +1088,8 @@ public:
     /// not hold is not in the view the mount sees.
     void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
         auto const at = std::ranges::find(_entries, key, &Entry::key);
-        RowLocation const found{at == _entries.end() ? std::nullopt
-                                                     : std::optional{static_cast<std::int64_t>(at - _entries.begin())}};
+        RowLocation const found{
+            at == _entries.end() ? std::nullopt : std::optional{static_cast<std::int64_t>(at - _entries.begin())}};
         _owner->post([stop = std::move(stop), done = std::move(done), found] {
             if (!stop.stop_requested()) {
                 done(found);
@@ -1150,8 +1153,8 @@ public:
     void visible(std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
         _engine->visible(first, count, columns);
     }
-    async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(std::int64_t first,
-                                                                                       std::int64_t count) override {
+    async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(
+        std::int64_t first, std::int64_t count) override {
         return _engine->keysOf(first, count);
     }
     void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
@@ -1161,7 +1164,9 @@ public:
         std::vector<table::RowId> keys, std::vector<std::string> columns) override {
         return _engine->fetchRows(std::move(keys), std::move(columns));
     }
-    std::expected<void, table::TableError> setSort(SortChain sort) override { return _engine->setSort(std::move(sort)); }
+    std::expected<void, table::TableError> setSort(SortChain sort) override {
+        return _engine->setSort(std::move(sort));
+    }
     std::expected<void, table::TableError> setFilter(table::FilterSpec filter) override {
         return _engine->setFilter(std::move(filter));
     }
@@ -1302,7 +1307,6 @@ struct RowsTable {
     async::CallbackScope scope;
 };
 
-
 namespace {
 
 /// A table's `bands` parts as bands: each part's label, unit, literal list of column ids and bands one level down. The
@@ -1311,8 +1315,10 @@ namespace {
 [[nodiscard]] std::vector<table::BandInfo> bandsOf(std::span<DocNodePtr const> parts) {
     std::vector<table::BandInfo> bands;
     for (DocNodePtr const& part : parts) {
-        table::BandInfo band{.label = std::string{part->name("label")}, .unit = std::string{part->name("unit")},
-                             .columns = {}, .bands = bandsOf(part->partList("bands"))};
+        table::BandInfo band{.label = std::string{part->name("label")},
+                             .unit = std::string{part->name("unit")},
+                             .columns = {},
+                             .bands = bandsOf(part->partList("bands"))};
         if (ExprPtr const members = part->prop("columns"); members != nullptr && members->kind == ExprKind::Literal) {
             if (ValueList const* const list = members->literal.asList()) {
                 for (Value const& member : *list) {
@@ -2023,8 +2029,7 @@ void keyedRowsAt(Value const& value, std::span<std::string const> path, std::str
 /// @param paths The members' paths.
 /// @return `true` when one is.
 [[nodiscard]] bool anyMemberSet(Value const& value, std::vector<std::string> const& paths) {
-    return std::ranges::any_of(
-        paths, [&](std::string const& path) { return memberSetAt(value, pathMembers(path)); });
+    return std::ranges::any_of(paths, [&](std::string const& path) { return memberSetAt(value, pathMembers(path)); });
 }
 
 }  // namespace
@@ -2431,8 +2436,8 @@ void Session::settleReply(detail::CacheEntry& entry, std::string const& reply) {
     // rule refuses; every other reply keeps the strict rule.
     bool const opaque = std::ranges::any_of(entry.records, &ActionRecordInfo::opaque);
     auto json = parseJson(reply);
-    auto value = json ? (opaque ? detail::tableValueFromJson(*json) : valueFromJson(*json))
-                      : std::unexpected(json.error());
+    auto value =
+        json ? (opaque ? detail::tableValueFromJson(*json) : valueFromJson(*json)) : std::unexpected(json.error());
     if (!value) {
         settleFailure(entry, "the reply is not a document value: " + value.error(), "error");
         return;
@@ -3462,8 +3467,8 @@ async::Completion<WatchHolder> Session::watchRecord(std::string const& record,
     flushWatches();
     auto [completion, promise] = async::Completion<WatchHolder>::makeSettleable(&_runtime->owner());
     if (registry.inFlight.contains(record)) {
-        registry.waiters.push_back(
-            detail::WatchRegistry::Waiter{.record = record, .promise = std::move(promise), .holder = std::move(holder)});
+        registry.waiters.push_back(detail::WatchRegistry::Waiter{
+            .record = record, .promise = std::move(promise), .holder = std::move(holder)});
     } else {
         promise.resolve(std::move(holder));
     }
@@ -3487,10 +3492,10 @@ async::Completion<std::string> Session::read(std::shared_ptr<ModelChannel> const
     using OnStop = ::core::async::StopCallback<std::function<void()>>;
     std::shared_ptr<OnStop> onStop;
     if (stop.stop_possible()) {
-        onStop = std::make_shared<OnStop>(stop, std::function<void()>{[settle] {
-                                              settle->reject(
-                                                  std::make_exception_ptr(::core::async::OperationCancelled{}));
-                                          }});
+        onStop =
+            std::make_shared<OnStop>(stop, std::function<void()>{[settle] {
+                                         settle->reject(std::make_exception_ptr(::core::async::OperationCancelled{}));
+                                     }});
     }
     try {
         auto sent = channel->execute(actionId, detail::canonicalJson(body),
@@ -5184,14 +5189,14 @@ Value ScreenCore::elementValue(ElementState const& element, std::string_view nam
         return Value{};
     }
     if (kind == "table" && (name == "layout" || name == "visibleColumns" || name == "hiddenCount")) {
-        TableConfig const* const config = element.rowsTable != nullptr     ? &element.rowsTable->config
+        TableConfig const* const config = element.rowsTable != nullptr    ? &element.rowsTable->config
                                           : element.modelTable != nullptr ? &element.modelTable->config
                                           : element.gridTable != nullptr  ? &element.gridTable->config
                                                                           : nullptr;
         return config == nullptr ? Value{} : layoutElementValue(*config, name);
     }
     if (kind == "table" && name == "filters") {
-        TableConfig const* const config = element.rowsTable != nullptr     ? &element.rowsTable->config
+        TableConfig const* const config = element.rowsTable != nullptr    ? &element.rowsTable->config
                                           : element.modelTable != nullptr ? &element.modelTable->config
                                           : element.gridTable != nullptr  ? &element.gridTable->config
                                                                           : nullptr;
@@ -7152,8 +7157,8 @@ void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, ElementState
             live = live || static_cast<bool>(current->rowKeyNow);
         }
         if (live) {
-            common.focusId = slotProp<std::string>(
-                [scope = ctx.scope, path = node.path] { return focusKeyOf(path, *scope); });
+            common.focusId =
+                slotProp<std::string>([scope = ctx.scope, path = node.path] { return focusKeyOf(path, *scope); });
         } else {
             common.focusId = focusKeyOf(node.path, *ctx.scope);
         }
@@ -8470,9 +8475,8 @@ namespace {
 // Whether a field, or a member of it at any depth, is computed: what an evaluation round would bring back.
 // NOLINTNEXTLINE(misc-no-recursion): an object's and a row's members are fields.
 [[nodiscard]] bool computesAny(std::span<forms::FieldSpec const> fields) {
-    return std::ranges::any_of(fields, [](forms::FieldSpec const& field) {
-        return field.computed || computesAny(field.children);
-    });
+    return std::ranges::any_of(
+        fields, [](forms::FieldSpec const& field) { return field.computed || computesAny(field.children); });
 }
 
 }  // namespace
@@ -8489,7 +8493,8 @@ void ScreenCore::deriveForm(ElementState& element, ModelAlias* alias) {
         return;
     }
     auto const call = [this, alias](std::string actionId, bool evaluate) {
-        return [this, alias, actionId = std::move(actionId), evaluate](std::string body) -> async::Completion<std::string> {
+        return [this, alias, actionId = std::move(actionId),
+                evaluate](std::string body) -> async::Completion<std::string> {
             std::shared_ptr<ModelChannel> const channel = channelOf(*alias, *this);
             if (channel == nullptr) {
                 auto [failed, promise] = async::Completion<std::string>::makeSettleable(&runtime().owner());
@@ -8622,9 +8627,8 @@ void ScreenCore::gridParts(DocNode const& part, LowerCtx const& ctx, forms::Fiel
             ValueRecord record;
             for (auto const& member : row.fields()) {
                 forms::Encoding const& encoding = member->encoded().get();
-                record.insert_or_assign(member->spec().name, encoding.has_value() && encoding->has_value()
-                                                                 ? (*encoding)->value
-                                                                 : Value{});
+                record.insert_or_assign(member->spec().name,
+                                        encoding.has_value() && encoding->has_value() ? (*encoding)->value : Value{});
             }
             Bindings bindings = live.bindings != nullptr ? *live.bindings : Bindings{};
             bindings.push_back(Binding{.name = "row", .read = [record] { return Value{record}; }});
@@ -8638,13 +8642,14 @@ void ScreenCore::gridParts(DocNode const& part, LowerCtx const& ctx, forms::Fiel
                         .field = std::string{column->name("field")},
                         .value = {}};
         if (ExprPtr const field = column->prop("field")) {
-            // One member per row: a name that is no member of the row type is reported once, and its cell is read-only.
+            // One member per row: a name that is no member of the row type is reported once, and its cell is
+            // read-only.
             std::vector<std::string> members;
             for (forms::FieldSpec const& member : array.spec().children) {
                 members.push_back(member.name);
             }
-            made.fieldOf = [this, read = inRow(field), members = std::move(members), path = field->path](
-                               forms::RowState const& row) {
+            made.fieldOf = [this, read = inRow(field), members = std::move(members),
+                            path = field->path](forms::RowState const& row) {
                 auto const read_ = read(row);
                 std::string const name = read_ ? textOf(read_->first, read_->second) : std::string{};
                 if (!name.empty() && std::ranges::find(members, name) == members.end()) {
@@ -8685,7 +8690,8 @@ void ScreenCore::gridParts(DocNode const& part, LowerCtx const& ctx, forms::Fiel
             };
         }
         if (ExprPtr const offered = column->prop("options")) {
-            made.options = [read = inRow(offered)](forms::RowState const& row) -> std::optional<std::vector<std::string>> {
+            made.options =
+                [read = inRow(offered)](forms::RowState const& row) -> std::optional<std::vector<std::string>> {
                 auto const read_ = read(row);
                 ValueList const* const items = read_ ? read_->first.asList() : nullptr;
                 if (items == nullptr) {
@@ -8720,7 +8726,8 @@ void ScreenCore::gridParts(DocNode const& part, LowerCtx const& ctx, forms::Fiel
 void ScreenCore::gridOptions(DocNode const& part, LowerCtx const& ctx, GridOptions& options) {
     DetachedLower const detached = detachedLower(ctx);
     std::string_view const enter = part.name("enterMoves");
-    options.enterMoves = enter == "right" ? EnterMoves::Right : (enter == "none" ? EnterMoves::None : EnterMoves::Down);
+    options.enterMoves =
+        enter == "right" ? EnterMoves::Right : (enter == "none" ? EnterMoves::None : EnterMoves::Down);
     options.walk = part.name("walk") == "columns" ? Walk::Columns : Walk::Rows;
     options.appendRows = part.flag("appendRows");
     options.rowsFixed = part.flag("rowsFixed");
@@ -8873,8 +8880,8 @@ Node ScreenCore::lowerFixedGrid(DocNode const& node, LowerCtx const& ctx, Elemen
                     };
                 }
                 if (ExprPtr const decimals = given->prop("decimals")) {
-                    cell.decimals = [read = reader(decimals)](
-                                        forms::RowState const* row) -> std::optional<std::uint32_t> {
+                    cell.decimals =
+                        [read = reader(decimals)](forms::RowState const* row) -> std::optional<std::uint32_t> {
                         auto const read_ = read(row);
                         int const places = read_ ? placesOf(read_->first, read_->second) : -1;
                         return places >= 0 ? std::optional{static_cast<std::uint32_t>(places)} : std::nullopt;
@@ -9022,10 +9029,10 @@ Node ScreenCore::lowerFixedGrid(DocNode const& node, LowerCtx const& ctx, Elemen
     return gridTableNode(node, ctx, *element);
 }
 
-// A grid of a form, made once per element: every mount of the table shows the same grid, so its focus, its open editor,
-// its messages, its layout, its sort and its filters outlive a remount. Its columns and walk are `gridParts`'; its
-// header, its menus, its cell menu and its arrangement are a table's (`configureTable`): an edit column whose part says
-// `sortable` sorts, every edit column filters unless its part says `filterable: false`, and a display column does
+// A grid of a form, made once per element: every mount of the table shows the same grid, so its focus, its open
+// editor, its messages, its layout, its sort and its filters outlive a remount. Its columns and walk are `gridParts`';
+// its header, its menus, its cell menu and its arrangement are a table's (`configureTable`): an edit column whose part
+// says `sortable` sorts, every edit column filters unless its part says `filterable: false`, and a display column does
 // neither. The grid's own cell entries come after the built-ins and before the separator and the document's `cellMenu`
 // entries. Sorting and filtering change the view, never the record's order.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one section per part of a table's configuring.
@@ -9056,11 +9063,11 @@ Node ScreenCore::formGridTable(DocNode const& part, LowerCtx const& ctx, Element
         // A member per row sorts and filters its drafts as text.
         bool const perRow = static_cast<bool>(column.fieldOf);
         bool const edits = perRow || (!column.field.empty() && member != array.spec().children.end());
-        config.columns.push_back(LayoutColumn{.id = column.id,
-                                              .label = column.label,
-                                              .locked = false,
-                                              .kind = edits && !perRow ? detail::columnKindOf(member->kind)
-                                                                       : table::ColumnKind::Text});
+        config.columns.push_back(
+            LayoutColumn{.id = column.id,
+                         .label = column.label,
+                         .locked = false,
+                         .kind = edits && !perRow ? detail::columnKindOf(member->kind) : table::ColumnKind::Text});
         config.sortable.push_back(edits && at < parts.size() && parts[at]->flag("sortable"));
         filterable.push_back(edits && (at >= parts.size() || parts[at]->flag("filterable", true)));
         held->shown.push_back(TableColumn{.id = column.id, .label = column.label, .sortable = config.sortable.back()});
@@ -9216,12 +9223,11 @@ Node ScreenCore::formGridTable(DocNode const& part, LowerCtx const& ctx, Element
             held->summaries->setHeadings([held](std::size_t run) { return gridHeading(*held, run); });
         }
         // A copy that spans a summary row writes its cells as they are drawn; the scope is held weakly.
-        held->grid.grid->copySummaries(
-            held->summaries, [this, &part, held, detached = detachedLower(ctx)](Value const& record,
-                                                                               std::string const& column) {
-                LowerCtx const live = attached(detached);
-                return live.scope == nullptr ? std::string{} : gridSummaryText(part, live, *held, record, column);
-            });
+        held->grid.grid->copySummaries(held->summaries, [this, &part, held, detached = detachedLower(ctx)](
+                                                            Value const& record, std::string const& column) {
+            LowerCtx const live = attached(detached);
+            return live.scope == nullptr ? std::string{} : gridSummaryText(part, live, *held, record, column);
+        });
     }
     // The cell selection a document binds is shown; each change of it runs `onSelectionChange` with the new range.
     if (ExprPtr const bound = part.prop("selection");
@@ -9236,13 +9242,13 @@ Node ScreenCore::formGridTable(DocNode const& part, LowerCtx const& ctx, Element
         });
     }
     if (Commands const* const commands = part.event("onSelectionChange"); commands != nullptr && !commands->empty()) {
-        held->grid.grid->onSelectionChange([this, detached = detachedLower(ctx), commands](
-                                               std::optional<CellRange> const& range) {
-            LowerCtx const live = attached(detached);
-            if (live.scope != nullptr) {
-                runEvent(commands, live, cellRangeValue(range));
-            }
-        });
+        held->grid.grid->onSelectionChange(
+            [this, detached = detachedLower(ctx), commands](std::optional<CellRange> const& range) {
+                LowerCtx const live = attached(detached);
+                if (live.scope != nullptr) {
+                    runEvent(commands, live, cellRangeValue(range));
+                }
+            });
     }
     // The walk follows the visible columns in layout order, and the cells the scope's formatting; a copy with no row
     // selected copies the focused cell.
@@ -9269,11 +9275,11 @@ Node ScreenCore::formGridTable(DocNode const& part, LowerCtx const& ctx, Element
                     Value const* const column = key.field("column");
                     Value const* const direction = key.field("direction");
                     if (column != nullptr && column->asString() != nullptr) {
-                        bool const descending =
-                            direction != nullptr && direction->asString() != nullptr && *direction->asString() == "desc";
-                        chain.push_back(table::SortKey{.column = *column->asString(),
-                                                       .dir = descending ? table::SortDirection::Descending
-                                                                         : table::SortDirection::Ascending});
+                        bool const descending = direction != nullptr && direction->asString() != nullptr &&
+                                                *direction->asString() == "desc";
+                        chain.push_back(table::SortKey{
+                            .column = *column->asString(),
+                            .dir = descending ? table::SortDirection::Descending : table::SortDirection::Ascending});
                     }
                 }
             }
@@ -9383,8 +9389,8 @@ Node ScreenCore::gridTableNode(DocNode const& part, LowerCtx const& ctx, Element
             });
             return entries;
         };
-        table.onMenu = [this, own, rowEntries, chosen = std::move(table.onMenu)](std::optional<std::size_t> column,
-                                                                                std::vector<std::size_t> const& path) {
+        table.onMenu = [this, own, rowEntries, chosen = std::move(table.onMenu)](
+                           std::optional<std::size_t> column, std::vector<std::size_t> const& path) {
             if (!column && !path.empty()) {
                 std::size_t const shown = own(column).size();
                 std::size_t const first = shown + (shown > 0 ? 1 : 0);
@@ -9423,9 +9429,8 @@ Node ScreenCore::gridTableNode(DocNode const& part, LowerCtx const& ctx, Element
         };
         base = std::move(named);
     }
-    return besideDialogs(table.common, std::move(dialogs), [&] {
-        return held->grid.grid->node(std::move(columns), std::move(table), std::move(base));
-    });
+    return besideDialogs(table.common, std::move(dialogs),
+                         [&] { return held->grid.grid->node(std::move(columns), std::move(table), std::move(base)); });
 }
 
 [[nodiscard]] std::expected<forms::detail::engine::Json, std::string> changeWire(std::string const& payload,
@@ -10084,7 +10089,8 @@ constexpr std::string_view kUnreadable = "The value could not be read";
     if (ExprPtr const decimals = part.prop("decimals")) {
         constexpr std::int64_t kMostPlaces = 18;
         Value const places = read(decimals);
-        if (std::int64_t const* const count = places.asInt(); count != nullptr && *count >= 0 && *count <= kMostPlaces) {
+        if (std::int64_t const* const count = places.asInt();
+            count != nullptr && *count >= 0 && *count <= kMostPlaces) {
             display.decimals = static_cast<std::uint32_t>(*count);
         }
     }
@@ -10097,8 +10103,8 @@ constexpr std::string_view kUnreadable = "The value could not be read";
     if (auto const grouping = part.flags.find("grouping"); grouping != part.flags.end()) {
         display.grouping = grouping->second;
     }
-    for (auto [key, member] : {std::pair{"empty", &display.empty}, std::pair{"unit", &display.unit},
-                               std::pair{"date", &display.date}}) {
+    for (auto [key, member] :
+         {std::pair{"empty", &display.empty}, std::pair{"unit", &display.unit}, std::pair{"date", &display.date}}) {
         if (auto const found = part.names.find(std::string_view{key}); found != part.names.end()) {
             *member = found->second;
         }
@@ -10346,8 +10352,9 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
         for (std::string_view const key : {"tone", "tooltip"}) {
             if (part->prop(key) != nullptr) {
                 report(pointerAppend(part->path, key),
-                       "`" + std::string{key} + "` is drawn on a model-backed table's cells; a table over `rows` "
-                       "draws none");
+                       "`" + std::string{key} +
+                           "` is drawn on a model-backed table's cells; a table over `rows` "
+                           "draws none");
             }
         }
         cells.push_back(part.get());
@@ -10357,9 +10364,10 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     // A column's display parts, read once; a rows table's columns have no other source of them.
     std::vector<std::optional<table::ColumnDisplay>> displays;
     for (DocNode const* const column : cells) {
-        displays.push_back(column != nullptr && givesDisplay(*column)
-                               ? std::optional{displayOf(*column, {}, [&](ExprPtr const& expr) { return once(ctx, expr); })}
-                               : std::nullopt);
+        displays.push_back(
+            column != nullptr && givesDisplay(*column)
+                ? std::optional{displayOf(*column, {}, [&](ExprPtr const& expr) { return once(ctx, expr); })}
+                : std::nullopt);
     }
     // A column's filter menu: a column part's values, of the kind its cells infer, shown by its display parts. A
     // derived column and one whose part says `filterable: false` have none.
@@ -10445,24 +10453,24 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
                 });
         }
         if (ExprPtr const spansExpr = node.prop("rowSpans")) {
-            look.spans = slotProp<std::vector<RowSpan>>([this, scope, bindings = ctx.bindings, spansExpr,
-                                                         spansReported, fields, table] {
-                std::vector<RowSpan> spans =
-                    rowSpansOf(evalIn(*scope, bindings.get(), spansExpr), fields, spansExpr->path, *spansReported);
-                // A span across a column the user moved away or hid is cut at that column.
-                std::vector<std::string> visible = fields;
-                if (table != nullptr) {
-                    TableConfig const& config = table->config;
-                    visible = layoutOver(config.columns, config.declaredHidden, layoutNow(config)).visible();
-                }
-                std::erase_if(spans, [&](RowSpan& span) {
-                    span.columns = cutColumns(
-                        CellSpan{.column = fields.at(span.column), .rows = span.rows, .columns = span.columns}, fields,
-                        visible);
-                    return span.columns == 0;
+            look.spans = slotProp<std::vector<RowSpan>>(
+                [this, scope, bindings = ctx.bindings, spansExpr, spansReported, fields, table] {
+                    std::vector<RowSpan> spans =
+                        rowSpansOf(evalIn(*scope, bindings.get(), spansExpr), fields, spansExpr->path, *spansReported);
+                    // A span across a column the user moved away or hid is cut at that column.
+                    std::vector<std::string> visible = fields;
+                    if (table != nullptr) {
+                        TableConfig const& config = table->config;
+                        visible = layoutOver(config.columns, config.declaredHidden, layoutNow(config)).visible();
+                    }
+                    std::erase_if(spans, [&](RowSpan& span) {
+                        span.columns = cutColumns(
+                            CellSpan{.column = fields.at(span.column), .rows = span.rows, .columns = span.columns},
+                            fields, visible);
+                        return span.columns == 0;
+                    });
+                    return spans;
                 });
-                return spans;
-            });
         }
         return look;
     };
@@ -10481,7 +10489,8 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
             bool const labelled = operand && std::ranges::any_of(display->labels, [&](table::ValueLabel const& label) {
                                       return detail::cells::sameOperand(label.operand, *operand, kind.info.kind);
                                   });
-            if (Quantity const* const quantity = shown.asQuantity(); quantity != nullptr && !text.empty() && !labelled) {
+            if (Quantity const* const quantity = shown.asQuantity();
+                quantity != nullptr && !text.empty() && !labelled) {
                 auto const unit = format.units.find(quantity->unit);
                 bool const named = unit != format.units.end() && !unit->second.display.empty();
                 text += " " + (named ? unit->second.display : quantity->unit);
@@ -10496,10 +10505,10 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
         auto const nodes = part == nullptr ? std::span<DocNodePtr const>{} : part->nodes("cell");
         if (nodes.empty()) {
             return ui::text(Text{
-                .text = slotProp<std::string>([scope = ctx.scope, &row, field = fields.at(column),
-                                               display = displays.at(column), plainText] {
-                    return plainText(row.get().field(field), display, scope->formatting());
-                }),
+                .text = slotProp<std::string>(
+                    [scope = ctx.scope, &row, field = fields.at(column), display = displays.at(column), plainText] {
+                        return plainText(row.get().field(field), display, scope->formatting());
+                    }),
                 .role = roles.at(column),
             });
         }
@@ -10537,8 +10546,8 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
         }
         source.rows = table->summaries;
         source.rowScopedCells.assign(fields.size(), true);
-        source.cellView = [this, ctx, &node, table, fields, displays, plainText,
-                           inner = source.cellView](std::size_t column, reactive::Signal<Value> const& row) -> Node {
+        source.cellView = [this, ctx, &node, table, fields, displays, plainText, inner = source.cellView](
+                              std::size_t column, reactive::Signal<Value> const& row) -> Node {
             Value const& record = row.peek();
             if (record.field(kSummaryField) == nullptr) {
                 return inner(column, row);
@@ -10554,7 +10563,8 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
                 });
             return ui::text(std::move(text));
         };
-        source.rowView = [this, ctx, &node, inner = source.rowView](reactive::Signal<Value> const& row) -> TableRowLook {
+        source.rowView = [this, ctx, &node,
+                          inner = source.rowView](reactive::Signal<Value> const& row) -> TableRowLook {
             if (row.peek().field(kSummaryField) != nullptr) {
                 return summaryLook(node, ctx, row.peek());
             }
@@ -10590,9 +10600,9 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
         static_cast<void>(table->version.get());
         TableStatus status;
         ValueList const* const selected = tableSelection(*element).asList();
-        status.counts = countsText(table->rows->counts(),
-                                   selected == nullptr ? 0 : static_cast<std::int64_t>(selected->size()),
-                                   scope->formatting());
+        status.counts =
+            countsText(table->rows->counts(), selected == nullptr ? 0 : static_cast<std::int64_t>(selected->size()),
+                       scope->formatting());
         status.message = table->status == false ? std::string{} : table->message.get();
         status.shown = table->status.value_or(!status.state.empty() || !status.message.empty());
         return status;
@@ -10653,8 +10663,9 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     // is selected already it clears them, as a short table's Ctrl+A does.
     if (options.selectionMode == SelectionMode::Multiple) {
         options.onSelectAll = [this, ctx, element, table, own, commands = node.event("onSelectionChange")] {
-            auto selection = table::Selection::create(table::SelectionOptions{
-                .mode = table::SelectionMode::Multiple, .pruneOnFilter = false, .tableMode = table::TableMode::Client});
+            auto selection = table::Selection::create(table::SelectionOptions{.mode = table::SelectionMode::Multiple,
+                                                                              .pruneOnFilter = false,
+                                                                              .tableMode = table::TableMode::Client});
             if (!selection || !selection->selectAll(table->engine->engine())) {
                 return;
             }
@@ -10666,9 +10677,8 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
                     }
                 }
             });
-            bool const every = std::ranges::all_of(selection->keys(), [&held](table::RowId const& key) {
-                return held.contains(key);
-            });
+            bool const every = std::ranges::all_of(selection->keys(),
+                                                   [&held](table::RowId const& key) { return held.contains(key); });
             ValueList items;
             if (!every) {
                 for (table::RowId const& key : selection->keys()) {
@@ -10773,9 +10783,8 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     commonOf(node, ctx, element, options.common);
     std::span<DocNodePtr const> const empty = node.nodes("empty");
     if (empty.empty()) {
-        return besideDialogs(options.common, std::move(dialogs), [&] {
-            return ui::table(std::move(columns), std::move(source), std::move(options));
-        });
+        return besideDialogs(options.common, std::move(dialogs),
+                             [&] { return ui::table(std::move(columns), std::move(source), std::move(options)); });
     }
     // With `empty`, a column holds the table and the content shown in its place while `rows` is an empty list; a
     // `null` (a query not answered yet) shows the table. The column is placed as the table would be: it takes the
@@ -10818,9 +10827,9 @@ namespace {
         Value const* const direction = key.field("direction");
         bool const descending =
             direction != nullptr && direction->asString() != nullptr && *direction->asString() == "desc";
-        chain.push_back(table::SortKey{.column = *column->asString(),
-                                       .dir = descending ? table::SortDirection::Descending
-                                                         : table::SortDirection::Ascending});
+        chain.push_back(
+            table::SortKey{.column = *column->asString(),
+                           .dir = descending ? table::SortDirection::Descending : table::SortDirection::Ascending});
     }
     return chain;
 }
@@ -10833,8 +10842,8 @@ namespace {
     for (table::SortKey const& key : chain) {
         ValueRecord entry;
         entry.insert_or_assign("column", Value{key.column});
-        entry.insert_or_assign(
-            "direction", Value{std::string{key.dir == table::SortDirection::Descending ? "desc" : "asc"}});
+        entry.insert_or_assign("direction",
+                               Value{std::string{key.dir == table::SortDirection::Descending ? "desc" : "asc"}});
         keys.emplace_back(std::move(entry));
     }
     return Value{std::move(keys)};
@@ -10935,7 +10944,6 @@ void rowReadsOf(DocNode const& node, RowReads& out) {
 
 }  // namespace
 
-
 namespace {
 
 /// @brief The column kind a column part's literal `kind` names.
@@ -10965,8 +10973,8 @@ namespace {
     UnitTable const& units, std::set<std::string, std::less<>> const& seen) {
     table::UnitRegistryBuilder builder;
     auto const add = [&builder](std::string const& id, std::string const& canonical, math::Rational factor) {
-        static_cast<void>(builder.add(table::UnitInfo{
-            .id = id, .symbol = id, .dimension = canonical, .toBase = factor, .decimals = 0}));
+        static_cast<void>(builder.add(
+            table::UnitInfo{.id = id, .symbol = id, .dimension = canonical, .toBase = factor, .decimals = 0}));
     };
     for (auto const& [id, info] : units) {
         add(id, info.canonical.empty() ? id : info.canonical, info.toCanonical);
@@ -11033,7 +11041,8 @@ void startRowsEngine(RowsTable& table, reactive::Runtime& runtime) {
     engine->onChange(table.heard);
     SortChain ordered;
     if (table.byOf) {
-        ordered.push_back(table::SortKey{.column = std::string{kGroupRunColumn}, .dir = table::SortDirection::Ascending});
+        ordered.push_back(
+            table::SortKey{.column = std::string{kGroupRunColumn}, .dir = table::SortDirection::Ascending});
     }
     ordered.insert(ordered.end(), table.sort.begin(), table.sort.end());
     static_cast<void>(engine->setSort(std::move(ordered)));
@@ -11064,9 +11073,8 @@ void startRowsEngine(RowsTable& table, reactive::Runtime& runtime) {
     }
     for (table::GroupFilter const& group : filter.groups) {
         auto const declared = std::ranges::find(table.groups, group.group, &table::ColumnGroupInfo::id);
-        std::vector<std::string> const members = !group.group.empty() && declared != table.groups.end()
-                                                     ? declared->columns
-                                                     : group.columns;
+        std::vector<std::string> const members =
+            !group.group.empty() && declared != table.groups.end() ? declared->columns : group.columns;
         for (std::string const& id : members) {
             add(id);
         }
@@ -11131,7 +11139,8 @@ void loadStateAndViews(TableStates& states, table::TableStateKey const& key, Tab
         std::string failure;
         std::function<void(std::optional<std::string> const&, std::string const&)> done;
     };
-    auto const joined = std::make_shared<Joined>(Joined{.waiting = 2, .json = {}, .failure = {}, .done = std::move(done)});
+    auto const joined =
+        std::make_shared<Joined>(Joined{.waiting = 2, .json = {}, .failure = {}, .done = std::move(done)});
     auto const arrive = [joined] {
         if (--joined->waiting == 0) {
             joined->done(joined->json, joined->failure);
@@ -11246,7 +11255,8 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
     for (DocNodePtr const& part : node.partList("groups")) {
         table::ColumnGroupInfo group{.id = part->id, .label = part->id, .columns = {}};
         if (ExprPtr const label = part->prop("label")) {
-            group.label = runtime().untracked([&] { return textOf(evalIn(scope, bindings.get(), label), scope.formatting()); });
+            group.label =
+                runtime().untracked([&] { return textOf(evalIn(scope, bindings.get(), label), scope.formatting()); });
         }
         if (ExprPtr const members = part->prop("columns"); members && members->kind == ExprKind::Literal) {
             if (ValueList const* const ids = members->literal.asList()) {
@@ -11324,7 +11334,8 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
     // A bound layout is controlled, as a bound sort is: any expression but a literal `null` binds it.
     if (ExprPtr const layout = node.prop("layout");
         layout && (layout->kind != ExprKind::Literal || !layout->literal.isNull())) {
-        config.bound = &scope.nodes.computed([&scope, bindings, layout] { return evalIn(scope, bindings.get(), layout); });
+        config.bound =
+            &scope.nodes.computed([&scope, bindings, layout] { return evalIn(scope, bindings.get(), layout); });
     }
     // Shows the page of @p view: each group's heading entry before the first of its rows the page holds, and the
     // engine's own operations when the page is the whole ungrouped view and they made it, a reset otherwise.
@@ -11337,7 +11348,8 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
                 Value const& heading = view.runs.at(view.runOf.at(index));
                 Value const* const key = heading.field(kGroupHeadingField);
                 entries.push_back(PageRows::Entry{
-                    .key = table::RowId{key != nullptr && key->asString() != nullptr ? *key->asString() : std::string{}},
+                    .key =
+                        table::RowId{key != nullptr && key->asString() != nullptr ? *key->asString() : std::string{}},
                     .row = heading});
             }
             entries.push_back(PageRows::Entry{.key = engine.rowIdAt(index), .row = view.rows.at(index)});
@@ -11346,8 +11358,8 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
         table::ViewChange reset;
         reset.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0});
         bool const passed = whole && change != nullptr && !change->ops.empty();
-        table.shown = RowsTable::Shown{
-            .version = table.version.peek(), .first = view.first, .last = view.last, .any = true};
+        table.shown =
+            RowsTable::Shown{.version = table.version.peek(), .first = view.first, .last = view.last, .any = true};
         table.rows->show(std::move(entries), passed ? *change : reset);
     };
     table.showPage = show;
@@ -11383,7 +11395,8 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
                                                   .part = "state"};
         }
     }
-    table.view = std::make_unique<reactive::Computed<TableView>>(runtime(), [this, &table] { return tableView(table); });
+    table.view =
+        std::make_unique<reactive::Computed<TableView>>(runtime(), [this, &table] { return tableView(table); });
     // The page the mount shows again when the page moves, or the view changed under it other than through the
     // engine (the rows held back, `rows` with no change of the engine's view); a page the engine's change showed is
     // not shown twice.
@@ -11440,8 +11453,7 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
                     report(table.node->path,
                            "table " + (id.empty() ? table.node->path : id) + " holds " + groupedCount(rows.size()) +
                                " rows; a table over rows is ordered on the client up to " + groupedCount(kClientRows) +
-                               " rows or " + groupedCount(kClientCells) +
-                               " cells — serve it as a model's table");
+                               " rows or " + groupedCount(kClientCells) + " cells — serve it as a model's table");
                 }
                 table.source->assign(std::move(rows));
             });
@@ -11497,16 +11509,17 @@ void ScreenCore::sortRowsTable(RowsTable& table, Value const& sort) {
                 R"(; a table's sort is a list of {"column": <a sortable column's id>, "direction": "asc" or "desc"})");
     } else {
         for (SortKey const& key : *keys) {
-            chain.push_back(table::SortKey{.column = key.column->id,
-                                           .dir = key.descending ? table::SortDirection::Descending
-                                                                 : table::SortDirection::Ascending});
+            chain.push_back(table::SortKey{
+                .column = key.column->id,
+                .dir = key.descending ? table::SortDirection::Descending : table::SortDirection::Ascending});
         }
     }
     // The columns the new keys read are in use before the old ones leave, so a column both read keeps its cells.
     useColumns(table, usedColumns(table, chain, table.filter));
     SortChain ordered;
     if (table.grouped) {
-        ordered.push_back(table::SortKey{.column = std::string{kGroupRunColumn}, .dir = table::SortDirection::Ascending});
+        ordered.push_back(
+            table::SortKey{.column = std::string{kGroupRunColumn}, .dir = table::SortDirection::Ascending});
     }
     ordered.insert(ordered.end(), chain.begin(), chain.end());
     if (auto const set = table.engine->setSort(std::move(ordered)); !set) {
@@ -11651,8 +11664,11 @@ struct CollectionRecords {
     int cells = 0;
     for (std::size_t at = 0; at < text.size();) {
         auto const lead = static_cast<unsigned char>(text[at]);
-        std::size_t const length = lead < 0x80U ? 1 : (lead >> 5U) == 0x6U ? 2 : (lead >> 4U) == 0xEU ? 3
-                                                    : (lead >> 3U) == 0x1EU ? 4 : 1;
+        std::size_t const length = lead < 0x80U            ? 1
+                                   : (lead >> 5U) == 0x6U  ? 2
+                                   : (lead >> 4U) == 0xEU  ? 3
+                                   : (lead >> 3U) == 0x1EU ? 4
+                                                           : 1;
         if (length == 1 || at + length > text.size()) {
             ++cells;
             ++at;
@@ -11972,7 +11988,7 @@ Node ScreenCore::lowerCollectionRows(ElementState& element, LowerCtx const& ctx,
             for (std::string const& id : read) {
                 Value const* const text = ref->row.field(id);
                 copied.cells.emplace_back(text != nullptr && text->asString() != nullptr ? *text->asString()
-                                                                                        : std::string{});
+                                                                                         : std::string{});
             }
             gathered.rows.push_back(std::move(copied));
         }
@@ -11990,9 +12006,9 @@ Node ScreenCore::lowerCollectionRows(ElementState& element, LowerCtx const& ctx,
             return buttons ? buttons(key) : ui::text(Text{});
         }
         Text cell{.text = slotProp<std::string>([&row, field = fields.at(column)] {
-            Value const* const text = row.get().field(field);
-            return text != nullptr && text->asString() != nullptr ? *text->asString() : std::string{};
-        })};
+                      Value const* const text = row.get().field(field);
+                      return text != nullptr && text->asString() != nullptr ? *text->asString() : std::string{};
+                  })};
         cell.common.testId = "cell_" + fields.at(column) + "_" + key;
         return ui::text(std::move(cell));
     };
@@ -12007,7 +12023,7 @@ Node ScreenCore::lowerCollectionRows(ElementState& element, LowerCtx const& ctx,
     }
     if (options.onSelectionChange) {
         options.onSelectionChange = [inner = std::move(options.onSelectionChange)](std::vector<Key> const& keys,
-                                                                                  SelectionChange change) {
+                                                                                   SelectionChange change) {
             std::vector<Key> texts;
             texts.reserve(keys.size());
             for (Key const& key : keys) {
@@ -12054,9 +12070,8 @@ Node ScreenCore::lowerCollectionRows(ElementState& element, LowerCtx const& ctx,
             return arranged;
         });
     }
-    return besideDialogs(options.common, std::move(dialogs), [&] {
-        return ui::table(std::move(columns), std::move(source), std::move(options));
-    });
+    return besideDialogs(options.common, std::move(dialogs),
+                         [&] { return ui::table(std::move(columns), std::move(source), std::move(options)); });
 }
 
 namespace {
@@ -12100,7 +12115,8 @@ std::vector<table::UnitInfo> viewUnitsOf(Json::object_t const& fields, std::vect
         Json const* const value = member(object, name);
         return value == nullptr ? nullptr : std::get_if<std::string>(&value->data);
     };
-    auto const integerOf = [&member](Json::object_t const& object, std::string_view name) -> std::optional<std::int64_t> {
+    auto const integerOf = [&member](Json::object_t const& object,
+                                     std::string_view name) -> std::optional<std::int64_t> {
         Json const* const value = member(object, name);
         if (value == nullptr) {
             return std::nullopt;
@@ -12258,7 +12274,8 @@ ActionTable actionTableOf(DocNode const& node, Catalog const& catalog) {
         }
     }
     auto const viewColumn = [&viewColumns](std::string_view id) -> ViewColumn const* {
-        auto const found = std::ranges::find(viewColumns, id, [](auto const& entry) -> auto const& { return entry.first; });
+        auto const found =
+            std::ranges::find(viewColumns, id, [](auto const& entry) -> auto const& { return entry.first; });
         return found == viewColumns.end() ? nullptr : &found->second;
     };
     auto const add = [&out](std::string id, std::string label, std::optional<table::ColumnKind> kind, bool shown,
@@ -12269,17 +12286,17 @@ ActionTable actionTableOf(DocNode const& node, Catalog const& catalog) {
         if (!kind) {
             out.inferKinds.push_back(id);
         }
-        out.description.columns.push_back(table::TableColumn{
-            .info = table::ColumnInfo{.id = std::move(id),
-                                      .kind = kind.value_or(table::ColumnKind::Text),
-                                      .comparator = {},
-                                      .format = {},
-                                      .level = {}},
-            .label = std::move(label),
-            .group = {},
-            .sortable = true,
-            .filterable = true,
-            .shown = shown});
+        out.description.columns.push_back(
+            table::TableColumn{.info = table::ColumnInfo{.id = std::move(id),
+                                                         .kind = kind.value_or(table::ColumnKind::Text),
+                                                         .comparator = {},
+                                                         .format = {},
+                                                         .level = {}},
+                               .label = std::move(label),
+                               .group = {},
+                               .sortable = true,
+                               .filterable = true,
+                               .shown = shown});
     };
     if (auto const parts = node.partList("columns"); !parts.empty()) {
         for (DocNodePtr const& part : parts) {
@@ -12342,7 +12359,8 @@ void fitViewSelection(ScreenCore& core, ElementState& element, ModelTable& model
         return;
     }
     TableSelection next = *current;
-    auto const dropped = std::erase_if(next.except, [&model](table::RowId const& key) { return model.rows->leftView(key); });
+    auto const dropped =
+        std::erase_if(next.except, [&model](table::RowId const& key) { return model.rows->leftView(key); });
     if (dropped > 0) {
         model.viewSelection.set(std::move(next));
     }
@@ -12499,11 +12517,12 @@ public:
                 model->viewSelection.set(again);
                 rerun(nextBody);
             };
-            _core->tableMessage(*_element,
-                                "The rows changed since you selected them: " +
-                                    render::formatCanonicalNumber(std::to_string(rows), _core->session.formatting().numeric) +
-                                    (rows == 1 ? " row now. Run on these?" : " rows now. Run on these?"),
-                                {{StatusEntry{.id = id, .label = "Run on these"}, rerun}});
+            _core->tableMessage(
+                *_element,
+                "The rows changed since you selected them: " +
+                    render::formatCanonicalNumber(std::to_string(rows), _core->session.formatting().numeric) +
+                    (rows == 1 ? " row now. Run on these?" : " rows now. Run on these?"),
+                {{StatusEntry{.id = id, .label = "Run on these"}, rerun}});
             return;
         }
     }
@@ -12627,8 +12646,8 @@ private:
     [[nodiscard]] bool holds(Key const& key) const {
         RowStates const& states = _model->rows->states();
         std::optional<TableSelection> const& view = _model->viewSelection.peek();
-        bool const selected = view ? std::ranges::contains(view->except, key)
-                                   : std::ranges::contains(selectedKeys(), key);
+        bool const selected =
+            view ? std::ranges::contains(view->except, key) : std::ranges::contains(selectedKeys(), key);
         return selected || (_model->config.focused && _model->config.focused->key == key) ||
                std::ranges::contains(_model->window->retained(), key) || states.isBusy(key) ||
                states.failure(key).has_value() || _deferred.contains(key) ||
@@ -12781,9 +12800,8 @@ void sendRowEdit(ScreenCore& core, ModelTable& model, table::RowEditRequest cons
     for (table::EditCell const& cell : request.cells) {
         table::EditInfo const* edit = nullptr;
         if (description != nullptr) {
-            auto const found = std::ranges::find_if(description->columns, [&](table::TableColumn const& column) {
-                return column.info.id == cell.column;
-            });
+            auto const found = std::ranges::find_if(
+                description->columns, [&](table::TableColumn const& column) { return column.info.id == cell.column; });
             edit = found != description->columns.end() && found->edit ? &*found->edit : nullptr;
         }
         if (edit == nullptr) {
@@ -12818,8 +12836,11 @@ void sendRowEdit(ScreenCore& core, ModelTable& model, table::RowEditRequest cons
         table::RowId row;
         table::RowEditDone done;
     };
-    auto const settling = std::make_shared<Settling>(Settling{
-        .remaining = calls.size(), .errors = std::move(refused), .named = false, .row = request.row, .done = std::move(done)});
+    auto const settling = std::make_shared<Settling>(Settling{.remaining = calls.size(),
+                                                              .errors = std::move(refused),
+                                                              .named = false,
+                                                              .row = request.row,
+                                                              .done = std::move(done)});
     auto const finish = [&model, settling] {
         if (--settling->remaining > 0) {
             return;
@@ -13008,8 +13029,8 @@ void ScreenCore::wireModelTable(ElementState& element) {
             report(node.path, problem);
         }
     }
-    Value const body = node.prop("body") ? runtime().untracked([&] { return evalIn(scope, nullptr, node.prop("body")); })
-                                         : Value{};
+    Value const body =
+        node.prop("body") ? runtime().untracked([&] { return evalIn(scope, nullptr, node.prop("body")); }) : Value{};
     // The table owns these members of the query; a body that gives one has it replaced, which is said, since the
     // body is the query's fixed part and the author may have meant it to restrict the rows.
     if (ValueRecord const* const fixed = body.asRecord()) {
@@ -13024,19 +13045,19 @@ void ScreenCore::wireModelTable(ElementState& element) {
     }
     model.waiting = model.stateKey.has_value();
     model.window = std::make_shared<WindowRows>(
-        session, WindowRowsOptions{.channel = channelOf(*alias, *this),
-                                   .table = typed ? std::string{} : model.id,
-                                   .action = action,
-                                   .queryMember = typed ? typed->queryMember : std::string{},
-                                   .inferKinds = typed ? typed->inferKinds : std::vector<std::string>{},
-                                   .records = typed ? typed->records
-                                                    : std::vector<std::string>{model.modelType + "." + model.id},
-                                   .body = body,
-                                   .pageSize = 200,
-                                   .maxPages = 8,
-                                   .maxKeys = 1000,
-                                   .maxColumns = 96,
-                                   .restoring = model.waiting});
+        session, WindowRowsOptions{
+                     .channel = channelOf(*alias, *this),
+                     .table = typed ? std::string{} : model.id,
+                     .action = action,
+                     .queryMember = typed ? typed->queryMember : std::string{},
+                     .inferKinds = typed ? typed->inferKinds : std::vector<std::string>{},
+                     .records = typed ? typed->records : std::vector<std::string>{model.modelType + "." + model.id},
+                     .body = body,
+                     .pageSize = 200,
+                     .maxPages = 8,
+                     .maxKeys = 1000,
+                     .maxColumns = 96,
+                     .restoring = model.waiting});
     element.tableWindow = model.window;
     model.rows = std::make_shared<ObservedRows>(
         model.window, model.scope.token().guard([this, &model, &element] {
@@ -13139,7 +13160,8 @@ void ScreenCore::wireModelTable(ElementState& element) {
                     return;
                 }
                 if (auto const set = table.window->setFilter(filter); !set) {
-                    report(pointerAppend(element.node->path, "filters"), "the filter is refused: " + set.error().message);
+                    report(pointerAppend(element.node->path, "filters"),
+                           "the filter is refused: " + set.error().message);
                     return;
                 }
                 table.filter = std::move(filter);
@@ -13199,14 +13221,14 @@ void ScreenCore::wireModelTable(ElementState& element) {
                 }
                 Key const shown = keyOf(key);
                 table.highlight.set(std::nullopt);
-                table.window->locate(std::visit([](auto const& value) { return table::RowId{value}; }, shown),
-                                     [&table, shown](std::optional<std::int64_t> index) {
-                                         table.highlight.set(index && *index >= 0
-                                                                 ? std::optional<TableHighlight>{TableHighlight{
-                                                                       .key = shown,
-                                                                       .row = static_cast<std::size_t>(*index)}}
-                                                                 : std::nullopt);
-                                     });
+                table.window->locate(
+                    std::visit([](auto const& value) { return table::RowId{value}; }, shown),
+                    [&table, shown](std::optional<std::int64_t> index) {
+                        table.highlight.set(index && *index >= 0
+                                                ? std::optional<TableHighlight>{TableHighlight{
+                                                      .key = shown, .row = static_cast<std::size_t>(*index)}}
+                                                : std::nullopt);
+                    });
             });
         });
     }
@@ -13271,7 +13293,8 @@ void ScreenCore::storedTableState(ElementState& element, std::optional<std::stri
         document = table::fitState(std::move(document), *description, fitted);
         for (table::FitDrop const& drop : fitted.dropped) {
             if (drop.what == table::FitDrop::What::Filter || drop.what == table::FitDrop::What::GroupFilter) {
-                report(node.path, "the stored filter on `" + drop.id + "` is not applied: the table has no such column");
+                report(node.path,
+                       "the stored filter on `" + drop.id + "` is not applied: the table has no such column");
             }
         }
     }
@@ -13325,19 +13348,18 @@ void ScreenCore::describedTable(ElementState& element, Value const& described) {
         std::string const text = canonicalJson(described);
         if (!glz::read<glz::opts{.error_on_unknown_keys = false}>(next, text) && next.revision != before) {
             table::FitReport fitted;
-            static_cast<void>(table::fitState(
-                table::StateDocument{.version = table::kStateVersion,
-                                     .layout = {},
-                                     .sort = model.sort,
-                                     .filters = model.filter,
-                                     .view = {},
-                                     .carried = {}},
-                next, fitted));
+            static_cast<void>(table::fitState(table::StateDocument{.version = table::kStateVersion,
+                                                                   .layout = {},
+                                                                   .sort = model.sort,
+                                                                   .filters = model.filter,
+                                                                   .view = {},
+                                                                   .carried = {}},
+                                              next, fitted));
             for (table::FitDrop const& drop : fitted.dropped) {
                 if (drop.what == table::FitDrop::What::Filter || drop.what == table::FitDrop::What::GroupFilter ||
                     drop.what == table::FitDrop::What::Unit) {
-                    report(element.node->path,
-                           "the filter on `" + drop.id + "` is dropped: the table's new description has no such column");
+                    report(element.node->path, "the filter on `" + drop.id +
+                                                   "` is dropped: the table's new description has no such column");
                 }
             }
         }
@@ -13356,11 +13378,13 @@ void ScreenCore::describedTable(ElementState& element, Value const& described) {
     modelLayoutColumns(element);
     // The fitted sort and filters are what the rows hold now.
     table::FitReport ignored;
-    table::StateDocument const fitted = table::fitState(
-        table::StateDocument{
-            .version = table::kStateVersion, .layout = {}, .sort = model.sort, .filters = model.filter, .view = {},
-            .carried = {}},
-        *now, ignored);
+    table::StateDocument const fitted = table::fitState(table::StateDocument{.version = table::kStateVersion,
+                                                                             .layout = {},
+                                                                             .sort = model.sort,
+                                                                             .filters = model.filter,
+                                                                             .view = {},
+                                                                             .carried = {}},
+                                                        *now, ignored);
     model.sort = fitted.sort.value_or(SortChain{});
     model.filter = fitted.filters.value_or(table::FilterSpec{});
     if (element.sortBound == nullptr) {
@@ -13395,10 +13419,10 @@ void ScreenCore::inferredTable(ElementState& element) {
         *description, fitted);
     for (table::FitDrop const& drop : fitted.dropped) {
         if (drop.what == table::FitDrop::What::Filter || drop.what == table::FitDrop::What::GroupFilter) {
-            report(element.node->path, std::string{fromStore ? "the stored filter" : "the filter"} + " on `" +
-                                           drop.id + "` is not applied: " +
-                                           (drop.carried ? "the table has no such column"
-                                                         : "it does not apply to the column's kind"));
+            report(element.node->path,
+                   std::string{fromStore ? "the stored filter" : "the filter"} + " on `" + drop.id +
+                       "` is not applied: " +
+                       (drop.carried ? "the table has no such column" : "it does not apply to the column's kind"));
         }
     }
     filter = document.filters.value_or(table::FilterSpec{});
@@ -13441,8 +13465,8 @@ void ScreenCore::rowsTableMessage(RowsTable& rows, std::string text) {
     rows.message.set(text);
     rows.messageTimer.cancel();
     if (reactive::Scheduler* const scheduler = session.options().scheduler) {
-        rows.messageTimer = scheduler->after(
-            kStatusMessageHold, rows.scope.token().guard([&rows, shown = std::move(text)] {
+        rows.messageTimer =
+            scheduler->after(kStatusMessageHold, rows.scope.token().guard([&rows, shown = std::move(text)] {
                 if (rows.message.peek() == shown) {
                     rows.message.set({});
                 }
@@ -13460,7 +13484,8 @@ void ScreenCore::tableMessage(ElementState& table, std::string text) {
         grid->entries.set({});
         grid->messageTimer.cancel();
         grid->message.set(text);
-        if (reactive::Scheduler* const scheduler = session.options().scheduler; scheduler != nullptr && !text.empty()) {
+        if (reactive::Scheduler* const scheduler = session.options().scheduler;
+            scheduler != nullptr && !text.empty()) {
             grid->messageTimer = scheduler->after(kStatusMessageHold, grid->scope.token().guard([grid, shown = text] {
                 if (grid->message.peek() == shown) {
                     grid->message.set({});
@@ -13491,8 +13516,8 @@ void ScreenCore::tableMessage(ElementState& table, std::string text) {
     model->message.set(text);
     model->messageTimer.cancel();
     if (reactive::Scheduler* const scheduler = session.options().scheduler) {
-        model->messageTimer = scheduler->after(
-            kStatusMessageHold, model->scope.token().guard([model, shown = std::move(text)] {
+        model->messageTimer =
+            scheduler->after(kStatusMessageHold, model->scope.token().guard([model, shown = std::move(text)] {
                 if (model->message.peek() == shown) {
                     model->message.set({});
                     model->entries.set({});
@@ -13624,13 +13649,12 @@ std::size_t ScreenCore::tableRowScopes(ElementState const& table) {
 }
 
 void ScreenCore::tableSaveFailed(table::TableStateKey const& key, table::SaveResult const& result) {
-    std::string const text = result.reason.empty()
-                                 ? std::string{"The table's arrangement could not be saved"}
-                                 : "The table's arrangement could not be saved: " + result.reason;
+    std::string const text = result.reason.empty() ? std::string{"The table's arrangement could not be saved"}
+                                                   : "The table's arrangement could not be saved: " + result.reason;
     std::vector<ElementState*> tables;
     for (ElementState* const element : modelTables) {
         std::optional<table::TableStateKey> const* const held =
-            element->modelTable != nullptr ? &element->modelTable->stateKey
+            element->modelTable != nullptr  ? &element->modelTable->stateKey
             : element->rowsTable != nullptr ? &element->rowsTable->stateKey
                                             : nullptr;
         if (held != nullptr && *held == key) {
@@ -13647,15 +13671,14 @@ namespace {
 /// The description's columns a model-backed table's `Table::columns` are, in order: those its column parts name, or
 /// without parts every column but the companions, which travel with their columns and are never one of them.
 [[nodiscard]] std::vector<table::TableColumn const*> arrangedColumns(DocNode const& node,
-                                                                    table::TableDescription const& description) {
+                                                                     table::TableDescription const& description) {
     std::vector<std::string> const companions = table::companionColumns(description);
     std::vector<table::TableColumn const*> out;
     if (auto const parts = node.partList("columns"); !parts.empty()) {
         for (DocNodePtr const& part : parts) {
-            auto const found = std::ranges::find(description.columns, part->id,
-                                                 [](table::TableColumn const& column) -> auto const& {
-                                                     return column.info.id;
-                                                 });
+            auto const found =
+                std::ranges::find(description.columns, part->id,
+                                  [](table::TableColumn const& column) -> auto const& { return column.info.id; });
             if (found != description.columns.end() && !std::ranges::binary_search(companions, part->id)) {
                 out.push_back(&*found);
             }
@@ -13713,9 +13736,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
     auto const columns = std::make_shared<std::vector<LayoutColumn> const>(config.columns);
     auto const sortable = std::make_shared<std::vector<bool> const>(config.sortable);
     auto const hidden = std::make_shared<std::vector<std::string> const>(config.declaredHidden);
-    auto const layoutHeld = [&config, columns, hidden] {
-        return layoutOver(*columns, *hidden, layoutNow(config));
-    };
+    auto const layoutHeld = [&config, columns, hidden] { return layoutOver(*columns, *hidden, layoutNow(config)); };
     // Every key of the chain marks its header, in the chain's order; a sort that is not a list of keys naming
     // sortable columns, each with a direction, marks none, as the rows keep their order under it.
     options.sort = slotProp<std::vector<TableSort>>([&element, columns, sortable] {
@@ -13741,12 +13762,13 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             if (!sortable->at(index)) {
                 return std::vector<TableSort>{};
             }
-            out.push_back(TableSort{.column = index,
-                                    .direction = *way == "desc" ? SortDirection::Descending : SortDirection::Ascending});
+            out.push_back(TableSort{
+                .column = index, .direction = *way == "desc" ? SortDirection::Descending : SortDirection::Ascending});
         }
         return out;
     });
-    options.arrangement = slotProp<TableArrangement>([columns, layoutHeld] { return arrangementOf(*columns, layoutHeld()); });
+    options.arrangement =
+        slotProp<TableArrangement>([columns, layoutHeld] { return arrangementOf(*columns, layoutHeld()); });
     // A copy: the selected rows in view order by the visible columns in layout order, or with no row selected the
     // focused cell alone; over `maxCopyRows` keys it is refused and nothing is copied. The rows say how each cell
     // shows; an unloaded cell is copied as empty and counted in the message.
@@ -13784,40 +13806,39 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         // A copy started after this one wins: this one's rows, arriving late, write nothing.
         std::uint64_t const started = ++config.copies;
         auto gather = [&config, viewing, keys = std::move(keys)](std::vector<std::string> const& named,
-                                                                      CopyDone done) mutable {
+                                                                 CopyDone done) mutable {
             if (viewing && config.gatherView) {
                 config.gatherView(named, std::move(done));
             } else {
                 config.gather(std::move(keys), named, std::move(done));
             }
         };
-        gather(columns, [this, &config, &element, headers, started, separator = std::move(separator)](
-                          std::expected<CopyGathered, std::string> gathered) {
-                          if (started != config.copies) {
-                              return;
-                          }
-                          if (!gathered) {
-                              tableMessage(element, std::move(gathered.error()));
-                              return;
-                          }
-                          // None of the rows is in the view any more: the clipboard keeps what it had.
-                          if (gathered->rows.empty()) {
-                              return;
-                          }
-                          std::ranges::stable_sort(gathered->rows, {}, &CopyRow::viewRow);
-                          std::vector<std::vector<std::optional<std::string>>> rows;
-                          rows.reserve(gathered->rows.size());
-                          for (CopyRow& row : gathered->rows) {
-                              rows.push_back(std::move(row.cells));
-                          }
-                          CopiedText const text =
-                              ui::copyText(headers ? gathered->headers : std::vector<std::string>{}, rows);
-                          if (!clipboard || !clipboard(text.text)) {
-                              tableMessage(element, "The rows could not be copied: there is no clipboard");
-                              return;
-                          }
-                          tableMessage(element, tableText::copied(rows.size(), text.unloaded, separator));
-                      });
+        gather(columns, [this, &config, &element, headers, started,
+                         separator = std::move(separator)](std::expected<CopyGathered, std::string> gathered) {
+            if (started != config.copies) {
+                return;
+            }
+            if (!gathered) {
+                tableMessage(element, std::move(gathered.error()));
+                return;
+            }
+            // None of the rows is in the view any more: the clipboard keeps what it had.
+            if (gathered->rows.empty()) {
+                return;
+            }
+            std::ranges::stable_sort(gathered->rows, {}, &CopyRow::viewRow);
+            std::vector<std::vector<std::optional<std::string>>> rows;
+            rows.reserve(gathered->rows.size());
+            for (CopyRow& row : gathered->rows) {
+                rows.push_back(std::move(row.cells));
+            }
+            CopiedText const text = ui::copyText(headers ? gathered->headers : std::vector<std::string>{}, rows);
+            if (!clipboard || !clipboard(text.text)) {
+                tableMessage(element, "The rows could not be copied: there is no clipboard");
+                return;
+            }
+            tableMessage(element, tableText::copied(rows.size(), text.unloaded, separator));
+        });
     };
     options.onCopy = [&config, copy] {
         config.touch();
@@ -13924,8 +13945,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
     // `configurable` lets the user change about the columns. A user's filters go to the rows, and are held and
     // saved, unless the document binds them; then `onFiltersChange` runs with `event` the new filters.
     FilterMenu& menu = *config.filterMenu;
-    auto const refilter = [this, ctx, &config, keep, commands = node.event("onFiltersChange")](
-                              table::FilterSpec const& spec) {
+    auto const refilter = [this, ctx, &config, keep,
+                           commands = node.event("onFiltersChange")](table::FilterSpec const& spec) {
         static_cast<void>(keep);
         bool applied = true;
         Value const event = filtersValueOf(spec);
@@ -14066,7 +14087,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         std::vector<std::string> const visible = layout.visible();
         table::FilterSpec const filters = filtersNow();
         for (auto const& [group, formed] : groupsNow()) {
-            auto const first = std::ranges::find(visible, group.columns.empty() ? std::string{} : group.columns.front());
+            auto const first =
+                std::ranges::find(visible, group.columns.empty() ? std::string{} : group.columns.front());
             auto const at = static_cast<std::size_t>(first - visible.begin());
             bool together = first != visible.end() && at + group.columns.size() <= visible.size();
             for (std::size_t offset = 0; together && offset < group.columns.size(); ++offset) {
@@ -14124,14 +14146,14 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             }
         };
         options.onColumnMove = [refused, move = std::move(options.onColumnMove)](std::size_t column,
-                                                                                  std::size_t position) {
+                                                                                 std::size_t position) {
             if (!refused()) {
                 move(column, position);
             }
         };
         if (options.onColumnResize) {
-            options.onColumnResize = [refused, resize = std::move(options.onColumnResize)](
-                                         std::size_t column, std::optional<int> units) {
+            options.onColumnResize = [refused, resize = std::move(options.onColumnResize)](std::size_t column,
+                                                                                           std::optional<int> units) {
                 if (!refused()) {
                     resize(column, units);
                 }
@@ -14196,40 +14218,40 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                                         static_cast<void>(refilter(spec));
                                     }),
                                     usable));
-            items.push_back(command(
-                "Exclude this value",
-                filtering([this, id, entry, refilter, filtersNow] {
-                    table::FilterSpec spec = runtime().untracked(filtersNow);
-                    std::vector<table::FilterEntry>& exclude = spec.columns[id].exclude;
-                    auto const listed = std::ranges::find_if(exclude, [](table::FilterEntry const& excluded) {
-                        return excluded.oneOf.has_value();
-                    });
-                    if (entry.oneOf && listed != exclude.end()) {
-                        if (!std::ranges::contains(*listed->oneOf, entry.oneOf->front())) {
-                            listed->oneOf->push_back(entry.oneOf->front());
-                        }
-                    } else if (!std::ranges::contains(exclude, entry)) {
-                        exclude.push_back(entry);
-                    }
-                    static_cast<void>(refilter(spec));
-                }),
-                usable));
+            items.push_back(command("Exclude this value", filtering([this, id, entry, refilter, filtersNow] {
+                                        table::FilterSpec spec = runtime().untracked(filtersNow);
+                                        std::vector<table::FilterEntry>& exclude = spec.columns[id].exclude;
+                                        auto const listed =
+                                            std::ranges::find_if(exclude, [](table::FilterEntry const& excluded) {
+                                                return excluded.oneOf.has_value();
+                                            });
+                                        if (entry.oneOf && listed != exclude.end()) {
+                                            if (!std::ranges::contains(*listed->oneOf, entry.oneOf->front())) {
+                                                listed->oneOf->push_back(entry.oneOf->front());
+                                            }
+                                        } else if (!std::ranges::contains(exclude, entry)) {
+                                            exclude.push_back(entry);
+                                        }
+                                        static_cast<void>(refilter(spec));
+                                    }),
+                                    usable));
             if (config.declaredGroups) {
-                for (table::ColumnGroupInfo const& group : runtime().untracked([&] { return config.declaredGroups(); })) {
+                for (table::ColumnGroupInfo const& group :
+                     runtime().untracked([&] { return config.declaredGroups(); })) {
                     if (!std::ranges::contains(group.columns, id)) {
                         continue;
                     }
-                    items.push_back(command(
-                        "Filter by this value in any " + group.label,
-                        filtering([this, groupId = group.id, entry, refilter, filtersNow] {
-                            table::FilterSpec spec = runtime().untracked(filtersNow);
-                            std::erase_if(spec.groups, [&groupId](table::GroupFilter const& filter) {
-                                return filter.group == groupId;
-                            });
-                            spec.groups.push_back(table::GroupFilter{.group = groupId, .include = {entry}});
-                            static_cast<void>(refilter(spec));
-                        }),
-                        usable));
+                    items.push_back(
+                        command("Filter by this value in any " + group.label,
+                                filtering([this, groupId = group.id, entry, refilter, filtersNow] {
+                                    table::FilterSpec spec = runtime().untracked(filtersNow);
+                                    std::erase_if(spec.groups, [&groupId](table::GroupFilter const& filter) {
+                                        return filter.group == groupId;
+                                    });
+                                    spec.groups.push_back(table::GroupFilter{.group = groupId, .include = {entry}});
+                                    static_cast<void>(refilter(spec));
+                                }),
+                                usable));
                 }
             }
             std::span<DocNodePtr const> const parts = node.partList("cellMenu");
@@ -14242,8 +14264,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             // The entries read the row as it was when the menu opened; the scope owns the signal that holds it. The
             // scope is the menu's own: state the table's row scope declares starts at its initial value in it.
             Value const record = held ? held->record : Value{};
-            auto const scope =
-                std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
+            auto const scope = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
             scope->row = &scope->nodes.make<reactive::Signal<Value>>(runtime(), record);
             scope->rowKey = canonicalJson(valueOfKey(key));
             declare(*scope, node.scope ? &*node.scope : nullptr, {}, {});
@@ -14277,8 +14298,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             auto bindings = std::make_shared<Bindings>(*ctx.bindings);
             std::string const id = column < columns->size() ? columns->at(column).id : std::string{};
             bindings->push_back(Binding{.name = "column", .read = [id] { return Value{id}; }});
-            std::vector<MenuItem> own =
-                menuItems(parts, LowerCtx{.scope = ctx.scope, .bindings = std::move(bindings), .boundary = ctx.boundary});
+            std::vector<MenuItem> own = menuItems(
+                parts, LowerCtx{.scope = ctx.scope, .bindings = std::move(bindings), .boundary = ctx.boundary});
             clearsMessageFirst(config, own);
             return own;
         };
@@ -14321,10 +14342,9 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         input.currentShared = config.viewShared;
         input.defaultOnMount = views->own().defaultOnMount;
         input.shares = views->shares();
-        table::SavedView const* const current =
-            !config.savedView ? nullptr
-            : config.viewShared ? views->sharedView(*config.savedView)
-                                : views->ownView(*config.savedView);
+        table::SavedView const* const current = !config.savedView   ? nullptr
+                                                : config.viewShared ? views->sharedView(*config.savedView)
+                                                                    : views->ownView(*config.savedView);
         if (current != nullptr) {
             table::StateDocument const view = fittedView(*current);
             table::SavedView const now = arrangementNow();
@@ -14347,8 +14367,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
     };
     // Applying a view sets its layout, sort and filters as the gestures do, through their handlers where they are
     // bound, and records its name.
-    auto const applyView = [this, &config, columns, hidden, fittedView, arrangementNow, relayout, resort, refilter, recordView](
-                               table::SavedView const& saved, bool shared) {
+    auto const applyView = [this, &config, columns, hidden, fittedView, arrangementNow, relayout, resort, refilter,
+                            recordView](table::SavedView const& saved, bool shared) {
         auto const apply = [this, columns, hidden, fittedView, arrangementNow, relayout, resort, refilter, recordView,
                             saved, shared] {
             table::StateDocument const view = fittedView(saved);
@@ -14381,8 +14401,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         runtime().owner().post(config.viewsScope.token().guard(apply));
     };
     // A views change answers on the owner: its refusal goes to the status line, and what it did once done.
-    auto const changeViews = [&config](async::Completion<TableViews::Result> completion,
-                                       std::function<void()> done) {
+    auto const changeViews = [&config](async::Completion<TableViews::Result> completion, std::function<void()> done) {
         completion.then(config.viewsScope, [&config, done = std::move(done)](TableViews::Result const& result) {
             if (!result) {
                 config.message(result.error());
@@ -14464,7 +14483,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 break;
             case MenuCommand::RemoveView:
                 if (current) {
-                    changeViews(views->change(table::RemoveView{*current}), [recordView] { recordView(std::nullopt, false); });
+                    changeViews(views->change(table::RemoveView{*current}),
+                                [recordView] { recordView(std::nullopt, false); });
                 }
                 break;
             case MenuCommand::SetDefaultView:
@@ -14509,8 +14529,9 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
     };
     // A menu is built when it opens, and again when an entry is chosen, from the chain and the layout of the moment,
     // so the path the backend reports names the entry it showed.
-    auto const entriesOf = [this, &config, &element, columns, sortable, filterable, layoutHeld, groupsNow, groupArgument,
-                            filtersNow, viewsInput](std::optional<std::size_t> column) -> std::vector<TableMenuEntry> {
+    auto const entriesOf = [this, &config, &element, columns, sortable, filterable, layoutHeld, groupsNow,
+                            groupArgument, filtersNow,
+                            viewsInput](std::optional<std::size_t> column) -> std::vector<TableMenuEntry> {
         return runtime().untracked([&]() -> std::vector<TableMenuEntry> {
             table::ColumnLayout const layout = layoutHeld();
             // The groups, each named in its members' menus and in the table's.
@@ -14518,8 +14539,9 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 std::vector<MenuGroup> out;
                 for (auto const& [group, formed] : groupsNow()) {
                     if (id.empty() || std::ranges::contains(group.columns, id)) {
-                        out.push_back(MenuGroup{
-                            .id = groupArgument(group, formed), .label = group.label, .columns = group.columns.size()});
+                        out.push_back(MenuGroup{.id = groupArgument(group, formed),
+                                                .label = group.label,
+                                                .columns = group.columns.size()});
                     }
                 }
                 return out;
@@ -14551,8 +14573,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 .column = at,
                 .sortable = sortable->at(*column),
                 .filterable = filterable->at(*column),
-                .sortPlace = held == chain.end() ? std::nullopt
-                                                 : std::optional{static_cast<std::size_t>(held - chain.begin())},
+                .sortPlace =
+                    held == chain.end() ? std::nullopt : std::optional{static_cast<std::size_t>(held - chain.begin())},
                 .chainSize = chain.size(),
                 .maxSortKeys = config.maxSortKeys(),
                 .visibleIndex = static_cast<std::size_t>(std::ranges::find(visible, at.id) - visible.begin()),
@@ -14576,8 +14598,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         }
         return menuEntries(entries);
     };
-    options.onMenu = [&config, &menu, entriesOf, sortBy, arrange, columns, openColumn, openGroup, refilter, copy, headerOn,
-                      viewCommand](std::optional<std::size_t> column, std::vector<std::size_t> const& path) {
+    options.onMenu = [&config, &menu, entriesOf, sortBy, arrange, columns, openColumn, openGroup, refilter, copy,
+                      headerOn, viewCommand](std::optional<std::size_t> column, std::vector<std::size_t> const& path) {
         config.touch();
         std::vector<TableMenuEntry> const entries = entriesOf(column);
         TableMenuEntry const* const entry = chosen(entries, path);
@@ -14717,7 +14739,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 if (runtime().untracked([&] { return layoutHeld().groups().size(); }) >= before) {
                     return;
                 }
-                FilterMenuState const& open = runtime().untracked([&]() -> FilterMenuState const& { return menu.state(); });
+                FilterMenuState const& open =
+                    runtime().untracked([&]() -> FilterMenuState const& { return menu.state(); });
                 if (open.open && open.target.formed && open.target.columns == members) {
                     menu.close();
                 }
@@ -14757,9 +14780,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                         ids.push_back(columns->at(at).id);
                     }
                 }
-                resort([&](SortChain const& current) {
-                    return applySortEdit(current, ids, edit, config.maxSortKeys());
-                });
+                resort(
+                    [&](SortChain const& current) { return applySortEdit(current, ids, edit, config.maxSortKeys()); });
             },
         .onClose = [&config] { config.sortOpen.set(false); },
     });
@@ -14805,14 +14827,13 @@ Node ScreenCore::lowerModelTable(DocNode const& node, LowerCtx const& ctx, Eleme
     commonOf(node, ctx, element, placed);
     Common listCommon;
     listCommon.layout = placed.layout;
-    Node list = ui::forEach<Value>(
-        [&model] { return std::vector<Value>{Value{model.revision.get()}}; },
-        [](Value const& revision) -> Key { return Key{*revision.asString()}; },
-        [this, ctx, &node, element](reactive::Signal<Value> const& revision) {
-            static_cast<void>(revision);
-            return modelTableOf(node, ctx, *element);
-        },
-        Axis::Vertical, 0, listCommon);
+    Node list = ui::forEach<Value>([&model] { return std::vector<Value>{Value{model.revision.get()}}; },
+                                   [](Value const& revision) -> Key { return Key{*revision.asString()}; },
+                                   [this, ctx, &node, element](reactive::Signal<Value> const& revision) {
+                                       static_cast<void>(revision);
+                                       return modelTableOf(node, ctx, *element);
+                                   },
+                                   Axis::Vertical, 0, listCommon);
     std::span<DocNodePtr const> const empty = node.nodes("empty");
     if (empty.empty()) {
         return list;
@@ -14951,8 +14972,8 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     FormatContext const& format = ctx.scope->formatting();
     Align const tableValign = cellPlaceNamed(node.name("valign")).value_or(Align::Center);
     auto const describedColumn = [description](std::string_view id) -> table::TableColumn const* {
-        auto const found = std::ranges::find(description->columns, id,
-                                             [](table::TableColumn const& column) -> auto const& { return column.info.id; });
+        auto const found = std::ranges::find(
+            description->columns, id, [](table::TableColumn const& column) -> auto const& { return column.info.id; });
         return found == description->columns.end() ? nullptr : &*found;
     };
     std::vector<TableColumn> columns;
@@ -14979,7 +15000,8 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         table::TableColumn display = described;
         CellExprs exprs{.tone = nullptr, .tooltip = nullptr, .path = part != nullptr ? part->path : node.path};
         if (part != nullptr) {
-            display.display = displayOf(*part, described.display, [&](ExprPtr const& expr) { return once(ctx, expr); });
+            display.display =
+                displayOf(*part, described.display, [&](ExprPtr const& expr) { return once(ctx, expr); });
             if (described.info.kind == table::ColumnKind::Measure &&
                 (display.display.decimals || !display.display.unit.empty())) {
                 report(part->path, "`" + described.info.id +
@@ -15109,11 +15131,10 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         source.ownCell.at(at) = parts.at(at) != nullptr && !parts.at(at)->nodes("cell").empty();
     }
     // The companions travel with their column: the query names them beside the columns the mount names.
-    model.rows->companions(
-        [described = std::make_shared<table::TableDescription const>(*description),
-         overrides](std::span<std::string const> named) {
-            return table::columnsWithCompanions(*described, named, overrides);
-        });
+    model.rows->companions([described = std::make_shared<table::TableDescription const>(*description),
+                            overrides](std::span<std::string const> named) {
+        return table::columnsWithCompanions(*described, named, overrides);
+    });
     // A cell's text, by its column's display. Each column's `DisplayUnits` points into `registry`, so the formatters
     // hold it: it lives as long as the cells do.
     auto const textOfCell = [shown, displayUnits, registry](std::size_t column, Value const& record,
@@ -15162,9 +15183,8 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         }
         return accent;
     };
-    bool const cellExprsGiven = std::ranges::any_of(*cellExprs, [](CellExprs const& exprs) {
-        return exprs.tone != nullptr || exprs.tooltip != nullptr;
-    });
+    bool const cellExprsGiven = std::ranges::any_of(
+        *cellExprs, [](CellExprs const& exprs) { return exprs.tone != nullptr || exprs.tooltip != nullptr; });
     // The row scope a cell's own tone and tooltip expressions read; none when no column gives one.
     auto const exprScope = [this, ctx, &node, &model](reactive::Signal<Value> const& row) {
         std::string key = runtime().untracked([&] {
@@ -15223,8 +15243,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             // The cell owns its scope for as long as its node lives.
             auto const owner =
                 std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(lowerAll(cell, rowCtx), scope);
-            return accentedCell(Node{owner, owner->first.get()},
-                                slotProp<CellAccent>([&row, column, accentOf, scope] {
+            return accentedCell(Node{owner, owner->first.get()}, slotProp<CellAccent>([&row, column, accentOf, scope] {
                                     return accentOf(column, row.get(), scope.get());
                                 }));
         }
@@ -15255,8 +15274,8 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     // or kept it in view, and whether it is locked.
     {
         auto const toneReported = std::make_shared<bool>(false);
-        source.rowView = [this, ctx, &node, &model, toneExpr, labelExpr, toneReported](
-                             reactive::Signal<Value> const& row) {
+        source.rowView = [this, ctx, &node, &model, toneExpr, labelExpr,
+                          toneReported](reactive::Signal<Value> const& row) {
             std::string key = runtime().untracked([&] {
                 Value const* const id = row.peek().field(model.keyColumn);
                 return id == nullptr ? std::string{} : canonicalJson(*id);
@@ -15355,8 +15374,8 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         return keys;
     });
     // The selection the user made: held by the element unless the document binds it, then the command list.
-    auto const selectRows = [this, ctx, &element, commands = node.event("onSelectionChange")](
-                                std::vector<Key> const& keys) {
+    auto const selectRows = [this, ctx, &element,
+                             commands = node.event("onSelectionChange")](std::vector<Key> const& keys) {
         ValueList items;
         for (Key const& key : keys) {
             items.push_back(valueOfKey(key));
@@ -15387,7 +15406,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         return std::vector<Key>(view->except.begin(), view->except.end());
     });
     options.onSelectionChange = [this, &element, &model, select](std::vector<Key> const& keys,
-                                                                   SelectionChange change) {
+                                                                 SelectionChange change) {
         tableGesture(element);
         std::optional<TableSelection> const viewing = model.viewSelection.peek();
         if (viewing && change == SelectionChange::Extend) {
@@ -15442,16 +15461,16 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     // window does not hold them, and select as the gesture says. Past `maxRangeRows` it is refused and selects
     // nothing.
     options.onSelectRange = [this, ctx, &element, &model, select](std::size_t anchor, std::size_t focus,
-                                                                     SelectionChange change) {
+                                                                  SelectionChange change) {
         tableGesture(element);
         std::size_t const first = std::min(anchor, focus);
         std::size_t const count = std::max(anchor, focus) - first + 1;
         std::size_t const bound = session.options().maxRangeRows;
         if (count > bound) {
-            tableMessage(element, "A range selects at most " +
-                                      render::formatCanonicalNumber(std::to_string(bound),
-                                                                    ctx.scope->formatting().numeric) +
-                                      " rows");
+            tableMessage(element,
+                         "A range selects at most " +
+                             render::formatCanonicalNumber(std::to_string(bound), ctx.scope->formatting().numeric) +
+                             " rows");
             return;
         }
         // In a selection of the view a range changes `except`: from an anchor left out it leaves the range out,
@@ -15482,31 +15501,30 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             return;
         }
         model.rows->keysOf(static_cast<std::int64_t>(first), static_cast<std::int64_t>(count))
-            .then(model.scope,
-                  [this, &element, select = std::weak_ptr{select}, change](
-                      std::expected<std::vector<table::RowId>, table::TableError> const& found) {
-                      if (!found) {
-                          tableMessage(element, "The range could not be selected: " + found.error().message);
-                          return;
-                      }
-                      std::vector<Key> keys;
-                      if (change == SelectionChange::Extend) {
-                          if (ValueList const* const held = tableSelection(element).asList()) {
-                              for (Value const& item : *held) {
-                                  keys.push_back(keyOf(item));
-                              }
-                          }
-                      }
-                      for (table::RowId const& id : *found) {
-                          Key const key = std::visit([](auto const& value) { return Key{value}; }, id);
-                          if (!std::ranges::contains(keys, key)) {
-                              keys.push_back(key);
-                          }
-                      }
-                      if (auto const live = select.lock()) {
-                          (*live)(keys);
-                      }
-                  });
+            .then(model.scope, [this, &element, select = std::weak_ptr{select},
+                                change](std::expected<std::vector<table::RowId>, table::TableError> const& found) {
+                if (!found) {
+                    tableMessage(element, "The range could not be selected: " + found.error().message);
+                    return;
+                }
+                std::vector<Key> keys;
+                if (change == SelectionChange::Extend) {
+                    if (ValueList const* const held = tableSelection(element).asList()) {
+                        for (Value const& item : *held) {
+                            keys.push_back(keyOf(item));
+                        }
+                    }
+                }
+                for (table::RowId const& id : *found) {
+                    Key const key = std::visit([](auto const& value) { return Key{value}; }, id);
+                    if (!std::ranges::contains(keys, key)) {
+                        keys.push_back(key);
+                    }
+                }
+                if (auto const live = select.lock()) {
+                    (*live)(keys);
+                }
+            });
     };
     options.highlight = slotProp<std::optional<TableHighlight>>([&model] { return model.highlight.get(); });
     // The header's sort chain and menus, and the columns' arrangement; the column chooser and the sort dialog.
@@ -15547,9 +15565,8 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         model.config.beginMount();
         model.config.filterTarget = [shown, displayUnits, registry, described, labels, refused, unitsOf,
                                      listed](std::string const& id) -> std::optional<FilterTarget> {
-            auto const found = std::ranges::find_if(*shown, [&id](table::TableColumn const& column) {
-                return column.info.id == id;
-            });
+            auto const found =
+                std::ranges::find_if(*shown, [&id](table::TableColumn const& column) { return column.info.id == id; });
             if (found == shown->end() || !found->filterable) {
                 return std::nullopt;
             }
@@ -15565,7 +15582,8 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             target.unitList = described->units;
             if (found->info.kind == table::ColumnKind::Measure) {
                 for (MenuDimension const& dimension : unitsOf(*found)) {
-                    target.unitChoices.insert(target.unitChoices.end(), dimension.units.begin(), dimension.units.end());
+                    target.unitChoices.insert(target.unitChoices.end(), dimension.units.begin(),
+                                              dimension.units.end());
                 }
             }
             target.listed = listed;
@@ -15573,11 +15591,10 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             return target;
         };
         // A cell a menu opens on: unloaded while its row holds no field for it or its level has not loaded.
-        model.config.heldCell = [&model, shown, displayUnits, registry](Key const& key,
-                                                                        std::string const& id) -> std::optional<HeldCell> {
-            auto const found = std::ranges::find_if(*shown, [&id](table::TableColumn const& column) {
-                return column.info.id == id;
-            });
+        model.config.heldCell = [&model, shown, displayUnits, registry](
+                                    Key const& key, std::string const& id) -> std::optional<HeldCell> {
+            auto const found =
+                std::ranges::find_if(*shown, [&id](table::TableColumn const& column) { return column.info.id == id; });
             if (found == shown->end()) {
                 return std::nullopt;
             }
@@ -15590,8 +15607,9 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                     }
                     Value const* const field = ref->row.field(id);
                     table::UnloadedLevels const levels = model.rows->unloadedLevels(at);
-                    bool const unloaded = field == nullptr || (!found->info.level.empty() &&
-                                                               std::ranges::contains(levels.levels, found->info.level));
+                    bool const unloaded =
+                        field == nullptr ||
+                        (!found->info.level.empty() && std::ranges::contains(levels.levels, found->info.level));
                     return HeldCell{.record = ref->row,
                                     .cell = unloaded ? table::Cell{table::Unloaded{}}
                                                      : cellOfRecord(field, *found, registry.get()),
@@ -15603,11 +15621,11 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             return std::nullopt;
         };
         model.config.dimensions = [shown, unitsOf](std::string const& id) {
-            auto const found = std::ranges::find_if(*shown, [&id](table::TableColumn const& column) {
-                return column.info.id == id;
-            });
-            return found == shown->end() || found->info.kind != table::ColumnKind::Measure ? std::vector<MenuDimension>{}
-                                                                                           : unitsOf(*found);
+            auto const found =
+                std::ranges::find_if(*shown, [&id](table::TableColumn const& column) { return column.info.id == id; });
+            return found == shown->end() || found->info.kind != table::ColumnKind::Measure
+                       ? std::vector<MenuDimension>{}
+                       : unitsOf(*found);
         };
     }
     // A copy reads the rows the window holds and fetches the others by key, naming the columns copied; each cell
@@ -15633,9 +15651,8 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         std::vector<std::string> named;
         CopyGathered gathered;
         for (std::string const& id : ids) {
-            auto const found = std::ranges::find_if(*shown, [&id](table::TableColumn const& column) {
-                return column.info.id == id;
-            });
+            auto const found =
+                std::ranges::find_if(*shown, [&id](table::TableColumn const& column) { return column.info.id == id; });
             if (found != shown->end()) {
                 places.push_back(static_cast<std::size_t>(found - shown->begin()));
                 named.push_back(id);
@@ -15666,10 +15683,10 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                          ++column) {
                         table::Cell const& cell = fetchedRow.cells.at(column);
                         std::size_t const place = places.at(column);
-                        row.cells.push_back(std::holds_alternative<table::Unloaded>(cell)
-                                                ? std::nullopt
-                                                : std::optional{formatCell(cell, shown->at(place), format,
-                                                                           displayUnits->at(place))});
+                        row.cells.push_back(
+                            std::holds_alternative<table::Unloaded>(cell)
+                                ? std::nullopt
+                                : std::optional{formatCell(cell, shown->at(place), format, displayUnits->at(place))});
                     }
                     gathered.rows.push_back(std::move(row));
                 }
@@ -15682,9 +15699,8 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         std::vector<std::string> named;
         CopyGathered gathered;
         for (std::string const& id : ids) {
-            auto const found = std::ranges::find_if(*shown, [&id](table::TableColumn const& column) {
-                return column.info.id == id;
-            });
+            auto const found =
+                std::ranges::find_if(*shown, [&id](table::TableColumn const& column) { return column.info.id == id; });
             if (found != shown->end()) {
                 places.push_back(static_cast<std::size_t>(found - shown->begin()));
                 named.push_back(id);
@@ -15743,10 +15759,10 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                          ++column) {
                         table::Cell const& cell = fetchedRow.cells.at(column);
                         std::size_t const place = places.at(column);
-                        row.cells.push_back(std::holds_alternative<table::Unloaded>(cell)
-                                                ? std::nullopt
-                                                : std::optional{formatCell(cell, shown->at(place), format,
-                                                                           displayUnits->at(place))});
+                        row.cells.push_back(
+                            std::holds_alternative<table::Unloaded>(cell)
+                                ? std::nullopt
+                                : std::optional{formatCell(cell, shown->at(place), format, displayUnits->at(place))});
                     }
                     gathered.rows.push_back(std::move(row));
                 }
@@ -15769,13 +15785,11 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     model.rows->mounting();
     if (std::shared_ptr<GridController> const grid =
             editableModelTable(node, ctx, element, *description, *shown, source, options, drafts)) {
-        return besideDialogs(options.common, std::move(dialogs), [&] {
-            return grid->node(std::move(columns), std::move(options), std::move(source));
-        });
+        return besideDialogs(options.common, std::move(dialogs),
+                             [&] { return grid->node(std::move(columns), std::move(options), std::move(source)); });
     }
-    return besideDialogs(options.common, std::move(dialogs), [&] {
-        return ui::table(std::move(columns), std::move(source), std::move(options));
-    });
+    return besideDialogs(options.common, std::move(dialogs),
+                         [&] { return ui::table(std::move(columns), std::move(source), std::move(options)); });
 }
 
 // A model's table with a column its description edits is mounted as a grid over its cells: each editable column's
@@ -15801,8 +15815,8 @@ std::shared_ptr<GridController> ScreenCore::editableModelTable(
             if (schema) {
                 if (auto made = forms::FormModel::fromSchema(described.edit->action, *schema)) {
                     column.model = std::make_shared<forms::FormModel const>(std::move(*made));
-                    column.path = described.edit->member.empty() ? std::string{"value"}
-                                                                 : "values." + described.edit->member;
+                    column.path =
+                        described.edit->member.empty() ? std::string{"value"} : "values." + described.edit->member;
                     editable = true;
                 } else {
                     report(node.path, "`" + described.info.id + "` is edited by `" + described.edit->action +
@@ -15865,19 +15879,18 @@ std::shared_ptr<GridController> ScreenCore::editableModelTable(
         runtime().untracked([cells] { cells->touch(); });
     }));
     // The walk follows the visible columns in layout order, and the cells the scope's formatting.
-    held->effects.push_back(
-        std::make_unique<reactive::Effect>(runtime(), [this, &model, cells, scope = ctx.scope] {
-            TableConfig const& arranged = model.config;
-            std::vector<std::string> visible =
-                layoutOver(arranged.columns, arranged.declaredHidden, layoutNow(arranged)).visible();
-            FormatContext format = scope->formatting();
-            runtime().untracked([&] {
-                if (!visible.empty()) {
-                    cells->setLayout(std::move(visible));
-                }
-                cells->setFormat(std::move(format));
-            });
-        }));
+    held->effects.push_back(std::make_unique<reactive::Effect>(runtime(), [this, &model, cells, scope = ctx.scope] {
+        TableConfig const& arranged = model.config;
+        std::vector<std::string> visible =
+            layoutOver(arranged.columns, arranged.declaredHidden, layoutNow(arranged)).visible();
+        FormatContext format = scope->formatting();
+        runtime().untracked([&] {
+            if (!visible.empty()) {
+                cells->setLayout(std::move(visible));
+            }
+            cells->setFormat(std::move(format));
+        });
+    }));
     controller->keepAlive(held);
     source.rows = std::shared_ptr<TableRows>(grid, &grid->view());
     // Every cell is the column's own, so each draws its marks: no default cell is shared across columns.
@@ -16518,9 +16531,9 @@ std::string ScreenCore::gridSummaryText(DocNode const& part, LowerCtx const& ctx
                                         std::string const& column) {
     Value const* const first = record.field(kSummaryFirstField);
     Value const* const count = record.field(kSummaryCountField);
-    ValueList rows = summaryScopeRows(held.grid.source->view(),
-                                      first != nullptr && first->asInt() != nullptr ? *first->asInt() : 0,
-                                      count != nullptr && count->asInt() != nullptr ? *count->asInt() : 0);
+    ValueList rows =
+        summaryScopeRows(held.grid.source->view(), first != nullptr && first->asInt() != nullptr ? *first->asInt() : 0,
+                         count != nullptr && count->asInt() != nullptr ? *count->asInt() : 0);
     std::optional<Value> const value = summaryValue(part, record, column, ctx, std::move(rows));
     if (!value) {
         return {};

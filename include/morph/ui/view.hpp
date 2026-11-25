@@ -1453,7 +1453,8 @@ struct AccentedCell {
     Prop<CellAccent> accent;
 };
 
-/// @brief What marks one cell of an editable table: read-only, changed since the record was loaded, not encoding, being
+/// @brief What marks one cell of an editable table: read-only, changed since the record was loaded, not encoding,
+/// being
 ///        saved, or being recomputed.
 struct CellMarks {
     /// @brief The cell takes no edit: drawn on the theme's read-only cell surface.
@@ -1813,7 +1814,8 @@ struct Table {
     ///        none, and the range is kept. The backend draws no row selection and reports no `onSelectionChange`. A
     ///        table over a `TableSource` only.
     std::optional<Prop<std::optional<CellRange>>> cellSelection;
-    /// @brief Called, while `cellSelection` is engaged, with the rectangle the user selected: a drag from cell to cell,
+    /// @brief Called, while `cellSelection` is engaged, with the rectangle the user selected: a drag from cell to
+    /// cell,
     ///        a `Shift`+click, a row header's click or a column header's selection gesture.
     std::function<void(std::optional<CellRange>)> onCellSelect;
 };

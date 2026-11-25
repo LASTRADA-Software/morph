@@ -44,19 +44,19 @@ public:
     /// @param key    The table's state key; its `part` is ignored.
     /// @param owner  The session's owner, where completions are delivered. Borrowed: it must outlive them.
     TableViews(TableStates& states, table::TableStateKey key, exec::IExecutor& owner)
-        : _held{std::make_shared<Held>(Held{.states = &states,
-                                            .owner = &owner,
-                                            .own = Part{.key = partOf(key, "views"), .document = {}, .revision = {}},
-                                            .shared = Part{.key = partOf(key, "shared"), .document = {},
-                                                           .revision = {}}})} {}
+        : _held{std::make_shared<Held>(
+              Held{.states = &states,
+                   .owner = &owner,
+                   .own = Part{.key = partOf(key, "views"), .document = {}, .revision = {}},
+                   .shared = Part{.key = partOf(key, "shared"), .document = {}, .revision = {}}})} {}
 
     /// @brief Loads the user's views, and the shared ones when the store shares.
     /// @return Completes when every part is read; the reason a part could not be read otherwise.
     [[nodiscard]] async::Completion<Result> load() {
         auto [completion, promise] = async::Completion<Result>::makeSettleable(_held->owner);
         bool const shares = this->shares();
-        auto const settle = std::make_shared<Settle>(
-            Settle{.promise = std::move(promise), .waiting = shares ? 2 : 1, .failure = {}});
+        auto const settle =
+            std::make_shared<Settle>(Settle{.promise = std::move(promise), .waiting = shares ? 2 : 1, .failure = {}});
         loadPart(_held, &Held::own, settle);
         if (shares) {
             loadPart(_held, &Held::shared, settle);
@@ -191,7 +191,8 @@ private:
     }
 
     // Takes what the store holds for a part: its document and revision, or none.
-    [[nodiscard]] static std::optional<std::string> take(Part& part, std::optional<table::StoredTableState> const& stored) {
+    [[nodiscard]] static std::optional<std::string> take(Part& part,
+                                                         std::optional<table::StoredTableState> const& stored) {
         if (!stored) {
             part.document = {};
             part.revision.reset();
@@ -206,7 +207,8 @@ private:
         return std::nullopt;
     }
 
-    static void loadPart(std::shared_ptr<Held> const& held, Part Held::* member, std::shared_ptr<Settle> const& settle) {
+    static void loadPart(std::shared_ptr<Held> const& held, Part Held::* member,
+                         std::shared_ptr<Settle> const& settle) {
         auto const done = [settle](std::string failure) {
             if (settle->failure.empty()) {
                 settle->failure = std::move(failure);
@@ -269,8 +271,9 @@ private:
         }
         table::ITableStateStore& store = saving->held->states->store();
         std::string json = table::writeViews(*applied, saving->part);
-        auto sent = saving->part == table::ViewsPart::Own ? store.save(part.key, json, std::move(expected))
-                                                          : store.publish(part.key, saving->operation, std::move(expected));
+        auto sent = saving->part == table::ViewsPart::Own
+                        ? store.save(part.key, json, std::move(expected))
+                        : store.publish(part.key, saving->operation, std::move(expected));
         sent.then([saving, document = std::move(*applied), json](table::SaveResult const& result) mutable {
                 answered(saving, std::move(document), std::move(json), result);
             })
@@ -286,14 +289,14 @@ private:
             case table::SaveOutcome::Saved:
                 part.document = std::move(document);
                 part.revision = result.revision;
-                saving->held->states->keep(part.key,
-                                           table::StoredTableState{.json = std::move(json), .revision = result.revision});
+                saving->held->states->keep(
+                    part.key, table::StoredTableState{.json = std::move(json), .revision = result.revision});
                 saving->promise.resolve(Result{});
                 return;
             case table::SaveOutcome::Conflict:
                 if (saving->retried) {
-                    saving->promise.resolve(Result{
-                        std::unexpected(failed(saving->part, "another window changed them at the same time"))});
+                    saving->promise.resolve(
+                        Result{std::unexpected(failed(saving->part, "another window changed them at the same time"))});
                     return;
                 }
                 saving->retried = true;
@@ -315,8 +318,9 @@ private:
             .then([saving](std::optional<table::StoredTableState> const& stored) {
                 Part& reread = partIn(*saving->held, saving->part);
                 if (auto failure = take(reread, stored)) {
-                    saving->promise.resolve(Result{std::unexpected(
-                        saving->part == table::ViewsPart::Own ? std::move(*failure) : failed(saving->part, *failure))});
+                    saving->promise.resolve(Result{std::unexpected(saving->part == table::ViewsPart::Own
+                                                                       ? std::move(*failure)
+                                                                       : failed(saving->part, *failure))});
                     return;
                 }
                 if (stored) {

@@ -46,6 +46,7 @@
 #include <functional>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <memory>
 #include <morph/core/callback_scope.hpp>
 #include <morph/core/executor.hpp>
@@ -54,7 +55,6 @@
 #include <morph/table/filter.hpp>
 #include <morph/table/sort.hpp>
 #include <morph/table/view_change.hpp>
-#include <map>
 #include <numeric>
 #include <optional>
 #include <span>
@@ -522,8 +522,9 @@ struct RetainedOrder {
     out.order.reserve(baseOrder.size() + placed.size());
     auto from = baseOrder.begin();
     for (auto const& [row, decided] : placed) {
-        auto const to = std::upper_bound(
-            from, baseOrder.end(), row, [&before](std::uint32_t left, std::uint32_t right) { return before(left, right); });
+        auto const to =
+            std::upper_bound(from, baseOrder.end(), row,
+                             [&before](std::uint32_t left, std::uint32_t right) { return before(left, right); });
         out.order.insert(out.order.end(), from, to);
         from = to;
         if (decided == Match::No) {
@@ -1327,7 +1328,8 @@ public:
     }
 
     /// @brief Takes in every change the source notified at once, rather than at the owner's next turn: what a
-    ///        caller that changed the source and reads the view in the same turn calls. Nothing notified, nothing done.
+    ///        caller that changed the source and reads the view in the same turn calls. Nothing notified, nothing
+    ///        done.
     void flush() { flushChanges(); }
 
     /// @brief Rows currently held in place by `Deferred` reorder.
@@ -1349,9 +1351,9 @@ private:
     // What the engine's state was when a job's input was taken, to tell on
     // the job's return whether a later change made its result useless.
     struct Ticket {
-        std::uint64_t epoch = 0;           // structural changes absorbed
-        std::uint64_t changeSeq = 0;       // notifications absorbed
-        std::uint64_t columnsVersion = 0;  // column sets adopted
+        std::uint64_t epoch = 0;            // structural changes absorbed
+        std::uint64_t changeSeq = 0;        // notifications absorbed
+        std::uint64_t columnsVersion = 0;   // column sets adopted
         std::uint64_t retainedVersion = 0;  // retained sets asked for
     };
 
@@ -1964,9 +1966,9 @@ private:
     std::shared_ptr<CompiledFilter const> _appliedFilter;
     std::uint64_t _viewColumnsVersion = 0;
     std::uint64_t _viewEpoch = 0;
-    std::uint64_t _viewChangeSeq = 0;      // notifications the view took in
-    std::vector<std::uint32_t> _view;      // displayed
-    std::vector<std::uint32_t> _trueView;  // sorted and filtered, without holds
+    std::uint64_t _viewChangeSeq = 0;       // notifications the view took in
+    std::vector<std::uint32_t> _view;       // displayed
+    std::vector<std::uint32_t> _trueView;   // sorted and filtered, without holds
     std::vector<std::uint32_t> _undecided;  // neither admitted nor rejected, source rows ascending
     std::vector<RowId> _appliedRetained;
     std::uint64_t _appliedRetainedVersion = 0;

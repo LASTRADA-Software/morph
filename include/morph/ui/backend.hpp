@@ -932,10 +932,9 @@ public:
     ///                `setColumns` gave); asked for each time the menu opens or a key is matched.
     /// @param chosen  Called with the cell's row and column and the chosen entry's path, an index per level from the
     ///                top; never for a separator, a heading, a disabled entry or one with a submenu.
-    virtual void setCellMenu(std::function<std::vector<MenuEntry>(Key const& row, std::size_t column)> entries,
-                             std::function<void(Key const& row, std::size_t column,
-                                                std::vector<std::size_t> const& path)>
-                                 chosen) = 0;
+    virtual void setCellMenu(
+        std::function<std::vector<MenuEntry>(Key const& row, std::size_t column)> entries,
+        std::function<void(Key const& row, std::size_t column, std::vector<std::size_t> const& path)> chosen) = 0;
 
     /// @brief The chords the cell menu's entries may declare, the only keys that ask for the focused cell's entries
     ///        (`setCellMenu`). Called for a table with a cell menu, once it is built; a table never told this runs no
@@ -998,9 +997,9 @@ public:
     /// @brief Tells the backend which contiguous range of view rows is realized and how many rows exist in total, so
     ///        it can size a scrollbar and place leading/trailing space for the rows that are not realized. Called
     ///        after each pass for every table over a `TableSource` (one that realizes every row with the whole view,
-    ///        `(0, count, count)`), and for a table over `rows` at or above its `Virtualization::threshold`, whether or
-    ///        not the backend reports a range. The focused row a source table keeps realized beyond the range is not
-    ///        counted: `setRowIndex` places it.
+    ///        `(0, count, count)`), and for a table over `rows` at or above its `Virtualization::threshold`, whether
+    ///        or not the backend reports a range. The focused row a source table keeps realized beyond the range is
+    ///        not counted: `setRowIndex` places it.
     /// @param first The view index of the first row of the range.
     /// @param count How many rows the range holds, from `first`.
     /// @param total How many rows the table's data has, realized or not.
@@ -1134,8 +1133,8 @@ public:
     ///        keys for, instead of resolving the range itself.
     /// @param handler The handler, with the view rows of the range's anchor and end, and the kind of change; empty
     ///        does nothing.
-    virtual void setOnSelectRange(std::function<void(std::size_t anchorRow, std::size_t focusRow, SelectionChange)>
-                                      handler) {
+    virtual void setOnSelectRange(
+        std::function<void(std::size_t anchorRow, std::size_t focusRow, SelectionChange)> handler) {
         static_cast<void>(handler);
     }
 
@@ -1171,7 +1170,8 @@ public:
     ///        `true` (its first click calls it with `false`, as a single click does).
     /// @param onClick The handler, with the cell's view row and its column (an index into the columns `setColumns`
     ///        gave); empty does nothing.
-    virtual void setOnCellClick(std::function<void(std::size_t viewRow, std::size_t column, bool doubleClick)> onClick) {
+    virtual void setOnCellClick(
+        std::function<void(std::size_t viewRow, std::size_t column, bool doubleClick)> onClick) {
         static_cast<void>(onClick);
     }
 
@@ -1191,14 +1191,16 @@ public:
 
     /// @brief Draws a rectangle of selected cells in place of a row selection, or none. Never calls the handler
     ///        `setOnCellSelect` gave.
-    /// @param rect `{firstRow, rowCount, firstPosition, positionCount}`: view rows, and places among the visible columns
+    /// @param rect `{firstRow, rowCount, firstPosition, positionCount}`: view rows, and places among the visible
+    /// columns
     ///        in layout order (a rectangle is of the layout, so these are positions, not indices into the columns
     ///        `setColumns` gave); empty draws none.
     virtual void setCellSelection(std::optional<std::array<std::size_t, 4>> rect) { static_cast<void>(rect); }
 
     /// @brief Makes the table select cells, not rows: it draws no row selection and reports no `onSelectionChange`.
-    ///        It calls the handler with the rectangle a drag from cell to cell or a `Shift`+click selects, a row header's
-    ///        click (anchor `(row, 0)`, focus `(row, last position)`) and a column header's selection gesture (anchor
+    ///        It calls the handler with the rectangle a drag from cell to cell or a `Shift`+click selects, a row
+    ///        header's click (anchor `(row, 0)`, focus `(row, last position)`) and a column header's selection gesture
+    ///        (anchor
     ///        `(0, position)`, focus `(last row, position)`). `Shift` with an arrow and `Ctrl+A` are the table's own
     ///        chords, declared with `setKeys`, not the backend's.
     /// @param onSelect The handler, with the anchor's and the focus's view rows and visible positions; empty selects
@@ -1210,9 +1212,9 @@ public:
     }
 
     /// @brief Sets a cell's marks; called after the row's key, on every change, and whenever a cell is attached to a
-    ///        row at a column, for a table whose rows come from a `TableSource`. `readOnly` draws the theme's read-only
-    ///        cell surface, `modified` the modified mark, `error` the error mark, `stale` and `muted` the stale and
-    ///        muted looks. A cell no call names has no marks.
+    ///        row at a column, for a table whose rows come from a `TableSource`. `readOnly` draws the theme's
+    ///        read-only cell surface, `modified` the modified mark, `error` the error mark, `stale` and `muted` the
+    ///        stale and muted looks. A cell no call names has no marks.
     /// @param row    One of this table's rows.
     /// @param column The cell's column: an index into the columns `setColumns` gave.
     /// @param marks  The marks.

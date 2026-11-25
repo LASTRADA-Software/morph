@@ -1248,7 +1248,8 @@ TEST_CASE("qt_quick table: the sorted column's header shows and states its direc
 
 // Controls: report the edge drag's width in pixels instead of units; read the drag's translation once it has ended
 // (no change of width); leave the filter button above the edge (the filterable header's drag reaches no edge).
-TEST_CASE("qt_quick table: dragging a header's trailing edge reports units, a double click on it none", "[qt_quick][table]") {
+TEST_CASE("qt_quick table: dragging a header's trailing edge reports units, a double click on it none",
+          "[qt_quick][table]") {
     bool const filterable = GENERATE(false, true);
     CAPTURE(filterable);
     Scene scene;
@@ -2570,9 +2571,10 @@ TEST_CASE("qt_quick table: an unloaded cell is a placeholder and a failed one an
 // Mutations: the tint painted opaque over the row's selection fill (its alpha is 1); the slot under the row's
 // background (z -1), where a toned or selected row hides it; `invalid` ignored by
 // MorphTableRow.qml, which draws no error mark (cellLoadAt is 0 and no failedMark exists).
-TEST_CASE("qt_quick table: a toned cell keeps its selection mark, a tooltip cell is described, a unit header is named "
-          "with its unit",
-          "[qt_quick]") {
+TEST_CASE(
+    "qt_quick table: a toned cell keeps its selection mark, a tooltip cell is described, a unit header is named "
+    "with its unit",
+    "[qt_quick]") {
     QuickWindowFixture f{10, 3, {.units = {"kg"}}};
     auto* const header = itemNamed(*f.item(), QStringLiteral("header0"));
     REQUIRE(header != nullptr);
@@ -2725,9 +2727,8 @@ TEST_CASE("qt_quick table window: Shift with an arrow and Ctrl+A select through 
 // handler is never called).
 TEST_CASE("qt_quick table window: a select-all handler takes Ctrl+A and the select-all box over a source",
           "[qt_quick]") {
-    QuickWindowFixture f{100'000,
-                         30,
-                         {.selection = ui::SelectionMode::Multiple, .selectColumn = true, .selectAllHandler = true}};
+    QuickWindowFixture f{
+        100'000, 30, {.selection = ui::SelectionMode::Multiple, .selectColumn = true, .selectAllHandler = true}};
     CHECK(f.prop("selectAllHandled").toBool());
     f.item()->forceActiveFocus();
     f.scene.key(Qt::Key_A, Qt::ControlModifier);
@@ -2944,18 +2945,18 @@ TEST_CASE("qt_quick table: a status entry reports its id", "[qt_quick]") {
     Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::Multiple);
     std::vector<std::string> chosen;
     table.table->setOnStatusEntry([&chosen](std::string id) { chosen.push_back(std::move(id)); });
-    table.table->setStatus(ui::TableStatus{.message = "m",
-                                           .entries = {{.id = "run", .label = "Run on these"}},
-                                           .standing = "1 row could not be saved",
-                                           .standingEntries = {{.id = "select", .label = "Select them"},
-                                                               {.id = "clear", .label = "Clear marks"}},
-                                           .shown = true});
+    table.table->setStatus(ui::TableStatus{
+        .message = "m",
+        .entries = {{.id = "run", .label = "Run on these"}},
+        .standing = "1 row could not be saved",
+        .standingEntries = {{.id = "select", .label = "Select them"}, {.id = "clear", .label = "Clear marks"}},
+        .shown = true});
     scene.settle();
     QQuickItem& item = Scene::itemOf(*table.table);
-    for (auto const& [id, label] : std::vector<std::pair<QString, QString>>{
-             {QStringLiteral("run"), QStringLiteral("Run on these")},
-             {QStringLiteral("select"), QStringLiteral("Select them")},
-             {QStringLiteral("clear"), QStringLiteral("Clear marks")}}) {
+    for (auto const& [id, label] :
+         std::vector<std::pair<QString, QString>>{{QStringLiteral("run"), QStringLiteral("Run on these")},
+                                                  {QStringLiteral("select"), QStringLiteral("Select them")},
+                                                  {QStringLiteral("clear"), QStringLiteral("Clear marks")}}) {
         auto const* const button = itemNamed(item, QStringLiteral("statusEntry_") + id);
         REQUIRE(button != nullptr);
         CHECK(button->property("text").toString() == label);
@@ -2971,14 +2972,14 @@ namespace {
 struct QuickGrid {
     QuickGrid() {
         form = std::make_unique<morph::forms::FormSession>(
-            scene.runtime(),
-            morph::test::formsengine::modelOf("Lims_RecordSpecimens", morph::test::grid::kSpecimens),
+            scene.runtime(), morph::test::formsengine::modelOf("Lims_RecordSpecimens", morph::test::grid::kSpecimens),
             server.submitter(), server.fetcher(),
             morph::forms::FormSessionOptions{.locale = ui::localeFacts("de").numeric, .bcp47 = "de"});
         form->prefill(R"({"sampleId":1,"specimens":[{},{}]})");
         std::vector<ui::GridColumn> columns;
         for (morph::forms::FieldSpec const& member : form->field("specimens").spec().children) {
-            columns.push_back(ui::GridColumn{.id = member.name, .label = member.name, .field = member.name, .value = {}});
+            columns.push_back(
+                ui::GridColumn{.id = member.name, .label = member.name, .field = member.name, .value = {}});
         }
         ui::TableOptions table;
         table.common.testId = "grid";
@@ -2989,8 +2990,8 @@ struct QuickGrid {
         ui::TextInput after;
         after.common.testId = "after";
         view.emplace(scene.runtime(), scene.backend(),
-                     ui::column(ui::Column{.children = {ui::textInput(std::move(before)), grid.node,
-                                                        ui::textInput(std::move(after))}}));
+                     ui::column(ui::Column{
+                         .children = {ui::textInput(std::move(before)), grid.node, ui::textInput(std::move(after))}}));
         scene.settle();
     }
     QuickGrid(QuickGrid const&) = delete;
@@ -3078,7 +3079,8 @@ TEST_CASE("qt_quick grid: a double click opens the editor in the cell and focus 
     CHECK(g.grid.grid->editing() == morph::test::grid::at(2, "mass"));
     QList<QQuickItem*> const fields = Scene::itemsOf(g.named(QStringLiteral("grid")), "QQuickTextField");
     REQUIRE(fields.size() == 1);
-    QPointF const centre = fields.front()->mapToScene(QPointF{fields.front()->width() / 2, fields.front()->height() / 2});
+    QPointF const centre =
+        fields.front()->mapToScene(QPointF{fields.front()->width() / 2, fields.front()->height() / 2});
     CHECK(area.contains(centre));
     CHECK(fields.front()->hasActiveFocus());
     g.scene.type(QStringLiteral("7"));
@@ -3123,8 +3125,8 @@ TEST_CASE("qt_quick grid: a drag selects a rectangle of cells and a row header c
     QuickGrid g;
     QQuickItem& table = g.named(QStringLiteral("grid"));
     CHECK(table.property("selectsCells").toBool());
-    QPoint const start = Scene::centreOf(g.cellAt(0, 1));   // (1, mass)
-    QPoint const end = Scene::centreOf(g.cellAt(1, 2));     // (2, volume)
+    QPoint const start = Scene::centreOf(g.cellAt(0, 1));  // (1, mass)
+    QPoint const end = Scene::centreOf(g.cellAt(1, 2));    // (2, volume)
     QTest::mousePress(&g.scene.window(), Qt::LeftButton, {}, start);
     constexpr int steps = 10;
     for (int step = 1; step <= steps; ++step) {
@@ -3132,7 +3134,8 @@ TEST_CASE("qt_quick grid: a drag selects a rectangle of cells and a row header c
     }
     QTest::mouseRelease(&g.scene.window(), Qt::LeftButton, {}, end);
     g.scene.settle();
-    CHECK(g.grid.grid->selection() == ui::CellRange{morph::test::grid::at(1, "mass"), morph::test::grid::at(2, "volume")});
+    CHECK(g.grid.grid->selection() ==
+          ui::CellRange{morph::test::grid::at(1, "mass"), morph::test::grid::at(2, "volume")});
     QVariantList const rect = table.property("cellRect").toList();
     REQUIRE(rect.size() == 4);
     CHECK(rect.at(0).toInt() == 0);
@@ -3153,12 +3156,14 @@ TEST_CASE("qt_quick grid: a drag selects a rectangle of cells and a row header c
     QPointF const header = row.mapToScene(QPointF{lead / 2, row.height() / 2});
     QTest::mouseClick(&g.scene.window(), Qt::LeftButton, {}, header.toPoint());
     g.scene.settle();
-    CHECK(g.grid.grid->selection() == ui::CellRange{morph::test::grid::at(2, "label"), morph::test::grid::at(2, "note")});
+    CHECK(g.grid.grid->selection() ==
+          ui::CellRange{morph::test::grid::at(2, "label"), morph::test::grid::at(2, "note")});
 }
 
 // Mutation: the header's sort handler taking only a Shift-click in a table that selects cells (the plain click reports
 // no sort).
-TEST_CASE("qt_quick grid: a header click sorts, a Shift-click adds, a Ctrl-click selects the column", "[qt_quick][grid]") {
+TEST_CASE("qt_quick grid: a header click sorts, a Shift-click adds, a Ctrl-click selects the column",
+          "[qt_quick][grid]") {
     Scene scene;
     morph::test::formsengine::FakeServer server{scene.owner()};
     auto form = std::make_unique<morph::forms::FormSession>(
@@ -3183,7 +3188,7 @@ TEST_CASE("qt_quick grid: a header click sorts, a Shift-click adds, a Ctrl-click
     scene.settle();
     QQuickItem* const table = itemNamed(*scene.window().contentItem(), QStringLiteral("grid"));
     REQUIRE(table != nullptr);
-    QQuickItem* const header = itemNamed(*table, QStringLiteral("header1"));   // mass
+    QQuickItem* const header = itemNamed(*table, QStringLiteral("header1"));  // mass
     REQUIRE(header != nullptr);
     scene.click(*header);
     REQUIRE(sorts.size() == 1);
@@ -3192,13 +3197,14 @@ TEST_CASE("qt_quick grid: a header click sorts, a Shift-click adds, a Ctrl-click
     REQUIRE(sorts.size() == 2);
     CHECK(sorts.back() == std::pair{std::size_t{1}, ui::HeaderClick::Shift});
     scene.click(*header, Qt::ControlModifier);
-    CHECK(sorts.size() == 2);   // a Ctrl-click sorts nothing
+    CHECK(sorts.size() == 2);  // a Ctrl-click sorts nothing
     CHECK(grid.grid->selection() == ui::CellRange{morph::test::grid::at(1, "mass"), morph::test::grid::at(2, "mass")});
     view.reset();
     grid = {};
 }
 
-// Mutation: the QML band item placed from its first run's x to its last run's end (one item, as wide as columns 1 to 4).
+// Mutation: the QML band item placed from its first run's x to its last run's end (one item, as wide as columns 1 to
+// 4).
 TEST_CASE("qt_quick table: a band draws over each run of its columns", "[qt_quick][bands]") {
     Scene scene;
     Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);

@@ -58,7 +58,6 @@
 #include <morph/util/rational.hpp>
 #include <optional>
 #include <set>
-#include <unordered_set>
 #include <span>
 #include <stdexcept>
 #include <stop_token>
@@ -67,6 +66,7 @@
 #include <system_error>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -520,8 +520,8 @@ public:
     /// @param first The first view row.
     /// @param count The rows.
     /// @return The keys in view order, or why they cannot be had.
-    virtual async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(std::int64_t first,
-                                                                                               std::int64_t count) = 0;
+    virtual async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(
+        std::int64_t first, std::int64_t count) = 0;
 
     /// @brief Finds the view index of the row with a key, under the current sort and filters, whether or not the row
     ///        is held: what focus follows its key by when a new order moves it away from the rows in view.
@@ -716,8 +716,7 @@ inline constexpr char const* kDuplicateKey = "morph::ui: duplicate ForEach key";
     if (std::isfinite(value)) {
         // The longest fixed text of a finite double: 309 integer digits, a sign, a point and 767 fraction digits.
         std::array<char, 1100> fixed{};
-        auto const written =
-            std::to_chars(fixed.data(), fixed.data() + fixed.size(), value, std::chars_format::fixed);
+        auto const written = std::to_chars(fixed.data(), fixed.data() + fixed.size(), value, std::chars_format::fixed);
         if (written.ec == std::errc{}) {
             if (auto const parsed = table::parseDecimal(std::string_view{fixed.data(), written.ptr})) {
                 return Value{Decimal{*parsed}};
@@ -765,8 +764,8 @@ inline constexpr char const* kDuplicateKey = "morph::ui: duplicate ForEach key";
 /// `DateTime` column's a `Timestamp`. A `Rational` is a `Decimal` with its places. A `double` is the `Decimal` its
 /// shortest fixed-notation text spells, or that text's shortest form as a `String` when it spells none
 /// `table::parseDecimal` reads (non-finite, more than 18 fraction digits, beyond an `int64` numerator). Text is a
-/// `String`, a flag a `Bool`, and a quantity the `Decimal` of its amount in the column's canonical unit. A measure is a
-/// `Quantity` of its amount in its own unit, named by the unit's id in @p units; its amount alone, a `Decimal`, when
+/// `String`, a flag a `Bool`, and a quantity the `Decimal` of its amount in the column's canonical unit. A measure is
+/// a `Quantity` of its amount in its own unit, named by the unit's id in @p units; its amount alone, a `Decimal`, when
 /// @p units is null or does not hold the unit.
 /// @param cell   The cell.
 /// @param column The cell's column, whose kind decides how an integer reads.
@@ -1032,9 +1031,8 @@ public:
             digest.add(_engine->rowIdAt(at));
         }
         auto const retained = _engine->retained();
-        return ViewSelection{.filters = _engine->filter(),
-                             .retained = {retained.begin(), retained.end()},
-                             .revision = digest.text()};
+        return ViewSelection{
+            .filters = _engine->filter(), .retained = {retained.begin(), retained.end()}, .revision = digest.text()};
     }
 
     /// @brief How many rows a selection holds: every row is here, so the count is exact.
@@ -1086,7 +1084,9 @@ public:
     /// @brief Sets the engine's sort.
     /// @param sort The keys.
     /// @return The engine's error, or nothing.
-    std::expected<void, table::TableError> setSort(SortChain sort) override { return _engine->setSort(std::move(sort)); }
+    std::expected<void, table::TableError> setSort(SortChain sort) override {
+        return _engine->setSort(std::move(sort));
+    }
 
     /// @brief Sets the engine's filter.
     /// @param filter The filter.
@@ -1104,9 +1104,8 @@ public:
         using Result = std::expected<table::DistinctValues, table::TableError>;
         auto [completion, promise] = async::Completion<Result>::makeSettleable(_owner);
         auto settle = std::make_shared<async::Completion<Result>::Promise>(std::move(promise));
-        _owner->post(_scope.token().guard([this, settle, request = std::move(request)] {
-            settle->resolve(_engine->distinctValues(request));
-        }));
+        _owner->post(_scope.token().guard(
+            [this, settle, request = std::move(request)] { settle->resolve(_engine->distinctValues(request)); }));
         return std::move(completion);
     }
 
@@ -1225,9 +1224,8 @@ private:
     }
 
     void rowsChanged(table::RowChange const& change) override {
-        _log.push_back(Logged{.snapshot = _source->snapshot(),
-                              .whole = change.kind != table::ChangeKind::Updated,
-                              .rows = change.rows});
+        _log.push_back(Logged{
+            .snapshot = _source->snapshot(), .whole = change.kind != table::ChangeKind::Updated, .rows = change.rows});
     }
 
     // Brings the memo to the engine's view snapshot: every change up to the one that made it is applied. The
@@ -1358,8 +1356,9 @@ struct ValueColumn {
 /// @brief The hidden leading sort key of a grouped rows table: an `Integer` column of each row's run index.
 ///
 /// It begins with U+001F, a character no document name holds, so no column a document declares can share its id.
-inline constexpr std::string_view kGroupRunColumn = "\x1F"
-                                                    "group";
+inline constexpr std::string_view kGroupRunColumn =
+    "\x1F"
+    "group";
 
 namespace detail {
 
@@ -1738,8 +1737,8 @@ public:
     /// @param columns The document's columns, each id once.
     /// @param keyOf   Reads a row's key.
     /// @param units   The registry `Quantity` cells' units are found in; null: none, and every quantity is invalid.
-    ValueRowsSource(reactive::Runtime& runtime, std::vector<ValueColumn> columns, std::function<Key(Value const& row)> keyOf,
-                    std::shared_ptr<table::UnitRegistry const> units = {})
+    ValueRowsSource(reactive::Runtime& runtime, std::vector<ValueColumn> columns,
+                    std::function<Key(Value const& row)> keyOf, std::shared_ptr<table::UnitRegistry const> units = {})
         : _runtime{&runtime},
           _columns{std::move(columns)},
           _keyOf{std::move(keyOf)},
@@ -1747,9 +1746,12 @@ public:
           _held(_columns.size()) {
         _infos.reserve(_columns.size() + 1);
         for (auto const& column : _columns) {
-            _infos.push_back(table::ColumnInfo{
-                .id = column.id, .kind = column.kind.value_or(table::ColumnKind::Text), .comparator = {},
-                .format = {}, .level = {}, .dimensions = {}});
+            _infos.push_back(table::ColumnInfo{.id = column.id,
+                                               .kind = column.kind.value_or(table::ColumnKind::Text),
+                                               .comparator = {},
+                                               .format = {},
+                                               .level = {},
+                                               .dimensions = {}});
         }
     }
 
@@ -1927,8 +1929,12 @@ public:
         _groupUnits = std::move(units);
         bool const listed = _infos.size() > _columns.size();
         if (_group && !listed) {
-            _infos.push_back(table::ColumnInfo{.id = std::string{kGroupRunColumn}, .kind = table::ColumnKind::Integer,
-                                               .comparator = {}, .format = {}, .level = {}, .dimensions = {}});
+            _infos.push_back(table::ColumnInfo{.id = std::string{kGroupRunColumn},
+                                               .kind = table::ColumnKind::Integer,
+                                               .comparator = {},
+                                               .format = {},
+                                               .level = {},
+                                               .dimensions = {}});
         } else if (!_group && listed) {
             _infos.pop_back();
         }
@@ -1989,7 +1995,8 @@ public:
     [[nodiscard]] RecordOf recordOf() const {
         return [](table::RowSnapshot const& snapshot, std::size_t sourceRow) {
             auto const* const rows = dynamic_cast<detail::ValueRowsSnapshot const*>(&snapshot);
-            return RowRecord{.key = snapshot.rowId(sourceRow), .row = rows == nullptr ? Value{} : rows->row(sourceRow)};
+            return RowRecord{.key = snapshot.rowId(sourceRow),
+                             .row = rows == nullptr ? Value{} : rows->row(sourceRow)};
         };
     }
 
@@ -2248,8 +2255,8 @@ private:
             if (same[row] && !changedKind) {
                 continue;
             }
-            Value const value = same[row] ? (tracked ? next.trackers[row]->value : fieldOf(column, rows[row]))
-                                          : std::move(fresh[row]);
+            Value const value =
+                same[row] ? (tracked ? next.trackers[row]->value : fieldOf(column, rows[row])) : std::move(fresh[row]);
             auto converted = detail::convertedCell(value, kind, _units.get());
             next.invalid[row] = converted.invalid ? 1 : 0;
             if (!changedKind && was[row] != std::numeric_limits<std::size_t>::max() &&
@@ -2510,10 +2517,10 @@ struct JsonDecimal {
 /// @brief A member as a cell of a column of @p kind.
 ///
 /// `null` is an empty cell. An integer is an `int64` (beyond its range a `double`), a `Rational` of 0 places under
-/// `Decimal` and a `double` under `Number`; a fractional number a `double`; a string its text, under `Date` its days when it is `YYYY-MM-DD` and
-/// under `DateTime` its seconds rounded down when it is ISO-8601; `{num, den, dp}` its `Rational`; with a `unit` under
-/// `Measure` a measure in @p units' number for the unit (`kUnknownUnit`, invalid, when @p units lacks it). Anything
-/// else is the member's JSON text, which only a `Text` column reads as valid.
+/// `Decimal` and a `double` under `Number`; a fractional number a `double`; a string its text, under `Date` its days
+/// when it is `YYYY-MM-DD` and under `DateTime` its seconds rounded down when it is ISO-8601; `{num, den, dp}` its
+/// `Rational`; with a `unit` under `Measure` a measure in @p units' number for the unit (`kUnknownUnit`, invalid, when
+/// @p units lacks it). Anything else is the member's JSON text, which only a `Text` column reads as valid.
 /// @param member The member.
 /// @param kind   The column's kind.
 /// @param units  The registry a measure's unit is found in; null finds none.
@@ -2595,8 +2602,8 @@ struct JsonDecimal {
 [[nodiscard]] inline std::expected<table::GenericPage, table::TableError> typedPageOf(
     TypedPageDom const& dom, table::TableDescription const& description, table::UnitRegistry const* units) {
     auto const invalid = [](std::string message) {
-        return std::unexpected(
-            table::TableError{.code = table::TableErrorCode::InvalidValue, .column = {}, .message = std::move(message)});
+        return std::unexpected(table::TableError{
+            .code = table::TableErrorCode::InvalidValue, .column = {}, .message = std::move(message)});
     };
     std::shared_ptr<table::UnitRegistry const> built;
     bool const measures = std::ranges::any_of(description.columns, [](table::TableColumn const& column) {
@@ -2931,11 +2938,13 @@ public:
         }
         bool const replacing = _description.has_value() && another;
         table::FitReport report;
-        auto fitted = table::fitState(
-            table::StateDocument{
-                .version = table::kStateVersion, .layout = {}, .sort = _sort, .filters = _filter, .view = {},
-                .carried = {}},
-            description, report);
+        auto fitted = table::fitState(table::StateDocument{.version = table::kStateVersion,
+                                                           .layout = {},
+                                                           .sort = _sort,
+                                                           .filters = _filter,
+                                                           .view = {},
+                                                           .carried = {}},
+                                      description, report);
         _sort = fitted.sort.value_or(SortChain{});
         _filter = fitted.filters.value_or(table::FilterSpec{});
         _description = std::move(description);
@@ -2970,10 +2979,10 @@ public:
         auto const text = ui::detail::canonicalJson(described);
         if (auto const failed = glz::read<glz::opts{.error_on_unknown_keys = false}>(description, text)) {
             _descriptionError = true;
-            _error = table::TableError{.code = table::TableErrorCode::InvalidValue,
-                                       .column = {},
-                                       .message = "the table's description does not read: " +
-                                                  glz::format_error(failed, text)};
+            _error = table::TableError{
+                .code = table::TableErrorCode::InvalidValue,
+                .column = {},
+                .message = "the table's description does not read: " + glz::format_error(failed, text)};
             status();
             return;
         }
@@ -2995,7 +3004,9 @@ public:
     ///        row that was deleted or no longer matches the filter. Called once per such reply, after the rows took
     ///        it, with those keys; a reply that holds every key it named is not reported.
     /// @param handler The receiver; empty to stop receiving.
-    void onRowsAbsent(std::function<void(std::span<table::RowId const>)> handler) { _onRowsAbsent = std::move(handler); }
+    void onRowsAbsent(std::function<void(std::span<table::RowId const>)> handler) {
+        _onRowsAbsent = std::move(handler);
+    }
 
     /// @brief Sets what hears that `error()` or `counts()` may have changed: a fetch was sent, answered or failed,
     ///        or a reply or a description did not read. A failed fetch changes no row, so the view's `onChange` says
@@ -3144,10 +3155,10 @@ public:
         using Result = std::expected<std::vector<table::RowId>, table::TableError>;
         auto [completion, promise] = async::Completion<Result>::makeSettleable(&_session->runtime().owner());
         if (first < 0 || count < 0 || count > std::numeric_limits<std::int64_t>::max() - first) {
-            promise.resolve(Result{std::unexpected(table::TableError{
-                .code = table::TableErrorCode::InvalidSpec,
-                .column = {},
-                .message = std::format("{} rows from view row {} are not a range", count, first)})});
+            promise.resolve(Result{std::unexpected(
+                table::TableError{.code = table::TableErrorCode::InvalidSpec,
+                                  .column = {},
+                                  .message = std::format("{} rows from view row {} are not a range", count, first)})});
             return std::move(completion);
         }
         auto const size = std::max<std::int64_t>(_options.pageSize, 1);
@@ -3215,8 +3226,8 @@ public:
         table::TableQuery query = queryOf(table::PageRequest{}, {});
         query.columns = std::vector<std::string>{};
         query.keys = std::vector<table::RowId>{std::move(key)};
-        auto body = _description ? bodyOf(query)
-                                 : std::expected<Value, table::TableError>{std::unexpected(unavailable())};
+        auto body =
+            _description ? bodyOf(query) : std::expected<Value, table::TableError>{std::unexpected(unavailable())};
         if (!body) {
             _session->runtime().owner().post(
                 _scope.guard([stop = std::move(stop), done = std::move(done), error = std::move(body.error())] {
@@ -3290,9 +3301,9 @@ public:
         for (std::size_t from = 0; from < keys.size(); from += chunk) {
             table::TableQuery query = queryOf(table::PageRequest{}, {});
             query.columns = *named;
-            query.keys = std::vector<table::RowId>(keys.begin() + static_cast<std::ptrdiff_t>(from),
-                                                   keys.begin() + static_cast<std::ptrdiff_t>(
-                                                                      std::min(from + chunk, keys.size())));
+            query.keys = std::vector<table::RowId>(
+                keys.begin() + static_cast<std::ptrdiff_t>(from),
+                keys.begin() + static_cast<std::ptrdiff_t>(std::min(from + chunk, keys.size())));
             auto body = bodyOf(query);
             if (!body) {
                 rowsAnswered(*state, std::unexpected(std::move(body.error())));
@@ -3426,7 +3437,8 @@ public:
             _distinctFlights.erase(_distinctFlights.begin());
         }
         auto const settle = std::make_shared<async::Completion<Result>::Promise>(std::move(promise));
-        reply.then(_scope, [this, settle, flight, epoch = _distinctEpoch, key = std::move(key)](std::string const& text) {
+        reply.then(_scope, [this, settle, flight, epoch = _distinctEpoch,
+                            key = std::move(key)](std::string const& text) {
             _distinctFlights.erase(flight);
             auto read = table::readGenericPage(text, *_description, _units.get());
             if (!read) {
@@ -3434,8 +3446,9 @@ public:
                 return;
             }
             if (!read->distinct) {
-                settle->resolve(Result{std::unexpected(table::TableError{
-                    .code = table::TableErrorCode::InvalidValue, .column = {}, .message = "the reply holds no values"})});
+                settle->resolve(Result{std::unexpected(table::TableError{.code = table::TableErrorCode::InvalidValue,
+                                                                         .column = {},
+                                                                         .message = "the reply holds no values"})});
                 return;
             }
             // A reply asked for before the record changed, the session reconnected or the revision moved answers
@@ -3797,10 +3810,10 @@ private:
                 keys.push_back(*key);
                 continue;
             }
-            request.promise.resolve(Result{std::unexpected(table::TableError{
-                .code = table::TableErrorCode::Unavailable,
-                .column = {},
-                .message = std::format("view row {} is in no page", at)})});
+            request.promise.resolve(
+                Result{std::unexpected(table::TableError{.code = table::TableErrorCode::Unavailable,
+                                                         .column = {},
+                                                         .message = std::format("view row {} is in no page", at)})});
             return;
         }
         request.promise.resolve(Result{std::move(keys)});
@@ -3856,8 +3869,8 @@ private:
         std::vector<FetchedRow> out;
         out.reserve(page.rows.size());
         for (std::size_t at = 0; at < page.rows.size() && at < page.keys.size(); ++at) {
-            auto const unloaded = std::ranges::find(page.unloadedRows, static_cast<std::int64_t>(at),
-                                                    &table::UnloadedRow::index);
+            auto const unloaded =
+                std::ranges::find(page.unloadedRows, static_cast<std::int64_t>(at), &table::UnloadedRow::index);
             FetchedRow row{.key = std::move(page.keys.at(at)), .viewRow = page.indices.at(at), .cells = {}};
             row.cells.reserve(columns.size());
             for (std::size_t column = 0; column < columns.size(); ++column) {
@@ -3903,14 +3916,14 @@ private:
             return table::TableError{.code = code, .column = std::move(column), .message = std::move(message)};
         };
         if (sort.size() > _description->capabilities.maxSortKeys) {
-            return error(table::TableErrorCode::LimitExceeded, {},
-                         std::format("{} sort keys; the table takes {}", sort.size(),
-                                     _description->capabilities.maxSortKeys));
+            return error(
+                table::TableErrorCode::LimitExceeded, {},
+                std::format("{} sort keys; the table takes {}", sort.size(), _description->capabilities.maxSortKeys));
         }
         for (std::size_t at = 0; at < sort.size(); ++at) {
             auto const& id = sort[at].column;
-            auto const column = std::ranges::find(_description->columns, id,
-                                                  [](table::TableColumn const& c) -> auto const& { return c.info.id; });
+            auto const column = std::ranges::find(
+                _description->columns, id, [](table::TableColumn const& c) -> auto const& { return c.info.id; });
             if (column == _description->columns.end()) {
                 return error(table::TableErrorCode::UnknownColumn, id, "no column " + id);
             }
@@ -4029,10 +4042,11 @@ private:
         }
         if (spacing && !_awaitedTimer.active()) {
             auto const wait = *_awaitedLast + _session->options().tableAwaitedRefetch - at;
-            _awaitedTimer = scheduler->after(std::max(wait, std::chrono::milliseconds{1}), _scope.token().guard([this] {
-                _awaitedTimer = {};
-                pump();
-            }));
+            _awaitedTimer =
+                scheduler->after(std::max(wait, std::chrono::milliseconds{1}), _scope.token().guard([this] {
+                    _awaitedTimer = {};
+                    pump();
+                }));
         }
     }
 
@@ -4040,8 +4054,8 @@ private:
     // overlaid with the window's sort, filter, rows and columns.
     [[nodiscard]] std::expected<Value, table::TableError> bodyOf(table::TableQuery const& query) const {
         auto const invalid = [](std::string message) {
-            return std::unexpected(
-                table::TableError{.code = table::TableErrorCode::InvalidValue, .column = {}, .message = std::move(message)});
+            return std::unexpected(table::TableError{
+                .code = table::TableErrorCode::InvalidValue, .column = {}, .message = std::move(message)});
         };
         auto const text = glz::write_json(query);
         if (!text) {
@@ -4167,8 +4181,9 @@ private:
     // added after the units listed, so the numbers held cells carry keep their meaning; at most
     // `detail::kMaxUnlistedUnits` are, the rest staying unknown.
     void listUnits(std::span<glz::generic_u64 const> rows) {
-        auto const added = detail::unlistedUnits(rows, *_description, _units.get(),
-                                                 detail::kMaxUnlistedUnits - std::min(_unlisted, detail::kMaxUnlistedUnits));
+        auto const added =
+            detail::unlistedUnits(rows, *_description, _units.get(),
+                                  detail::kMaxUnlistedUnits - std::min(_unlisted, detail::kMaxUnlistedUnits));
         if (added.empty()) {
             return;
         }
@@ -4211,7 +4226,8 @@ private:
     }
 
     [[nodiscard]] static table::TableError unavailable() {
-        return table::TableError{.code = table::TableErrorCode::Unavailable, .column = {}, .message = "no description"};
+        return table::TableError{
+            .code = table::TableErrorCode::Unavailable, .column = {}, .message = "no description"};
     }
 
     void heardRevision(std::string const& revision) {
@@ -4263,8 +4279,8 @@ private:
                                         .count = static_cast<std::size_t>(rowsBefore - rowsAfter),
                                         .to = 0});
         }
-        auto const places = static_cast<std::size_t>(
-            std::clamp<std::int64_t>(std::min(rowsBefore, rowsAfter) - start, 0, size));
+        auto const places =
+            static_cast<std::size_t>(std::clamp<std::int64_t>(std::min(rowsBefore, rowsAfter) - start, 0, size));
         std::unordered_map<table::RowId, std::size_t> wasAt;
         std::unordered_map<table::RowId, std::size_t> nowAt;
         for (std::size_t at = 0; at < places; ++at) {
@@ -4453,7 +4469,8 @@ private:
             if (!change.ops.empty() && change.ops.back().first + change.ops.back().count == at) {
                 ++change.ops.back().count;
             } else {
-                change.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = at, .count = 1, .to = 0});
+                change.ops.push_back(
+                    table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = at, .count = 1, .to = 0});
             }
         }
         announce(change);
@@ -4630,7 +4647,8 @@ private:
             return;
         }
         // Records of rows no longer held are not looked up again; past the window's own bound they are dropped.
-        if (_memo.size() > _options.maxPages * static_cast<std::size_t>(std::max<std::int64_t>(_options.pageSize, 1))) {
+        if (_memo.size() >
+            _options.maxPages * static_cast<std::size_t>(std::max<std::int64_t>(_options.pageSize, 1))) {
             _memo.clear();
         }
         if (_onChange) {

@@ -582,7 +582,8 @@ TEST_CASE("ui::table: a Ctrl-click in a windowed table keeps selected keys whose
 
 // Mutation: leave `onGroupFilter` unwired in `bindTableConfig` (the group's button reports nothing), or record
 // `columnGroups` without escaping its label (the label's `:` reads as the separator).
-TEST_CASE("ui::table: filter buttons, groups, resizes, copy and menus reach their handlers through the mount", "[ui]") {
+TEST_CASE("ui::table: filter buttons, groups, resizes, copy and menus reach their handlers through the mount",
+          "[ui]") {
     Fixture fixture;
     Signal<std::vector<std::size_t>> filtered{fixture.runtime, {1}};
     std::vector<std::string> reported;
@@ -599,23 +600,22 @@ TEST_CASE("ui::table: filter buttons, groups, resizes, copy and menus reach thei
     };
     options.onFilter = [note](std::size_t column) { note("filter " + std::to_string(column)); };
     options.filtered = [&filtered] { return filtered.get(); };
-    options.columnGroups = std::vector<ui::TableColumnGroup>{{.label = "Lot: A+B", .first = 0, .count = 2,
-                                                             .filtered = true}};
+    options.columnGroups =
+        std::vector<ui::TableColumnGroup>{{.label = "Lot: A+B", .first = 0, .count = 2, .filtered = true}};
     options.onGroupFilter = [note](std::size_t group) { note("group " + std::to_string(group)); };
     options.onCopy = [note] { note("copy"); };
-    ui::Mounted const mounted{
-        fixture.runtime, fixture.backend,
-        ui::table<Item>({{.label = "Name", .filterable = true}, {.label = "Qty", .filterable = true}},
-                        [&fixture] { return fixture.items.get(); }, keyOf,
-                        [](Signal<Item> const& item) {
-                            return std::vector<ui::Node>{
-                                ui::text({.text = [&item] { return item.get().name; }}),
-                                ui::text({.text = [&item] { return std::to_string(item.get().qty); }})};
-                        },
-                        std::move(options))};
+    ui::Mounted const mounted{fixture.runtime, fixture.backend,
+                              ui::table<Item>(
+                                  {{.label = "Name", .filterable = true}, {.label = "Qty", .filterable = true}},
+                                  [&fixture] { return fixture.items.get(); }, keyOf,
+                                  [](Signal<Item> const& item) {
+                                      return std::vector<ui::Node>{
+                                          ui::text({.text = [&item] { return item.get().name; }}),
+                                          ui::text({.text = [&item] { return std::to_string(item.get().qty); }})};
+                                  },
+                                  std::move(options))};
     int const table = fixture.backend.find("Table", "showHeader", "true").value_or(0);
-    CHECK(fixture.backend.prop(table, "columns") ==
-          "[Name:content;filterable=true,Qty:content;filterable=true]");
+    CHECK(fixture.backend.prop(table, "columns") == "[Name:content;filterable=true,Qty:content;filterable=true]");
     CHECK(fixture.backend.prop(table, "filtered") == "[1]");
     CHECK(fixture.backend.prop(table, "columnGroups") == R"([Lot\: A\+B:0+2;filtered=true])");
     CHECK(fixture.backend.headerName(table, 1) == "Qty, filtered");

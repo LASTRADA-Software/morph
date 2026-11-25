@@ -144,9 +144,9 @@ concept HoldsRecord = requires {
 
 /// @brief A type that names the members of itself which open what holds it: `openMembers()`, a range of names.
 template <typename T>
-concept DeclaresOpenMembers = requires { T::openMembers(); } && std::ranges::range<decltype(T::openMembers())> &&
-                              std::convertible_to<std::ranges::range_value_t<decltype(T::openMembers())>,
-                                                  std::string_view>;
+concept DeclaresOpenMembers =
+    requires { T::openMembers(); } && std::ranges::range<decltype(T::openMembers())> &&
+    std::convertible_to<std::ranges::range_value_t<decltype(T::openMembers())>, std::string_view>;
 
 /// @brief A type that names the member of itself which makes what holds it partial: `partialMember()`.
 template <typename T>

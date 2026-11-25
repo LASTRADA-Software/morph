@@ -3510,7 +3510,8 @@ template <typename A>
         // A computed field is derived, not user-entered: exclude it from
         // `required` the same way an opted-out or std::optional field is.
         // A derived member is the model's to set, so it is not required either.
-        const bool isOptional = isStdOptional<Member> || declaredOptional<A>(name) || isComputed || declaredDerived<A>(name);
+        const bool isOptional =
+            isStdOptional<Member> || declaredOptional<A>(name) || isComputed || declaredDerived<A>(name);
         if (!isOptional) {
             requiredNames.emplace_back(std::string{name});
             requiredMemberNames.push_back(name);
@@ -3708,10 +3709,11 @@ namespace detail {
 template <typename T>
 concept NestedAggregate = ReflectableAggregate<T> && !EmptyCapableField<T>;
 
-/// @brief Calls @p visit on every nested aggregate directly inside @p object: a member of a `NestedAggregate` type, each
+/// @brief Calls @p visit on every nested aggregate directly inside @p object: a member of a `NestedAggregate` type,
+/// each
 ///        element of a `std::vector` of them, and either of those inside an engaged `std::optional`: the shapes the
-///        schema describes a nested aggregate's members in (`recurseIntoNestedAggregateIfAny`). The walk reads no member
-///        name, so it compiles for a type local to an unnamed namespace.
+///        schema describes a nested aggregate's members in (`recurseIntoNestedAggregateIfAny`). The walk reads no
+///        member name, so it compiles for a type local to an unnamed namespace.
 /// @tparam A     The object's type.
 /// @tparam Visit A callable taking any nested aggregate by reference.
 /// @param object The object whose nested aggregates are visited.
@@ -3728,8 +3730,8 @@ constexpr void forEachNested(A& object, Visit const& visit) {
                 // A `glz::meta` entry that computes its value yields a value: nothing is stored behind it.
                 [[maybe_unused]] decltype(auto) member = morph::detail::reflectedMember<Idx>(object);
                 using Member = std::remove_cvref_t<decltype(member)>;
-                if constexpr (!std::is_lvalue_reference_v<decltype(member)> || std::is_const_v<
-                                  std::remove_reference_t<decltype(member)>>) {
+                if constexpr (!std::is_lvalue_reference_v<decltype(member)> ||
+                              std::is_const_v<std::remove_reference_t<decltype(member)>>) {
                     return;
                 } else if constexpr (IsStdVector<Member>::value) {
                     if constexpr (NestedAggregate<typename IsStdVector<Member>::ValueType>) {

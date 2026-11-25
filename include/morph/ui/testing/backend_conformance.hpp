@@ -2912,18 +2912,17 @@ struct SelectionReport {
     reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
     reactive::Signal<std::vector<TableSort>> shown{probe.runtime(), {}};
     std::vector<std::size_t> asked;
-    Mounted const view{probe.runtime(), probe.backend(),
-                       ui::table<Entry>(
-                           {{.label = "Name", .sortable = true}, {.label = "Id"}}, [&rows] { return rows.get(); },
-                           [](Entry const& entry) { return Key{entry.id}; },
-                           [](reactive::Signal<Entry> const& entry) {
-                               return std::vector<Node>{
-                                   ui::text({.text = [&entry] { return entry.get().label; }}),
-                                   ui::text({.text = [&entry] { return std::to_string(entry.get().id); }})};
-                           },
-                           TableOptions{.sort = [&shown] { return shown.get(); },
-                                        .onSort = [&asked](std::size_t column,
-                                                           HeaderClick) { asked.push_back(column); }})};
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::table<Entry>(
+            {{.label = "Name", .sortable = true}, {.label = "Id"}}, [&rows] { return rows.get(); },
+            [](Entry const& entry) { return Key{entry.id}; },
+            [](reactive::Signal<Entry> const& entry) {
+                return std::vector<Node>{ui::text({.text = [&entry] { return entry.get().label; }}),
+                                         ui::text({.text = [&entry] { return std::to_string(entry.get().id); }})};
+            },
+            TableOptions{.sort = [&shown] { return shown.get(); },
+                         .onSort = [&asked](std::size_t column, HeaderClick) { asked.push_back(column); }})};
     probe.settle();
     Checks checks;
     shown.set({TableSort{.column = 0, .direction = SortDirection::Descending}});
@@ -4509,16 +4508,15 @@ struct MinColumnGridSpec {
 /// @param options Sorting, menus and the rest.
 /// @return The node.
 [[nodiscard]] inline Node columnsTable(reactive::Signal<std::vector<Entry>> const& rows,
-                                      std::vector<TableColumn> columns, TableOptions options) {
+                                       std::vector<TableColumn> columns, TableOptions options) {
     std::size_t const count = columns.size();
     return ui::table<Entry>(
         std::move(columns), [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
         [count](reactive::Signal<Entry> const& entry) {
             std::vector<Node> cells;
             for (std::size_t column = 0; column < count; ++column) {
-                cells.push_back(ui::text({.text = [&entry, column] {
-                    return entry.get().label + std::to_string(column);
-                }}));
+                cells.push_back(
+                    ui::text({.text = [&entry, column] { return entry.get().label + std::to_string(column); }}));
             }
             return cells;
         },
@@ -4531,7 +4529,8 @@ struct MinColumnGridSpec {
 [[nodiscard]] inline std::string headerClicks(std::vector<std::pair<std::size_t, HeaderClick>> const& clicks) {
     std::string text;
     for (auto const& [column, click] : clicks) {
-        text += (text.empty() ? "" : ",") + std::to_string(column) + (click == HeaderClick::Shift ? ":Shift" : ":Plain");
+        text +=
+            (text.empty() ? "" : ",") + std::to_string(column) + (click == HeaderClick::Shift ? ":Shift" : ":Plain");
     }
     return text;
 }
@@ -4564,11 +4563,10 @@ struct MinColumnGridSpec {
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> sortChainMarksHeaders(ConformanceProbe& probe) {
     reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
-    reactive::Signal<std::vector<TableSort>> chain{
-        probe.runtime(),
-        {TableSort{.column = 1, .direction = SortDirection::Descending},
-         TableSort{.column = 0, .direction = SortDirection::Ascending},
-         TableSort{.column = 2, .direction = SortDirection::Ascending}}};
+    reactive::Signal<std::vector<TableSort>> chain{probe.runtime(),
+                                                   {TableSort{.column = 1, .direction = SortDirection::Descending},
+                                                    TableSort{.column = 0, .direction = SortDirection::Ascending},
+                                                    TableSort{.column = 2, .direction = SortDirection::Ascending}}};
     Mounted const view{probe.runtime(), probe.backend(),
                        columnsTable(rows,
                                     {{.label = "Name", .sortable = true},
@@ -4618,9 +4616,9 @@ struct MinColumnGridSpec {
 [[nodiscard]] inline std::optional<std::string> headerMenuReportsColumnAndPath(ConformanceProbe& probe) {
     reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
     std::vector<std::string> chosen;
-    Mounted const view{probe.runtime(), probe.backend(),
-                       columnsTable(rows, {{.label = "Name"}, {.label = "Mass"}, {.label = "Site"}},
-                                    menuOptions(chosen))};
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        columnsTable(rows, {{.label = "Name"}, {.label = "Mass"}, {.label = "Site"}}, menuOptions(chosen))};
     probe.settle();
     Checks checks;
     std::vector<MenuEntry> const entries = probe.headerMenu(view.root(), 1);
@@ -4670,11 +4668,12 @@ struct MinColumnGridSpec {
     probe.moveColumn(view.root(), 0, 1);
     probe.settle();
     Checks checks;
-    checks.that(moves == std::vector<std::pair<std::size_t, std::size_t>>{{0, 1}},
-                "moving Name to place 1 reported " + std::to_string(moves.size()) +
-                    " moves, not column 0 to place 1 once" +
-                    (moves.empty() ? "" : ": " + std::to_string(moves.front().first) + " to " +
-                                              std::to_string(moves.front().second)));
+    checks.that(
+        moves == std::vector<std::pair<std::size_t, std::size_t>>{{0, 1}},
+        "moving Name to place 1 reported " + std::to_string(moves.size()) + " moves, not column 0 to place 1 once" +
+            (moves.empty()
+                 ? ""
+                 : ": " + std::to_string(moves.front().first) + " to " + std::to_string(moves.front().second)));
     return checks.result();
 }
 
@@ -4683,10 +4682,10 @@ struct MinColumnGridSpec {
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> filteredHeaderIsNamed(ConformanceProbe& probe) {
     reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
-    Mounted const view{probe.runtime(), probe.backend(),
-                       columnsTable(rows, {{.label = "Name", .filterable = true}, {.label = "Mass", .filterable = true}},
-                                    {.onFilter = [](std::size_t) {},
-                                     .filtered = std::vector<std::size_t>{0}})};
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        columnsTable(rows, {{.label = "Name", .filterable = true}, {.label = "Mass", .filterable = true}},
+                     {.onFilter = [](std::size_t) {}, .filtered = std::vector<std::size_t>{0}})};
     probe.settle();
     Checks checks;
     checks.text("the filtered header's name", "Name, filtered", probe.headerName(view.root(), 0));
@@ -4707,9 +4706,9 @@ struct MinColumnGridSpec {
     probe.pressFilter(view.root(), 1);
     probe.settle();
     Checks checks;
-    checks.that(pressed == std::vector<std::size_t>{1}, "pressing Mass's filter button reported " +
-                                                            std::to_string(pressed.size()) +
-                                                            " presses, not column 1 once");
+    checks.that(
+        pressed == std::vector<std::size_t>{1},
+        "pressing Mass's filter button reported " + std::to_string(pressed.size()) + " presses, not column 1 once");
     return checks.result();
 }
 
@@ -4728,9 +4727,9 @@ struct MinColumnGridSpec {
     probe.pressGroupFilter(view.root(), 0);
     probe.settle();
     Checks checks;
-    checks.that(pressed == std::vector<std::size_t>{0}, "pressing Place's filter button reported " +
-                                                            std::to_string(pressed.size()) +
-                                                            " presses, not group 0 once");
+    checks.that(
+        pressed == std::vector<std::size_t>{0},
+        "pressing Place's filter button reported " + std::to_string(pressed.size()) + " presses, not group 0 once");
     return checks.result();
 }
 
@@ -4986,7 +4985,8 @@ struct MinColumnGridSpec {
         {.name = "a stack told it is the head bar keeps its children", .run = detail::headBarKeepsItsChildren},
         {.name = "table: a Shift-click on a sortable header reports Shift, a plain click Plain",
          .run = detail::shiftClickReportsShift},
-        {.name = "table: a chain of three keys marks every header with its place", .run = detail::sortChainMarksHeaders},
+        {.name = "table: a chain of three keys marks every header with its place",
+         .run = detail::sortChainMarksHeaders},
         {.name = "table: a header's menu shows its entries and choosing one reports the column and the path",
          .run = detail::headerMenuReportsColumnAndPath},
         {.name = "table: the table's menu is the menu with no column", .run = detail::tableMenuHasNoColumn},

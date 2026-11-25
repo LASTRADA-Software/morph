@@ -26,17 +26,17 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
+#include <morph/forms/forms.hpp>
 #include <morph/net/socket_backend.hpp>
 #include <morph/net/socket_server.hpp>
 #include <morph/reactive/runtime.hpp>
 #include <morph/session/session.hpp>
-#include <morph/forms/forms.hpp>
 #include <morph/table/description.hpp>
-#include <morph/table/row_selection.hpp>
 #include <morph/table/level_cache.hpp>
+#include <morph/table/row_selection.hpp>
+#include <morph/ui/author.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/preferences.hpp>
-#include <morph/ui/author.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/service_client.hpp>
 #include <morph/ui/table_rows.hpp>
@@ -973,11 +973,10 @@ struct SessionOverLink {
 struct WideWindow {
     WideWindow(SessionOverLink& client, std::vector<std::string> columns)
         : link{client.link},
-          rows{std::make_shared<ui::WindowRows>(*client.session, ui::WindowRowsOptions{.channel = client.link,
-                                                                                      .table = "wide",
-                                                                                      .records = {},
-                                                                                      .pageSize = 200,
-                                                                                      .maxPages = 8})},
+          rows{std::make_shared<ui::WindowRows>(
+              *client.session,
+              ui::WindowRowsOptions{
+                  .channel = client.link, .table = "wide", .records = {}, .pageSize = 200, .maxPages = 8})},
           shown{std::move(columns)} {
         rows->onChange([this](morph::table::ViewChange const& /*change*/) {
             if (link->answeredPages > mark && rows->row(0).has_value()) {
@@ -1009,7 +1008,8 @@ struct WideWindow {
 // gates in morph_tests). Each change costs one round trip: one first-page fetch. Unbuilt on the host that wrote it,
 // and its mutation not run: WindowRows sending a query change twice (restart called a second time in `setSort` or
 // `setFilter`) makes `firstPages` grow by two.
-TEST_CASE("table benchmark: a sort change and a text filter over a socket with 50 ms each way", "[.benchmark][table]") {
+TEST_CASE("table benchmark: a sort change and a text filter over a socket with 50 ms each way",
+          "[.benchmark][table]") {
     WideFixture const fixture;
     ViewServer server{};
     SessionOverLink client{server.url, 50ms};
@@ -1019,10 +1019,12 @@ TEST_CASE("table benchmark: a sort change and a text filter over a socket with 5
     int const beforeSort = client.link->firstPages;
     window.expect();
     auto const sortBegan = std::chrono::steady_clock::now();
-    REQUIRE(window.rows->setSort({morph::table::SortKey{.column = "d000", .dir = morph::table::SortDirection::Ascending}})
-                .has_value());
+    REQUIRE(
+        window.rows->setSort({morph::table::SortKey{.column = "d000", .dir = morph::table::SortDirection::Ascending}})
+            .has_value());
     REQUIRE(client.pumpUntil([&] { return window.accepted; }, 10s));
-    auto const sortMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - sortBegan).count();
+    auto const sortMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - sortBegan).count();
     CHECK(client.link->firstPages - beforeSort == 1);
 
     int const beforeFilter = client.link->firstPages;
@@ -1031,17 +1033,20 @@ TEST_CASE("table benchmark: a sort change and a text filter over a socket with 5
     contains.contains = "a";
     morph::table::FilterSpec filter;
     filter.columns.insert_or_assign(
-        "t011", morph::table::ColumnFilter{.combine = morph::table::Combine::Any, .include = {contains}, .exclude = {}});
+        "t011",
+        morph::table::ColumnFilter{.combine = morph::table::Combine::Any, .include = {contains}, .exclude = {}});
     auto const keyBegan = std::chrono::steady_clock::now();
     REQUIRE(window.rows->setFilter(filter).has_value());
     REQUIRE(client.pumpUntil([&] { return window.accepted; }, 10s));
     auto const keyMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - keyBegan).count();
     CHECK(client.link->firstPages - beforeFilter == 1);
 
-    std::println("| B3 | sort on d000, 100,000 x 300, 50 ms each way, to the accepted page: {:.1f} ms (bound 150) |", sortMs);
-    std::println("| B3 | a text filter's query to the accepted page, 50 ms each way: {:.1f} ms (bound 150 after the "
-                 "250 ms debounce) |",
-                 keyMs);
+    std::println("| B3 | sort on d000, 100,000 x 300, 50 ms each way, to the accepted page: {:.1f} ms (bound 150) |",
+                 sortMs);
+    std::println(
+        "| B3 | a text filter's query to the accepted page, 50 ms each way: {:.1f} ms (bound 150 after the "
+        "250 ms debounce) |",
+        keyMs);
 }
 
 // D9, recorded and not a gate: the server side of a values list, a `distinct` query on `t011` to its reply (bound
@@ -1052,14 +1057,15 @@ TEST_CASE("table benchmark: a server-mode values list from open to shown", "[.be
     Client client{server.url, "alice"};
     auto const instance = client.create(std::string{bench::kWideModelType});
     auto const began = std::chrono::steady_clock::now();
-    auto const listed = pageOf(client.execute(
-        instance, std::string{bench::kWideModelType}, "Table.wide",
-        R"({"distinct":{"column":"t011","search":"","bucket":"value","offset":0,"limit":200}})"));
+    auto const listed = pageOf(
+        client.execute(instance, std::string{bench::kWideModelType}, "Table.wide",
+                       R"({"distinct":{"column":"t011","search":"","bucket":"value","offset":0,"limit":200}})"));
     auto const ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count();
     REQUIRE(listed.distinct.has_value());
     CHECK_FALSE(listed.distinct->values.empty());
-    std::println("| D9 | values list of t011, 100,000 rows, the server's reply: {:.1f} ms, {} values of {} (bound 150) |",
-                 ms, listed.distinct->values.size(), listed.distinct->distinct);
+    std::println(
+        "| D9 | values list of t011, 100,000 rows, the server's reply: {:.1f} ms, {} values of {} (bound 150) |", ms,
+        listed.distinct->values.size(), listed.distinct->distinct);
 }
 
 namespace {
@@ -1140,19 +1146,19 @@ TEST_CASE("shared views: a view published over a socket is read by a second clie
                                              .qualifier = "samples",
                                              .part = "shared"};
     // Mutation: publish written under the caller's person (bob does not see it).
-    auto const publish = alice.execute(
-        aliceState, model, "publish",
-        morph::model::ActionTraits<ui::TableStatePublish>::toJson(ui::TableStatePublish{
-            .key = shared,
-            .operation = morph::table::writeViewOperation(morph::table::AddView{morph::table::SavedView{
-                .name = "Mine", .layout = {}, .sort = {}, .filters = {}}}),
-            .expected = std::string{morph::table::kNoDocument}}));
+    auto const publish =
+        alice.execute(aliceState, model, "publish",
+                      morph::model::ActionTraits<ui::TableStatePublish>::toJson(ui::TableStatePublish{
+                          .key = shared,
+                          .operation = morph::table::writeViewOperation(morph::table::AddView{
+                              morph::table::SavedView{.name = "Mine", .layout = {}, .sort = {}, .filters = {}}}),
+                          .expected = std::string{morph::table::kNoDocument}}));
     REQUIRE(publish.kind == "ok");
     auto const published = morph::model::ActionTraits<ui::TableStatePublish>::resultFromJson(publish.body).result;
     REQUIRE(published.outcome == morph::table::SaveOutcome::Saved);
-    auto const read = bob.execute(
-        bobState, model, "load",
-        morph::model::ActionTraits<ui::TableStateLoad>::toJson(ui::TableStateLoad{.keys = {shared}}));
+    auto const read =
+        bob.execute(bobState, model, "load",
+                    morph::model::ActionTraits<ui::TableStateLoad>::toJson(ui::TableStateLoad{.keys = {shared}}));
     REQUIRE(read.kind == "ok");
     auto const loaded = morph::model::ActionTraits<ui::TableStateLoad>::resultFromJson(read.body);
     REQUIRE(loaded.entries.size() == 1);
@@ -1166,15 +1172,14 @@ TEST_CASE("shared views: a view published over a socket is read by a second clie
     auto own = shared;
     own.part = "views";
     auto const saveOnce = [&] {
-        auto const reply = alice.execute(
-            aliceState, model, "save",
-            morph::model::ActionTraits<ui::TableStateSave>::toJson(
-                ui::TableStateSave{.key = own,
-                                   .expected = std::string{morph::table::kNoDocument},
-                                   .upload = {},
-                                   .offset = 0,
-                                   .text = R"({"version":1,"views":[]})",
-                                   .last = true}));
+        auto const reply = alice.execute(aliceState, model, "save",
+                                         morph::model::ActionTraits<ui::TableStateSave>::toJson(
+                                             ui::TableStateSave{.key = own,
+                                                                .expected = std::string{morph::table::kNoDocument},
+                                                                .upload = {},
+                                                                .offset = 0,
+                                                                .text = R"({"version":1,"views":[]})",
+                                                                .last = true}));
         REQUIRE(reply.kind == "ok");
         return morph::model::ActionTraits<ui::TableStateSave>::resultFromJson(reply.body).result;
     };
@@ -1201,28 +1206,30 @@ TEST_CASE("shared views: a view published twice under one name over a socket is 
                                              .qualifier = "samples",
                                              .part = "shared"};
     auto const team = [](morph::table::SortDirection direction) {
-        return morph::table::SavedView{
-            .name = "Team",
-            .layout = {},
-            .sort = {morph::table::SortKey{.column = "name", .dir = direction}},
-            .filters = {}};
+        return morph::table::SavedView{.name = "Team",
+                                       .layout = {},
+                                       .sort = {morph::table::SortKey{.column = "name", .dir = direction}},
+                                       .filters = {}};
     };
     auto const publish = [&](morph::table::ViewOperation const& operation, std::string expected) {
-        auto const reply = alice.execute(
-            aliceState, model, "publish",
-            morph::model::ActionTraits<ui::TableStatePublish>::toJson(ui::TableStatePublish{
-                .key = shared, .operation = morph::table::writeViewOperation(operation), .expected = std::move(expected)}));
+        auto const reply =
+            alice.execute(aliceState, model, "publish",
+                          morph::model::ActionTraits<ui::TableStatePublish>::toJson(
+                              ui::TableStatePublish{.key = shared,
+                                                    .operation = morph::table::writeViewOperation(operation),
+                                                    .expected = std::move(expected)}));
         REQUIRE(reply.kind == "ok");
         return morph::model::ActionTraits<ui::TableStatePublish>::resultFromJson(reply.body).result;
     };
     auto const first = publish(morph::table::AddView{team(morph::table::SortDirection::Ascending)},
                                std::string{morph::table::kNoDocument});
     REQUIRE(first.outcome == morph::table::SaveOutcome::Saved);
-    auto const second = publish(morph::table::ReplaceView{team(morph::table::SortDirection::Descending)}, first.revision);
+    auto const second =
+        publish(morph::table::ReplaceView{team(morph::table::SortDirection::Descending)}, first.revision);
     REQUIRE(second.outcome == morph::table::SaveOutcome::Saved);
-    auto const read = bob.execute(
-        bobState, model, "load",
-        morph::model::ActionTraits<ui::TableStateLoad>::toJson(ui::TableStateLoad{.keys = {shared}}));
+    auto const read =
+        bob.execute(bobState, model, "load",
+                    morph::model::ActionTraits<ui::TableStateLoad>::toJson(ui::TableStateLoad{.keys = {shared}}));
     REQUIRE(read.kind == "ok");
     auto const loaded = morph::model::ActionTraits<ui::TableStateLoad>::resultFromJson(read.body);
     REQUIRE(loaded.entries.size() == 1);
@@ -1487,10 +1494,11 @@ namespace {
 
 // `key` (the key) and `count`, edited by `Lims_EditSpecimenCount`.
 std::vector<morph::table::TableColumn> specimenColumns() {
-    return {morph::table::TableColumn{.info = {.id = "key", .kind = morph::table::ColumnKind::Integer}, .label = "Key"},
-            morph::table::TableColumn{.info = {.id = "count", .kind = morph::table::ColumnKind::Integer},
-                                      .label = "Count",
-                                      .edit = morph::table::EditInfo{.action = "Lims_EditSpecimenCount"}}};
+    return {
+        morph::table::TableColumn{.info = {.id = "key", .kind = morph::table::ColumnKind::Integer}, .label = "Key"},
+        morph::table::TableColumn{.info = {.id = "count", .kind = morph::table::ColumnKind::Integer},
+                                  .label = "Count",
+                                  .edit = morph::table::EditInfo{.action = "Lims_EditSpecimenCount"}}};
 }
 
 }  // namespace
@@ -1539,8 +1547,7 @@ TEST_CASE("push tables: a cell edit reaches the model and the change event refet
     auto const described = alice.execute(model, "editnet::Specimens", "Table.specimens.describe", "{}");
     REQUIRE(described.kind == "ok");
     CHECK(described.body.find(R"("edit":{"action":"Lims_EditSpecimenCount")") != std::string::npos);
-    auto const edited =
-        alice.execute(model, "editnet::Specimens", "Lims_EditSpecimenCount", R"({"key":1,"value":4})");
+    auto const edited = alice.execute(model, "editnet::Specimens", "Lims_EditSpecimenCount", R"({"key":1,"value":4})");
     REQUIRE(edited.kind == "ok");
     REQUIRE(alice.pumpUntil([&] { return !alice.changes.empty(); }));
     CHECK(alice.keysOf("editnet::Specimens.specimens") == std::vector<std::string>{"1"});

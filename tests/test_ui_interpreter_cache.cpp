@@ -9,9 +9,9 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <cmath>
 #include <core/async/Cancellation.hpp>
 #include <core/async/StopToken.hpp>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -249,8 +249,8 @@ TEST_CASE("cache: a watch without an entry joins the watch set", "[push][cache][
     std::vector<std::optional<std::vector<glz::raw_json>>> heard;
     std::optional<ui::WatchHolder> copy;
     {
-        auto watching =
-            h.session.watchRecord("T_Row", [&](morph::effects::RecordChange const& change) { heard.push_back(change.keys); });
+        auto watching = h.session.watchRecord(
+            "T_Row", [&](morph::effects::RecordChange const& change) { heard.push_back(change.keys); });
         watching.then([&](ui::WatchHolder const& holder) { copy = holder; });
         h.settle();
     }

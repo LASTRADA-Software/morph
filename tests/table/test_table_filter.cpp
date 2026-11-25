@@ -29,8 +29,8 @@
 #include <numeric>
 #include <optional>
 #include <random>
-#include <set>
 #include <ranges>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -605,10 +605,10 @@ TEST_CASE("table: the filter is sound under every completion", "[table][filter][
 
 // Mutation: `ValueSet::contains` answering false.
 TEST_CASE("table: oneOf matches what its eq entries match", "[table][filter]") {
-    Filtered const text{.source = tabletest::column(ColumnKind::Text, {std::string{"Alpha"}, std::string{"beta"},
-                                                                       std::string{"Gamma"}, Cell{},
-                                                                       std::string{"alpha"}}),
-                        .services = {}};
+    Filtered const text{
+        .source = tabletest::column(ColumnKind::Text, {std::string{"Alpha"}, std::string{"beta"}, std::string{"Gamma"},
+                                                       Cell{}, std::string{"alpha"}}),
+        .services = {}};
     CHECK(text.by(on("c", {oneOf({"alpha", "BETA"})})) == Rows{0, 1, 4});
     CHECK(must(text.by(on("c", {oneOf({"alpha", "BETA"})}))) == must(text.by(on("c", {eq("alpha"), eq("BETA")}))));
     CHECK(text.by(on("c", {}, Combine::Any, {oneOf({"alpha", "BETA"})})) == Rows{2, 3});
@@ -626,8 +626,8 @@ TEST_CASE("table: oneOf matches what its eq entries match", "[table][filter]") {
 
 // Mutation: a lone oneOf entry answering No, not Unknown, on an unloaded cell.
 TEST_CASE("table: oneOf is unknown on an unloaded cell", "[table][filter]") {
-    auto const source = tabletest::slowColumn(ColumnKind::Text,
-                                              {std::string{"Alpha"}, Cell{morph::table::Unloaded{}}, std::string{"b"}});
+    auto const source = tabletest::slowColumn(
+        ColumnKind::Text, {std::string{"Alpha"}, Cell{morph::table::Unloaded{}}, std::string{"b"}});
     auto const page = apply(*source, TableQuery{.sort = {}, .filters = on("c", {oneOf({"alpha"})}), .page = {}});
     REQUIRE(page);
     CHECK(page->rows == std::vector<std::size_t>{0});
@@ -679,7 +679,7 @@ TEST_CASE("table: a oneOf of any size is one lookup a cell", "[table][filter]") 
 TEST_CASE("table: oneOf is the OR of its eq entries over random tables", "[table][filter]") {
     struct Kind {
         ColumnKind kind;
-        std::vector<Cell> cells;           // the values a cell is drawn from
+        std::vector<Cell> cells;            // the values a cell is drawn from
         std::vector<std::string> operands;  // the same values as filter text
     };
     std::vector<Kind> const kinds{
@@ -696,8 +696,7 @@ TEST_CASE("table: oneOf is the OR of its eq entries over random tables", "[table
          {"0.5", "1.0", "1.25", "2", "2.50", "3", "3.75", "4"}},
         {ColumnKind::Date,
          {std::string{"2026-01-01"}, std::string{"2026-01-02"}, std::string{"2026-01-03"}, std::string{"2026-01-04"},
-          std::string{"2026-01-05"}, std::string{"2026-01-06"}, std::string{"2026-01-07"},
-          std::string{"2026-01-08"}},
+          std::string{"2026-01-05"}, std::string{"2026-01-06"}, std::string{"2026-01-07"}, std::string{"2026-01-08"}},
          {"2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05", "2026-01-06", "2026-01-07",
           "2026-01-08"}},
         {ColumnKind::Bool, {true, false}, {"true", "false"}},
@@ -740,10 +739,12 @@ using morph::table::Unloaded;
 std::shared_ptr<VectorSource> companySource(std::vector<std::vector<Cell>> rows, bool slow = false) {
     std::vector<ColumnInfo> columns;
     for (auto const* const id : {"companyA", "companyB", "companyC"}) {
-        columns.push_back(slow ? tabletest::levelCol(id, ColumnKind::Text, "slow") : tabletest::col(id, ColumnKind::Text));
+        columns.push_back(slow ? tabletest::levelCol(id, ColumnKind::Text, "slow")
+                               : tabletest::col(id, ColumnKind::Text));
     }
     auto source = tabletest::makeSource(std::move(columns), std::move(rows));
-    source->setGroups({ColumnGroupInfo{.id = "company", .label = "Company", .columns = {"companyA", "companyB", "companyC"}}});
+    source->setGroups(
+        {ColumnGroupInfo{.id = "company", .label = "Company", .columns = {"companyA", "companyB", "companyC"}}});
     return source;
 }
 
@@ -823,20 +824,20 @@ TEST_CASE("groups: the spec's truth table", "[table][filter][groups]") {
     CHECK(by({.group = "company", .match = exactly(1), .include = {eq("F")}}) == Rows{0, 3});
     CHECK(by({.group = "company", .match = every(), .include = {oneOf({"F", "S"})}}) == Rows{2});
     CHECK(must(by({.columns = {"companyA", "companyB", "companyC"}, .include = {eq("F")}})) ==
-          must(by({.group = "company", .include = {eq("F")}})));  // the plain group is `any`
+          must(by({.group = "company", .include = {eq("F")}})));                      // the plain group is `any`
     CHECK(by({.group = "company", .include = {}, .exclude = {eq("X")}}) == Rows{2});  // "none of the companies is X"
-    std::vector<FilterEntry> seventeen;  // only the 17th entry can match
+    std::vector<FilterEntry> seventeen;                                               // only the 17th entry can match
     for (int i = 1; i <= 16; ++i) {
         seventeen.push_back(eq("A" + std::to_string(i)));
     }
     seventeen.push_back(eq("F"));
     CHECK(by({.group = "company", .include = seventeen}) == Rows{0, 1, 2, 3});  // a 16-bit entry mask would miss it
     // "two of the three dates are after 2026-05-01": atLeast 2 with a gt entry over three Date columns.
-    auto const dates = tabletest::makeSource(
-        {tabletest::col("d1", ColumnKind::Date), tabletest::col("d2", ColumnKind::Date),
-         tabletest::col("d3", ColumnKind::Date)},
-        {{std::string{"2026-06-01"}, std::string{"2026-07-01"}, std::string{"2026-01-01"}},
-         {std::string{"2026-06-01"}, std::string{"2026-02-01"}, std::string{"2026-01-01"}}});
+    auto const dates =
+        tabletest::makeSource({tabletest::col("d1", ColumnKind::Date), tabletest::col("d2", ColumnKind::Date),
+                               tabletest::col("d3", ColumnKind::Date)},
+                              {{std::string{"2026-06-01"}, std::string{"2026-07-01"}, std::string{"2026-01-01"}},
+                               {std::string{"2026-06-01"}, std::string{"2026-02-01"}, std::string{"2026-01-01"}}});
     Filtered const f{.source = dates, .services = {}};
     FilterSpec spec;
     spec.groups.push_back({.columns = {"d1", "d2", "d3"}, .match = atLeast(2), .include = {gt("2026-05-01")}});
@@ -887,7 +888,8 @@ TEST_CASE("groups: three-valued over unloaded cells", "[table][filter][groups]")
 // exclude-only Together lines fail.
 TEST_CASE("groups: duplicate columns, exactly zero and too many together entries", "[table][filter][groups]") {
     auto const& f = truthTable();
-    CHECK(codeOf(f.by(FilterSpec{.columns = {}, .groups = {{.columns = {"companyA", "companyA"}, .include = {eq("F")}}}})) ==
+    CHECK(codeOf(f.by(
+              FilterSpec{.columns = {}, .groups = {{.columns = {"companyA", "companyA"}, .include = {eq("F")}}}})) ==
           TableErrorCode::InvalidSpec);
     CHECK(by({.group = "company", .match = exactly(0), .include = {eq("F")}}) == Rows{4});
     CHECK(codeOf(f.by(FilterSpec{.columns = {},
@@ -994,8 +996,9 @@ TEST_CASE("groups: the JSON shape reads and writes", "[table][filter][groups]") 
     ColumnCount unknown;
     REQUIRE_FALSE(glz::read_json(unknown, std::string{R"({"most":2})"}));
     CHECK(codeOf(by({.group = "company", .match = unknown, .include = {eq("F")}})) == TableErrorCode::InvalidSpec);
-    CHECK(codeOf(by({.group = "company", .mode = GroupMode::Together, .match = unknown,
-                     .include = {eq("F"), eq("S")}})) == TableErrorCode::InvalidSpec);
+    CHECK(codeOf(by(
+              {.group = "company", .mode = GroupMode::Together, .match = unknown, .include = {eq("F"), eq("S")}})) ==
+          TableErrorCode::InvalidSpec);
 }
 
 // Mutation: ColumnCount::operator== comparing `kind` only: a changed `match.n` compares equal.
@@ -1391,7 +1394,8 @@ TEST_CASE("groups: a row costs k lookups and at most one augmentation an entry",
         for (auto const& cell : rows[r]) {
             held.insert(std::get<std::string>(cell));
         }
-        bool const covered = std::ranges::all_of(sixteen, [&](FilterEntry const& entry) { return held.contains(*entry.eq); });
+        bool const covered =
+            std::ranges::all_of(sixteen, [&](FilterEntry const& entry) { return held.contains(*entry.eq); });
         coveredRows += covered ? 1 : 0;
         auto& worst = covered ? maxAugmentationsOnCoveredRows : maxAugmentationsOnUncoveredRows;
         worst = std::max(worst, counters.augmentations);

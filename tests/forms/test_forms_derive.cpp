@@ -23,24 +23,32 @@
 struct DeriveBox {
     std::int64_t count = 0;
     std::int64_t perBox = 0;
-    std::int64_t total = 0;   // computed: count * perBox
-    std::int64_t limit = 0;   // derived: the model's
-    static constexpr auto computedFields = morph::forms::computeList(
-        morph::forms::computed<&DeriveBox::total, &DeriveBox::count, &DeriveBox::perBox>(
+    std::int64_t total = 0;  // computed: count * perBox
+    std::int64_t limit = 0;  // derived: the model's
+    static constexpr auto computedFields =
+        morph::forms::computeList(morph::forms::computed<&DeriveBox::total, &DeriveBox::count, &DeriveBox::perBox>(
             [](auto const& box) { return box.count * box.perBox; }));
     static const std::array<morph::forms::FieldMeta, 1> fieldMetadata;
 };
-inline const std::array<morph::forms::FieldMeta, 1> DeriveBox::fieldMetadata{morph::forms::derived<&DeriveBox::limit>()};
+inline const std::array<morph::forms::FieldMeta, 1> DeriveBox::fieldMetadata{
+    morph::forms::derived<&DeriveBox::limit>()};
 
 struct RecordBoxes {
     std::vector<DeriveBox> boxes;
-    std::int64_t sum = 0;     // computed: the boxes' totals
-    static constexpr auto computedFields = morph::forms::computeList(morph::forms::computed<&RecordBoxes::sum, &RecordBoxes::boxes>(
-        [](auto const& record) { std::int64_t s = 0; for (auto const& b : record.boxes) s += b.total; return s; }));
+    std::int64_t sum = 0;  // computed: the boxes' totals
+    static constexpr auto computedFields = morph::forms::computeList(
+        morph::forms::computed<&RecordBoxes::sum, &RecordBoxes::boxes>([](auto const& record) {
+            std::int64_t s = 0;
+            for (auto const& b : record.boxes) s += b.total;
+            return s;
+        }));
 };
 struct DeriveBoxModel {
     static inline RecordBoxes last{};
-    bool execute(RecordBoxes const& record) { last = record; return true; }   // sets no derived member
+    bool execute(RecordBoxes const& record) {
+        last = record;
+        return true;
+    }  // sets no derived member
 };
 BRIDGE_REGISTER_MODEL(DeriveBoxModel, "T_DeriveBoxes")
 BRIDGE_REGISTER_ACTION(DeriveBoxModel, RecordBoxes, "T_RecordBoxes")
@@ -48,25 +56,31 @@ BRIDGE_REGISTER_ACTION(DeriveBoxModel, RecordBoxes, "T_RecordBoxes")
 // A nested struct, plain and optional, with its own computed and derived members.
 struct DeriveLid {
     std::int64_t width = 0;
-    std::int64_t area = 0;    // computed: width * width
-    std::int64_t mark = 0;    // derived: the model's
-    static constexpr auto computedFields = morph::forms::computeList(
-        morph::forms::computed<&DeriveLid::area, &DeriveLid::width>([](auto const& lid) { return lid.width * lid.width; }));
+    std::int64_t area = 0;  // computed: width * width
+    std::int64_t mark = 0;  // derived: the model's
+    static constexpr auto computedFields =
+        morph::forms::computeList(morph::forms::computed<&DeriveLid::area, &DeriveLid::width>(
+            [](auto const& lid) { return lid.width * lid.width; }));
     static const std::array<morph::forms::FieldMeta, 1> fieldMetadata;
 };
-inline const std::array<morph::forms::FieldMeta, 1> DeriveLid::fieldMetadata{morph::forms::derived<&DeriveLid::mark>()};
+inline const std::array<morph::forms::FieldMeta, 1> DeriveLid::fieldMetadata{
+    morph::forms::derived<&DeriveLid::mark>()};
 
 struct RecordCrate {
     DeriveLid lid;
     std::optional<DeriveLid> spare;
     std::optional<std::vector<DeriveLid>> extras;
     std::int64_t lidArea = 0;  // computed: the lid's area, read recomputed
-    static constexpr auto computedFields = morph::forms::computeList(
-        morph::forms::computed<&RecordCrate::lidArea, &RecordCrate::lid>([](auto const& crate) { return crate.lid.area; }));
+    static constexpr auto computedFields =
+        morph::forms::computeList(morph::forms::computed<&RecordCrate::lidArea, &RecordCrate::lid>(
+            [](auto const& crate) { return crate.lid.area; }));
 };
 struct DeriveCrateModel {
     static inline RecordCrate last{};
-    bool execute(RecordCrate const& crate) { last = crate; return true; }
+    bool execute(RecordCrate const& crate) {
+        last = crate;
+        return true;
+    }
 };
 BRIDGE_REGISTER_MODEL(DeriveCrateModel, "T_DeriveCrates")
 BRIDGE_REGISTER_ACTION(DeriveCrateModel, RecordCrate, "T_RecordCrate")
@@ -111,15 +125,16 @@ TEST_CASE("derive: the server keeps recomputeAll's values and the model's", "[fo
     RecordBoxes const& kept = DeriveBoxModel::last;
     CHECK(kept.boxes.at(0).total == 6);
     CHECK(kept.sum == 6);
-    CHECK(kept.boxes.at(0).limit == 0);   // the client's 555 is cleared; the model set nothing
-    auto const evaluated = morph::model::detail::defaultDispatcher().evaluate("T_DeriveBoxes", "T_RecordBoxes", kForged);
+    CHECK(kept.boxes.at(0).limit == 0);  // the client's 555 is cleared; the model set nothing
+    auto const evaluated =
+        morph::model::detail::defaultDispatcher().evaluate("T_DeriveBoxes", "T_RecordBoxes", kForged);
     CHECK(evaluated.body == R"({"boxes":[{"count":2,"perBox":3,"total":6,"limit":0}],"sum":6})");
 }
 
 // Mutation: annotateNestedAggregate not writing x-computed for a row type.
 TEST_CASE("derive: a row type's schema marks computed and derived members", "[forms][derive]") {
     auto dom = glz::read_json<glz::generic_u64>(morph::forms::schemaJson<RecordBoxes>()).value();
-    auto& box = dom["properties"]["boxes"]["items"];   // DeriveBox is used once: glaze inlines it
+    auto& box = dom["properties"]["boxes"]["items"];  // DeriveBox is used once: glaze inlines it
     CHECK(glz::write_json(box["properties"]["total"]["x-readonly"]).value() == "true");
     CHECK(glz::write_json(box["properties"]["total"]["x-computed"]["inputs"]).value() == R"(["count","perBox"])");
     CHECK(glz::write_json(box["properties"]["limit"]["x-derived"]).value() == "true");

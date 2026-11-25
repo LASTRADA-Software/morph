@@ -14,9 +14,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <format>
+#include <glaze/glaze.hpp>
 #include <initializer_list>
 #include <memory>
-#include <glaze/glaze.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/forms/engine/collection.hpp>
 #include <morph/table/data_source.hpp>
@@ -191,7 +191,9 @@ std::vector<std::string> firstRowTexts(Harness const& h) {
     return texts;
 }
 
-std::string realizedWindow(Harness const& h) { return h.backend.prop(h.backend.all("Table").front(), "realizedWindow"); }
+std::string realizedWindow(Harness const& h) {
+    return h.backend.prop(h.backend.all("Table").front(), "realizedWindow");
+}
 
 }  // namespace
 
@@ -211,8 +213,9 @@ TEST_CASE("interpreter baseline: U1 U2 a rows table of 100,000", "[.benchmark][b
         shownFirst = std::stoll(texts.front());
     }
     std::string const document = sortedDocument(items, shownFirst);
-    std::println("\nU1, U2: a document rows table of 100,000 rows on the recording backend, click to settled\n\n"
-                 "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
+    std::println(
+        "\nU1, U2: a document rows table of 100,000 rows on the recording backend, click to settled\n\n"
+        "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
     std::vector<double> sorts;
     std::vector<double> renames;
     for (int run = 0; run < 7; ++run) {
@@ -317,13 +320,14 @@ TEST_CASE("interpreter baseline: U4 memory of a rows table", "[.benchmark][basel
     REQUIRE(items.asList() != nullptr);
     REQUIRE(items.asList()->size() == kRows);
     auto const valueBytes = ValueBytes{}.of(items);
-    std::println("\nU4: a rows table of 10,000 x 300 sorted on one column\n\n| held as | bytes | MiB | bytes per cell |\n"
-                 "|---|---:|---:|---:|\n"
-                 "| cells (approximateCellBytes) | {} | {:.1f} | {:.1f} |\n"
-                 "| the state's document values | {} | {:.1f} | {:.1f} |",
-                 cellBytes, static_cast<double>(cellBytes) / (1024.0 * 1024.0),
-                 static_cast<double>(cellBytes) / (kRows * 300.0), valueBytes,
-                 static_cast<double>(valueBytes) / (1024.0 * 1024.0), static_cast<double>(valueBytes) / (kRows * 300.0));
+    std::println(
+        "\nU4: a rows table of 10,000 x 300 sorted on one column\n\n| held as | bytes | MiB | bytes per cell |\n"
+        "|---|---:|---:|---:|\n"
+        "| cells (approximateCellBytes) | {} | {:.1f} | {:.1f} |\n"
+        "| the state's document values | {} | {:.1f} | {:.1f} |",
+        cellBytes, static_cast<double>(cellBytes) / (1024.0 * 1024.0),
+        static_cast<double>(cellBytes) / (kRows * 300.0), valueBytes,
+        static_cast<double>(valueBytes) / (1024.0 * 1024.0), static_cast<double>(valueBytes) / (kRows * 300.0));
     static_cast<void>(std::fflush(stdout));
 }
 
@@ -369,8 +373,9 @@ TEST_CASE("interpreter baseline: U5 a collection of 20,000", "[.benchmark][basel
     std::string const edited = listReply(source, 1);
     auto const model = morph::forms::CollectionModel::fromSchema(kCollectionView);
     REQUIRE(model.has_value());
-    std::println("\nU5: a collection of 20,000 rows over a ListRows reply\n\n"
-                 "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
+    std::println(
+        "\nU5: a collection of 20,000 rows over a ListRows reply\n\n"
+        "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
     std::vector<double> mounts;
     std::vector<double> sorts;
     std::vector<double> edits;
@@ -384,9 +389,9 @@ TEST_CASE("interpreter baseline: U5 a collection of 20,000", "[.benchmark][basel
             return std::string{R"({"ok":true})"};
         });
         auto began = Clock::now();
-        morph::forms::CollectionSession collection{
-            harness.rt, *model, [](std::string_view) { return std::optional<std::string>{}; },
-            harness.server.submitter(), harness.server.fetcher()};
+        morph::forms::CollectionSession collection{harness.rt, *model,
+                                                   [](std::string_view) { return std::optional<std::string>{}; },
+                                                   harness.server.submitter(), harness.server.fetcher()};
         harness.settle();
         mounts.push_back(millisSince(began));
         REQUIRE(collection.rows().size() == kRows);
@@ -427,8 +432,9 @@ TEST_CASE("interpreter bench: a collection of 20,000 rows: mount, sort, one row 
   "vocab": "ui/1", "id": "bench",
   "models": { "sample": { "type": "Lims_SampleModel" } },
   "view": { "kind": "collection", "model": "sample", "action": "Lims_ListSamples" } })";
-    std::println("\nU5: a collection node of 20,000 rows on the table engine, call to settled\n\n"
-                 "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
+    std::println(
+        "\nU5: a collection node of 20,000 rows on the table engine, call to settled\n\n"
+        "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
     std::vector<double> mounts;
     std::vector<double> sorts;
     std::vector<double> edits;
@@ -462,7 +468,6 @@ TEST_CASE("interpreter bench: a collection of 20,000 rows: mount, sort, one row 
     printRow("U5: sort on Name from the header, click to settled", kRows, spreadOf(sorts));
     printRow("U5: one row edited (the list reloaded), reply to settled", kRows, spreadOf(edits));
 }
-
 
 namespace {
 
@@ -546,9 +551,10 @@ TEST_CASE("interpreter bench: K4 the query cache under an event and a wide page"
     std::ranges::sort(stores);
     std::println("\n| K4 | a 4,096-key event against an entry of 200 rows | {:.3f} ms median ({:.3f}-{:.3f}) |",
                  events[events.size() / 2], events.front(), events.back());
-    std::println("| K4 | storing a decoded 200 x 300 page of fractional numbers in an opaque entry | {:.3f} ms median "
-                 "({:.3f}-{:.3f}) |",
-                 stores[stores.size() / 2], stores.front(), stores.back());
+    std::println(
+        "| K4 | storing a decoded 200 x 300 page of fractional numbers in an opaque entry | {:.3f} ms median "
+        "({:.3f}-{:.3f}) |",
+        stores[stores.size() / 2], stores.front(), stores.back());
     static_cast<void>(std::fflush(stdout));
 }
 
@@ -602,8 +608,9 @@ TEST_CASE("interpreter bench: U1 U2 a rows table of 100,000 on the engine", "[.b
     bench::WideTableSource const fixture{{.rows = kRows, .columns = 300, .seed = 1}};
     std::string const items = fixtureItems(fixture);
     ui::ValueList const rows = listOf(items);
-    std::println("\nU1, U2: a document's rows of 100,000 through ValueRowsSource and the engine, call to settled\n\n"
-                 "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
+    std::println(
+        "\nU1, U2: a document's rows of 100,000 through ValueRowsSource and the engine, call to settled\n\n"
+        "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
     std::vector<double> sorts;
     std::vector<double> shared;
     std::vector<double> fresh;
@@ -663,20 +670,22 @@ TEST_CASE("interpreter bench: U4 memory of a rows table on the engine", "[.bench
         }
         heldBytes += bench::approximateCellBytes(snapshot->cell(row, sorted));
     }
-    std::println("\nU4: a rows table of 10,000 x 300 through ValueRowsSource, sorted on one column\n\n"
-                 "| held as | cells | bytes | MiB |\n|---|---:|---:|---:|\n"
-                 "| the source's cells (one column in use) | {} | {} | {:.2f} |\n"
-                 "| every column as cells (approximateCellBytes) | {} | {} | {:.1f} |",
-                 h.source->cellsHeld(), heldBytes, static_cast<double>(heldBytes) / (1024.0 * 1024.0),
-                 kRows * fixture.columns().size(), allBytes, static_cast<double>(allBytes) / (1024.0 * 1024.0));
+    std::println(
+        "\nU4: a rows table of 10,000 x 300 through ValueRowsSource, sorted on one column\n\n"
+        "| held as | cells | bytes | MiB |\n|---|---:|---:|---:|\n"
+        "| the source's cells (one column in use) | {} | {} | {:.2f} |\n"
+        "| every column as cells (approximateCellBytes) | {} | {} | {:.1f} |",
+        h.source->cellsHeld(), heldBytes, static_cast<double>(heldBytes) / (1024.0 * 1024.0),
+        kRows * fixture.columns().size(), allBytes, static_cast<double>(allBytes) / (1024.0 * 1024.0));
     static_cast<void>(std::fflush(stdout));
 }
 
 // B1 as a `rows` table runs it: the engine with no worker, in owner steps of 4 ms, over `ValueRowsSource`, with the
 // collator a rows table orders by. A timing: the bounds are table.md's, read off the printed rows.
 TEST_CASE("interpreter bench: B1 a rows table's sort and filter in owner steps", "[.benchmark][interpreter]") {
-    std::println("\nB1: a three-key sort then a text filter on a rows table's engine, no worker, 4 ms steps\n\n"
-                 "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
+    std::println(
+        "\nB1: a three-key sort then a text filter on a rows table's engine, no worker, 4 ms steps\n\n"
+        "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
     for (std::size_t const rows : {std::size_t{10'000}, std::size_t{20'000}, std::size_t{100'000}}) {
         bench::WideTableSource const fixture{{.rows = static_cast<std::int64_t>(rows), .columns = 300, .seed = 1}};
         ui::ValueList const items = listOf(fixtureItems(fixture));
@@ -722,8 +731,9 @@ TEST_CASE("interpreter bench: U1 U2 split between the source and the engine", "[
     constexpr std::size_t kRows = 100'000;
     bench::WideTableSource const fixture{{.rows = kRows, .columns = 300, .seed = 1}};
     ui::ValueList const rows = listOf(fixtureItems(fixture));
-    std::println("\nU1, U2 split: a document's rows of 100,000, the source's call and the engine's settling\n\n"
-                 "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
+    std::println(
+        "\nU1, U2 split: a document's rows of 100,000, the source's call and the engine's settling\n\n"
+        "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
     std::vector<double> use;
     std::vector<double> useSettled;
     std::vector<double> sort;
@@ -784,8 +794,9 @@ TEST_CASE("interpreter bench: a third sort key on 100,000 rows", "[.benchmark][i
     h.backend.clickHeader(table, 1, ui::HeaderClick::Shift);
     h.settle();
     REQUIRE(h.backend.prop(table, "sort") == "0:Ascending,1:Ascending");
-    std::println("\nD7: a third sort key added from the header to a two-key sort of 100,000 rows, click to settled\n\n"
-                 "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
+    std::println(
+        "\nD7: a third sort key added from the header to a two-key sort of 100,000 rows, click to settled\n\n"
+        "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
     std::vector<double> adds;
     for (int run = 0; run < 7; ++run) {
         auto const began = Clock::now();

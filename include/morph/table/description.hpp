@@ -134,7 +134,8 @@ struct ColumnDisplay {
     [[nodiscard]] bool operator==(ColumnDisplay const& other) const = default;
 };
 
-/// @brief The action that edits a column's cells, on a model's table (`docs/spec/table/editing.md`, "Cells of a model's
+/// @brief The action that edits a column's cells, on a model's table (`docs/spec/table/editing.md`, "Cells of a
+/// model's
 ///        table").
 struct EditInfo {
     /// @brief The action's id: it takes a `CellEdit` or a `RowEdit` of the column's table.
@@ -182,9 +183,10 @@ struct TableColumn {
 
 }  // namespace morph::table
 
-/// @brief The JSON of `morph::table::TableColumn`: every member by its name, `display`, `tone`, `tooltip` and `edit` left
-///        out while they hold their defaults, so a column that shows its cells plainly costs nothing for them. A reader
-///        restores a member left out to its default.
+/// @brief The JSON of `morph::table::TableColumn`: every member by its name, `display`, `tone`, `tooltip` and `edit`
+/// left
+///        out while they hold their defaults, so a column that shows its cells plainly costs nothing for them. A
+///        reader restores a member left out to its default.
 template <>
 struct glz::meta<morph::table::TableColumn> {
     /// @brief The column type.
@@ -331,8 +333,8 @@ struct TableDescription {
 [[nodiscard]] inline std::expected<void, TableError> validateDisplay(TableDescription const& description) {
     using Refused = std::unexpected<TableError>;
     auto const refuse = [](std::string column, std::string message) {
-        return Refused{
-            TableError{.code = TableErrorCode::SourceContract, .column = std::move(column), .message = std::move(message)}};
+        return Refused{TableError{
+            .code = TableErrorCode::SourceContract, .column = std::move(column), .message = std::move(message)}};
     };
     auto const isCompanion = [&description](std::string_view id) {
         auto const found = std::ranges::find(description.columns, id,
@@ -994,16 +996,15 @@ struct glz::meta<morph::table::GenericPage> {
         return morph::table::detail::omittedPageMember(member, key);
     }
     /// @brief Each member after its JSON name.
-    static constexpr auto value =
-        glz::object("revision", &T::revision, "columns", &T::columns, "keys", &T::keys, "rows",
-                    glz::custom<[](T& page, std::vector<std::vector<glz::raw_json_view>> const& rows) {
-                        morph::table::detail::readPageRows(page, rows);
-                    },
-                                [](T const& page) { return morph::table::detail::writePageRows(page); }>,
-                    "total", &T::total, "totalKind", &T::totalKind, "offset", &T::offset, "unloadedRows",
-                    &T::unloadedRows, "undecided", &T::undecided, "awaiting", &T::awaiting, "failed", &T::failed,
-                    "indices", &T::indices, "distinct", &T::distinct, "unmatched", &T::unmatched, "viewRevision",
-                    &T::viewRevision);
+    static constexpr auto value = glz::object(
+        "revision", &T::revision, "columns", &T::columns, "keys", &T::keys, "rows",
+        glz::custom<[](T& page, std::vector<std::vector<glz::raw_json_view>> const& rows) {
+            morph::table::detail::readPageRows(page, rows);
+        },
+                    [](T const& page) { return morph::table::detail::writePageRows(page); }>,
+        "total", &T::total, "totalKind", &T::totalKind, "offset", &T::offset, "unloadedRows", &T::unloadedRows,
+        "undecided", &T::undecided, "awaiting", &T::awaiting, "failed", &T::failed, "indices", &T::indices, "distinct",
+        &T::distinct, "unmatched", &T::unmatched, "viewRevision", &T::viewRevision);
 };
 
 namespace morph::table {
@@ -1265,43 +1266,42 @@ public:
     /// @return `false` when the reply was ignored: its fetch belongs to an earlier query, or is not the one in
     ///         flight for its page.
     bool accept(PageFetch const& fetch, GenericPage page) {
-        return acceptReply(fetch, replyOf(page),
-                           [this, &page](detail::GenericWindowCells& content, detail::WindowFetchKind kind,
-                                         std::size_t take) {
-                               if (kind == detail::WindowFetchKind::Whole) {
-                                   content.cells.clear();
-                               }
-                               if (kind == detail::WindowFetchKind::Rest) {
-                                   std::erase_if(content.cells, [&page](auto const& entry) {
-                                       return std::ranges::find(page.columns, entry.first) == page.columns.end();
-                                   });
-                               }
-                               // Each reply column's target, found once; the rows are then read in order, row by
-                               // row, so the reply's cells are visited where they lie.
-                               std::vector<std::vector<Cell>*> targets(page.columns.size(), nullptr);
-                               for (std::size_t column = 0; column < page.columns.size(); ++column) {
-                                   auto const& id = page.columns[column];
-                                   if (kind == detail::WindowFetchKind::Rest && !content.holds(id)) {
-                                       continue;
-                                   }
-                                   auto& values = content.cells[id];
-                                   if (kind != detail::WindowFetchKind::Rest) {
-                                       values.clear();
-                                   }
-                                   values.reserve(values.size() + take);
-                                   targets[column] = &values;
-                               }
-                               for (std::size_t row = 0; row < take; ++row) {
-                                   auto& cells = page.rows[row];
-                                   for (std::size_t column = 0; column < targets.size(); ++column) {
-                                       if (targets[column] != nullptr) {
-                                           targets[column]->push_back(column < cells.size() ? std::move(cells[column])
-                                                                                            : Cell{});
-                                       }
-                                   }
-                               }
-                               limitColumns(content);
-                           });
+        return acceptReply(
+            fetch, replyOf(page),
+            [this, &page](detail::GenericWindowCells& content, detail::WindowFetchKind kind, std::size_t take) {
+                if (kind == detail::WindowFetchKind::Whole) {
+                    content.cells.clear();
+                }
+                if (kind == detail::WindowFetchKind::Rest) {
+                    std::erase_if(content.cells, [&page](auto const& entry) {
+                        return std::ranges::find(page.columns, entry.first) == page.columns.end();
+                    });
+                }
+                // Each reply column's target, found once; the rows are then read in order, row by
+                // row, so the reply's cells are visited where they lie.
+                std::vector<std::vector<Cell>*> targets(page.columns.size(), nullptr);
+                for (std::size_t column = 0; column < page.columns.size(); ++column) {
+                    auto const& id = page.columns[column];
+                    if (kind == detail::WindowFetchKind::Rest && !content.holds(id)) {
+                        continue;
+                    }
+                    auto& values = content.cells[id];
+                    if (kind != detail::WindowFetchKind::Rest) {
+                        values.clear();
+                    }
+                    values.reserve(values.size() + take);
+                    targets[column] = &values;
+                }
+                for (std::size_t row = 0; row < take; ++row) {
+                    auto& cells = page.rows[row];
+                    for (std::size_t column = 0; column < targets.size(); ++column) {
+                        if (targets[column] != nullptr) {
+                            targets[column]->push_back(column < cells.size() ? std::move(cells[column]) : Cell{});
+                        }
+                    }
+                }
+                limitColumns(content);
+            });
     }
 
     /// @brief Patches held rows from the reply to a `RowsFetch`.
@@ -1311,22 +1311,22 @@ public:
     std::vector<std::int64_t> patch(RowsFetch const& fetch, GenericPage reply) {
         // The columns a page holds that the reply lacks go once per page, not once per row.
         Core::Held const* trimmed = nullptr;
-        return patchRows(fetch, replyOf(reply), [&reply, &trimmed](Core::Held& page, std::size_t at,
-                                                                   std::size_t from) {
-            if (trimmed != &page) {
-                std::erase_if(page.content.cells, [&reply](auto const& entry) {
-                    return std::ranges::find(reply.columns, entry.first) == reply.columns.end();
-                });
-                trimmed = &page;
-            }
-            auto& cells = reply.rows[from];
-            for (std::size_t column = 0; column < reply.columns.size() && column < cells.size(); ++column) {
-                auto const found = page.content.cells.find(reply.columns[column]);
-                if (found != page.content.cells.end() && at < found->second.size()) {
-                    found->second[at] = std::move(cells[column]);
+        return patchRows(
+            fetch, replyOf(reply), [&reply, &trimmed](Core::Held& page, std::size_t at, std::size_t from) {
+                if (trimmed != &page) {
+                    std::erase_if(page.content.cells, [&reply](auto const& entry) {
+                        return std::ranges::find(reply.columns, entry.first) == reply.columns.end();
+                    });
+                    trimmed = &page;
                 }
-            }
-        });
+                auto& cells = reply.rows[from];
+                for (std::size_t column = 0; column < reply.columns.size() && column < cells.size(); ++column) {
+                    auto const found = page.content.cells.find(reply.columns[column]);
+                    if (found != page.content.cells.end() && at < found->second.size()) {
+                        found->second[at] = std::move(cells[column]);
+                    }
+                }
+            });
     }
 
     /// @brief The key of the held row at a view row.
@@ -1593,7 +1593,9 @@ public:
     /// @param groups   The source's declared groups when the snapshot was taken.
     PinnedSource(std::shared_ptr<RowSnapshot const> snapshot, std::vector<ColumnInfo> columns,
                  std::vector<ColumnGroupInfo> groups = {})
-        : _snapshot{std::move(snapshot)}, _columns{std::move(columns)}, _groups{std::move(groups)},
+        : _snapshot{std::move(snapshot)},
+          _columns{std::move(columns)},
+          _groups{std::move(groups)},
           _pinnedAt{nextPin()} {}
 
     /// @brief When the snapshot was pinned, among every pin of the process: larger for later.
@@ -1801,10 +1803,10 @@ struct AnswerContext {
         }
     }
     if (query.distinct) {
-        auto const listed = query.distinct->group.empty()
-                                ? std::span<std::string const>{&query.distinct->column, 1}
-                                : detail::groupColumns(groups, query.distinct->group)
-                                      .value_or(std::span<std::string const>{});
+        auto const listed =
+            query.distinct->group.empty()
+                ? std::span<std::string const>{&query.distinct->column, 1}
+                : detail::groupColumns(groups, query.distinct->group).value_or(std::span<std::string const>{});
         for (auto const& id : listed) {
             if (auto const index = findColumn(columns, id); index && columns[*index].level == level) {
                 return id;
@@ -2475,8 +2477,8 @@ struct QueryTable {
 /// A column's field is the `value` member of a `CellEdit` action (an `EditInfo` with no `member`), or the named member
 /// of a `RowEdit` action's `values`. The fits are `Integer` with an integer, slider, enum or choice field; `Key` with
 /// an integer or choice; `Decimal` with a decimal; `Quantity` and `Measure` with a quantity; `Number` with a number or
-/// slider; `Text` with a text, multiline, enum or choice; `Date` with a date or epoch date; `DateTime` with a date-time
-/// or epoch date-time; `Bool` with a Boolean; `Custom` with a text, enum or choice.
+/// slider; `Text` with a text, multiline, enum or choice; `Date` with a date or epoch date; `DateTime` with a
+/// date-time or epoch date-time; `Bool` with a Boolean; `Custom` with a text, enum or choice.
 /// @param description The description.
 /// @param schemaOf    An action's input schema by its id; nothing for an action that is not known.
 /// @return `SourceContract` naming the first column whose action is unknown or does not read, whose field is missing,

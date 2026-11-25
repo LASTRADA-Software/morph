@@ -285,10 +285,11 @@ TEST_CASE("tui forms: the header box of a paged table selects every row of the v
     REQUIRE(screen.has_value());
     client.settle();
     INFO(client.drawn());
-    REQUIRE(client.drawn().starts_with("[ ]"));                               // the header box, at the first cell
+    REQUIRE(client.drawn().starts_with("[ ]"));  // the header box, at the first cell
     using Type = core::tui::MouseEvent::Type;
-    for (Type const type : {Type::Press, Type::Release}) {                    // screen cell (1, 0), 1-based
-        static_cast<void>(client.screen.dispatchEvent(core::tui::MouseEvent{.type = type, .button = 0, .x = 2, .y = 1}));
+    for (Type const type : {Type::Press, Type::Release}) {  // screen cell (1, 0), 1-based
+        static_cast<void>(
+            client.screen.dispatchEvent(core::tui::MouseEvent{.type = type, .button = 0, .x = 2, .y = 1}));
     }
     client.settle();
     INFO(client.drawn());

@@ -29,7 +29,8 @@ int sum(std::vector<int> const& widths) { return std::accumulate(widths.begin(),
 TEST_CASE("stretch columns: with room to spare each is its natural width plus a weighted share of the spare",
           "[ui][stretch]") {
     std::vector<StretchColumn> const columns{column(10, 10, 4, 1), column(10, 10, 4, 3)};
-    CHECK(ui::stretchWidths(columns, 30) == std::vector<int>{13, 17});  // 2.5 and 7.5 of the spare 10: the odd unit to the first
+    CHECK(ui::stretchWidths(columns, 30) ==
+          std::vector<int>{13, 17});  // 2.5 and 7.5 of the spare 10: the odd unit to the first
     CHECK(ui::stretchWidths(columns, 20) == std::vector<int>{10, 10});
 }
 

@@ -31,8 +31,8 @@
 #include <morph/ui/interpreter.hpp>
 #include <string>
 
-#include "qt_quick/widget.hpp"
 #include "qt_quick/wide_rows_document.hpp"
+#include "qt_quick/widget.hpp"
 #include "table/wide_table_model.hpp"
 
 namespace {
@@ -98,8 +98,8 @@ int main(int argc, char* argv[]) {
             print("failed: refused: " + loaded.error().message());
             return;
         }
-        auto screen = run->interpreter.mount(std::make_shared<morph::ui::Document const>(std::move(*loaded)), {},
-                                             run->backend);
+        auto screen =
+            run->interpreter.mount(std::make_shared<morph::ui::Document const>(std::move(*loaded)), {}, run->backend);
         if (!screen) {
             print("failed: refused: " + screen.error().message());
             return;

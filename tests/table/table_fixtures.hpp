@@ -107,20 +107,22 @@ inline std::shared_ptr<morph::table::VectorSource> slowColumn(ColumnKind kind, s
 inline std::shared_ptr<morph::table::VectorSource> distinctSource(
     std::vector<std::string> const& slow = {}, std::vector<std::pair<std::size_t, std::size_t>> const& unloaded = {}) {
     using S = std::string;
-    std::vector<std::vector<Cell>> rows{
-        {S{"open"}, S{"Berlin"}, std::int64_t{1}}, {S{"Open"}, S{"Paris"}, std::int64_t{2}},
-        {S{"closed"}, S{"Berlin"}, std::int64_t{3}}, {Cell{}, S{"Berlin"}, std::int64_t{4}},
-        {S{"open"}, S{"Paris"}, S{"x"}}, {S{"hold"}, S{"Rome"}, std::int64_t{5}}};
+    std::vector<std::vector<Cell>> rows{{S{"open"}, S{"Berlin"}, std::int64_t{1}},
+                                        {S{"Open"}, S{"Paris"}, std::int64_t{2}},
+                                        {S{"closed"}, S{"Berlin"}, std::int64_t{3}},
+                                        {Cell{}, S{"Berlin"}, std::int64_t{4}},
+                                        {S{"open"}, S{"Paris"}, S{"x"}},
+                                        {S{"hold"}, S{"Rome"}, std::int64_t{5}}};
     for (auto const& [row, column] : unloaded) {
         rows.at(row).at(column) = Cell{morph::table::Unloaded{}};
     }
     auto const levelOf = [&slow](std::string const& id) {
         return std::ranges::find(slow, id) != slow.end() ? std::string{"slow"} : std::string{};
     };
-    return makeSource({levelCol("status", ColumnKind::Text, levelOf("status")),
-                       levelCol("city", ColumnKind::Text, levelOf("city")),
-                       levelCol("qty", ColumnKind::Integer, levelOf("qty"))},
-                      std::move(rows));
+    return makeSource(
+        {levelCol("status", ColumnKind::Text, levelOf("status")), levelCol("city", ColumnKind::Text, levelOf("city")),
+         levelCol("qty", ColumnKind::Integer, levelOf("qty"))},
+        std::move(rows));
 }
 
 // A typed row whose companyA, companyB and companyC form the declared group "company". Reflected by glaze.

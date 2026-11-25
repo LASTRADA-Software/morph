@@ -42,9 +42,9 @@
 #include <morph/table/engine.hpp>
 #include <optional>
 #include <span>
-#include <typeindex>
 #include <string>
 #include <string_view>
+#include <typeindex>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -321,8 +321,11 @@ public:
             drafts.push_back(draft(row, cell.column));
         }
         auto& queue = _rowQueues[row];
-        queue.push_back(RowFlight{
-            .id = ++_nextFlight, .request = std::move(request), .sent = false, .discard = false, .drafts = std::move(drafts)});
+        queue.push_back(RowFlight{.id = ++_nextFlight,
+                                  .request = std::move(request),
+                                  .sent = false,
+                                  .discard = false,
+                                  .drafts = std::move(drafts)});
         if (queue.size() == 1) {
             startRow(row);
         }
@@ -510,7 +513,9 @@ public:
     ///        row's next commit was sent, with the row's key now and whether the commit was refused. A commit whose
     ///        row went absent settles unheard.
     /// @param handler The receiver; empty for none.
-    void onRowSettled(std::function<void(RowId const& row, bool refused)> handler) { _rowSettled = std::move(handler); }
+    void onRowSettled(std::function<void(RowId const& row, bool refused)> handler) {
+        _rowSettled = std::move(handler);
+    }
 
     /// @brief Whether a cell has an edit committed and not yet settled.
     /// @param row    The row's key.
@@ -739,8 +744,8 @@ private:
                     eraseError(row, cell.column);
                     CellState& state = _cells[row][cell.column];
                     state.modified = true;
-                    state.settled = state.draft.has_value() && at < settled.drafts.size() &&
-                                    state.draft == settled.drafts.at(at);
+                    state.settled =
+                        state.draft.has_value() && at < settled.drafts.size() && state.draft == settled.drafts.at(at);
                 }
             } else {
                 RowEditRequest landing = settled.request;

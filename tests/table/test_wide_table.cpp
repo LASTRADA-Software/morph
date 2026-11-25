@@ -192,9 +192,9 @@ TEST_CASE("wide table: apply reads only the sorted and filtered columns", "[tabl
     RecordingSource const recording{wide};
     morph::table::TableQuery query;
     query.sort = {{.column = "i001", .dir = morph::table::SortDirection::Ascending}};
-    query.filters.columns.emplace("t001", morph::table::ColumnFilter{.combine = morph::table::Combine::Any,
-                                                                     .include = {{.contains = "a"}},
-                                                                     .exclude = {}});
+    query.filters.columns.emplace(
+        "t001", morph::table::ColumnFilter{
+                    .combine = morph::table::Combine::Any, .include = {{.contains = "a"}}, .exclude = {}});
     query.page = {.offset = 0, .limit = 200};
     morph::table::ApplyOptions options;
     options.services.units = wide.units();

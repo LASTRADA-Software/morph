@@ -39,14 +39,14 @@ namespace morph::tui::detail {
 /// (`setOnFilter`). Groups (`setColumnGroups`) draw a line above the headers: each group's label over the visible
 /// columns it names, ending in its own filter button. Bands (`setBands`) draw a line per level above that, outermost
 /// first: each run's label, then its unit in brackets, from the run's first drawn column, cut at its last. With menus
-/// (`setMenu`), the header line keeps its last two cells for a `⋯` that opens the table's menu, so no column's header or
-/// filter button lies under it; a header's menu opens
-/// on a right click on the header, or with Shift+F10 or the context-menu key on the focused header. A menu is a list
-/// below its header, as a button-style menu's is. The terminal draws no drag or resize handle: a move is
-/// Ctrl+Shift+Left and Ctrl+Shift+Right on the focused header, and nothing resizes a column. With a cell menu
-/// (`setCellMenu`), a right click on a row's cell opens it below the cell, after selecting the row alone when it is not
-/// selected; over a source, Shift+F10 or the context-menu key opens it on the focused cell, and a key the table leaves
-/// that is one of `setCellMenuKeys` runs the focused cell's entry whose chord it is.
+/// (`setMenu`), the header line keeps its last two cells for a `⋯` that opens the table's menu, so no column's header
+/// or filter button lies under it; a header's menu opens on a right click on the header, or with Shift+F10 or the
+/// context-menu key on the focused header. A menu is a list below its header, as a button-style menu's is. The
+/// terminal draws no drag or resize handle: a move is Ctrl+Shift+Left and Ctrl+Shift+Right on the focused header, and
+/// nothing resizes a column. With a cell menu
+/// (`setCellMenu`), a right click on a row's cell opens it below the cell, after selecting the row alone when it is
+/// not selected; over a source, Shift+F10 or the context-menu key opens it on the focused cell, and a key the table
+/// leaves that is one of `setCellMenuKeys` runs the focused cell's entry whose chord it is.
 ///
 /// While a header can act (a column sorts, or the table has menus or moves columns), it takes the keyboard focus
 /// within the table: Up on the first row (the first view row over a source) focuses the header of the chain's first
@@ -122,8 +122,9 @@ public:
     void setSelectionView(std::vector<ui::Key> const& except) override;
     void setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) override;
     /// An unmatched row's cells draw dim; a busy row shows the busy glyph and a locked row the lock glyph in gutter
-    /// cells of their own (the glyph and a gap), after the selection and cursor marks; the marks' tooltip, or for a busy or locked row
-    /// without one a text saying why, is the row's hover text over its own tooltip. Throws std::logic_error when
+    /// cells of their own (the glyph and a gap), after the selection and cursor marks; the marks' tooltip, or for a
+    /// busy or locked row without one a text saying why, is the row's hover text over its own tooltip. Throws
+    /// std::logic_error when
     /// @p row is not one of this table's rows.
     void setRowMarks(ui::Widget& row, ui::RowMarks const& marks) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
@@ -131,8 +132,9 @@ public:
     void setOnSort(std::function<void(std::size_t, ui::HeaderClick)> onSort) override;
     void setMenu(std::function<std::vector<ui::MenuEntry>(std::optional<std::size_t>)> entries,
                  std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) override;
-    void setCellMenu(std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> entries,
-                     std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> chosen) override;
+    void setCellMenu(
+        std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> entries,
+        std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> chosen) override;
     void setCellMenuKeys(std::vector<std::string> const& chords) override { _cellMenuKeys = chords; }
     void setVisibleColumns(std::vector<std::size_t> const& visible) override;
     void setOnColumnMove(std::function<void(std::size_t, std::size_t)> handler) override;
@@ -192,11 +194,12 @@ public:
     void setOnFocusMove(std::function<void(ui::FocusMove)> handler) override;
     /// Printable text typed on a focused cell of a table over a source, with no chord of the table's for the key.
     void setOnText(std::function<void(std::string)> onText) override;
-    void setOnCellClick(std::function<void(std::size_t viewRow, std::size_t column, bool doubleClick)> onClick) override;
+    void setOnCellClick(
+        std::function<void(std::size_t viewRow, std::size_t column, bool doubleClick)> onClick) override;
     /// Reported before the frame after the one that found the focus outside the table and everything in it.
     void setOnFocusOut(std::function<void()> onFocusOut) override;
-    /// The editor takes the cell's slot and the cell none; an editor that had the focus gives it back to the table when
-    /// it goes. Throws std::logic_error when @p row is not one of this table's rows.
+    /// The editor takes the cell's slot and the cell none; an editor that had the focus gives it back to the table
+    /// when it goes. Throws std::logic_error when @p row is not one of this table's rows.
     void setCellEditor(ui::Widget& row, std::size_t column, ui::Widget* editor) override;
     /// An error mark draws `!` and a modified one `+` at the cell's trailing edge. Throws std::logic_error when @p row
     /// is not one of this table's rows.
@@ -264,8 +267,8 @@ private:
         WidgetBase* cell = nullptr;    ///< The spanning cell, a child of the table's view while the plan holds it.
         std::size_t column = 0;
         std::size_t columns = 1;  ///< How many columns it covers from `column`, its own included.
-        std::size_t first = 0;  ///< The origin's place among the shown rows.
-        std::size_t last = 0;   ///< The last covered row's place.
+        std::size_t first = 0;    ///< The origin's place among the shown rows.
+        std::size_t last = 0;     ///< The last covered row's place.
     };
     /// The lines of @p row: its natural height, a line at least, and what a spanning cell it ends needs besides.
     [[nodiscard]] int heightOf(WidgetBase const& row) const;
@@ -441,13 +444,13 @@ private:
     std::vector<ui::Key> _selection;  ///< The keys requested or selected by the user, in that order.
     /// Engaged while the selection is of the view: every row but these keys is marked, until the next `setSelection`.
     std::optional<std::vector<ui::Key>> _viewExcept;
-    WidgetBase* _cursor = nullptr;    ///< The cursor row; null for the first shown row.
-    std::optional<ui::Key> _anchor;   ///< Where a range starts: the row last clicked or toggled.
-    std::size_t _cursorPlace = 0;     ///< The cursor's position among the shown rows, when last known.
-    std::size_t _top = 0;             ///< The first shown row drawn.
-    ::core::tui::Size _size{};        ///< The table's size, as of the last frame.
-    int _rowRoom = 0;                 ///< Lines below the header, as of the last frame.
-    bool _follow = true;              ///< Whether the next frame brings the cursor row into view.
+    WidgetBase* _cursor = nullptr;   ///< The cursor row; null for the first shown row.
+    std::optional<ui::Key> _anchor;  ///< Where a range starts: the row last clicked or toggled.
+    std::size_t _cursorPlace = 0;    ///< The cursor's position among the shown rows, when last known.
+    std::size_t _top = 0;            ///< The first shown row drawn.
+    ::core::tui::Size _size{};       ///< The table's size, as of the last frame.
+    int _rowRoom = 0;                ///< Lines below the header, as of the last frame.
+    bool _follow = true;             ///< Whether the next frame brings the cursor row into view.
     /// The focused view the table last looked at, compared by address only: it may be gone by the next frame.
     ::core::tui::Component const* _focusSeen = nullptr;
 
