@@ -826,7 +826,7 @@ std::size_t unloadedIn(DataSource const& source, std::string_view column) {
     auto const snapshot = source.snapshot();
     std::size_t count = 0;
     for (std::size_t row = 0; row < snapshot->rowCount(); ++row) {
-        count += std::holds_alternative<Unloaded>(snapshot->cell(row, *index)) ? 1 : 0;
+        count += std::holds_alternative<Unloaded>(snapshot->cell(row, *index)) ? 1U : 0U;
     }
     return count;
 }
@@ -927,8 +927,8 @@ TEST_CASE("table benchmark: S5 S6 arrivals", "[.benchmark][table][unloaded]") {
         require(engine.setSort({{.column = "d000", .dir = kAsc}}));
         auto const waiting = source->unloadedRows();
         REQUIRE(waiting.size() > 25'000);
-        for (auto const [from, count, samples] : {std::tuple{std::size_t{0}, std::size_t{200}, &first},
-                                                  std::tuple{std::size_t{200}, std::size_t{1000}, &second}}) {
+        for (auto const& [from, count, samples] : {std::tuple{std::size_t{0}, std::size_t{200}, &first},
+                                                   std::tuple{std::size_t{200}, std::size_t{1000}, &second}}) {
             std::vector<std::size_t> const arriving(waiting.begin() + static_cast<std::ptrdiff_t>(from),
                                                     waiting.begin() + static_cast<std::ptrdiff_t>(from + count));
             auto const before = engine.stats();
@@ -1882,7 +1882,7 @@ TEST_CASE("table benchmark: values with units", "[.benchmark][table][measure]") 
     std::size_t parsed = 0;
     printRow("M3: ui::parseMeasure of 1,000 typed texts", 1'000, timedRuns(31, [&] {
                  for (auto const& text : typed) {
-                     parsed += morph::ui::parseMeasure(text, listed, de).has_value() ? 1 : 0;
+                     parsed += morph::ui::parseMeasure(text, listed, de).has_value() ? 1U : 0U;
                  }
              }));
     REQUIRE(parsed == 31 * typed.size());
@@ -1903,9 +1903,9 @@ TEST_CASE("table benchmark: values with units", "[.benchmark][table][measure]") 
         require(engine.setSort({SortKey{.column = column, .dir = kAsc}}));
         REQUIRE(engine.stats().keyBuilds == 1);
         return timedRuns(kRuns, [&] {
-            auto const listed = engine.distinctValues({.column = column});
-            REQUIRE(listed.has_value());
-            REQUIRE(listed->values.size() == 200);
+            auto const listedValuesHeld = engine.distinctValues({.column = column});
+            REQUIRE(listedValuesHeld.has_value());
+            REQUIRE(listedValuesHeld->values.size() == 200);
         });
     };
     printRow("M4: distinctValues through an engine holding the keys, Measure m", kRows, held("m"));

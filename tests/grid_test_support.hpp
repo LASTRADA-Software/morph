@@ -351,8 +351,10 @@ public:
         auto asked = std::exchange(_locates, {});
         for (auto& [key, done] : asked) {
             auto const at = std::ranges::find(view, key, &Row::key);
-            done(at == view.end() ? ui::RowLocation{std::nullopt}
-                                  : ui::RowLocation{static_cast<std::int64_t>(at - view.begin())});
+            // Assigned, not cast: the iterator difference is `std::ptrdiff_t`, which is `std::int64_t` only on some
+            // targets.
+            std::int64_t const index = at - view.begin();
+            done(at == view.end() ? ui::RowLocation{std::nullopt} : ui::RowLocation{index});
         }
     }
     [[nodiscard]] std::size_t locatesAsked() const { return _locates.size(); }

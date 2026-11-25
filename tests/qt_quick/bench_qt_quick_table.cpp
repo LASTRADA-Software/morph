@@ -223,7 +223,7 @@ TEST_CASE("qt quick baseline: F2 to F5 on a rows table of 2,000 x 300", "[.bench
     auto const widgets = detail::liveWidgets().size();
     std::size_t headers = 0;
     for (QQuickItem const* const item : tableItem->findChildren<QQuickItem*>()) {
-        headers += item->objectName().startsWith(QStringLiteral("header")) ? 1 : 0;
+        headers += item->objectName().startsWith(QStringLiteral("header")) ? 1U : 0U;
     }
     std::println(
         "\nF2: a rows table of 2,000 x 300, 1,280 x 800, mounted in {:.0f} ms (document parse included), {} rows "

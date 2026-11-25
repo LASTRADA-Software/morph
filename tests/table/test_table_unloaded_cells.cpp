@@ -402,7 +402,7 @@ TEST_CASE("table: an arrival is one repair", "[table][unloaded][levels]") {
         auto const snapshot = source->snapshot();
         std::size_t misplaced = 0;
         for (auto const row : arriving) {
-            misplaced += engine.viewRowOfKey(snapshot->rowId(row)) == place[row] ? 0 : 1;
+            misplaced += engine.viewRowOfKey(snapshot->rowId(row)) == place[row] ? 0U : 1U;
         }
         CHECK(misplaced == 0);
     }
@@ -427,7 +427,7 @@ TEST_CASE("table: deciding rows runs no filter over all rows", "[table][unloaded
     std::size_t wrong = 0;
     for (auto const row : arriving) {
         bool const inView = engine.viewRowOfKey(snapshot->rowId(row)).has_value();
-        wrong += inView == shown.contains(row) ? 0 : 1;
+        wrong += inView == shown.contains(row) ? 0U : 1U;
     }
     CHECK(wrong == 0);
     CHECK(engine.undecidedRowCount() == static_cast<std::size_t>(oracle.undecided));

@@ -561,7 +561,7 @@ TEST_CASE("table: levelsNeeded names the levels a query sorts, filters and shows
     TableQuery named{.columns = V{"id", "r2"}};
     CHECK(needed(named).order.empty());
     CHECK(needed(named).display == V{"recipe"});
-    TableQuery sorted{.sort = {SortKey{.column = "s1"}}, .columns = V{"id"}};
+    TableQuery sorted{.sort = {SortKey{.column = "s1"}}, .filters = FilterSpec{}, .columns = V{"id"}};
     CHECK(needed(sorted).order == V{"stock"});
     CHECK(needed(sorted).display.empty());
     TableQuery filtered{.filters = FilterSpec{.columns = {{"p1", ColumnFilter{.include = {{.gt = "1"}}}}}},

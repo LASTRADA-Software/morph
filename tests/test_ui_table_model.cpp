@@ -113,7 +113,7 @@ TEST_CASE("window rows: an awaited order is throttled", "[ui][table]") {
     for (std::int64_t key = 0; key < 10; ++key) {
         h.change({key});
         h.advance(10ms);
-    }                                                          // ten events in 100 ms
+    }  // ten events in 100 ms
     CHECK(h.dispatcher.count("Table.samples") == before + 1);  // one, at the first event
     h.replyPage(awaited);
     h.advance(149ms);
@@ -5913,8 +5913,13 @@ TEST_CASE("view selection: only the table whose view was refused offers it again
     while (openCalls(h, "Table.samples") > 0) {
         std::size_t const call = oldestOpen(h, "Table.samples");
         bool const closed = queryOf(h, call).filters.columns.at("status").include.front().eq == "closed";
-        h.reply(call, closed ? selectionPage({{6, "closed"}, {7, "closed"}, {8, "closed"}, {9, "closed"}}, 4, "c1")
-                             : selectionPage(openRows(), 6, "v1"));
+        std::string page;
+        if (closed) {
+            page = selectionPage({{6, "closed"}, {7, "closed"}, {8, "closed"}, {9, "closed"}}, 4, "c1");
+        } else {
+            page = selectionPage(openRows(), 6, "v1");
+        }
+        h.reply(call, std::move(page));
     }
     int const t = h.byTestId("Table", "t");
     int const u = h.byTestId("Table", "u");

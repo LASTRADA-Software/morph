@@ -1789,8 +1789,11 @@ TEST_CASE("grid: the loader checks a form's derive keys and keeps a grid column'
 TEST_CASE("grid: spans pass the walk and drop pasted values", "[ui][grid][spans]") {
     GridFixture f{3};
     f.source->setSpans([](forms::RowState const& row) {
-        return row.key() == 1 ? std::vector<ui::CellSpan>{{.column = "mass", .rows = 2, .columns = 2}}
-                              : std::vector<ui::CellSpan>{};
+        std::vector<ui::CellSpan> spans;
+        if (row.key() == 1) {
+            spans.push_back({.column = "mass", .rows = 2, .columns = 2});
+        }
+        return spans;
     });
     CHECK(f.source->covered(ui::Key{std::int64_t{2}}, "mass"));
     CHECK(f.source->covered(ui::Key{std::int64_t{1}}, "volume"));
