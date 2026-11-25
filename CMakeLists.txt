@@ -660,6 +660,7 @@ target_sources(morph
         include/morph/ui/frontend.hpp
         include/morph/ui/value.hpp
         include/morph/ui/locale_table.hpp
+        include/morph/ui/stretch_columns.hpp
         include/morph/ui/table_config.hpp
         include/morph/ui/table_dialogs.hpp
         include/morph/ui/table_filter_menu.hpp
