@@ -39,6 +39,7 @@ struct DeriveOf {
     Action body;
 
     /// @brief glaze's meta: the one member `body`.
+    // NOLINTNEXTLINE(readability-identifier-naming): glaze looks the meta type up by this name.
     struct glaze {
         /// @brief The described type.
         using T = DeriveOf;

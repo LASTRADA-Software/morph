@@ -438,6 +438,10 @@ public:
     /// @return The unit signal.
     [[nodiscard]] reactive::Signal<std::size_t>& unit() noexcept { return _unit; }
 
+    /// @brief A Decimal's or Quantity's entry unit, read-only.
+    /// @return The unit signal.
+    [[nodiscard]] reactive::Signal<std::size_t> const& unit() const noexcept { return _unit; }
+
     /// @brief The field's places as a record gives them after the form was built, with the meaning of
     ///        `x-decimalPlaces`: the canonical unit's entry places and the wire `dp`. Another unit of a Quantity keeps
     ///        its own. Unset keeps the schema's. A change checks the draft again and leaves its text as typed.
@@ -448,6 +452,10 @@ public:
     ///        collection that had rows).
     /// @return The engagement signal.
     [[nodiscard]] reactive::Signal<bool>& engaged() noexcept { return _engaged; }
+
+    /// @brief Whether the control was engaged, read-only.
+    /// @return The engaged signal.
+    [[nodiscard]] reactive::Signal<bool> const& engaged() const noexcept { return _engaged; }
 
     /// @brief The draft's encoding. Tracked.
     /// @return The encoding computed.
@@ -612,8 +620,8 @@ public:
         std::uint64_t const key = row->key();
         _core->runtime().batch([&] {
             _rows.mutate([&](auto& rows) {
-                auto const at = static_cast<std::ptrdiff_t>(std::min(position, rows.size()));
-                rows.insert(rows.begin() + at, std::move(row));
+                auto const offset = static_cast<std::ptrdiff_t>(std::min(position, rows.size()));
+                rows.insert(rows.begin() + offset, std::move(row));
             });
             _engaged.set(true);
         });
@@ -655,8 +663,8 @@ public:
         _core->runtime().batch([&] {
             _rows.mutate([&](auto& held) {
                 for (RemovedRow& removed : rows) {
-                    auto const at = static_cast<std::ptrdiff_t>(std::min(removed.position, held.size()));
-                    held.insert(held.begin() + at, std::move(removed.row));
+                    auto const offset = static_cast<std::ptrdiff_t>(std::min(removed.position, held.size()));
+                    held.insert(held.begin() + offset, std::move(removed.row));
                 }
             });
             _engaged.set(true);
@@ -1205,6 +1213,7 @@ public:
     /// @param path The path.
     /// @return The field.
     /// @throws std::out_of_range when no field has that path.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
     [[nodiscard]] FieldState& field(std::string_view path) const {
         FieldState* current = nullptr;
         std::span<std::unique_ptr<FieldState> const> scope = _fields;
@@ -1283,7 +1292,7 @@ public:
     void submit() {
         // A hook ends an edit not yet committed (a grid's open cell editor), so the body sent holds it.
         auto const hooks = _beforeSubmit;
-        for (auto const& [id, hook] : hooks) {
+        for (auto const& [hookId, hook] : hooks) {
             if (hook) {
                 hook();
             }
@@ -1402,15 +1411,15 @@ public:
     /// @param hook The hook.
     /// @return The hook's id, for `removeBeforeSubmit`.
     [[nodiscard]] std::size_t addBeforeSubmit(std::function<void()> hook) {
-        std::size_t const id = ++_nextHook;
-        _beforeSubmit.emplace_back(id, std::move(hook));
-        return id;
+        std::size_t const hookId = ++_nextHook;
+        _beforeSubmit.emplace_back(hookId, std::move(hook));
+        return hookId;
     }
 
     /// @brief Removes a hook `addBeforeSubmit` registered.
-    /// @param id The hook's id; one not registered is ignored.
-    void removeBeforeSubmit(std::size_t id) {
-        std::erase_if(_beforeSubmit, [id](auto const& entry) { return entry.first == id; });
+    /// @param hookId The hook's id; one not registered is ignored.
+    void removeBeforeSubmit(std::size_t hookId) {
+        std::erase_if(_beforeSubmit, [hookId](auto const& entry) { return entry.first == hookId; });
     }
 
     /// @brief Whether a scalar field holds another entry than when the form was last loaded: its draft or its unit
@@ -1420,7 +1429,7 @@ public:
     /// @param path The field's path (see `field`), such as `specimens#3.mass`.
     /// @return `true` when modified; `false` for a path that names no field, and for an Object or a collection.
     [[nodiscard]] bool modified(std::string_view path) const {
-        FieldState* state = nullptr;
+        FieldState const* state = nullptr;
         try {
             state = &field(path);
         } catch (std::out_of_range const&) {
@@ -1664,6 +1673,7 @@ public:
             }
         });
         std::vector<FieldState*> targets;
+        targets.reserve(writes.size());
         for (auto const& write : writes) {
             targets.push_back(write.first);
         }
@@ -1876,6 +1886,7 @@ private:
         if (spec.truncated) {
             return;
         }
+        // NOLINTNEXTLINE(misc-no-recursion): an Object's members and a row's are fields, which the walk visits in turn.
         runtime().untracked([&] {
             if (spec.kind == FieldKind::Object) {
                 for (auto const& member : state.members()) {
@@ -1889,9 +1900,8 @@ private:
                     }
                 }
             } else {
-                _loadedCells.insert_or_assign(
-                    state.path(),
-                    LoadedCell{.text = state.draft(), .unit = const_cast<FieldState&>(state).unit().get()});
+                _loadedCells.insert_or_assign(state.path(),
+                                              LoadedCell{.text = state.draft(), .unit = state.unit().get()});
             }
         });
     }
@@ -1930,13 +1940,12 @@ private:
         if (found == _loadedCells.end()) {
             return true;
         }
-        return state.draft() != found->second.text ||
-               const_cast<FieldState&>(state).unit().get() != found->second.unit;
+        return state.draft() != found->second.text || state.unit().get() != found->second.unit;
     }
 
     // A collection's row by key, tracked; null when there is none.
     [[nodiscard]] RowState const* rowOf(std::string_view arrayPath, std::uint64_t key) const {
-        FieldState* array = nullptr;
+        FieldState const* array = nullptr;
         try {
             array = &field(arrayPath);
         } catch (std::out_of_range const&) {
@@ -2042,6 +2051,7 @@ private:
     // NOLINTNEXTLINE(misc-no-recursion): an Object's members and a row's are fields.
     [[nodiscard]] static std::optional<std::string> partialOf(FieldState const& field) {
         FieldSpec const& spec = field.spec();
+        // NOLINTNEXTLINE(misc-no-recursion): an Object's members and a row's are fields, which the walk visits in turn.
         auto const membersOf = [](std::span<std::unique_ptr<FieldState> const> members) {
             std::string json = "{";
             bool first = true;
@@ -2070,8 +2080,7 @@ private:
         if (encoding.has_value() && encoding->has_value()) {
             return (*encoding)->json;
         }
-        if (!encoding.has_value() && spec.blankAs == BlankAs::Empty &&
-            const_cast<FieldState&>(field).engaged().get()) {  // NOLINT(cppcoreguidelines-pro-type-const-cast)
+        if (!encoding.has_value() && spec.blankAs == BlankAs::Empty && field.engaged().get()) {
             return std::string{R"("")"};
         }
         return std::nullopt;
@@ -2110,6 +2119,7 @@ private:
     // key was i-th when it was sent, wherever it is now.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per segment's form.
     [[nodiscard]] Resolved resolve(DeriveRound const& round, std::string_view path) const {
+        // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
         return runtime().untracked([&] {
             std::span<std::unique_ptr<FieldState> const> scope = _fields;
             FieldState* current = nullptr;
@@ -2206,8 +2216,7 @@ private:
     [[nodiscard]] bool holdsLoaded(FieldState const& field) const {
         auto const found = _loadedCells.find(field.path());
         return found != _loadedCells.end() && field.draft() == found->second.text &&
-               const_cast<FieldState&>(field).unit().peek() ==
-                   found->second.unit;  // NOLINT(cppcoreguidelines-pro-type-const-cast)
+               field.unit().peek() == found->second.unit;
     }
 
     // A programmatic write into @p targets that is no edit: a target that held its loaded value is recorded as loaded
@@ -2237,8 +2246,10 @@ private:
         runtime().untracked([&] {
             for (std::size_t at = 0; at < targets.size(); ++at) {
                 if (heldLoaded.at(at)) {
-                    _loadedCells.insert_or_assign(targets[at]->path(), LoadedCell{.text = targets[at]->draft(),
-                                                                                  .unit = targets[at]->unit().peek()});
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): at < targets.size()
+                    FieldState const& target = *targets[at];
+                    _loadedCells.insert_or_assign(target.path(),
+                                                  LoadedCell{.text = target.draft(), .unit = target.unit().peek()});
                 }
             }
             for (std::size_t index = 0; index < _fields.size(); ++index) {
@@ -2267,6 +2278,7 @@ private:
     };
 
     // Sends a round: the evaluation and the derive call, each with the partial body.
+    // NOLINTNEXTLINE(misc-no-recursion): a stale round's settling starts the next round, which settles through its replies in turn.
     void startRound() {
         _debounce.cancel();
         _round = InFlight{.round = captureRound()};
@@ -2315,6 +2327,7 @@ private:
     }
 
     // One reply of the round in flight settled; once both did, the state follows, and a stale round makes one more.
+    // NOLINTNEXTLINE(misc-no-recursion): a stale round's settling starts the next round, which settles through its replies in turn.
     void settled(std::uint64_t sequence, bool evaluation, bool failed) {
         if (!_round || _round->round.sequence != sequence) {
             return;

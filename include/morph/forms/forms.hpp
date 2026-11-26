@@ -2354,7 +2354,7 @@ inline void annotateComputedProperty(glz::generic_u64& property, std::vector<std
         inputsList.emplace_back(std::string{inputName});
     }
     computedMeta["inputs"] = inputsList;
-    property["x-computed"] = computedMeta;
+    property["x-computed"] = std::move(computedMeta);
 }
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
@@ -2710,6 +2710,7 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
 
     if constexpr (isMeasureValue<Member>) {
         // The units are the application's at run time, listed by the table's description, not by the schema.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): glz::generic's operator[] keys by name; it indexes no sequence
         property["x-measure"] = true;
     }
     if constexpr (units::isQuantity<Member>) {
@@ -3460,6 +3461,7 @@ void annotateColumnGroups(glz::generic_u64& dom, std::span<std::string_view cons
 /// throws.
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — glaze DOM requires operator[]
 template <typename A>
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
 [[nodiscard]] std::string mergeSchemaExtras(std::string rawSchema) {
     // u64 number mode: the schema carries int64/uint64 bounds in $defs, which
     // the default double-only DOM would silently round.
@@ -3719,13 +3721,16 @@ concept NestedAggregate = ReflectableAggregate<T> && !EmptyCapableField<T>;
 /// @param object The object whose nested aggregates are visited.
 /// @param visit  Called once per nested aggregate, in member order.
 template <typename A, typename Visit>
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
 constexpr void forEachNested(A& object, Visit const& visit) {
     using Plain = std::remove_cvref_t<A>;
     if constexpr (WrittenAsMember<Plain>) {
         forEachNested(object.*(glz::meta<Plain>::value), visit);
     } else if constexpr (glz::reflectable<Plain> || glz::glaze_object_t<Plain>) {
         constexpr auto memberCount = reflectedCount<Plain>();
+        // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
         [&]<std::size_t... I>(std::index_sequence<I...>) {
+            // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
             [[maybe_unused]] auto one = [&]<std::size_t Idx>() {
                 // A `glz::meta` entry that computes its value yields a value: nothing is stored behind it.
                 [[maybe_unused]] decltype(auto) member = morph::detail::reflectedMember<Idx>(object);
@@ -3742,7 +3747,7 @@ constexpr void forEachNested(A& object, Visit const& visit) {
                 } else if constexpr (isStdOptional<Member>) {
                     // The schema decides an engaged value as it decides the member itself: a nested aggregate, or a
                     // `std::vector` of them.
-                    using Value = typename Member::value_type;
+                    using Value = Member::value_type;
                     if constexpr (NestedAggregate<Value>) {
                         if (member.has_value()) {
                             visit(*member);
