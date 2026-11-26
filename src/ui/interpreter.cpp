@@ -5043,7 +5043,7 @@ namespace {
         }
     }
     TableSelection out;
-    if (ValueList const* const items = tableSelection(element).asList()) {
+    if (Value const itemsValue = tableSelection(element); ValueList const* const items = itemsValue.asList()) {
         for (Value const& item : *items) {
             out.keys.push_back(keyOf(item));
         }
@@ -10604,7 +10604,8 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     options.status = slotProp<TableStatus>([element, table, scope = ctx.scope] {
         static_cast<void>(table->version.get());
         TableStatus status;
-        ValueList const* const selected = tableSelection(*element).asList();
+        Value const selectedValue = tableSelection(*element);
+        ValueList const* const selected = selectedValue.asList();
         status.counts =
             countsText(table->rows->counts(), selected == nullptr ? 0 : static_cast<std::int64_t>(selected->size()),
                        scope->formatting());
@@ -10676,7 +10677,8 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
             }
             std::unordered_set<Key> held;
             runtime().untracked([&] {
-                if (ValueList const* const items = tableSelection(*element).asList()) {
+                if (Value const itemsValue = tableSelection(*element);
+                    ValueList const* const items = itemsValue.asList()) {
                     for (Value const& item : *items) {
                         held.insert(keyOf(item));
                     }
@@ -10796,7 +10798,8 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     // node's visibility and layout, and every other common property stays on the table, so its test id and the
     // element id `focus` finds name the table.
     auto const listed = [scope = ctx.scope, bindings = ctx.bindings, rowsExpr] {
-        ValueList const* const items = evalIn(*scope, bindings.get(), rowsExpr).asList();
+        Value const itemsValue = evalIn(*scope, bindings.get(), rowsExpr);
+        ValueList const* const items = itemsValue.asList();
         return items == nullptr || !items->empty();
     };
     Column wrapper;
@@ -13789,7 +13792,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         }
         std::vector<Key> keys;
         std::vector<std::string> copyColumns = runtime().untracked([&] {
-            if (ValueList const* const items = tableSelection(element).asList()) {
+            if (Value const itemsValue = tableSelection(element); ValueList const* const items = itemsValue.asList()) {
                 for (Value const& item : *items) {
                     keys.push_back(keyOf(item));
                 }
@@ -15375,7 +15378,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                                                  : SelectionMode::None;
     options.selection = slotProp<std::vector<Key>>([&element] {
         std::vector<Key> keys;
-        if (ValueList const* const items = tableSelection(element).asList()) {
+        if (Value const itemsValue = tableSelection(element); ValueList const* const items = itemsValue.asList()) {
             for (Value const& item : *items) {
                 keys.push_back(keyOf(item));
             }
@@ -15518,7 +15521,8 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                 }
                 std::vector<Key> keys;
                 if (change == SelectionChange::Extend) {
-                    if (ValueList const* const held = tableSelection(element).asList()) {
+                    if (Value const heldValue = tableSelection(element);
+                        ValueList const* const held = heldValue.asList()) {
                         for (Value const& item : *held) {
                             keys.push_back(keyOf(item));
                         }
