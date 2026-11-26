@@ -1148,40 +1148,61 @@ void TableRowImpl::adopted(ItemBase& child) {
                      });
 }
 
-void TableRowImpl::setLoad(std::size_t column, ui::CellLoad load) {
-    QString const key = QString::number(column);
-    if (load == ui::CellLoad::Loaded) {
-        _loads.remove(key);
-    } else {
-        _loads.insert(key, static_cast<int>(load));
+// A row's cells are bound one by one, each calling one of the three setters below, and each write hands the row's
+// whole map to QML, which converts it to a JavaScript object: a write per cell makes a pass over a wide row cost
+// the square of its columns. A cell whose entry does not change writes nothing.
+namespace {
+
+/// Sets or clears one column's entry in a row's map.
+/// @param map The map.
+/// @param key The column's key.
+/// @param entry The entry; an empty variant clears the column's.
+/// @return Whether the map changed.
+bool setEntry(QVariantMap& map, QString const& key, QVariant const& entry) {
+    if (!entry.isValid()) {
+        return map.remove(key) > 0;
     }
-    write("cellLoads", _loads);
+    auto const found = map.constFind(key);
+    if (found != map.constEnd() && *found == entry) {
+        return false;
+    }
+    map.insert(key, entry);
+    return true;
+}
+
+}  // namespace
+
+void TableRowImpl::setLoad(std::size_t column, ui::CellLoad load) {
+    if (setEntry(_loads, QString::number(column),
+                 load == ui::CellLoad::Loaded ? QVariant{} : QVariant{static_cast<int>(load)})) {
+        write("cellLoads", _loads);
+    }
 }
 
 void TableRowImpl::setAccent(std::size_t column, ui::CellAccent const& accent) {
-    QString const key = QString::number(column);
-    if (accent == ui::CellAccent{}) {
-        _accents.remove(key);
-    } else {
-        _accents.insert(key, QVariantMap{{QStringLiteral("tone"), accent.tone ? static_cast<int>(*accent.tone) : -1},
-                                         {QStringLiteral("tooltip"), toQString(accent.tooltip)},
-                                         {QStringLiteral("invalid"), accent.invalid}});
+    QVariant entry;
+    if (accent != ui::CellAccent{}) {
+        entry = QVariantMap{{QStringLiteral("tone"), accent.tone ? static_cast<int>(*accent.tone) : -1},
+                            {QStringLiteral("tooltip"), toQString(accent.tooltip)},
+                            {QStringLiteral("invalid"), accent.invalid}};
     }
-    write("cellAccents", _accents);
+    if (setEntry(_accents, QString::number(column), entry)) {
+        write("cellAccents", _accents);
+    }
 }
 
 void TableRowImpl::setMarks(std::size_t column, ui::CellMarks const& marks) {
-    QString const key = QString::number(column);
-    if (marks == ui::CellMarks{}) {
-        _marks.remove(key);
-    } else {
-        _marks.insert(key, QVariantMap{{QStringLiteral("readOnly"), marks.readOnly},
-                                       {QStringLiteral("modified"), marks.modified},
-                                       {QStringLiteral("error"), marks.error},
-                                       {QStringLiteral("stale"), marks.stale},
-                                       {QStringLiteral("muted"), marks.muted}});
+    QVariant entry;
+    if (marks != ui::CellMarks{}) {
+        entry = QVariantMap{{QStringLiteral("readOnly"), marks.readOnly},
+                            {QStringLiteral("modified"), marks.modified},
+                            {QStringLiteral("error"), marks.error},
+                            {QStringLiteral("stale"), marks.stale},
+                            {QStringLiteral("muted"), marks.muted}};
     }
-    write("cellMarks", _marks);
+    if (setEntry(_marks, QString::number(column), entry)) {
+        write("cellMarks", _marks);
+    }
 }
 
 void TableRowImpl::setGap(int gap) { static_cast<void>(gap); }
