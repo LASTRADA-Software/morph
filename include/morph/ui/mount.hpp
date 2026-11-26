@@ -1402,16 +1402,10 @@ private:
         std::vector<Widget*>& children = found->second.children;
         std::vector<Widget*> next;
         next.reserve(children.size());
-        for (Widget* const child : order) {
-            if (std::ranges::contains(children, child)) {
-                next.push_back(child);
-            }
-        }
-        for (Widget* const child : children) {
-            if (!std::ranges::contains(next, child)) {
-                next.push_back(child);
-            }
-        }
+        std::ranges::copy_if(order, std::back_inserter(next),
+                             [&children](Widget const* child) { return std::ranges::contains(children, child); });
+        std::ranges::copy_if(children, std::back_inserter(next),
+                             [&next](Widget const* child) { return !std::ranges::contains(next, child); });
         children = std::move(next);
     }
 
@@ -3381,7 +3375,7 @@ private:
         if (slot.editor == nullptr) {
             return;
         }
-        Widget* const editor = std::exchange(slot.editorWidget, nullptr);
+        Widget const* const editor = std::exchange(slot.editorWidget, nullptr);
         table.widget->setCellEditor(*slot.widget, slot.editorColumn, nullptr);
         std::erase(slot.children, editor);
         slot.editor.reset();
@@ -3885,11 +3879,8 @@ private:
                 target.push_back(placed->second.cell.widget);
             }
         }
-        for (Widget* const child : slot.children) {
-            if (!std::ranges::contains(target, child)) {
-                target.push_back(child);
-            }
-        }
+        std::ranges::copy_if(slot.children, std::back_inserter(target),
+                             [&target](Widget const* child) { return !std::ranges::contains(target, child); });
         if (target != slot.children) {
             reorderChildren(*dynamic_cast<ContainerWidget*>(slot.widget), slot.children, target);
         }
