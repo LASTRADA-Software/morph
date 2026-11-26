@@ -15366,8 +15366,8 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                 look.label = bindProp<std::string>(rowCtx, labelExpr, std::string{}, stringOf);
             }
             std::optional<Key> const rowKey = runtime().untracked([&]() -> std::optional<Key> {
-                Value const* const rowKey = row.peek().field(model.keyColumn);
-                return rowKey == nullptr ? std::nullopt : std::optional{keyOf(*rowKey)};
+                Value const* const keyValue = row.peek().field(model.keyColumn);
+                return keyValue == nullptr ? std::nullopt : std::optional{keyOf(*keyValue)};
             });
             // A locked row's tooltip is why it is locked; else a failed row's is its message, else an unmatched row
             // says so.

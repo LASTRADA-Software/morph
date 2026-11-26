@@ -3984,9 +3984,9 @@ private:
         for (std::size_t at = 0; at < sort.size(); ++at) {
             // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): at < sort.size() by the loop
             auto const& columnId = sort[at].column;
-            auto const column =
-                std::ranges::find(_description->columns, columnId,
-                                  [](table::TableColumn const& column) -> auto const& { return column.info.id; });
+            auto const column = std::ranges::find(
+                _description->columns, columnId,
+                [](table::TableColumn const& candidate) -> auto const& { return candidate.info.id; });
             if (column == _description->columns.end()) {
                 return error(table::TableErrorCode::UnknownColumn, columnId, "no column " + columnId);
             }

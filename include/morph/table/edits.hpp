@@ -600,7 +600,7 @@ private:
     // The queue is brought up to date before the patcher is called: patching
     // notifies the source's listeners at once, and their handlers may commit
     // to the same row or destroy this object.
-    void settle(RowId const& row, std::expected<std::vector<Cell>, FieldError> outcome) {
+    void settle(RowId const& row, std::expected<std::vector<Cell>, FieldError>&& outcome) {
         auto const found = _queues.find(row);
         if (found == _queues.end() || found->second.empty()) {
             return;
