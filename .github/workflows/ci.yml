@@ -414,8 +414,14 @@ jobs:
 
       # Release legs run the suite too: these are the only builds with NDEBUG
       # defined, so code on those paths runs nowhere else.
+      #
+      # Every Linux ctest runs one test per CPU (--parallel "$(nproc)").
+      # catch_discover_tests makes each test case its own process, so a serial
+      # run is mostly process start-up: ~6,000 cases, about half a second each
+      # under ASan, ran 56 minutes one at a time. Tests that share a resource
+      # say so with RESOURCE_LOCK (the ladder's database) or RUN_SERIAL.
       - name: Test
-        run: ctest --preset ${{ matrix.preset }}
+        run: ctest --preset ${{ matrix.preset }} --parallel "$(nproc)"
 
       # Cumulative hit/miss for this leg. Without it the cache is
       # unfalsifiable: a thrashing cache and a working one look identical
@@ -637,7 +643,7 @@ jobs:
           if [ "${{ matrix.preset }}" = "clang-asan" ] || [ "${{ matrix.preset }}" = "clang-tsan" ]; then
             EXCLUDE_ARGS+=(-E "OomInjector|morph#108")
           fi
-          ctest --preset ${{ matrix.preset }} "${EXCLUDE_ARGS[@]}"
+          ctest --preset ${{ matrix.preset }} --parallel "$(nproc)" "${EXCLUDE_ARGS[@]}"
 
       # The tui suite ran at all. The step above passes just as well when
       # MORPH_BUILD_TUI was dropped from the configure, or quietly turned off,
@@ -645,7 +651,7 @@ jobs:
       # tui cases, and `--no-tests=error` turns "selected nothing" red.
       - name: The tui suite was built and ran
         if: "!cancelled()"
-        run: ctest --preset ${{ matrix.preset }} -L tui --no-tests=error --output-on-failure
+        run: ctest --preset ${{ matrix.preset }} --parallel "$(nproc)" -L tui --no-tests=error --output-on-failure
 
       # Cache statistics for this leg. The `sccache stats` step is skipped
       # whenever the probe put this job on the self-hosted fleet, because
@@ -802,7 +808,7 @@ jobs:
           # on a runner with no display.
           QT_QPA_PLATFORM: offscreen
         run: |
-          LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage -LE stress
+          LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage --parallel "$(nproc)" -LE stress
 
       # Deliberately left on the implicit `success()`, unlike the three test
       # steps that carry `!cancelled()` (ladder-tests' scenario corpus,
@@ -934,7 +940,7 @@ jobs:
       - name: Test (offscreen Qt platform)
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --preset gcc-debug
+        run: ctest --preset gcc-debug --parallel "$(nproc)"
 
       # Cumulative hit/miss for this leg. Without it the cache is
       # unfalsifiable: a thrashing cache and a working one look identical
@@ -1272,7 +1278,7 @@ jobs:
         if: steps.filter.outputs.run == 'true'
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --preset gcc-debug -L ladder -LE stress --output-on-failure
+        run: ctest --preset gcc-debug --parallel "$(nproc)" -L ladder -LE stress --output-on-failure
 
       # The Qt Quick renderer's suites, on the Qt this job installs (Ubuntu's
       # packaged Qt is older than the 6.5 Qt Quick needs). `--no-tests=error`
@@ -1282,7 +1288,7 @@ jobs:
         if: "!cancelled() && steps.filter.outputs.run == 'true'"
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --preset gcc-debug -L qt_quick --no-tests=error --output-on-failure
+        run: ctest --preset gcc-debug --parallel "$(nproc)" -L qt_quick --no-tests=error --output-on-failure
 
       # ── The scenario corpus, against the servers just built ────────────
       # This step is the only place in CI that runs
@@ -1516,6 +1522,10 @@ jobs:
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
       # Configure steps for why leaving it unset is what lets pace-cc
       # be selected.
+      # MORPH_BUILD_UNIT_TESTS=OFF: this job runs the ladder and the Qt
+      # transport suites only, and morph_tests and morph_table_tests were a
+      # third of its compiles. "Linux / clang-asan" builds and runs them under
+      # the same sanitizers.
       - name: Configure (clang-asan, ladder + Qt on)
         if: steps.filter.outputs.run == 'true'
         run: |
@@ -1523,6 +1533,7 @@ jobs:
             -DMORPH_BUILD_QT=ON \
             -DMORPH_BUILD_LADDER=ON \
             -DMORPH_LADDER_RUNGS=all \
+            -DMORPH_BUILD_UNIT_TESTS=OFF \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
             $MORPH_PACE_AUTO_INSTALL_FLAG
@@ -1583,7 +1594,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           ASAN_OPTIONS: detect_leaks=0
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: ctest --preset clang-asan -L ladder -LE stress --output-on-failure
+        run: ctest --preset clang-asan --parallel "$(nproc)" -L ladder -LE stress --output-on-failure
 
       # The Qt transport suites, which no other sanitizer leg runs.
       # Instrumenting a suite nothing runs swaps one vacuous control for
@@ -1616,7 +1627,7 @@ jobs:
           ASAN_OPTIONS: detect_leaks=0
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
         run: |
-          ctest --preset clang-asan --no-tests=error --output-on-failure \
+          ctest --preset clang-asan --parallel "$(nproc)" --no-tests=error --output-on-failure \
             -R 'morph::qt::|qt_tls_example_runs'
 
       # Cumulative hit/miss for this leg. Without it the cache is
@@ -2370,6 +2381,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need history for the self-test's changed-paths diff below
 
       # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
       # .cache/cpm): restored, a configure clones nothing; missed, it clones
@@ -2392,10 +2405,37 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y gcc-15 g++-15 ninja-build
 
+      # The self-test builds morph from scratch once per mutation, nine times,
+      # which is most of this job. It tests the checker, so a pull request runs
+      # it only when the checker, its self-test, or what they read and mutate
+      # changed: the build and install rules (CMakeLists.txt, cmake/) and the
+      # three headers the mutations name. A master push always runs it, so a
+      # header the mutations name cannot drift away unnoticed. The check itself
+      # (the two steps after it) runs on every pull request.
+      - name: Does this change reach the install/export checker?
+        id: selftest
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          pattern='^(CMakeLists\.txt|cmake/|scripts/(test_)?check_install_export\.sh|\.github/workflows/ci\.yml|include/morph/detail/(fixed_string|selftest_not_standalone)\.hpp|include/morph/util/rational\.hpp)'
+          if git diff --name-only "$base" HEAD | grep -qE "$pattern"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # See scripts/test_check_install_export.sh's own comment: a gate nobody
       # tests reports green whether or not it still detects anything, and this
       # one guards a defect whose whole character was reporting success.
       - name: Self-test the install/export checker
+        if: steps.selftest.outputs.run == 'true'
         env:
           CC: gcc-15
           CXX: g++-15

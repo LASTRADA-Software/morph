@@ -44,6 +44,7 @@ need `VCPKG_ROOT` set.
 | Option | Default | What it builds |
 |---|---|---|
 | `MORPH_BUILD_TESTS` | `ON` | The unit tests |
+| `MORPH_BUILD_UNIT_TESTS` | `ON` | With `MORPH_BUILD_TESTS`, the library's own suites in `tests/` (`morph_tests`, `morph_table_tests`, the compile checks); a job running only the ladder or a frontend suite turns it off |
 | `MORPH_BUILD_SHARED` | `OFF` | Build `morph::morph` as a shared library. Every symbol is hidden unless `MORPH_API` marks it, on every platform; see below |
 | `MORPH_BUILD_EXAMPLES` | `ON` | The dependency-free examples (forms, concepts, gallery, LIMS gallery); the generic client when a frontend is on |
 | `MORPH_BUILD_CLIENT` | `ON` | `morph::client`, the generic client's source and shell |

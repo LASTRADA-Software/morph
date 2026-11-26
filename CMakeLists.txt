@@ -32,6 +32,10 @@ if(CMAKE_GENERATOR MATCHES "Ninja" AND MORPH_LINK_JOBS GREATER 0)
 endif()
 
 option(MORPH_BUILD_TESTS         "Build tests"         ON)
+# OFF builds no target under tests/ itself: morph_tests, morph_table_tests and the compile checks. A job that runs only
+# the ladder's or a frontend's suites sets it, since those targets are most of its build and another job builds and
+# runs them. The suites in tests/<frontend>/ and the ladder's are still built under MORPH_BUILD_TESTS.
+option(MORPH_BUILD_UNIT_TESTS    "Build the library's own suites in tests/ (morph_tests, morph_table_tests, compile checks)" ON)
 option(MORPH_BUILD_SHARED        "Build morph::morph as a shared library (MORPH_API marks what it exports; symbols are hidden by default)" OFF)
 # A shared morph links a shared core-cpp (CORE_CPP_BUILD_SHARED): core-cpp keeps
 # process and thread state of its own, such as the current executor, and a

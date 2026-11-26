@@ -1,3 +1,8 @@
+# MORPH_BUILD_UNIT_TESTS=OFF: nothing in this file is built (see its option in the root CMakeLists.txt).
+if(NOT MORPH_BUILD_UNIT_TESTS)
+    return()
+endif()
+
 # ── The SYSTEM-include demotion helper's own self-test ──────────────────────
 # cmake/morph_demote_interface_includes.cmake moves unixODBC's `-I` out of the
 # fetched Lightweight target's INTERFACE_COMPILE_OPTIONS. On Linux that flag is
