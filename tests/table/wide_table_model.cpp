@@ -807,9 +807,10 @@ WideModelState& wideModelState() {
     return state;
 }
 
-// The recipe columns of the wide layout, with their generators' attributes.
+// The recipe columns of the wide layout, with their generators' attributes. Never destroyed, like the loader that
+// reads it: that worker can still be generating when `main` returns, and a destroyed layout would be read under it.
 std::vector<WideColumn> const& recipeLayout() {
-    static auto const layout = [] {
+    static auto const* const layout = new auto([] {
         std::vector<WideColumn> out;
         auto const all = wideColumns(300);
         for (auto const& column : all) {
@@ -823,8 +824,8 @@ std::vector<WideColumn> const& recipeLayout() {
             }
         }
         return out;
-    }();
-    return layout;
+    }());  // NOLINT(cppcoreguidelines-owning-memory)
+    return *layout;
 }
 
 // The recipe cells of rows [first, first + count), one vector per row.
