@@ -334,6 +334,7 @@ inline constexpr glz::opts kStoredRead{.null_terminated = false, .error_on_unkno
         return text.size();
     }
     std::size_t end = limit;
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): end <= limit < text.size(), and the loop only lowers it
     while (end > 0 && (static_cast<unsigned char>(text[end]) & 0xC0U) == 0x80U && limit - end < 3) {
         --end;
     }
@@ -421,6 +422,7 @@ public:
 
         /// @brief Never ready before `await_suspend` has decided.
         /// @return `false`.
+        // NOLINTNEXTLINE(readability-convert-member-functions-to-static): the awaiter protocol calls it on the object.
         [[nodiscard]] constexpr bool await_ready() const noexcept { return false; }
 
         /// @brief Takes the lock when it is free, or queues for it.
@@ -544,20 +546,23 @@ struct TableStateShared {
     std::vector<std::string> out;
     std::size_t start = 0;
     std::size_t used = 0;
-    std::size_t at = 0;
-    while (at < text.size()) {
-        std::size_t const length = std::min(sequenceBytes(static_cast<unsigned char>(text[at])), text.size() - at);
+    std::size_t cursor = 0;
+    while (cursor < text.size()) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): cursor < text.size() by the loop
+        std::size_t const length =
+            std::min(sequenceBytes(static_cast<unsigned char>(text[cursor])), text.size() - cursor);
         std::size_t cost = 0;
-        for (std::size_t each = at; each < at + length; ++each) {
+        for (std::size_t each = cursor; each < cursor + length; ++each) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): each < cursor + length <= text.size()
             cost += escapedBytes(static_cast<unsigned char>(text[each]));
         }
-        if (used + cost > budget && at > start) {
-            out.push_back(quotedSegment(text.substr(start, at - start)));
-            start = at;
+        if (used + cost > budget && cursor > start) {
+            out.push_back(quotedSegment(text.substr(start, cursor - start)));
+            start = cursor;
             used = 0;
         }
         used += cost;
-        at += length;
+        cursor += length;
     }
     if (start < text.size()) {
         out.push_back(quotedSegment(text.substr(start)));
@@ -628,7 +633,7 @@ public:
         std::string const person = verifiedPerson();
         std::uint64_t spent = 0;
         bool full = false;
-        for (auto& key : request.keys) {
+        for (auto const& key : request.keys) {
             TableStateHead entry;
             if (full) {
                 entry.deferred = true;
@@ -902,7 +907,7 @@ private:
     /// @param key The key.
     static void checkKey(table::TableStateKey const& key) {
         if (auto problem = keyProblem(key)) {
-            throw std::invalid_argument{std::move(*problem)};
+            throw std::invalid_argument{*problem};
         }
     }
 
@@ -933,20 +938,21 @@ private:
     [[nodiscard]] std::optional<std::string> takePart(std::string const& person, TableStateSave& request) {
         std::scoped_lock const lock{_shared->mutex};
         auto& uploads = _shared->uploads;
-        auto const at = now();
-        std::erase_if(uploads, [&](auto const& entry) { return at - entry.second.touched > _options.uploadExpiry; });
-        std::pair<std::string, std::string> const id{person, request.upload};
+        auto const instant = now();
+        std::erase_if(uploads,
+                      [&](auto const& entry) { return instant - entry.second.touched > _options.uploadExpiry; });
+        std::pair<std::string, std::string> const uploadKey{person, request.upload};
         if (request.offset == 0) {
-            uploads.erase(id);
+            uploads.erase(uploadKey);
             auto const open =
                 std::ranges::count_if(uploads, [&](auto const& entry) { return entry.first.first == person; });
-            if (static_cast<std::size_t>(open) >= kMaxTableStateUploads) {
+            if (std::cmp_greater_equal(open, kMaxTableStateUploads)) {
                 throw detail::UploadsBusy{std::string{kTableStateUploadsBusy}};
             }
-            uploads.emplace(
-                id, detail::TableStateShared::Upload{.key = request.key, .text = {}, .started = at, .touched = at});
+            uploads.emplace(uploadKey, detail::TableStateShared::Upload{
+                                           .key = request.key, .text = {}, .started = instant, .touched = instant});
         }
-        auto const found = uploads.find(id);
+        auto const found = uploads.find(uploadKey);
         if (found == uploads.end() || !(found->second.key == request.key) ||
             found->second.text.size() != request.offset) {
             throw std::invalid_argument{"a table-state save part does not continue its upload"};
@@ -956,7 +962,7 @@ private:
             throw std::invalid_argument{"a table-state upload is over the table-state quota"};
         }
         found->second.text += request.text;
-        found->second.touched = at;
+        found->second.touched = instant;
         if (!request.last) {
             return std::nullopt;
         }
@@ -1098,7 +1104,7 @@ private:
     ::core::async::Task<std::string> readWhole(std::string person, table::TableStateKey key, Head head) {
         std::string text;
         while (text.size() < head.size()) {
-            std::string part = co_await readRange(person, key, head, text.size());
+            std::string const part = co_await readRange(person, key, head, text.size());
             if (part.empty()) {
                 throw std::runtime_error{"a table's stored state ended before its size"};
             }
@@ -1164,6 +1170,7 @@ private:
 
     /// @brief Stores a whole document under the `expected` rule and the quota, in the order the class describes. The
     ///        shared views, kept with no person, count as one more account.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a revision token, then a document, at every call.
     ::core::async::Task<table::SaveResult> commit(std::string person, table::TableStateKey key, std::string expected,
                                                   std::string text) {
         if (auto const error = glz::validate_json(text)) {
@@ -1204,6 +1211,7 @@ private:
                                                 .previousSegments = replacesSegments ? head.segments : 0}));
         }
         for (std::size_t index = 0; index < segments.size(); ++index) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): index < segments.size() by the loop
             co_await setOrThrow(pointKey(person, key, segmentPoint(key, revision, index)), segments[index]);
         }
         detail::StoredStateHead entry{.key = key, .revision = revision, .document = {}, .segments = {}, .bytes = {}};
