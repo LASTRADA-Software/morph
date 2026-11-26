@@ -80,6 +80,7 @@ struct FilterTarget {
 [[nodiscard]] inline std::optional<std::size_t> groupFilterIndex(table::FilterSpec const& filters,
                                                                  FilterTarget const& target) {
     for (std::size_t at = 0; at < filters.groups.size(); ++at) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): at < filters.groups.size() by the loop
         table::GroupFilter const& group = filters.groups[at];
         bool const same = target.formed ? group.group.empty() && group.columns == target.columns
                                         : !target.group.empty() && group.group == target.group;
@@ -175,8 +176,9 @@ struct FilterMenuState {
                ticks.ticked == other.ticks.ticked && ticks.blanks == other.ticks.blanks &&
                ticks.ops.size() == other.ticks.ops.size() &&
                std::ranges::equal(ticks.ops, other.ticks.ops,
-                                  [](TickOp const& a, TickOp const& b) {
-                                      return a.search == b.search && a.operand == b.operand && a.ticked == b.ticked;
+                                  [](TickOp const& lhs, TickOp const& rhs) {
+                                      return lhs.search == rhs.search && lhs.operand == rhs.operand &&
+                                             lhs.ticked == rhs.ticked;
                                   }) &&
                dates == other.dates && conditions == other.conditions && matchCase == other.matchCase &&
                combine == other.combine && match == other.match && count == other.count && refusal == other.refusal &&
@@ -196,26 +198,37 @@ namespace detail::filtermenu {
 /// @return It, folded.
 [[nodiscard]] inline std::string folded(std::string_view text) {
     std::string out{text};
-    for (char& c : out) {
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    for (char& letter : out) {
+        letter = static_cast<char>(std::tolower(static_cast<unsigned char>(letter)));
     }
     return out;
+}
+
+/// @brief Reads a number from a slice of a text.
+/// @tparam Number The integer type read.
+/// @param text  The text.
+/// @param from  The slice's first character.
+/// @param count The slice's length; the slice ends where the text does when it is shorter.
+/// @param out   The number read.
+/// @return Whether the slice starts with a number.
+template <typename Number>
+[[nodiscard]] inline bool readNumber(std::string_view text, std::size_t from, std::size_t count, Number& out) {
+    std::string_view const slice = text.substr(from, count);
+    return std::from_chars(std::to_address(slice.begin()), std::to_address(slice.end()), out).ec == std::errc{};
 }
 
 /// @brief The day a `YYYY-MM-DD` date, or the date part of an ISO date-time, falls on.
 /// @param text The text.
 /// @return Days since 1970-01-01; nothing when it does not read.
 [[nodiscard]] inline std::optional<std::int64_t> dayOf(std::string_view text) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): text.size() >= 10 by the first clause
     if (text.size() < 10 || text[4] != '-' || text[7] != '-') {
         return std::nullopt;
     }
     int year = 0;
     unsigned month = 0;
     unsigned day = 0;
-    char const* const at = text.data();
-    if (std::from_chars(at, at + 4, year).ec != std::errc{} ||
-        std::from_chars(at + 5, at + 7, month).ec != std::errc{} ||
-        std::from_chars(at + 8, at + 10, day).ec != std::errc{}) {
+    if (!readNumber(text, 0, 4, year) || !readNumber(text, 5, 2, month) || !readNumber(text, 8, 2, day)) {
         return std::nullopt;
     }
     std::chrono::year_month_day const date{std::chrono::year{year}, std::chrono::month{month}, std::chrono::day{day}};
@@ -305,8 +318,8 @@ namespace detail::filtermenu {
     take(ConditionOp::GreaterOrEqual, entry.ge);
     if (entry.between) {
         draft.op = ConditionOp::Between;
-        draft.operand = (*entry.between)[0];
-        draft.second = (*entry.between)[1];
+        draft.operand = std::get<0>(*entry.between);
+        draft.second = std::get<1>(*entry.between);
     }
     if (entry.isEmpty == true) {
         draft.op = ConditionOp::IsEmpty;
@@ -381,6 +394,7 @@ namespace detail::filtermenu {
     }
     std::array<ConditionDraft, 2> out;
     for (std::size_t at = 0; at < entries.size(); ++at) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): at < entries.size() by the loop
         auto draft = detail::filtermenu::draftOf(entries[at]);
         if (!draft) {
             return std::nullopt;
@@ -404,7 +418,6 @@ namespace detail::filtermenu {
             return {.kind = table::ColumnCount::Kind::Exactly, .n = n};
         case GroupMatch::AnyColumn:
         case GroupMatch::Together:
-            break;
         default:
             break;
     }
@@ -520,6 +533,7 @@ public:
     /// @brief Opens the menu on a column or a group, showing the part its stored filter is, and asks for the first
     ///        page of its values.
     /// @param target The column or group.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one ordered setup sharing `next`.
     void open(FilterTarget target) {
         _searchTimer.cancel();
         _sendTimer.cancel();
@@ -528,21 +542,21 @@ public:
         next.open = true;
         next.opening = _state.peek().opening + 1;
         next.target = std::move(target);
-        FilterTarget const& on = next.target;
-        bool const isGroup = on.column.empty();
-        table::ColumnKind const kind = on.shown.info.kind;
+        FilterTarget const& focus = next.target;
+        bool const isGroup = focus.column.empty();
+        table::ColumnKind const kind = focus.shown.info.kind;
         table::FilterSpec const filters = _host.filters ? _host.filters() : table::FilterSpec{};
         if (isGroup) {
             next.ticks.ticked = false;
-            if (auto const at = groupFilterIndex(filters, on)) {
-                readGroup(next, filters.groups.at(*at));
+            if (auto const index = groupFilterIndex(filters, focus)) {
+                readGroup(next, filters.groups.at(*index));
             }
-        } else if (auto const held = filters.columns.find(on.column); held != filters.columns.end()) {
+        } else if (auto const held = filters.columns.find(focus.column); held != filters.columns.end()) {
             if (classifyFilter(held->second, kind) == FilterPart::Values && valuesListed(next)) {
                 if (dates(next)) {
                     for (table::FilterEntry const& entry : held->second.include) {
                         if (entry.between) {
-                            next.dates.push_back((*entry.between)[0] + ".." + (*entry.between)[1]);
+                            next.dates.push_back(std::get<0>(*entry.between) + ".." + std::get<1>(*entry.between));
                         }
                         if (entry.isEmpty == true) {
                             next.ticks.blanks = true;
@@ -565,8 +579,8 @@ public:
             next.ticks.blanks = next.ticks.blanks.value_or(false);
         }
         for (ConditionDraft& draft : next.conditions) {
-            if (draft.unit.empty() && !on.unitChoices.empty()) {
-                draft.unit = on.unitChoices.front();
+            if (draft.unit.empty() && !focus.unitChoices.empty()) {
+                draft.unit = focus.unitChoices.front();
             }
         }
         _state.set(std::move(next));
@@ -607,6 +621,7 @@ public:
     /// @brief Ticks or unticks a value, or a date bucket.
     /// @param index   The value's index in the list.
     /// @param checked Its new state.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one tick, by the kind of row it lands on.
     void tick(std::size_t index, bool checked) {
         touch();
         _sendTimer.cancel();
@@ -615,6 +630,7 @@ public:
                 return;
             }
             clearConditions(state);
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): index < state.list.size() by the check above
             FilterListEntry const& entry = state.list[index];
             if (dates(state)) {
                 std::erase(state.dates, entry.value.operand);
@@ -695,14 +711,17 @@ public:
         if (index >= now.list.size()) {
             return;
         }
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): index < now.list.size() by the check above
         FilterListEntry const entry = now.list[index];
         if (entry.bucket != table::DateBucket::Year && entry.bucket != table::DateBucket::Month) {
             return;
         }
         if (entry.opened) {
             _state.mutate([&](FilterMenuState& state) {
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): index < the list's size by the check above; the list is unchanged since
                 state.list[index].opened = false;
                 std::size_t end = index + 1;
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): end < state.list.size() in the same condition
                 while (end < state.list.size() && state.list[end].depth > entry.depth) {
                     ++end;
                 }
@@ -725,19 +744,19 @@ public:
                 return;
             }
             _state.mutate([&](FilterMenuState& state) {
-                auto const at = std::ranges::find_if(state.list, [&](FilterListEntry const& held) {
+                auto const found = std::ranges::find_if(state.list, [&](FilterListEntry const& held) {
                     return held.value.operand == operand && held.depth + 1 == depth;
                 });
-                if (at == state.list.end() || at->opened) {
+                if (found == state.list.end() || found->opened) {
                     return;
                 }
-                at->opened = true;
+                found->opened = true;
                 std::vector<FilterListEntry> children;
                 for (table::DistinctValue const& value : reply->values) {
                     children.push_back(
                         FilterListEntry{.value = value, .bucket = bucket, .depth = depth, .opened = false});
                 }
-                state.list.insert(at + 1, children.begin(), children.end());
+                state.list.insert(found + 1, children.begin(), children.end());
             });
         });
     }
@@ -771,9 +790,9 @@ public:
     }
 
     /// @brief Sets "match case".
-    /// @param on Whether text conditions match case.
-    void setMatchCase(bool on) {
-        editCondition([&](FilterMenuState& state) { state.matchCase = on; });
+    /// @param enabled Whether text conditions match case.
+    void setMatchCase(bool enabled) {
+        editCondition([&](FilterMenuState& state) { state.matchCase = enabled; });
     }
 
     /// @brief Sets how the two conditions join.
@@ -834,8 +853,8 @@ public:
         FilterMenuState const& now = _state.peek();
         table::FilterSpec spec = _host.filters ? _host.filters() : table::FilterSpec{};
         if (now.target.column.empty()) {
-            if (auto const at = groupFilterIndex(spec, now.target)) {
-                spec.groups.erase(spec.groups.begin() + static_cast<std::ptrdiff_t>(*at));
+            if (auto const index = groupFilterIndex(spec, now.target)) {
+                spec.groups.erase(spec.groups.begin() + static_cast<std::ptrdiff_t>(*index));
             }
         } else {
             spec.columns.erase(now.target.column);
@@ -873,6 +892,7 @@ public:
         bool const tree = dates(state);
         std::string dimension;
         for (std::size_t at = 0; at < state.list.size(); ++at) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): at < state.list.size() by the loop
             FilterListEntry const& entry = state.list[at];
             if (!entry.value.dimension.empty() && entry.value.dimension != dimension) {
                 dimension = entry.value.dimension;
@@ -937,7 +957,7 @@ public:
                                                [](TickOp const& op) { return !op.operand && op.search.empty(); });
         bool const base = last == state.ticks.ops.rend() ? state.ticks.ticked : last->ticked;
         bool const unlisted =
-            !state.search.empty() || state.total < 0 || static_cast<std::int64_t>(state.list.size()) < state.total;
+            !state.search.empty() || state.total < 0 || std::cmp_less(state.list.size(), state.total);
         return (base && unlisted) ||
                std::any_of(state.ticks.ops.rbegin(), last, [](TickOp const& op) { return !op.operand && op.ticked; });
     }
@@ -1047,7 +1067,7 @@ private:
         return ticked;
     }
 
-    void readGroup(FilterMenuState& next, table::GroupFilter const& group) const {
+    static void readGroup(FilterMenuState& next, table::GroupFilter const& group) {
         bool const values = !next.target.formed && group.exclude.empty() &&
                             (group.mode == table::GroupMode::Together
                                  ? std::ranges::all_of(group.include,
@@ -1067,7 +1087,7 @@ private:
                     }
                 }
                 if (entry.eq) {
-                    next.ticks.ops.push_back(TickOp{.search = {}, .operand = *entry.eq, .ticked = true});
+                    next.ticks.ops.push_back(TickOp{.search = {}, .operand = entry.eq, .ticked = true});
                 }
                 if (entry.isEmpty == true) {
                     next.ticks.blanks = true;
@@ -1160,6 +1180,7 @@ private:
     }
 
     // Asks for the list's first page under the search, or with @p next the page after those listed.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): the request and its reply share one edit.
     void load(bool next) {
         FilterMenuState const& now = _state.peek();
         if (!now.open || !valuesListed(now)) {
@@ -1212,7 +1233,7 @@ private:
                 }
             });
         });
-    }
+    }  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the reply's continuations are owned by the scope.
 
     // Every value a search shows, every page of them, asked at `maxLimit` a request.
     void pageAll(
@@ -1224,13 +1245,13 @@ private:
             std::vector<table::DistinctValue> values;
             std::function<void(std::expected<std::vector<table::DistinctValue>, std::string>, std::int64_t)> done;
         };
-        auto paging = std::make_shared<Paging>();
+        auto const paging = std::make_shared<Paging>();
         paging->request = requestOf(_state.peek());
         paging->request.search = std::move(search);
         paging->request.limit = _host.maxLimit;
         paging->request.offset = 0;
         paging->done = std::move(done);
-        auto step = std::make_shared<std::function<void()>>();
+        auto const step = std::make_shared<std::function<void()>>();
         std::weak_ptr<std::function<void()>> const weakStep = step;
         *step = [this, paging, weakStep] {
             ask(paging->request, [paging, keep = weakStep.lock()](Reply const& reply) {
@@ -1248,27 +1269,27 @@ private:
                     (*keep)();
                 }
             });
-        };
+        };  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the step is kept alive by its continuation.
         (*step)();
     }
 
     // Resolves the ticks: the values each search's "(Select all)" reached, one search after another, and the count
     // of every value.
-    void resolve(std::function<void(std::expected<std::pair<ResolvedTicks, std::int64_t>, std::string>)> done) {
+    void resolve(std::function<void(std::expected<std::pair<ResolvedTicks, std::int64_t>, std::string>)> const& done) {
         FilterMenuState const& now = _state.peek();
-        auto searches = std::make_shared<std::vector<std::string>>();
+        auto const searches = std::make_shared<std::vector<std::string>>();
         for (TickOp const& op : now.ticks.ops) {
             if (!op.operand && !op.search.empty() && !std::ranges::contains(*searches, op.search)) {
                 searches->push_back(op.search);
             }
         }
         auto reached = std::make_shared<std::map<std::string, std::vector<std::string>, std::less<>>>();
-        auto finish = [reached, ticks = now.ticks, done](std::int64_t distinct) {
+        auto const finish = [reached, ticks = now.ticks, done](std::int64_t distinct) {
             ResolvedTicks resolved =
                 resolveTicks(ticks, [&](std::string const& search) { return reached->at(search); });
             done(std::pair{std::move(resolved), distinct});
         };
-        auto counted = [this, total = now.total, finish, done] {
+        auto const counted = [this, total = now.total, finish, done] {
             if (total >= 0) {
                 finish(total);
                 return;
@@ -1284,27 +1305,27 @@ private:
                 }
                 finish(reply->distinct);
             });
-        };
-        auto step = std::make_shared<std::function<void(std::size_t)>>();
+        };  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the reply's continuations are owned by the host.
+        auto const step = std::make_shared<std::function<void(std::size_t)>>();
         std::weak_ptr<std::function<void(std::size_t)>> const weakStep = step;
-        *step = [this, searches, reached, counted, done, weakStep](std::size_t at) {
-            if (at >= searches->size()) {
+        *step = [this, searches, reached, counted, done, weakStep](std::size_t index) {
+            if (index >= searches->size()) {
                 counted();
                 return;
             }
-            pageAll(searches->at(at),
-                    [reached, searches, at, done, self = weakStep.lock()](
+            pageAll(searches->at(index),
+                    [reached, searches, index, done, self = weakStep.lock()](
                         std::expected<std::vector<table::DistinctValue>, std::string> values, std::int64_t) {
                         if (!values) {
                             done(std::unexpected(values.error()));
                             return;
                         }
-                        std::vector<std::string>& operands = (*reached)[searches->at(at)];
+                        std::vector<std::string>& operands = (*reached)[searches->at(index)];
                         for (table::DistinctValue const& value : *values) {
                             operands.push_back(value.operand);
                         }
                         if (self) {
-                            (*self)(at + 1);
+                            (*self)(index + 1);
                         }
                     });
         };
@@ -1324,8 +1345,10 @@ private:
         }
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one resolve-then-write sequence.
     void applyValues() {
         std::uint64_t const serial = _serial;
+        // NOLINTNEXTLINE(readability-function-cognitive-complexity): the reply's cases are one decision.
         resolve([this, serial](std::expected<std::pair<ResolvedTicks, std::int64_t>, std::string> resolved) {
             if (serial != _serial) {
                 return;
@@ -1352,7 +1375,8 @@ private:
                 return;
             }
             bool const include = plan.side == PlanSide::Include;
-            auto write = [this, column, side = plan.side, blanks = ticks.blanks](std::vector<std::string> members) {
+            auto const write = [this, column, side = plan.side,
+                                blanks = ticks.blanks](std::vector<std::string> members) {
                 table::FilterSpec spec = _host.filters ? _host.filters() : table::FilterSpec{};
                 if (auto filter = valueFilter(side, std::move(members), blanks)) {
                     spec.columns.insert_or_assign(column, std::move(*filter));
@@ -1395,8 +1419,10 @@ private:
         });
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one resolve-then-write sequence.
     void applyGroupValues() {
         std::uint64_t const serial = _serial;
+        // NOLINTNEXTLINE(readability-function-cognitive-complexity): the reply's cases are one decision.
         resolve([this, serial](std::expected<std::pair<ResolvedTicks, std::int64_t>, std::string> resolved) {
             if (serial != _serial) {
                 return;
@@ -1406,19 +1432,19 @@ private:
                 return;
             }
             ResolvedTicks const ticks = resolved->first;
-            auto write = [this, ticks](std::vector<std::string> ticked) {
+            auto const write = [this, ticks](std::vector<std::string> ticked) {
                 FilterMenuState const& now = _state.peek();
-                std::int64_t n = 0;
-                static_cast<void>(std::from_chars(now.count.data(), now.count.data() + now.count.size(), n));
+                std::int64_t count = 0;
+                static_cast<void>(detail::filtermenu::readNumber(now.count, 0, now.count.size(), count));
                 auto filter = groupValueFilter(now.target.group, now.target.columns.size(), std::move(ticked),
-                                               ticks.blanks, now.match, n);
+                                               ticks.blanks, now.match, count);
                 if (!filter) {
                     refuse(std::move(filter.error()));
                     return;
                 }
                 table::FilterSpec spec = _host.filters ? _host.filters() : table::FilterSpec{};
-                if (auto const at = groupFilterIndex(spec, now.target)) {
-                    spec.groups.at(*at) = std::move(*filter);
+                if (auto const index = groupFilterIndex(spec, now.target)) {
+                    spec.groups.at(*index) = std::move(*filter);
                 } else {
                     spec.groups.push_back(std::move(*filter));
                 }
@@ -1426,8 +1452,8 @@ private:
             };
             if (!ticks.ticked) {
                 std::vector<std::string> ticked;
-                for (auto const& [operand, on] : ticks.covered) {
-                    if (on) {
+                for (auto const& [operand, covered] : ticks.covered) {
+                    if (covered) {
                         ticked.push_back(operand);
                     }
                 }
@@ -1495,6 +1521,7 @@ private:
 
     // Sends the conditions when every operand reads and every `between` has both ends; marks those that do not
     // read. Returns whether a filter was sent.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): reads both condition lines into one filter.
     bool sendConditions() {
         FilterMenuState const& now = _state.peek();
         if (!now.open || !hasConditions(now)) {
@@ -1542,28 +1569,28 @@ private:
                 state.conditions.at(at).invalid = invalid.at(at);
             }
         });
-        if (incomplete || invalid[0] || invalid[1]) {
+        if (incomplete || std::get<0>(invalid) || std::get<1>(invalid)) {
             return false;
         }
         table::FilterSpec spec = _host.filters ? _host.filters() : table::FilterSpec{};
         if (target.column.empty()) {
-            std::int64_t n = 1;
-            static_cast<void>(std::from_chars(now.count.data(), now.count.data() + now.count.size(), n));
-            auto const at = groupFilterIndex(spec, target);
+            std::int64_t count = 1;
+            static_cast<void>(detail::filtermenu::readNumber(now.count, 0, now.count.size(), count));
+            auto const index = groupFilterIndex(spec, target);
             if (entries.empty()) {
-                if (at) {
-                    spec.groups.erase(spec.groups.begin() + static_cast<std::ptrdiff_t>(*at));
+                if (index) {
+                    spec.groups.erase(spec.groups.begin() + static_cast<std::ptrdiff_t>(*index));
                 }
             } else {
                 table::GroupFilter filter{.group = target.formed ? std::string{} : target.group,
                                           .columns = target.formed ? target.columns : std::vector<std::string>{},
                                           .mode = table::GroupMode::Columns,
-                                          .match = columnCountOf(now.match, n),
+                                          .match = columnCountOf(now.match, count),
                                           .combine = now.combine,
                                           .include = std::move(entries),
                                           .exclude = {}};
-                if (at) {
-                    spec.groups.at(*at) = std::move(filter);
+                if (index) {
+                    spec.groups.at(*index) = std::move(filter);
                 } else {
                     spec.groups.push_back(std::move(filter));
                 }
@@ -1606,14 +1633,14 @@ namespace detail::filtermenu {
     }
     std::chrono::sys_days const days{std::chrono::days{*day}};
     std::int64_t seconds = 0;
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): text.size() >= 19 by the condition
     if (text.size() >= 19 && text[10] == 'T') {
         int hour = 0;
         int minute = 0;
         int second = 0;
-        char const* const at = text.data();
-        static_cast<void>(std::from_chars(at + 11, at + 13, hour));
-        static_cast<void>(std::from_chars(at + 14, at + 16, minute));
-        static_cast<void>(std::from_chars(at + 17, at + 19, second));
+        static_cast<void>(readNumber(text, 11, 2, hour));
+        static_cast<void>(readNumber(text, 14, 2, minute));
+        static_cast<void>(readNumber(text, 17, 2, second));
         seconds = (hour * 3600) + (minute * 60) + second;
     }
     return time::Timestamp{
@@ -1637,9 +1664,10 @@ namespace detail::filtermenu {
 /// @param which The condition, 0 or 1.
 /// @param target The column or group the menu edits.
 /// @return The line.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one line's controls, by condition kind.
 [[nodiscard]] inline Node conditionLine(FilterMenu& menu, std::size_t which, FilterTarget const& target) {
     table::ColumnKind const kind = target.shown.info.kind;
-    std::string const at = std::to_string(which + 1);
+    std::string const position = std::to_string(which + 1);
     std::vector<SelectOption> options;
     for (ConditionOp const op : conditionOps(kind)) {
         std::string const label{conditionLabel(op, kind)};
@@ -1663,7 +1691,7 @@ namespace detail::filtermenu {
                        }
                    }};
     ops.label = std::string{"Condition"};
-    ops.common.testId = "table_filter_op_" + at;
+    ops.common.testId = "table_filter_op_" + position;
     auto const takes = [&menu, which] {
         ConditionDraft const& draft = menu.state().conditions.at(which);
         return draft.op && takesOperand(*draft.op);
@@ -1676,7 +1704,7 @@ namespace detail::filtermenu {
     std::vector<Node> children{select(std::move(ops))};
     bool const dated = kind == table::ColumnKind::Date || kind == table::ColumnKind::DateTime;
     for (bool const upper : {false, true}) {
-        std::string const testId = std::string{upper ? "table_filter_second_" : "table_filter_operand_"} + at;
+        std::string const testId = std::string{upper ? "table_filter_second_" : "table_filter_operand_"} + position;
         auto const text = [&menu, which, upper] {
             ConditionDraft const& draft = menu.state().conditions.at(which);
             return upper ? draft.second : draft.operand;
@@ -1711,6 +1739,7 @@ namespace detail::filtermenu {
     }
     if (kind == table::ColumnKind::Measure && !target.unitChoices.empty()) {
         std::vector<SelectOption> units;
+        units.reserve(target.unitChoices.size());
         for (std::string const& unit : target.unitChoices) {
             units.push_back(SelectOption{.key = Key{unit}, .label = unit});
         }
@@ -1721,12 +1750,12 @@ namespace detail::filtermenu {
                     },
                     .onSelect =
                         [&menu, which](Key const& key) {
-                            if (std::string const* const id = std::get_if<std::string>(&key)) {
-                                menu.setUnit(which, *id);
+                            if (std::string const* const unitId = std::get_if<std::string>(&key)) {
+                                menu.setUnit(which, *unitId);
                             }
                         }};
         unit.label = std::string{"Unit"};
-        unit.common.testId = "table_filter_unit_" + at;
+        unit.common.testId = "table_filter_unit_" + position;
         children.push_back(select(std::move(unit)));
     }
     return ui::row(Row{.children = std::move(children), .gap = 1});
@@ -1769,7 +1798,7 @@ namespace detail::filtermenu {
         parts.push_back(forEach<FilterListRow>(
             [&menu] { return menu.rows(); }, [](FilterListRow const& row) -> Key { return Key{row.key}; },
             [&menu](reactive::Signal<FilterListRow> const& row) -> Node {
-                FilterListRow const first = row.peek();
+                FilterListRow const& first = row.peek();
                 if (first.kind == FilterListRow::Kind::Heading) {
                     Text heading{.text = first.label, .role = TextRole::Muted};
                     heading.common.testId = "table_filter_heading_" + first.id;
@@ -1832,7 +1861,7 @@ namespace detail::filtermenu {
         if (kind == table::ColumnKind::Text) {
             Checkbox matchCase{.label = std::string{"match case"},
                                .checked = [&menu] { return menu.state().matchCase; },
-                               .onToggle = [&menu](bool on) { menu.setMatchCase(on); }};
+                               .onToggle = [&menu](bool enabled) { menu.setMatchCase(enabled); }};
             matchCase.common.testId = "table_filter_case";
             parts.push_back(checkbox(std::move(matchCase)));
         }
