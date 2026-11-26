@@ -772,7 +772,7 @@ std::optional<TableErrorCode> codeOf(std::expected<TableQuery, TableError> const
 }
 
 // `n` distinct texts of exactly `bytes` bytes each.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `texts(n)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `texts(n, bytes)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::vector<std::string> texts(std::size_t n, std::size_t bytes) {
     std::vector<std::string> out;
     out.reserve(n);

@@ -1570,7 +1570,7 @@ struct WindowFixture {
 };
 
 // The indices 0 to n - 1 without @p left.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `allColumnsBut(n)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `allColumnsBut(n, left)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::vector<std::size_t> allColumnsBut(std::size_t n, std::size_t left) {
     std::vector<std::size_t> out;
     for (std::size_t column = 0; column < n; ++column) {

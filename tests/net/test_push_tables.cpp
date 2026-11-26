@@ -319,7 +319,7 @@ struct Server {
 
 // One client as `principal`: raw envelopes over a socket, and the `changes` events it receives.
 struct Client {
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `Client(url)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `Client(url, principal)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     Client(std::string const& url, std::string principal) : _principal{std::move(principal)} {
         socket = std::make_unique<morph::net::SocketBackend>(url);
         REQUIRE(socket->waitForConnected());
@@ -371,7 +371,7 @@ struct Client {
         return reply.modelId;
     }
 
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `execute(instance, modelType, action)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `execute(instance, modelType, action, body)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     morph::wire::Envelope execute(std::uint64_t instance, std::string const& modelType, std::string const& action,
                                   std::string body) {
         morph::wire::Envelope env;
@@ -560,7 +560,7 @@ namespace {
 
 // A server whose `tableWork` and view cache a case configures, `WideTableModel`'s recipe cache attached.
 struct ViewServer {
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `ViewServer(maxViewBytes, tableThreads)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `ViewServer(maxViewBytes)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     explicit ViewServer(std::size_t maxViewBytes = 64U << 20U, std::size_t tableThreads = 2)
         : tableWork{std::make_shared<RecordingPool>(tableThreads)} {
         morph::backend::ServerConfig config;
@@ -1386,7 +1386,7 @@ namespace {
 constexpr std::string_view kOpen = R"({"columns":{"status":{"include":[{"eq":"open"}]}}})";
 
 // The keys of a ChangedRows reply (`rows`, objects with `key`) or a SelectedRows reply (`keys`).
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `keysOfReply(body)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `keysOfReply(body, member)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::vector<std::int64_t> keysOfReply(std::string const& body, std::string const& member) {
     glz::generic_u64 json;
     REQUIRE_FALSE(glz::read_json(json, body));

@@ -313,7 +313,7 @@ TEST_CASE("cache: an opaque entry keeps a fractional number", "[push][cache][tab
         REQUIRE(rows != nullptr);
         auto const* const row = rows->at(0).asList();
         REQUIRE(row != nullptr);
-        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `operator()(at, expected)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `decimalAt(at, expected, places)`: a column index, the expected value and the decimal places read differently at each call, and a swap would fail the lambda's own checks
         auto const decimalAt = [&](std::size_t at, double expected, std::uint32_t places) {
             INFO("cell " << at);
             auto const* const decimal = row->at(at).asDecimal();

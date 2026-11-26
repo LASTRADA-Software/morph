@@ -892,6 +892,7 @@ void markFilterable(TableConfig const& config, std::vector<TableColumn>& columns
 
 /// What a model-backed table keeps in its element, across every mount of it: its rows and the query of its
 /// description, the arrangement it gave the rows, its persisted state's key and load, and its status line's message.
+// NOLINTNEXTLINE(clang-analyzer-optin.performance.Padding): the fields are grouped and commented by role, and the callback scope is declared last so it is destroyed first; a size-ordered layout would break both
 struct ModelTable {
     explicit ModelTable(reactive::Runtime& runtime)
         : version{runtime, 0},
@@ -1224,6 +1225,7 @@ private:
 /// A table lowered where names its element cannot see are bound has one of its own, kept by its mount, which
 /// persists nothing. A collection's table is one too, without a source or a page: its engine is over the session's
 /// source, and its mounts read the engine's rows through the element's `tableRows`.
+// NOLINTNEXTLINE(clang-analyzer-optin.performance.Padding): the fields are grouped and commented by role, and the callback scope is declared last so it is destroyed first; a size-ordered layout would break both
 struct RowsTable {
     explicit RowsTable(reactive::Runtime& runtime)
         : version{runtime, 0}, message{runtime, std::string{}}, config{runtime} {}
@@ -14470,6 +14472,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             }
             done();
         });
+        // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks): the analyzer loses the owner of the callable `std::function` heap-allocates for this capture; the function object owns it and frees it
     };
     auto const nameView = [&config, arrangementNow, recordView, changeViews] {
         ViewDialog const dialog = config.viewDialog.peek();
@@ -15600,6 +15603,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                     (*live)(keys);
                 }
             });
+        // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks): the analyzer loses the owner of the callable `std::function` heap-allocates for this capture; the function object owns it and frees it
     };
     options.highlight = slotProp<std::optional<TableHighlight>>([&model] { return model.highlight.get(); });
     // The header's sort chain and menus, and the columns' arrangement; the column chooser and the sort dialog.

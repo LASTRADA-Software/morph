@@ -248,8 +248,8 @@ PageRows wholeView(DataSource const& source, TableQuery query) {
 std::shared_ptr<bench::UnloadedSource> wideUnloaded(double loadedFraction) {
     auto wide = std::make_shared<bench::WideTableSource>(
         bench::WideTableOptions{.rows = 10'000, .columns = 30, .seed = 7, .loadDelay = {}});
-    auto columns = recipeColumns(*wide);
-    return bench::withUnloaded(std::move(wide), std::move(columns), "recipe", loadedFraction, 7);
+    auto const columns = recipeColumns(*wide);
+    return bench::withUnloaded(std::move(wide), columns, "recipe", loadedFraction, 7);
 }
 
 }  // namespace
@@ -276,9 +276,9 @@ struct PlainRow {
 TEST_CASE("table: apply reads only the sorted and filtered columns", "[table][unloaded][levels]") {
     auto wide = std::make_shared<bench::WideTableSource>(
         bench::WideTableOptions{.rows = 1000, .columns = 300, .seed = 7, .loadDelay = {}});
-    auto columns = recipeColumns(*wide);
+    auto const columns = recipeColumns(*wide);
     REQUIRE(columns.size() == 20);
-    auto const unloaded = bench::withUnloaded(std::move(wide), std::move(columns), "recipe", 0.7, 7);
+    auto const unloaded = bench::withUnloaded(std::move(wide), columns, "recipe", 0.7, 7);
     REQUIRE(anyUnloaded(*unloaded, "d003"));
     REQUIRE(anyUnloaded(*unloaded, "t005"));
     RecordingSource const recording{unloaded};

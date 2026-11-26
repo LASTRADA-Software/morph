@@ -341,7 +341,7 @@ std::vector<std::int64_t> range(std::int64_t first, std::int64_t count) {
 // One integer cell per column, the key's value.
 GenericPage pageOf(
     std::int64_t offset, std::vector<std::int64_t> const& keys, std::vector<std::string> const& columns,
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `pageOf(...)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `pageOf`'s `total` and `undecided` are row counts that every call spells out as a pair; a swap would change the page's counts the case asserts on
     std::int64_t total, std::int64_t undecided = 0) {
     GenericPage page;
     page.columns = columns;
@@ -358,7 +358,7 @@ GenericPage pageOf(
 // A keyed reply: each pair is a key and its view row.
 GenericPage keyedOf(
     std::vector<std::pair<std::int64_t, std::int64_t>> const& keyAtIndex,
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `keyedOf(...)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `keyedOf`'s `total` and `undecided` are row counts that every call spells out as a pair; a swap would change the page's counts the case asserts on
     std::vector<std::string> const& columns, std::int64_t total, std::int64_t undecided = 0) {
     GenericPage page;
     page.columns = columns;

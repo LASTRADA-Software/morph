@@ -267,8 +267,8 @@ struct ColumnWindow {
 /// @param viewport The viewport's width.
 /// @param overscan Columns kept beyond the viewport on each side.
 /// @return The window.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`pinned`, `scrollX`): a column count then a scroll offset, passed by name from the table state at the one call site
 [[nodiscard]] inline ColumnWindow columnWindow(
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`pinned`, `scrollX`): a column count then a scroll offset, passed by name from the table state at the one call site
     ColumnExtents const& extents, std::size_t pinned, int scrollX,
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`viewport`, `overscan`): a width then a column count, passed by name from the table state at the one call site
     int viewport, std::size_t overscan) {
@@ -2753,6 +2753,7 @@ private:
 
     // A table over a `TableSource`: the rows in and near view, each built from the source's view index, and in each
     // row the cells of the columns in or near view.
+    // NOLINTNEXTLINE(clang-analyzer-optin.performance.Padding): the fields are grouped and commented by role, and the realized rows are declared to go last first, as their comment says; a size-ordered layout would break both
     struct SourceTable {
         // Which pool a cell goes back to: the default cell's pool of one role, or a column's own pool.
         using PoolKey = std::pair<bool, std::size_t>;
@@ -5194,6 +5195,7 @@ private:
             Prop<std::string> const label = spec.removeLabel.isBound() || spec.text.isBound()
                                                 ? Prop<std::string>(labelOf)
                                                 : Prop<std::string>(labelOf());
+            // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks): the analyzer loses the owner of the callable `std::function` heap-allocates for this capture; the function object owns it and frees it
             bind(scope, label, [&widget, onRemove = event(spec.onRemove)](std::string const& shown) {
                 widget.setOnRemove(onRemove, shown);
             });

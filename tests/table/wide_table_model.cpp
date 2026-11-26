@@ -603,7 +603,7 @@ void WideTableSource::regenerate(std::uint64_t seed) {
 namespace {
 
 // Whether row `row` starts loaded: its draw, uniform in [0, 1), is below the fraction.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `drawnLoaded(seed, row, noexcept)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `drawnLoaded(seed, row, loadedFraction)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 [[nodiscard]] bool drawnLoaded(std::uint64_t seed, std::size_t row, double loadedFraction) noexcept {
     constexpr double kUnit = 1.0 / 9007199254740992.0;  // 2^-53
     auto const bits = cellBits(seed, "loaded", static_cast<std::int64_t>(row));
@@ -666,7 +666,7 @@ private:
 UnloadedSource::UnloadedSource(
     std::shared_ptr<morph::table::DataSource> source, std::vector<std::string> const& columns,
     std::string const& level,
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `UnloadedSource(...)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `loadedFraction` is a ratio and `seed` a generator seed; each call names both, and a swap would change which cells load, which the cases assert on
     double loadedFraction, std::uint64_t seed)
     : _source{std::move(source)},
       _columns{_source->columns().begin(), _source->columns().end()},
@@ -751,9 +751,9 @@ void UnloadedSource::publish(std::shared_ptr<morph::table::RowSnapshot const> in
 }
 
 std::shared_ptr<UnloadedSource> withUnloaded(std::shared_ptr<morph::table::DataSource> source,
-                                             std::vector<std::string> const& columns, std::string level,
+                                             std::vector<std::string> const& columns, std::string const& level,
                                              double loadedFraction, std::uint64_t seed) {
-    return std::make_shared<UnloadedSource>(std::move(source), columns, std::move(level), loadedFraction, seed);
+    return std::make_shared<UnloadedSource>(std::move(source), columns, level, loadedFraction, seed);
 }
 
 std::size_t processBytes() noexcept {
@@ -1007,9 +1007,10 @@ morph::table::TableDescription without(morph::table::TableDescription base, std:
     return morph::table::describe(std::move(base));
 }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `numbered(prefix)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `numbered(prefix, count)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::vector<std::string> numbered(char prefix, int count) {
     std::vector<std::string> out;
+    out.reserve(static_cast<std::size_t>(std::max(count, 0)));
     for (int i = 0; i < count; ++i) {
         out.push_back(std::format("{}{:03}", prefix, i));
     }

@@ -1264,7 +1264,7 @@ inline constexpr std::string_view kStored =
 /// @param text   The document.
 /// @param member The member.
 /// @return The document.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withTableKey(text)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withTableKey(text, member)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 inline std::string withTableKey(std::string_view text, std::string_view member) {
     auto json = parseJson(text);
     REQUIRE(json.has_value());
@@ -1966,7 +1966,7 @@ inline table::Engine& engineOf(Screen& screen, std::string_view id) {
 /// @param column The column's id.
 /// @param member The member.
 /// @return The document.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withColumnKey(text, column)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withColumnKey(text, column, member)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 inline std::string withColumnKey(std::string_view text, std::string_view column, std::string_view member) {
     auto json = parseJson(text);
     REQUIRE(json.has_value());
@@ -2315,7 +2315,7 @@ private:
         return found == _stored.end() ? std::nullopt : std::optional{found->second};
     }
 
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `conflictOf(part)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `conflictOf(part, expected)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     [[nodiscard]] std::optional<table::SaveResult> conflictOf(std::string const& part,
                                                               std::string const& expected) const {
         auto const stored = storedOf(part);
@@ -2329,7 +2329,7 @@ private:
                                  .reason = {}};
     }
 
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `store(part, json)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `store(part, json, expected)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     table::SaveResult store(std::string const& part, std::string json, std::string const& expected) {
         if (auto conflict = conflictOf(part, expected)) {
             return *conflict;

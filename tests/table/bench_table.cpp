@@ -640,7 +640,7 @@ Page<tbench::WideRow30> typedPage30(bench::WideTableSource const& source, PageRo
     return page;
 }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `firstRows(count)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `firstRows(count, total)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 PageRows firstRows(std::size_t count, std::int64_t total) {
     PageRows rows;
     for (std::size_t i = 0; i < count; ++i) {
@@ -1298,7 +1298,7 @@ TEST_CASE("table benchmark: S7 S9 the view cache", "[.benchmark][views]") {
 
 namespace {
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `windowPage(offset, rows)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `windowPage(offset, rows, columns)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 GenericPage windowPage(std::int64_t offset, std::int64_t rows, std::vector<std::string> const& columns) {
     GenericPage page;
     page.columns = columns;
@@ -1690,7 +1690,7 @@ std::shared_ptr<VectorSource> groupBenchSource(bool unloaded) {
 }
 
 // The members "v0".."v{n-1}", then "w0".. to make up `count` (values no cell holds).
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `setOf(held)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `setOf(held, count)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::vector<std::string> setOf(int held, int count) {
     std::vector<std::string> out;
     for (int v = 0; v < count; ++v) {

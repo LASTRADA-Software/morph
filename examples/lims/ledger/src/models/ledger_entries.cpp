@@ -214,9 +214,9 @@ template <typename AccountCode>
         for (std::size_t i = first; i < std::min(first + kIdsPerQuery, headers.size()); ++i) {
             ids.push_back(static_cast<std::int64_t>(headers.at(i).id.Value()));
         }
-        for (auto& line : mapper.Query<db::EntryLineRecord>()
-                              .WhereIn(::Lightweight::FieldNameOf<&db::EntryLineRecord::entry>, ids)
-                              .All()) {
+        for (auto const& line : mapper.Query<db::EntryLineRecord>()
+                                    .WhereIn(::Lightweight::FieldNameOf<&db::EntryLineRecord::entry>, ids)
+                                    .All()) {
             lines[line.entry.Value()].push_back(line);
         }
     }
@@ -225,7 +225,7 @@ template <typename AccountCode>
         return found == codes.end() ? std::nullopt : std::optional<std::string>{found->second};
     };
     entries.reserve(headers.size());
-    for (auto& header : headers) {
+    for (auto const& header : headers) {
         LoadedEntry entry{.header = header, .lines = {}};
         if (auto const found = lines.find(static_cast<std::int64_t>(entry.header.id.Value())); found != lines.end()) {
             entry.lines = std::move(found->second);

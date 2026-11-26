@@ -228,6 +228,7 @@ TEST_CASE("level cache: concurrent wants share one load", "[table][levels][threa
                 return out;
             }};
     std::vector<std::thread> threads;
+    threads.reserve(8);
     for (int i = 0; i < 8; ++i) {
         threads.emplace_back([&rig] { std::ignore = (rig.cache.want(keys(60), LevelUse::Display)); });
     }

@@ -2733,7 +2733,7 @@ namespace descedit {
 
 namespace {
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `editedTable(id)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `editedTable(id, action)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 morph::table::ServedTable editedTable(std::string const& id, std::string action) {
     morph::table::ServedTable served;
     served.description.id = id;

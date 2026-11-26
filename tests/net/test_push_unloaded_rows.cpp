@@ -258,7 +258,7 @@ struct Server {
 
 // One client as `principal`: raw envelopes over a socket, and the `changes` events it receives.
 struct Client {
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `Client(url)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `Client(url, principal)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     Client(std::string const& url, std::string principal) : _principal{std::move(principal)} {
         socket = std::make_unique<morph::net::SocketBackend>(url);
         REQUIRE(socket->waitForConnected());
@@ -307,7 +307,7 @@ struct Client {
         return reply.modelId;
     }
 
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `execute(instance, modelType, action)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `execute(instance, modelType, action, body)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     morph::wire::Envelope execute(std::uint64_t instance, std::string_view modelType, std::string const& action,
                                   std::string body) {
         morph::wire::Envelope env;
@@ -701,7 +701,7 @@ struct SessionClient {
     }
 
     // Reads an action's reply text through `Session::read`.
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `read(action)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `read(action, body)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     std::string read(std::string const& action, std::string const& body) {
         auto json = ui::parseJson(body);
         REQUIRE(json);

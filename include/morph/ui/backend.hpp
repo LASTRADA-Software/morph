@@ -914,8 +914,8 @@ public:
     ///                 table's menu (none).
     /// @param onChoose Called with the menu's column, or none, and the chosen entry's path, an index per level from
     ///                 the top; never for a separator, a heading, a disabled entry or one with a submenu.
-    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `entries` by value to move it into their widget, and an override must match this signature; the default only discards it
     virtual void setMenu(
+        // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `entries` by value to move it into their widget, and an override must match this signature; the default only discards it
         std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> entries,
         // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onChoose` by value to move it into their widget, and an override must match this signature; the default only discards it
         std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) {
@@ -1118,8 +1118,8 @@ public:
     /// @param totalWidth The width of every visible column together, in the backend's measure, which sizes the
     ///                   horizontal scroll bar.
     /// @param pinned     How many of @p columns are pinned.
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `offsets` and `widths` are the window's two parallel int spans, and the mount builds both with `columns` from one window and passes them in this order
     virtual void setColumnWindow(
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `offsets` and `widths` are the window's two parallel int spans, and the mount builds both with `columns` from one window and passes them in this order
         std::span<std::size_t const> columns, std::span<int const> offsets,
         // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `totalWidth` is a width and `pinned` a column count; the one call site in the mount passes the extents' total first, then the pinned count
         std::span<int const> widths, int totalWidth, std::size_t pinned) {

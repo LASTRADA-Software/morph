@@ -344,7 +344,7 @@ public:
     }
     [[nodiscard]] std::size_t handlers() const { return _handlerSets; }  // how often onChange was set
     // Gives a row a new key; reports it changed.
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `rekey(from)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `rekey(from, to)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     void rekey(table::RowId const& from, table::RowId const& to) {
         auto const at = std::ranges::find(view, from, &Row::key);
         at->key = to;

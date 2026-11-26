@@ -3260,7 +3260,7 @@ using morph::ui::testing::moveColumn;
 using morph::ui::testing::resizeColumn;
 
 // A document's text with a top-level `state` entry @p name initialised to @p init (JSON).
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withState(text, name)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withState(text, name, init)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::string withState(std::string_view text, std::string_view name, std::string_view init) {
     auto json = morph::ui::parseJson(text);
     REQUIRE(json.has_value());
@@ -3275,7 +3275,7 @@ std::string withState(std::string_view text, std::string_view name, std::string_
 }
 
 // A document's text whose table's first column part takes the member @p member, written `"key":value`.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withFirstColumnKey(text)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withFirstColumnKey(text, member)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::string withFirstColumnKey(std::string_view text, std::string_view member) {
     auto json = morph::ui::parseJson(text);
     REQUIRE(json.has_value());
@@ -5783,7 +5783,7 @@ inline constexpr std::string_view kSelectionMutations = R"({
     "tag":{"model":"sample","action":"Lims_TagRows","body":{"obj":{"rows":{"ref":"t.selectionSet"}}}}})";
 
 // The document of @p table and @p mutations: the table, and a button `run-<name>` running each mutation.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `selectionDoc(table, mutations)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `selectionDoc(table, mutations, h)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::string selectionDoc(std::string_view table, std::string_view mutations, TableHarness& h) {
     auto const parsed = morph::ui::parseJson(mutations);
     REQUIRE(parsed.has_value());
@@ -6454,7 +6454,7 @@ std::string keyedAt(std::vector<std::pair<std::int64_t, SelRow>> const& placed, 
 }
 
 // The document: @p table, a button `run-<name>` for each mutation, and buttons `pick-<key>` setting `picked`.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `actingDoc(h, table)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `actingDoc(h, table, mutations)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::string actingDoc(TableHarness& h, std::string_view table, std::string_view mutations) {
     h.mutationActions.insert_or_assign("save", "Lims_SaveAs");
     h.mutationActions.insert_or_assign("touch", "Lims_TouchRow");
@@ -7141,7 +7141,7 @@ TEST_CASE("model table: Enter after an edit that moves its row lands on the row 
 namespace {
 
 // The text of the cell of a mounted table's row in a column.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `mountedText(backend, rowWidget)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `mountedText(backend, rowWidget, column)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::string mountedText(morph::ui::testing::RecordingBackend const& backend, int rowWidget, std::size_t column) {
     for (int const cell : backend.children(rowWidget)) {
         if (backend.prop(cell, "column") == std::to_string(column)) {

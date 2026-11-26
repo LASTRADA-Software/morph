@@ -2273,7 +2273,7 @@ void addLimitsAction(ui::testing::TableHarness& h) {
                            ui::ActionInfo{.modelType = "Lims_SampleModel"});
 }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `replaced(text, from)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `replaced(text, from, to)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::string replaced(std::string_view text, std::string_view from, std::string_view to) {
     std::string out{text};
     REQUIRE(out.find(from) != std::string::npos);

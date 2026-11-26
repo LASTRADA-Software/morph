@@ -31,7 +31,7 @@ public:
         std::vector<std::string> columns;
     };
 
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `FakeRows(rows, columns, owner)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `FakeRows(rows, columns, owner, kind)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     FakeRows(std::int64_t rows, std::size_t columns, exec::IExecutor& owner,
              table::TotalKind kind = table::TotalKind::Exact)
         : _rows{rows}, _columns{columns}, _kind{kind}, _owner{&owner} {}

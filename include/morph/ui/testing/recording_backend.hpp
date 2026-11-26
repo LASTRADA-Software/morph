@@ -2866,8 +2866,8 @@ public:
     /// @param widths     Their widths.
     /// @param totalWidth Every visible column's width together.
     /// @param pinned     How many of @p columns are pinned.
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): overrides `Table::setColumnWindow`; the declaration says how its spans are told apart
     void setColumnWindow(
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): overrides `Table::setColumnWindow`; the declaration says how its spans are told apart
         std::span<std::size_t const> columns, std::span<int const> offsets,
         // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): overrides `Table::setColumnWindow`; the declaration says how its totals are told apart
         std::span<int const> widths, int totalWidth, std::size_t pinned) override {
