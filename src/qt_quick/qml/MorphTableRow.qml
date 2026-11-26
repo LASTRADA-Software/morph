@@ -81,8 +81,15 @@ MorphWidget {
         root.placeQueued = false
         root.place()
     }
-    // The height the row's cells ask for, in a table over a source; the table keeps the largest while it is realized.
+    // The height the row's cells ask for, in a table over a source (the table keeps it no lower than it was when the
+    // column window last changed).
     property real measuredHeight: 0
+    // The table's `windowEpoch` when `measuredHeight` was measured.
+    property int measuredEpoch: 0
+    onMeasuredEpochChanged: {
+        if (root.table)
+            root.table.scheduleRows()
+    }
     onMeasuredHeightChanged: {
         if (root.table)
             root.table.scheduleRows()
@@ -443,6 +450,7 @@ MorphWidget {
             placed.push(cell)
         }
         const own = measure ? tallest + 2 * insetY : table.oneLineRowHeight
+        root.measuredEpoch = table.windowEpoch
         root.measuredHeight = Math.max(own, root.backgroundItem ? root.backgroundItem.implicitHeight : 0)
         cells.implicitWidth = table.columnsWidth
         cells.implicitHeight = root.measuredHeight

@@ -440,6 +440,18 @@ MorphWidget {
     property bool arranged: false
     property var windowColumns: []
     property real windowTotalWidth: 0
+    // A count of the times the column window changed, its columns or their widths. A row's height is kept against a
+    // shorter measure only across such a change (`layoutRows`), so a wrapped cell that scrolls out sideways does not
+    // make its row shorter, while a row measured again in the same window takes what it measures.
+    property int windowEpoch: 0
+    property string windowShape: ""
+    onWindowColumnsChanged: {
+        const shape = root.windowColumns.map(entry => entry.column + ":" + Math.round(entry.width)).join(",")
+        if (shape !== root.windowShape) {
+            root.windowShape = shape
+            ++root.windowEpoch
+        }
+    }
     property int pinnedShown: 0
     // For tests and assistive technology: the window's size, its first scrolled column, and the header cells alive.
     readonly property int realizedColumnCount: root.windowColumns.length
@@ -474,6 +486,10 @@ MorphWidget {
     readonly property real oneLineRowHeight: root.estimatedRowHeight
     // Each realized row's height by view row, and the mean of them, which a row not realized counts as.
     property var rowHeights: ({})
+    // By view row: the `windowEpoch` each height was last measured in, and the height it had when the column window
+    // last changed, under which it does not go while the window stays.
+    property var rowHeightEpochs: ({})
+    property var rowHeightFloors: ({})
     property real meanRowHeight: root.estimatedRowHeight
     // Test-only: how many cell heights the rows have measured for their own heights.
     property int rowMeasures: 0
@@ -1755,9 +1771,11 @@ MorphWidget {
         }
     }
 
-    // Keeps each realized row's height (the larger of what it had and what it measures now; a row that left is
-    // forgotten), places every row at its view row, and moves the view by what the rows above the first visible one
-    // changed, so the rows in view stay where they are.
+    // Sets each realized row's height to what it measures now, but no less than the height it had when the column
+    // window last changed: a wrapped cell that scrolls out sideways does not make its row shorter, and a row measured
+    // again in the same window, whose cells changed, takes what it measures. A row that left is forgotten. Places
+    // every row at its view row, and moves the view by what the rows above the first visible one changed, so the rows
+    // in view stay where they are.
     function layoutRows() {
         root.rowsQueued = false
         const anchor = root.rowAtY(flick.contentY)
@@ -1769,13 +1787,23 @@ MorphWidget {
                 rows.push(row)
         }
         const heights = {}
+        const epochs = {}
+        const floors = {}
         let sum = 0
         for (const row of rows) {
-            const height = Math.max(root.rowHeights[row.viewRow] ?? 0, row.measuredHeight)
+            const epoch = root.rowHeightEpochs[row.viewRow]
+            const floor = epoch === undefined ? 0
+                        : epoch !== row.measuredEpoch ? root.rowHeights[row.viewRow]
+                        : root.rowHeightFloors[row.viewRow]
+            const height = Math.max(floor, row.measuredHeight)
             heights[row.viewRow] = height
+            epochs[row.viewRow] = row.measuredEpoch
+            floors[row.viewRow] = floor
             sum += height
         }
         root.rowHeights = heights
+        root.rowHeightEpochs = epochs
+        root.rowHeightFloors = floors
         root.meanRowHeight = rows.length > 0 ? sum / rows.length : root.estimatedRowHeight
         for (const row of rows) {
             row.y = root.rowTop(row.viewRow)

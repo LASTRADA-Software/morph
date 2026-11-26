@@ -2629,6 +2629,10 @@ TEST_CASE(
 // measuring a table whose columns are all wrap:false (rowMeasures grows).
 TEST_CASE("qt_quick table: a row's height only grows while it is realized", "[qt_quick]") {
     QuickWindowFixture f{2'000, 300, {.pinned = 0, .wrapped = {{.row = 3, .column = 60, .lines = 2}}}};
+    // Before the first viewport report every column is realized, the wrapped one too; a row that left the row window
+    // and came back has measured only the columns in view.
+    f.scrollRows(1'000);
+    f.scrollRows(0);
     int const low = f.call("rowHeight", 3).toInt();
     f.scrollColumns(60 * f.column);
     int const tall = f.call("rowHeight", 3).toInt();

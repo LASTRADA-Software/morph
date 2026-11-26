@@ -709,9 +709,9 @@ A server-mode table is always windowed by rows.
   blank placeholders of their column's width and are realized over the following frames, nearest the centre of
   the viewport first. A fling or a drag of the scroll thumb therefore passes over placeholders and never waits
   for realization; rows the view only passes are not realized at all.
-- **Row height.** A row's height is the tallest its realized cells have measured, and only grows while the row
-  is realized, as widths do: a wrapped cell that scrolls in sideways may make its row taller, and one that
-  scrolls out does not make it shorter. A row that leaves the row window forgets its height; an unrealized row
+- **Row height.** A row's height is the tallest its realized cells measure, and does not shrink when the
+  column window moves: a wrapped cell that scrolls in sideways may make its row taller, and one that scrolls out
+  does not make it shorter. Measured again in the same window, a row takes what it measures. A row that leaves the row window forgets its height; an unrealized row
   counts as the mean of the measured heights. When a row above the first visible row grows, the vertical offset
   grows with it. A table whose columns all have `wrap: false` has one row height and skips the measurement.
 - **A row not fetched yet** draws as a placeholder row of the estimated height.

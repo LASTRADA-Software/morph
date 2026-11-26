@@ -375,8 +375,10 @@ plus the padding, the first time either is larger than what the column was told 
 each header's width the same way, again when a font or a sort mark changes it; the mount grows a content column by them
 and fits the stretch columns to the viewport (`tableMeasure().shrinkFloor` is 8 units). **Row height.** A row's `measuredHeight` is its tallest placed cell's plus the padding,
 counted in `rowMeasures`, or the one-line height when every column keeps one line, which measures nothing.
-`layoutRows`, once per event loop turn, keeps each realized row's height as the larger of what it had and what it
-measures (a row that left is forgotten), takes their mean as the height of every row not realized, places each row
+`layoutRows`, once per event loop turn, sets each realized row's height to what it measures, but no lower than the
+height it had when the column window (`windowColumns`: its columns or their widths, counted in `windowEpoch`) last
+changed; a row measured again in the same window takes what it measures, so one measured while a pooled row still
+held another row's cells settles to its own height (a row that left is forgotten), takes their mean as the height of every row not realized, places each row
 at `rowTop(viewRow)`, and moves `flick.contentY` so the first visible row keeps its place: a row above it that grows,
 or a mean that changes, moves the view by as much (the mount holds no row heights, so this anchoring is
 `MorphTable`'s). The rows in view (`rowAtY` over the top and bottom of the viewport) are what the table reports.
@@ -820,8 +822,8 @@ software scene graph:
   window, every column 64 px): the cells and header cells alive are the windows' (F2); flings create no cell once the
   pools are warm (F8); the focused cell survives a scroll of 10,000 rows and 200 columns, with the view's counts (F10);
   hiding and moving a column create no cell items (D8); the status line shows the counts and "Retry"; an unloaded
-  cell draws its placeholder and a failed one its mark, neither widening the column; a row's height only grows while
-  it is realized, and a table of one-line columns measures none; a row growing above the view keeps the rows in view
+  cell draws its placeholder and a failed one its mark, neither widening the column; a row's height does not shrink
+  when the column window moves and is forgotten when the row leaves the row window, and a table of one-line columns measures none; a row growing above the view keeps the rows in view
   where they are; a windowed fixed column is as wide as an unwindowed one; a tap keeps the focus on the table and the
   status line is announced (from Qt 6.8); Shift with an arrow, Ctrl+A and the select-all box select through the mount.
 - **qmllint** over every `MorphUi` component, through the module's lint target, failing on any warning
