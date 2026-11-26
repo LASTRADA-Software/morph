@@ -1089,7 +1089,8 @@ void replyFirstPage(TableHarness& h, std::vector<std::int64_t> const& keys) {
 // The keys 0 to 199 with @p a and @p b swapped: the first page in another order.
 std::vector<std::int64_t> swappedPage(std::int64_t a, std::int64_t b) {
     std::vector<std::int64_t> keys(200);
-    std::ranges::iota(keys, std::int64_t{0});
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(keys.begin(), keys.end(), std::int64_t{0});
     std::swap(keys.at(static_cast<std::size_t>(a)), keys.at(static_cast<std::size_t>(b)));
     return keys;
 }
@@ -1140,7 +1141,8 @@ int focusSevenThenSort(TableHarness& h) {
 // The keys 0 to 199 with key 9,093 at view row 7: the first page of an order that lacks key 7 there.
 std::vector<std::int64_t> pageWithoutSeven() {
     std::vector<std::int64_t> keys(200);
-    std::ranges::iota(keys, std::int64_t{0});
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(keys.begin(), keys.end(), std::int64_t{0});
     keys.at(7) = 9'093;
     return keys;
 }
@@ -1216,7 +1218,8 @@ TEST_CASE("model table: a focused key a new sort deleted hands focus to the row 
     h.backend.clickHeader(table, 1);
     h.settle();
     std::vector<std::int64_t> keys(200);
-    std::ranges::iota(keys, std::int64_t{0});
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(keys.begin(), keys.end(), std::int64_t{0});
     keys.at(7) = 9'093;
     replyFirstPage(h, keys);
     replyKeyed(h, {});
@@ -1381,7 +1384,8 @@ TEST_CASE("model table: an arrival is one keyed request", "[ui][table]") {
     auto const screen = mountShown(h);
     std::size_t const sent = h.dispatcher.count("Table.samples");
     std::vector<std::int64_t> keys(20);
-    std::ranges::iota(keys, std::int64_t{0});
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(keys.begin(), keys.end(), std::int64_t{0});
     change(h, keys);
     REQUIRE(h.dispatcher.count("Table.samples") == sent + 1);  // exactly one more call
     REQUIRE(lastQuery(h).keys.has_value());
@@ -1484,7 +1488,8 @@ TEST_CASE("model table: an arrival for 50 rows re-evaluates their cells and no o
     h.backend.scrollTable(tableOf(h), 10, 30);
     h.settle();  // rows 0 to 49 realized
     std::vector<std::int64_t> keys(50);
-    std::ranges::iota(keys, std::int64_t{0});
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(keys.begin(), keys.end(), std::int64_t{0});
     auto const arrive = [&h](std::vector<std::int64_t> const& arrived) {
         change(h, arrived);
         table::TableQuery const asked = queryOf(h, h.dispatcher.last("Table.samples"));

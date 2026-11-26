@@ -547,7 +547,8 @@ std::vector<std::size_t> TableImpl::visibleOrder() const {
         return _visible;
     }
     std::vector<std::size_t> order(_columns.size());
-    std::ranges::iota(order, std::size_t{0});
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from Emscripten's libc++.
+    std::iota(order.begin(), order.end(), std::size_t{0});
     return order;
 }
 

@@ -182,7 +182,8 @@ std::expected<Rows, TableError> filterRows(VectorSource const& source, FilterEnt
     auto keys = KeyColumn::forColumn(source.columns()[0], services, snapshot->rowCount());
     buildKeys(*snapshot, 0, source.columns()[0], services, 0, snapshot->rowCount(), keys);
     Rows rows(snapshot->rowCount());
-    std::ranges::iota(rows, 0U);
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(rows.begin(), rows.end(), 0U);
     FilterRun run{*compiled, {&keys}, rows};
     static_cast<void>(run.run(kNoDeadline, ::core::async::StopToken{}));
     return std::move(run).take();
@@ -384,7 +385,8 @@ TEST_CASE("measure: invariant 25 over random amounts", "[table][measure]") {
     auto const source = tabletest::makeSource({measureCol("w")}, std::move(rows));
     for (auto const dir : {SortDirection::Ascending, SortDirection::Descending}) {
         Order want(expected.size());
-        std::ranges::iota(want, std::size_t{0});
+        // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+        std::iota(want.begin(), want.end(), std::size_t{0});
         std::ranges::sort(want, [&](std::size_t a, std::size_t b) {
             auto const& x = expected[a];
             auto const& y = expected[b];

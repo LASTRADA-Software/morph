@@ -1981,7 +1981,8 @@ TEST_CASE("table focus: a new order follows the focused key off-screen and only 
 // scrolled past).  Gate F2.
 TEST_CASE("table window: cells of their own columns scrolled across stay bounded", "[ui][mount]") {
     std::vector<std::size_t> every(300);
-    std::ranges::iota(every, std::size_t{0});
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(every.begin(), every.end(), std::size_t{0});
     WindowFixture f{1'999, 300, {.pinned = 0, .custom = every}};
     for (int x = 0; x <= 20'000; x += 1'000) {
         f.scrollColumns(x);
@@ -1992,7 +1993,8 @@ TEST_CASE("table window: cells of their own columns scrolled across stay bounded
 // Mutation: a pass that realized nothing posts the next anyway (the owner never goes idle).
 TEST_CASE("table window: cells whose build throws on every pass stop being retried", "[ui][mount]") {
     std::vector<std::size_t> every(300);
-    std::ranges::iota(every, std::size_t{0});
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(every.begin(), every.end(), std::size_t{0});
     WindowFixture f{1'999, 300, {.pinned = 0, .custom = every}};
     Probe const probe{f.owner.coreExecutor()};  // each failed pass is reported, not asserted
     f.throwing = true;

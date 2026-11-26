@@ -3102,7 +3102,8 @@ private:
                 columnWindow(extents, pinned, table.scrollX, table.viewport, table.virtualize.columnOverscan).columns;
         } else {
             places.resize(table.visible.size());
-            std::ranges::iota(places, std::size_t{0});
+            // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from Emscripten's libc++.
+            std::iota(places.begin(), places.end(), std::size_t{0});
         }
         std::vector<std::size_t> window;
         window.reserve(places.size() + 1);

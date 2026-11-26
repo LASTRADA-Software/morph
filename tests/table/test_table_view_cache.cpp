@@ -344,7 +344,8 @@ TEST_CASE("view cache: the bound evicts least recently used", "[table][views]") 
     auto const compute = [&]() -> std::expected<ViewComputation, TableError> {
         ViewComputation out;
         out.view.rows.resize(10'000);
-        std::ranges::iota(out.view.rows, 0U);
+        // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+        std::iota(out.view.rows.begin(), out.view.rows.end(), 0U);
         return out;
     };
     for (auto const* const name : {"one", "two", "three"}) {
@@ -386,7 +387,8 @@ TEST_CASE("view cache: the bound counts a view's order keys", "[table][views]") 
     auto const compute = [&]() -> std::expected<ViewComputation, TableError> {
         ViewComputation out;
         out.view.rows.resize(kRows);
-        std::ranges::iota(out.view.rows, 0U);
+        // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+        std::iota(out.view.rows.begin(), out.view.rows.end(), 0U);
         out.orderKeys = std::make_shared<std::vector<RowId> const>(orderKeys);
         return out;
     };

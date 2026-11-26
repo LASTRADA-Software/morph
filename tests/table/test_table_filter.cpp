@@ -1198,7 +1198,8 @@ bool oracle(Oracle const& definition, std::vector<Cell> const& row) {
     if (filter.mode == GroupMode::Together) {
         // Try every injective assignment of entries to columns.
         std::vector<std::size_t> columns(row.size());
-        std::ranges::iota(columns, std::size_t{0});
+        // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+        std::iota(columns.begin(), columns.end(), std::size_t{0});
         // NOLINTNEXTLINE(cppcoreguidelines-avoid-do-while): the permutation walk must run its body once before the first permutation step, which a `for` would reorder
         do {
             bool all = true;
@@ -1380,7 +1381,8 @@ TEST_CASE("groups: a row costs k lookups and at most one augmentation an entry",
         // Every 50th row holds v0..v15 in a shuffled order: the together filter below covers it, so its matching
         // runs to the bound. Random rows almost never hold all sixteen values.
         std::vector<int> values(16);
-        std::ranges::iota(values, 0);
+        // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+        std::iota(values.begin(), values.end(), 0);
         if (r % 50 == 0) {
             std::ranges::shuffle(values, rng);
         } else {

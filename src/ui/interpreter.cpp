@@ -11033,7 +11033,8 @@ namespace {
         {"dateTime", table::ColumnKind::DateTime},
         {"bool", table::ColumnKind::Bool},
     }};
-    const auto* const found = std::ranges::find(kKinds, name, &std::pair<std::string_view, table::ColumnKind>::first);
+    // NOLINTNEXTLINE(readability-qualified-auto): an array iterator is a pointer on some standard libraries only.
+    auto const found = std::ranges::find(kKinds, name, &std::pair<std::string_view, table::ColumnKind>::first);
     return found == kKinds.end() ? std::nullopt : std::optional{found->second};
 }
 

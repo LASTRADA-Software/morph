@@ -94,7 +94,8 @@ std::vector<RowId> intKeys(std::size_t count, std::int64_t first = 1) {
 PageRows pageOf(std::size_t rows, std::optional<std::int64_t> total = std::nullopt) {
     PageRows page;
     page.rows.resize(rows);
-    std::ranges::iota(page.rows, std::size_t{0});
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(page.rows.begin(), page.rows.end(), std::size_t{0});
     page.total = total;
     return page;
 }
