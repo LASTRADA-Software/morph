@@ -71,6 +71,36 @@ template <auto MemberPtr>
     return describe<MemberPtr>(label, help).withDerived();
 }
 
+namespace detail {
+
+/// @brief Value-initialises the members of @p action its type's `fieldMetadata` marks derived, not descending into
+///        nested aggregates.
+/// @tparam A The action or row type, one with field metadata.
+/// @param action The value cleared in place.
+template <typename A>
+void clearOwnDerived(A& action) {
+    using Plain = std::remove_cvref_t<A>;
+    constexpr auto memberCount = reflectedCount<Plain>();
+    [&]<std::size_t... I>(std::index_sequence<I...>) {
+        [[maybe_unused]] auto clear = [&]<std::size_t Idx>() {
+            // A `glz::meta` entry that computes its value yields a value: there is no stored member to clear.
+            [[maybe_unused]] decltype(auto) member = morph::detail::reflectedMember<Idx>(action);
+            using Member = std::remove_cvref_t<decltype(member)>;
+            // Assignability of the reference itself: a const member, or a const accessor, is never cleared.
+            if constexpr (std::is_lvalue_reference_v<decltype(member)> && std::is_default_constructible_v<Member> &&
+                          std::is_assignable_v<decltype(member), Member>) {
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): Idx < size.
+                if (detail::declaredDerived<Plain>(glz::reflect<Plain>::keys[Idx])) {
+                    member = Member{};
+                }
+            }
+        };
+        (clear.template operator()<I>(), ...);
+    }(std::make_index_sequence<memberCount>{});
+}
+
+}  // namespace detail
+
 /// @brief Value-initialises every derived member of @p action (`FieldMeta::derived` in its type's `fieldMetadata`),
 ///        and of every nested aggregate of it (each element of a `std::vector` member, a nested struct member, either
 ///        inside an engaged `std::optional`, recursively: `detail::forEachNested`): what every execution path runs
@@ -83,28 +113,12 @@ void clearDerived(A& action) {
     if constexpr (detail::WrittenAsMember<Plain>) {
         clearDerived(action.*(glz::meta<Plain>::value));
     } else if constexpr (glz::reflectable<Plain> || glz::glaze_object_t<Plain>) {
-        constexpr auto memberCount = detail::reflectedCount<Plain>();
-        [&]<std::size_t... I>(std::index_sequence<I...>) {
-            [[maybe_unused]] auto clear = [&]<std::size_t Idx>() {
-                // A `glz::meta` entry that computes its value yields a value: there is no stored member to clear.
-                [[maybe_unused]] decltype(auto) member = morph::detail::reflectedMember<Idx>(action);
-                using Member = std::remove_cvref_t<decltype(member)>;
-                // Assignability of the reference itself: a const member, or a const accessor, is never cleared.
-                if constexpr (std::is_lvalue_reference_v<decltype(member)> &&
-                              std::is_default_constructible_v<Member> &&
-                              std::is_assignable_v<decltype(member), Member>) {
-                    // Only a type with field metadata can mark a member derived; the names are read only then, since
-                    // reading them needs the type to have linkage.
-                    if constexpr (detail::HasFieldMetadata<Plain>) {
-                        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): Idx < size.
-                        if (detail::declaredDerived<Plain>(glz::reflect<Plain>::keys[Idx])) {
-                            member = Member{};
-                        }
-                    }
-                }
-            };
-            (clear.template operator()<I>(), ...);
-        }(std::make_index_sequence<memberCount>{});
+        // Only a type with field metadata can mark a member derived, and the member walk reads the names, which needs
+        // the type to have linkage. The check stays out here, not in the walk's lambda: MSVC instantiates a discarded
+        // branch there whose condition does not depend on the lambda's own parameters.
+        if constexpr (detail::HasFieldMetadata<Plain>) {
+            detail::clearOwnDerived(action);
+        }
         detail::forEachNested(action, [](auto& nested) { clearDerived(nested); });
     } else {
         static_cast<void>(action);
