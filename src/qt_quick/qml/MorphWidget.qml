@@ -281,8 +281,9 @@ Item {
     // field calls it for Tab, which Qt's text input takes for itself before the key reaches an ancestor's handler.
     function takeAncestorChord(event: var): bool {
         for (let item = root.parent; item; item = item.parent) {
-            if (typeof item.takeOwnChord === "function" && item.chords && item.chords.length > 0)
-                return item.takeOwnChord(event)
+            const widget = item as MorphWidget
+            if (widget && widget.chords.length > 0)
+                return widget.takeOwnChord(event)
         }
         return false
     }
