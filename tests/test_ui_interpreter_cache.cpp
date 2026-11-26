@@ -187,7 +187,8 @@ TEST_CASE("cache: a read makes no entry", "[push][cache][table]") {
     CHECK(text == reply);
     CHECK(h.session.cacheSize() == entries);
 
-    ::core::async::StopSource const stop;
+    // NOLINTNEXTLINE(misc-const-correctness): request_stop is const on libstdc++ only; the standard declares it non-const.
+    ::core::async::StopSource stop;
     bool cancelled = false;
     bool resolved = false;
     auto stopped = h.session.read(channel, "T_Page", valueOf("{}"), stop.get_token());
