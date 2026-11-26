@@ -823,8 +823,7 @@ private:
         auto const snapshot = _source->snapshot();
         for (std::size_t row = 0; row < snapshot->rowCount(); ++row) {
             if (snapshot->rowId(row) == key) {
-                return &_records.insert_or_assign(key, FormRowsSource::recordOf()(*snapshot, row))
-                            .first->second;
+                return &_records.insert_or_assign(key, FormRowsSource::recordOf()(*snapshot, row)).first->second;
             }
         }
         return nullptr;
