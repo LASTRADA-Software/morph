@@ -64,13 +64,14 @@ table::TableStateKey keyOf(std::string tableId) {
                                 .part = "state"};
 }
 
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kKey` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
 table::TableStateKey const kKey = keyOf("samples");
 
 // A server offering `morph.tableState` over a probe store; its token is the verified principal.
 struct StateServer {
     explicit StateServer(TableStateOptions options, std::shared_ptr<morph::session::IAuthorizer> authorizer =
                                                         std::make_shared<prefs_test::TokenAuthorizer>()) {
-        ui::registerTableState(prefs, dispatcher, registry, options);
+        ui::registerTableState(prefs, dispatcher, registry, std::move(options));
         server = std::make_shared<morph::backend::RemoteServer>(pool, std::move(authorizer), dispatcher, registry);
     }
 
@@ -129,10 +130,12 @@ public:
         return static_cast<std::size_t>(std::ranges::count(calls, action));
     }
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the call and body logs and the bind counter, which the cases read directly
     std::vector<std::string> calls;
     /// The body of each call, in order.
     std::vector<std::string> bodies;
     int binds = 0;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
     class Channel final : public ui::ModelChannel {
@@ -181,7 +184,7 @@ struct NoPublishForBob final : morph::session::IAuthorizer {
 struct StoreFixture : RowsFixture {
     explicit StoreFixture(TableStateOptions options = {}, std::shared_ptr<morph::session::IAuthorizer> authorizer =
                                                               std::make_shared<prefs_test::TokenAuthorizer>())
-        : server{options, std::move(authorizer)} {}
+        : server{std::move(options), std::move(authorizer)} {}
 
     StateServer server;
     ProbePreferencesStore& prefs = *server.prefs;
@@ -257,7 +260,7 @@ std::set<std::string> headAndSegmentsOf(ProbePreferencesStore const& prefs, tabl
     return out;
 }
 
-std::size_t segmentsOf(std::string const& text) { return ui::detail::segmentText(text, 12 * 1024).size(); }
+std::size_t segmentsOf(std::string const& text) { return ui::detail::segmentText(text, 12UZ * 1024).size(); }
 
 // A state whose filter ticks @p values values, each with a quote and a two-byte character to escape and keep whole.
 std::string stateWithOneOfValues(int values, std::string_view tag = "a") {
@@ -823,7 +826,8 @@ struct SteppedServer {
 
     // Sends @p request; @p into receives the reply when the step executor gets to it.
     void post(morph::wire::Envelope const& request, std::optional<morph::wire::Envelope>& into) {
-        server->handle(morph::wire::encode(request), [&into](std::string text) { into = morph::wire::decode(text); });
+        server->handle(morph::wire::encode(request),
+                       [&into](std::string const& text) { into = morph::wire::decode(text); });
     }
 
     morph::wire::Envelope sendNow(morph::wire::Envelope const& request) {
@@ -897,11 +901,14 @@ std::string escapedState(std::size_t bytes) {
 bool wellFormed(std::string_view text) {
     for (std::size_t at = 0; at < text.size();) {
         auto const lead = static_cast<unsigned char>(text[at]);
-        std::size_t const length = lead < 0x80           ? 1
-                                   : (lead >> 5) == 0x6  ? 2
-                                   : (lead >> 4) == 0xE  ? 3
-                                   : (lead >> 3) == 0x1E ? 4
-                                                         : 0;
+        std::size_t const length =
+            lead < 0x80 ? 1
+            // NOLINTBEGIN(readability-avoid-nested-conditional-operator): a flat pick of the UTF-8 sequence length from the lead byte, one range per line
+            : (lead >> 5) == 0x6  ? 2
+            : (lead >> 4) == 0xE  ? 3
+            : (lead >> 3) == 0x1E ? 4
+                                  : 0;
+        // NOLINTEND(readability-avoid-nested-conditional-operator)
         if (length == 0 || at + length > text.size()) {
             return false;
         }
@@ -1098,7 +1105,7 @@ TEST_CASE("table state: a key out of bounds fails its own load, and its neighbou
 // Mutation: no reply budget (every head in one reply, none deferred).
 TEST_CASE("table state: a load whose heads would outgrow its envelope defers the rest", "[ui][state]") {
     StoreFixture h;
-    std::string const big = escapedState(800 * 1024);
+    std::string const big = escapedState(800UZ * 1024);
     REQUIRE(ui::detail::wireBytes(big) > 3 * 800 * 1024);
     REQUIRE(save(h, keyOf("t1"), big).outcome == table::SaveOutcome::Saved);
     REQUIRE(save(h, keyOf("t2"), big).outcome == table::SaveOutcome::Saved);
@@ -1163,12 +1170,12 @@ TEST_CASE("table state: a segment never ends inside a UTF-8 sequence", "[ui][sta
 // Mutation: a document of exactly segmentBytes written as segments (`>=` for `>`).
 TEST_CASE("table state: a document of exactly 12 KiB is its head, one byte more is segments", "[ui][state]") {
     StoreFixture h;
-    REQUIRE(save(h, kKey, docOf(12 * 1024)).outcome == table::SaveOutcome::Saved);
+    REQUIRE(save(h, kKey, docOf(12UZ * 1024)).outcome == table::SaveOutcome::Saved);
     CHECK(h.prefs.pointsUnder(scopeOf(kKey)) == std::set<std::string>{"state"});
-    CHECK(load(h, kKey)->json == docOf(12 * 1024));
-    REQUIRE(save(h, kKey, docOf(12 * 1024 + 1)).outcome == table::SaveOutcome::Saved);
+    CHECK(load(h, kKey)->json == docOf(12UZ * 1024));
+    REQUIRE(save(h, kKey, docOf((12UZ * 1024) + 1)).outcome == table::SaveOutcome::Saved);
     CHECK(headOf(h.prefs, kKey).segments == std::optional<std::uint64_t>{2});
-    CHECK(load(h, kKey)->json == docOf(12 * 1024 + 1));
+    CHECK(load(h, kKey)->json == docOf((12UZ * 1024) + 1));
 }
 
 // Mutation: no refusal of a `.` in `part` ("state.pending" is stored, over the intent point of "state").
@@ -1211,6 +1218,7 @@ struct Started {
 };
 
 // Takes the lock of @p name, sets @p held, and waits until destroyed.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters): the test keeps `locks` and `held` alive past the coroutine's suspension, and the coroutine only reads them
 Started holdLock(ui::detail::TableStateLocks& locks, std::string name, bool& held) {
     auto const lease = co_await locks.lock(std::move(name));
     held = true;
@@ -1413,10 +1421,13 @@ std::vector<std::string> callsOf(std::vector<StoreCall> const& calls, std::strin
         if (call.part != part) {
             continue;
         }
-        std::string const outcome = call.op == "load"                              ? ""
-                                    : call.outcome == table::SaveOutcome::Saved    ? " Saved"
-                                    : call.outcome == table::SaveOutcome::Conflict ? " Conflict"
-                                                                                   : " Refused";
+        std::string const outcome =
+            call.op == "load" ? ""
+            // NOLINTNEXTLINE(readability-avoid-nested-conditional-operator): a flat pick over the call's outcome, one case per line
+            : call.outcome == table::SaveOutcome::Saved ? " Saved"
+            // NOLINTNEXTLINE(readability-avoid-nested-conditional-operator): a flat pick over the call's outcome, one case per line
+            : call.outcome == table::SaveOutcome::Conflict ? " Conflict"
+                                                           : " Refused";
         out.push_back(call.op + (call.op == "load" ? "" : " expected=" + call.expected) + outcome);
     }
     return out;
@@ -1494,7 +1505,7 @@ TEST_CASE("views: a screen's state, views and shared parts load in one call, and
     std::string const& body = h.client.bodies.at(static_cast<std::size_t>(load - h.client.calls.begin()));
     auto const parts = [&body](std::string_view part) {
         std::size_t count = 0;
-        std::string const needle = "\"part\":\"" + std::string{part} + "\"";
+        std::string const needle = R"("part":")" + std::string{part} + "\"";
         for (auto at = body.find(needle); at != std::string::npos; at = body.find(needle, at + 1)) {
             ++count;
         }

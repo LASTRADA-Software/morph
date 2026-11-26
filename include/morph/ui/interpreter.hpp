@@ -695,9 +695,11 @@ struct RunStarted {
     /// @brief The run's id, unique in the session.
     std::uint64_t run;
     /// @brief The action's id.
+    // NOLINTBEGIN(cppcoreguidelines-avoid-const-or-ref-data-members): the run's context borrows the action name and body of the call for the call's duration, and the object is built and dropped inside it
     std::string const& action;
     /// @brief The body sent.
     Value const& body;
+    // NOLINTEND(cppcoreguidelines-avoid-const-or-ref-data-members)
 };
 
 /// @brief A mutation's run as it settles.
@@ -705,6 +707,7 @@ struct RunSettled {
     /// @brief The run's id, as `RunStarted` gave it.
     std::uint64_t run;
     /// @brief The action's id.
+    // NOLINTBEGIN(cppcoreguidelines-avoid-const-or-ref-data-members): the settled-run view borrows the call's action, body, reply and refusal code, and the object lives only inside the observer callback they outlive
     std::string const& action;
     /// @brief The body sent.
     Value const& body;
@@ -714,6 +717,7 @@ struct RunSettled {
     Value const& reply;
     /// @brief The `ActionRefusal` code of a refused run; empty for none.
     std::string const& refusalCode;
+    // NOLINTEND(cppcoreguidelines-avoid-const-or-ref-data-members)
     /// @brief Runs the same mutation again, with the run's bindings and another body.
     std::function<void(Value body)> rerun;
 };
@@ -1165,7 +1169,7 @@ public:
     ///         the call's failure, or `core::async::OperationCancelled` after a stop.
     [[nodiscard]] async::Completion<std::string> read(std::shared_ptr<ModelChannel> const& channel,
                                                       std::string const& actionId, Value const& body,
-                                                      ::core::async::StopToken stop = {});
+                                                      ::core::async::StopToken const& stop = {});
 
     /// @brief Watches a record without a cache entry, for as long as a copy of the returned holder lives.
     ///
@@ -2548,7 +2552,7 @@ private:
     /// its mount owns. Returns the column chooser and the
     /// sort dialog its menu opens, to mount beside the table; null for a table with no menus.
     Node configureTable(TableConfig& config, LowerCtx const& ctx, TableOptions& options,
-                        std::shared_ptr<void const> keep);
+                        std::shared_ptr<void const> const& keep);
     /// Takes the columns a model-backed table's layout arranges from the description its rows hold now.
     void modelLayoutColumns(ElementState& element) const;
     /// A grouped table's heading row: its `group`'s `heading`, lowered as one cell in a row scope of its own whose

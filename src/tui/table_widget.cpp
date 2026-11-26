@@ -188,6 +188,7 @@ int TableImpl::heightOf(WidgetBase const& row) const {
 
 // The rows' order decides coverage, so it is worked out here, from the rows as they are, and never when a row is told
 // its spans: rows moving under an unchanged span change what is covered.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): plans spans in one pass in the rows' order: the spans carried from earlier rows decide what each next row covers
 void TableImpl::planSpans() {
     if (_spans.empty() && _plan.empty()) {
         std::erase(context().spanTables, this);
@@ -733,6 +734,7 @@ EventResult TableImpl::cellKey(::core::tui::KeyEvent const& key) {
 
 // Left and Right walk the visible columns; a move is reported one place over and the table waits for the mount to
 // rearrange it, the focus staying on the moved column.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): Left, Right, Down and the chords each move the header focus; the branches share the visible order and the focused place
 EventResult TableImpl::headerKey(::core::tui::KeyEvent const& key) {
     if (!_headerFocus) {
         return EventResult::Ignored;
@@ -1224,6 +1226,7 @@ void TableImpl::arrangeRows(std::vector<int> const& widths) {
     }
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one paint walks the header, the rows and the status line against a shared canvas and column layout
 void TableImpl::paint(::core::tui::Canvas& canvas) {
     auto const& theme = canvas.theme();
     _size = canvas.size();
@@ -1364,6 +1367,7 @@ EventResult TableImpl::modifiedKey(::core::tui::KeyEvent const& key) {
 }
 
 // Any key ends a double click: the click after it is a first click.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): maps each key to the table's mode (header, cell menu, source or plain rows); the modes share the focus and anchor state
 EventResult TableImpl::key(::core::tui::KeyEvent const& key) {
     _lastClick = {};
     if (matchesChord("Ctrl+C", key) && _onCopy) {
@@ -1460,6 +1464,7 @@ WidgetBase* TableImpl::rowAtLine(int line) const {
     return nullptr;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): a click resolves to the header, the gutter, a cell or the status line from one hit test, each target needing the modifier state
 void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifiers) {
     if (_status.shown && cell.y == _size.height - 1) {
         if (_retryX >= 0 && cell.x >= _retryX && cell.x < _retryX + displayWidth(kRetry) && _onRetry) {
@@ -1568,6 +1573,7 @@ bool TableImpl::selectCellsAt(WidgetBase const* row, ::core::tui::Point cell, ::
     }
     std::optional<std::size_t> const anchor = visiblePlace(_focusCell->second);
     int const across = cell.x - gutter();
+    // NOLINTNEXTLINE(readability-use-anyofallof): the loop calls the range handler for the first matching column and returns; `any_of` would hide the call in its predicate
     for (DrawnColumn const& column : drawnColumns(_size.width)) {
         std::optional<std::size_t> const place = visiblePlace(column.column);
         if (across >= column.x && across <= column.x + column.width && anchor && place) {
@@ -1599,6 +1605,7 @@ bool TableImpl::clickCell(WidgetBase const* row, int x, bool twice) {
         return false;
     }
     int const across = x - gutter();
+    // NOLINTNEXTLINE(readability-use-anyofallof): the loop runs the cell handler for the first column under the click; `any_of` would hide the call in its predicate
     for (DrawnColumn const& column : drawnColumns(_size.width)) {
         if (across >= column.x && across <= column.x + column.width) {
             // A copy: the handler may destroy this table.
@@ -1757,6 +1764,7 @@ void TableImpl::activateRow(ui::Key const& key) {
     }
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`first`, `count`, `total`): the window then the full row count, passed by name at both call sites in the mount
 void TableImpl::setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) {
     static_cast<void>(first);
     static_cast<void>(count);
@@ -1822,8 +1830,10 @@ void TableImpl::setCellAccent(ui::Widget& row, std::size_t column, ui::CellAccen
     refresh();
 }
 
-void TableImpl::setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
-                                std::span<int const> widths, int totalWidth, std::size_t pinned) {
+void TableImpl::setColumnWindow(
+    std::span<std::size_t const> columns, std::span<int const> offsets,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): overrides `Table::setColumnWindow`; the declaration says how its totals are told apart
+    std::span<int const> widths, int totalWidth, std::size_t pinned) {
     _arranged = true;
     _window.clear();
     for (auto const [column, offset, width] : std::views::zip(columns, offsets, widths)) {
@@ -1891,6 +1901,7 @@ bool TableImpl::selectRange(std::size_t anchorRow, std::size_t focusRow, ui::Sel
     return true;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): the source table's keys share the focus, the selection range and the edit state
 EventResult TableImpl::sourceKey(::core::tui::KeyEvent const& key) {
     // The whole view: through the select-all handler when the table has one, else through the mount, which resolves
     // it over the rows not realized; in Single mode it goes on outwards.
@@ -2145,6 +2156,7 @@ std::vector<TableImpl::DrawnColumn> TableImpl::drawnColumns(int width) const {
     return drawn;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`row`, `cell`): the row's stack then the cell inside it, as the two callers pass them
 std::optional<std::size_t> TableImpl::columnOf(WidgetBase const* row, WidgetBase const* cell,
                                                std::size_t position) const {
     if (!_source) {
@@ -2187,6 +2199,7 @@ std::string TableImpl::focusedTooltip() const {
 
 // A cell takes its column's slot; a pooled cell, one whose column is not drawn and one a mark stands for take none.
 // A heading's one cell takes every column drawn.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): assigns every cell its slot in one pass over the rows; pooled, undrawn, marked and heading cells each take none or all of the columns
 void TableImpl::slotCells(std::vector<DrawnColumn> const& drawn) {
     std::unordered_map<std::size_t, DrawnColumn const*> byColumn;
     int across = 0;
@@ -2284,6 +2297,7 @@ bool TableImpl::contextPress(::core::tui::Point cell) {
         if (row == nullptr) {
             return false;
         }
+        // NOLINTNEXTLINE(readability-use-anyofallof): the loop opens the cell menu for the first column under the click; `any_of` would hide the call in its predicate
         for (DrawnColumn const& drawn : drawnColumns(_size.width)) {
             int const left = gutter() + drawn.x;
             if (cell.x >= left && cell.x < left + drawn.width) {
@@ -2300,6 +2314,7 @@ bool TableImpl::contextPress(::core::tui::Point cell) {
         openMenu(std::nullopt);
         return true;
     }
+    // NOLINTNEXTLINE(readability-use-anyofallof): the loop opens the column menu for the first header under the click; `any_of` would hide the call in its predicate
     for (DrawnColumn const& drawn : drawnColumns(_size.width)) {
         int const left = gutter() + drawn.x;
         if (cell.x >= left && cell.x < left + drawn.width) {
@@ -2337,6 +2352,7 @@ void TableImpl::reportBeforeNextFrame() {
     refresh();
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): draws the status text, the retry button and the gap in one left-to-right pass over a running column
 void TableImpl::paintStatus(::core::tui::Canvas& canvas) {
     _retryX = -1;
     _entriesDrawn.clear();

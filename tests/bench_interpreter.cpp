@@ -253,6 +253,7 @@ public:
 
 private:
     // What @p value holds outside its own `sizeof`.
+    // NOLINTNEXTLINE(misc-no-recursion): `held` measures a value that may nest lists and records, recursing once per level of the document's own nesting
     std::size_t held(ui::Value const& value) {
         if (std::string const* const text = value.asString()) {
             return heap(*text);
@@ -714,7 +715,8 @@ TEST_CASE("interpreter bench: B1 a rows table's sort and filter in owner steps",
                                     {.column = "id", .dir = morph::table::SortDirection::Ascending}}));
             morph::table::FilterSpec filter;
             filter.columns["name"].include.push_back(morph::table::FilterEntry{.contains = "a"});
-            REQUIRE(engine.setFilter(std::move(filter)));
+            auto const filtered = engine.setFilter(std::move(filter));
+            REQUIRE(filtered);
             owner.runAll();
             results.push_back(millisSince(began));
             REQUIRE(engine.stats().ownerSteps - before.ownerSteps > 1);  // the work ran in steps, not in one call

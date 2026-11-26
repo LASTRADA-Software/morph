@@ -368,6 +368,7 @@ OpenWork<SampleView> SampleDirectoryModel::execute(const CountSamplesToVerify& a
     }
     auto const page = samplesWhere("CountSamplesToVerify", action.company, "state",
                                    ::morph::table::FilterEntry{.eq = std::string{"ToBeVerified"}}, 1);
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): `samplesWhere` lifts the total cap, so the page carries its total.
     return openWork<SampleView>(page.total.value());
 }
 
@@ -391,6 +392,7 @@ SearchHits<SampleView> SampleDirectoryModel::execute(const SearchSamples& action
                                   .screen = std::string{hit_screens::kSample},
                                   .params = {{"sampleId", *sample.id}}});
     }
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): `samplesWhere` lifts the total cap, so the page carries its total.
     return hitsOf<SampleView>(std::move(found), page.total.value());
 }
 

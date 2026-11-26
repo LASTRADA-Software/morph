@@ -232,7 +232,7 @@ Rows groupRows(GroupFilter group, FilterCounters* counters = nullptr) {
         keys.push_back(KeyColumn::forColumn(source->columns()[column], services, snapshot->rowCount()));
         buildKeys(*snapshot, column, source->columns()[column], services, 0, snapshot->rowCount(), keys.back());
     }
-    std::vector<KeyColumn const*> const pointers{&keys[0], &keys[1]};
+    std::vector<KeyColumn const*> const pointers{&keys.at(0), &keys.at(1)};
     Rows out;
     for (std::uint32_t row = 0; row < snapshot->rowCount(); ++row) {
         if (CompiledFilter::evaluateGroup(compiled->groups()[0], pointers, row, counters) == Match::Yes) {
@@ -349,6 +349,7 @@ TEST_CASE("measure: 0.3 kg and 300 g are one distinct value", "[table][measure]"
 }
 
 TEST_CASE("measure: invariant 25 over random amounts", "[table][measure]") {
+    // NOLINTNEXTLINE(bugprone-random-generator-seed, cert-msc32-c, cert-msc51-cpp): the fixed seed 25 replays the same sequence on every run, so a failing case reproduces
     std::mt19937 random{25};
     std::array<std::string_view, 4> const units{"kg", "g", "percent", ""};
     std::uniform_int_distribution<std::int64_t> amounts{-20'000, 20'000};
@@ -539,17 +540,19 @@ struct LineageRig {
         return options;
     }
 
-    LevelRead read(std::int64_t key) const {
+    [[nodiscard]] LevelRead read(std::int64_t key) const {
         std::vector<Cell> out(1);
         return cache.snapshot()->read(RowId{key}, out);
     }
 
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): `current` is the registry the case swaps between reads
     std::shared_ptr<UnitRegistry const> current = registry();
 
 private:
     std::function<void()> _during;
 
 public:
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): `cache` is the cache under test, which the cases call directly
     CellLevelCache cache;
 };
 

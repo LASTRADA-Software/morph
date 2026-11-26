@@ -319,6 +319,7 @@ struct Server {
 
 // One client as `principal`: raw envelopes over a socket, and the `changes` events it receives.
 struct Client {
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `Client(url)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     Client(std::string const& url, std::string principal) : _principal{std::move(principal)} {
         socket = std::make_unique<morph::net::SocketBackend>(url);
         REQUIRE(socket->waitForConnected());
@@ -335,7 +336,8 @@ struct Client {
             &owner);
         morph::wire::Envelope hello;
         hello.kind = std::string{kHello};
-        REQUIRE(send(std::move(hello)).kind == "ok");
+        auto const sent = send(std::move(hello));
+        REQUIRE(sent.kind == "ok");
     }
 
     // Sends @p request as this client's principal and waits for its reply.
@@ -369,6 +371,7 @@ struct Client {
         return reply.modelId;
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `execute(instance, modelType, action)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     morph::wire::Envelope execute(std::uint64_t instance, std::string const& modelType, std::string const& action,
                                   std::string body) {
         morph::wire::Envelope env;
@@ -421,10 +424,12 @@ struct Client {
         return keys;
     }
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the client's executor, socket, exchange and received changes, which the cases drive and read directly
     morph::exec::MainThreadExecutor owner;
     std::unique_ptr<morph::net::SocketBackend> socket;
     ui::Exchange exchange;
     std::vector<morph::wire::ChangesBody> changes;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
     std::string _principal;
@@ -555,6 +560,7 @@ namespace {
 
 // A server whose `tableWork` and view cache a case configures, `WideTableModel`'s recipe cache attached.
 struct ViewServer {
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `ViewServer(maxViewBytes, tableThreads)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     explicit ViewServer(std::size_t maxViewBytes = 64U << 20U, std::size_t tableThreads = 2)
         : tableWork{std::make_shared<RecordingPool>(tableThreads)} {
         morph::backend::ServerConfig config;
@@ -694,8 +700,8 @@ TEST_CASE("table over the bridge: one sort for many watchers", "[net][tables][vi
         *cache, std::vector<std::pair<morph::table::RowId, std::vector<morph::table::Cell>>>{
                     {morph::table::RowId{std::int64_t{1}}, cells}});
     REQUIRE(server.server->announce("WideTableModel.wide", std::nullopt));
-    for (std::size_t i = 0; i < clients.size(); ++i) {
-        auto& client = *clients[i];
+    for (auto const& held : clients) {
+        auto& client = *held;
         REQUIRE(client.pumpUntil([&] { return !client.changes.empty(); }));
     }
     // The fifty refetches are sent before any reply is read, and the computation they share waits until the other
@@ -740,7 +746,7 @@ TEST_CASE("table over the bridge: fifty sorts stay inside the bound", "[net][tab
     bench::WideTableModel::configure(
         {.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0},
         {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0});
-    std::size_t const viewBytes = 4 * 2'000;  // a view of every row of `wide`
+    std::size_t const viewBytes = 4UZ * 2'000;  // a view of every row of `wide`
     ViewServer const server{10 * viewBytes};
     Client client{server.url, "alice"};
     auto const instance = client.create(std::string{bench::kWideModelType});
@@ -783,7 +789,7 @@ TEST_CASE("table benchmark: C1 C2 C3 many clients over the bridge", "[.benchmark
     bench::WideTableModel::configure(
         {.rows = 100'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0},
         {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0});
-    ViewServer const server{10 * 4 * 100'000};
+    ViewServer const server{10UZ * 4 * 100'000};
     std::vector<std::unique_ptr<Client>> clients;
     std::vector<std::uint64_t> instances;
     for (int i = 0; i < 50; ++i) {
@@ -895,8 +901,10 @@ public:
 
     [[nodiscard]] ui::ChannelFacts facts() const override { return _inner->facts(); }
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the page counters the case reads after the run
     int firstPages = 0;
     int answeredPages = 0;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
     std::shared_ptr<ui::ModelChannel> _inner;
@@ -1330,6 +1338,7 @@ morph::table::ServedTable Rows::rows(morph::table::TableContext const& context) 
     if (context.session.principal == "bob") {
         std::vector<morph::table::RowId> mine;
         for (std::int64_t row = 0; row < 5; ++row) {
+            // NOLINTNEXTLINE(performance-inefficient-vector-operation): `mine` is a fixture list of five keys built once; sizing it would not change what the case checks
             mine.emplace_back(row);
         }
         served.source = morph::table::scoped(_source, std::move(mine));
@@ -1377,6 +1386,7 @@ namespace {
 constexpr std::string_view kOpen = R"({"columns":{"status":{"include":[{"eq":"open"}]}}})";
 
 // The keys of a ChangedRows reply (`rows`, objects with `key`) or a SelectedRows reply (`keys`).
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `keysOfReply(body)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::vector<std::int64_t> keysOfReply(std::string const& body, std::string const& member) {
     glz::generic_u64 json;
     REQUIRE_FALSE(glz::read_json(json, body));

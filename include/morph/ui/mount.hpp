@@ -112,6 +112,7 @@ public:
         _user.assign(_widths.size(), false);
         _tree.assign(_widths.size() + 1, 0);
         for (std::size_t at = 0; at < _widths.size(); ++at) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `at` runs below `_widths.size()`, the loop condition above
             add(at, _widths[at]);
         }
     }
@@ -121,11 +122,13 @@ public:
     /// @param width  The width measured.
     /// @return Whether the width changed.
     bool grow(std::size_t column, int width) {
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column >= _widths.size()` returns first, and `assign` sizes `_user` with `_widths`
         if (column >= _widths.size() || _user[column] || width <= _widths[column]) {
             return false;
         }
         add(column, width - _widths[column]);
         _widths[column] = width;
+        // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
         return true;
     }
 
@@ -135,11 +138,13 @@ public:
     /// @return Whether the width changed.
     bool fit(std::size_t column, int width) {
         width = std::max(width, 0);
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column >= _widths.size()` returns first, and `assign` sizes `_user` with `_widths`
         if (column >= _widths.size() || _user[column] || width == _widths[column]) {
             return false;
         }
         add(column, width - _widths[column]);
         _widths[column] = width;
+        // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
         return true;
     }
 
@@ -151,9 +156,11 @@ public:
             return;
         }
         width = std::max(width, 0);
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column >= _widths.size()` returned above, and `assign` sizes `_user` with `_widths`
         add(column, width - _widths[column]);
         _widths[column] = width;
         _user[column] = true;
+        // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
     }
 
     /// @brief The columns a horizontal viewport shows.
@@ -178,6 +185,7 @@ public:
         std::size_t index = std::min(column, _widths.size());
         int sum = 0;
         for (; index > 0; index -= index & (~index + 1)) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `index` starts at most at `_widths.size()`, one below `_tree.size()`, and only descends
             sum += _tree[index];
         }
         return sum;
@@ -188,6 +196,7 @@ public:
     /// @return The width; 0 past the last column.
     [[nodiscard]] int widthOf(std::size_t column) const {
         ++_reads;
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): guarded by `column < _widths.size()` in the same expression
         return column < _widths.size() ? _widths[column] : 0;
     }
 
@@ -204,8 +213,10 @@ public:
     [[nodiscard]] std::size_t columnReads() const noexcept { return _reads; }
 
 private:
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`column`, `delta`): called from `assign`, `grow`, `fit` and `set`, each passing the column first and the signed width change second
     void add(std::size_t column, int delta) {
         for (std::size_t at = column + 1; at < _tree.size(); at += at & (~at + 1)) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `at` stays below `_tree.size()` by the loop condition
             _tree[at] += delta;
         }
     }
@@ -217,8 +228,10 @@ private:
         int left = offset;
         for (; step > 0; step >>= 1U) {
             std::size_t const next = index + step;
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `next < _tree.size()` is the first operand of this condition
             if (next < _tree.size() && _tree[next] <= left) {
                 index = next;
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): reached only under `next < _tree.size()`, tested on the line above
                 left -= _tree[next];
             }
         }
@@ -254,8 +267,11 @@ struct ColumnWindow {
 /// @param viewport The viewport's width.
 /// @param overscan Columns kept beyond the viewport on each side.
 /// @return The window.
-[[nodiscard]] inline ColumnWindow columnWindow(ColumnExtents const& extents, std::size_t pinned, int scrollX,
-                                               int viewport, std::size_t overscan) {
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`pinned`, `scrollX`): a column count then a scroll offset, passed by name from the table state at the one call site
+[[nodiscard]] inline ColumnWindow columnWindow(
+    ColumnExtents const& extents, std::size_t pinned, int scrollX,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`viewport`, `overscan`): a width then a column count, passed by name from the table state at the one call site
+    int viewport, std::size_t overscan) {
     ColumnWindow window;
     std::size_t const count = extents.size();
     pinned = std::min(pinned, count);
@@ -302,6 +318,7 @@ inline void appendBandRuns(std::span<table::BandInfo const> bands, std::span<std
             count = 0;
         };
         for (std::size_t at = 0; at < visible.size(); ++at) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `at` is below `visible.size()`, the loop condition
             bool const own = std::ranges::contains(band.columns, visible[at]);
             // A run ends at a foreign column, and at the pinned edge.
             if (!own || (at == pinned && first)) {
@@ -361,6 +378,7 @@ inline void enclosingBands(std::span<table::BandInfo const> bands, std::string_v
 /// @param columnId The column's id.
 /// @param unit     The column's unit.
 /// @return `false` when @p unit is not empty and an enclosing band's unit equals it; `true` otherwise.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`columnId`, `unit`): a column id then its unit id, both read from the same TableColumn at every call
 [[nodiscard]] inline bool columnUnitShown(std::span<table::BandInfo const> bands, std::string_view columnId,
                                           std::string_view unit) {
     if (unit.empty()) {
@@ -377,6 +395,7 @@ inline void enclosingBands(std::span<table::BandInfo const> bands, std::string_v
 /// @param columnId The column's id.
 /// @param label    The column's own name.
 /// @return The name; @p label alone for a column under no band.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`columnId`, `unit`): a column id then its unit id, both read from the same TableColumn at every call
 [[nodiscard]] inline std::string bandedHeaderName(std::span<table::BandInfo const> bands, std::string_view columnId,
                                                   std::string_view label) {
     std::vector<table::BandInfo const*> enclosing;
@@ -419,8 +438,10 @@ struct CellSpan {
     auto const place = static_cast<std::size_t>(shown - visible.begin());
     auto const order = static_cast<std::size_t>(own - declared.begin());
     std::size_t count = 1;
-    while (count < span.columns && place + count < visible.size() && order + count < declared.size() &&
-           visible[place + count] == declared[order + count]) {
+    while (
+        count < span.columns && place + count < visible.size() && order + count < declared.size() &&
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `place + count < visible.size()` and `order + count < declared.size()` are earlier operands of the same condition
+        visible[place + count] == declared[order + count]) {
         ++count;
     }
     return count;
@@ -496,6 +517,7 @@ struct SpanRow {
         if (placeOf.empty()) {
             return column;
         }
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): guarded by `column < placeOf.size()` in the same expression
         return column < placeOf.size() ? placeOf[column] : std::nullopt;
     };
     // Until which row each visible place is covered.
@@ -1189,6 +1211,7 @@ private:
         }
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): applies each common property (visible, enabled, tooltip, keys and so on) to the widget; each binds against the same scope
     void applyCommon(reactive::Scope& scope, Widget& widget, Common const& common) {
         // The focus chain passes over a hidden or disabled widget and what is inside it.
         ChainFlags const* const flags = common.visible.isBound() || !common.visible.constant() ||
@@ -2290,6 +2313,7 @@ private:
 
     // The resolve of a table's spans: what the widget is told, by the difference from what it last was, and the
     // refusals, reported when their set changes.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): resolves spans against the table's rows in one pass: what the widget is told depends on the difference from the previous resolve, and refusals report when their set changes
     void resolveSpans(TableWidget& widget, SpanTable& table) {
         if (table.reconciling != 0 || !table.anyAsked) {
             return;
@@ -2565,6 +2589,7 @@ private:
 
     // Rows first, then the selection. The widget marks a selected key whenever its row arrives, so the order only
     // shapes the log: the first setSelection comes after the rows and already marks them.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): mounts each table spec kind (rows, source, model) against one widget, in the order the rows then the selection must bind
     Widget& mountKind(reactive::Scope& scope, Table const& spec, ContainerWidget* parent) {
         if (spec.source) {
             return mountSourceTable(scope, spec, parent);
@@ -2941,6 +2966,7 @@ private:
     }
 
     // Takes a new arrangement: the visible columns, their places, and their widths, the declared ones and the user's.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): takes a new arrangement: the visible columns, their places and their widths, declared and user's, each step reading the previous one's result
     static void arrange(SourceTable& table, TableArrangement arrangement) {
         table.arrangement = std::move(arrangement);
         std::vector<std::size_t> const before = std::exchange(table.visible, {});
@@ -3889,6 +3915,7 @@ private:
     }
 
     // After a pass: the counts, the focused cell and the highlighted row.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity, readability-convert-member-functions-to-static): the pass's reports (counts, focused cell, highlighted row) each read the same table state in turn
     void afterPass(SourceTable& table, TableTotal const& total) {
         std::pair<std::optional<std::int64_t>, std::size_t> const counts{
             total.known && total.kind == table::TotalKind::Exact ? std::optional{total.rows} : std::nullopt,
@@ -3904,7 +3931,7 @@ private:
                 table.widget->setHighlightedRow(static_cast<std::size_t>(*now));
             }
         }
-        if (table.focused && table.focusSearching) {
+        if (table.focused && table.focusSearching && table.focusKey) {
             if (std::optional<std::int64_t> const now = placeOfKey(table, *table.focusKey, table.focusIndex)) {
                 table.focusLocate.request_stop();
                 table.focusSearching = false;
@@ -3947,6 +3974,9 @@ private:
 
     // Asks the rows where the focused key is now, stopping an earlier ask.
     void locateFocus(SourceTable& table) {
+        if (!table.focusKey) {
+            return;
+        }
         table.focusLocate.request_stop();
         table.focusLocate = ::core::async::StopSource{};
         ::core::async::StopToken const stop = table.focusLocate.get_token();
@@ -4169,9 +4199,10 @@ private:
 
     // A rectangle the backend reports, by view rows and visible places, as a range by keys and column ids; a corner
     // outside the view or the visible columns reports nothing.
-    [[nodiscard]] static std::optional<CellRange> cellsAt(SourceTable const& table, std::size_t anchorRow,
-                                                          std::size_t anchorPlace, std::size_t focusRow,
-                                                          std::size_t focusPlace) {
+    [[nodiscard]] static std::optional<CellRange> cellsAt(
+        SourceTable const& table, std::size_t anchorRow,
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`anchorPlace`, `focusRow`): the selection's anchor then its focus, passed in that order by the one caller
+        std::size_t anchorPlace, std::size_t focusRow, std::size_t focusPlace) {
         auto const cell = [&table](std::size_t row, std::size_t place) -> std::optional<CellRef> {
             std::optional<TableRowRef> const ref = table.source.rows->row(static_cast<std::int64_t>(row));
             if (!ref || place >= table.visible.size() || table.visible.at(place) >= table.columns.size()) {
@@ -4221,6 +4252,7 @@ private:
 
     // Puts focus on a cell by view row and column: the row is kept realized, scrolled to when it is outside the rows
     // in view, and the backend shows it.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`index`, `column`): row index then column, the order every focus seam in this file uses
     void placeFocus(SourceTable& table, std::int64_t index, std::size_t column) {
         table.focused = true;
         table.focusSearching = false;
@@ -4392,6 +4424,7 @@ private:
     // rows realized; only their answer that the view lacks it moves focus to another row. An index at or past the
     // row count before the change names no row, so nothing moves it; after a reset no row is counted until the next
     // pass, so a first page that arrives before it moves nothing either.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): follows the focused and the highlighted rows through each operation of a change, which shifts both by the operation kind
     void follow(SourceTable& table, table::ViewChange const& change) {
         bool const reset = std::ranges::any_of(
             change.ops, [](table::ViewOp const& op) { return op.kind == table::ViewOp::Kind::Reset; });
@@ -4473,6 +4506,7 @@ private:
 
     // What an editable table adds: its focus held by a grid, a click on a cell, typed text, its own keys, and focus
     // leaving it.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): binds what an editable table adds (focus, click, typed text, keys, focus loss), each handler capturing the same table state
     void bindGrid(reactive::Scope& scope, Table const& spec, TableWidget& widget, SourceTable& table) {
         table.grid = spec.gridFocus.has_value();
         table.onGridFocus = event(spec.onGridFocus);
@@ -4484,30 +4518,32 @@ private:
             widget.setOnFocusOut(event(spec.onFocusOut));
         }
         if (table.grid || spec.onActivateCell || spec.onClickCell) {
-            widget.setOnCellClick([this, &table, activate = spec.onActivateCell, clicked = spec.onClickCell](
-                                      std::size_t viewRow, std::size_t column, bool doubleClick) {
-                static_cast<void>(runCallback(*_rt, [&] {
-                    if (column >= table.columns.size()) {
-                        return;
-                    }
-                    auto const index = static_cast<std::int64_t>(viewRow);
-                    std::optional<TableRowRef> const ref = table.source.rows->row(index);
-                    if (!doubleClick) {
-                        if (table.grid) {
-                            handFocus(table, index, column);
-                        } else if (ref) {
-                            focusAt(table, ref->key, column);
+            widget.setOnCellClick(
+                [this, &table, activate = spec.onActivateCell, clicked = spec.onClickCell](
+                    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`viewRow`, `column`, `doubleClick`): the backend callback's contract, in the order the conformance suite fires it
+                    std::size_t viewRow, std::size_t column, bool doubleClick) {
+                    static_cast<void>(runCallback(*_rt, [&] {
+                        if (column >= table.columns.size()) {
+                            return;
                         }
-                        if (ref && clicked) {
-                            clicked(CellRef{.key = ref->key, .column = table.columns.at(column).id});
+                        auto const index = static_cast<std::int64_t>(viewRow);
+                        std::optional<TableRowRef> const ref = table.source.rows->row(index);
+                        if (!doubleClick) {
+                            if (table.grid) {
+                                handFocus(table, index, column);
+                            } else if (ref) {
+                                focusAt(table, ref->key, column);
+                            }
+                            if (ref && clicked) {
+                                clicked(CellRef{.key = ref->key, .column = table.columns.at(column).id});
+                            }
+                            return;
                         }
-                        return;
-                    }
-                    if (ref && activate) {
-                        activate(CellRef{.key = ref->key, .column = table.columns.at(column).id});
-                    }
-                }));
-            });
+                        if (ref && activate) {
+                            activate(CellRef{.key = ref->key, .column = table.columns.at(column).id});
+                        }
+                    }));
+                });
         }
         if (!spec.onKey) {
             return;

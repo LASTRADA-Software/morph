@@ -410,6 +410,7 @@ TEST_CASE("column layout: reset keeps groups and units", "[table][layout]") {
 TEST_CASE("column layout: user-formed groups are fitted to the group rules", "[table][layout]") {
     std::vector<std::string> ids;
     for (int at = 0; at < 18; ++at) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `ids` is a fixture list built once; sizing it first would not change what the case checks
         ids.push_back("c" + std::to_string(at));
     }
     ColumnLayout layout{ids};

@@ -105,7 +105,7 @@ TEST_CASE("table: an edit of an unloaded cell is refused on the cell", "[table][
         {{Cell{Unloaded{}}, Cell{std::string{"x"}}}});
     Engine engine{source};
     std::vector<EditRequest> ran;
-    CellEdits edits{*source, [&](EditRequest const& request, EditDone) { ran.push_back(request); }, &engine};
+    CellEdits edits{*source, [&](EditRequest const& request, EditDone const&) { ran.push_back(request); }, &engine};
     edits.commit({.row = RowId{0}, .column = "c", .value = Cell{std::int64_t{5}}});
     CHECK(ran.empty());
     CHECK(edits.error(RowId{0}, "c") == "not loaded yet");
@@ -248,7 +248,7 @@ PageRows wholeView(DataSource const& source, TableQuery query) {
 std::shared_ptr<bench::UnloadedSource> wideUnloaded(double loadedFraction) {
     auto wide = std::make_shared<bench::WideTableSource>(
         bench::WideTableOptions{.rows = 10'000, .columns = 30, .seed = 7, .loadDelay = {}});
-    auto const columns = recipeColumns(*wide);
+    auto columns = recipeColumns(*wide);
     return bench::withUnloaded(std::move(wide), std::move(columns), "recipe", loadedFraction, 7);
 }
 
@@ -276,7 +276,7 @@ struct PlainRow {
 TEST_CASE("table: apply reads only the sorted and filtered columns", "[table][unloaded][levels]") {
     auto wide = std::make_shared<bench::WideTableSource>(
         bench::WideTableOptions{.rows = 1000, .columns = 300, .seed = 7, .loadDelay = {}});
-    auto const columns = recipeColumns(*wide);
+    auto columns = recipeColumns(*wide);
     REQUIRE(columns.size() == 20);
     auto const unloaded = bench::withUnloaded(std::move(wide), std::move(columns), "recipe", 0.7, 7);
     REQUIRE(anyUnloaded(*unloaded, "d003"));
@@ -350,6 +350,7 @@ TEST_CASE("table: a typed table without levels is whole", "[table][unloaded][lev
         using tunloaded::PlainRow;
         std::vector<PlainRow> rows;
         for (std::int64_t i = 0; i < 10; ++i) {
+            // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
             rows.push_back(PlainRow{.id = i, .qty = 10 * i});
         }
         auto const page = apply<PlainRow>(rows, [](PlainRow const& row) { return RowId{row.id}; }, query);

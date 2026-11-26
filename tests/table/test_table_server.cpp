@@ -332,14 +332,17 @@ std::vector<RowId> ids(std::initializer_list<std::int64_t> keys) {
 std::vector<std::int64_t> range(std::int64_t first, std::int64_t count) {
     std::vector<std::int64_t> out;
     for (std::int64_t at = 0; at < count; ++at) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `out` is a fixture list built once; sizing it first would not change what the case checks
         out.push_back(first + at);
     }
     return out;
 }
 
 // One integer cell per column, the key's value.
-GenericPage pageOf(std::int64_t offset, std::vector<std::int64_t> const& keys, std::vector<std::string> const& columns,
-                   std::int64_t total, std::int64_t undecided = 0) {
+GenericPage pageOf(
+    std::int64_t offset, std::vector<std::int64_t> const& keys, std::vector<std::string> const& columns,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `pageOf(...)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    std::int64_t total, std::int64_t undecided = 0) {
     GenericPage page;
     page.columns = columns;
     page.offset = offset;
@@ -353,8 +356,10 @@ GenericPage pageOf(std::int64_t offset, std::vector<std::int64_t> const& keys, s
 }
 
 // A keyed reply: each pair is a key and its view row.
-GenericPage keyedOf(std::vector<std::pair<std::int64_t, std::int64_t>> const& keyAtIndex,
-                    std::vector<std::string> const& columns, std::int64_t total, std::int64_t undecided = 0) {
+GenericPage keyedOf(
+    std::vector<std::pair<std::int64_t, std::int64_t>> const& keyAtIndex,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `keyedOf(...)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    std::vector<std::string> const& columns, std::int64_t total, std::int64_t undecided = 0) {
     GenericPage page;
     page.columns = columns;
     page.total = total;
@@ -396,7 +401,8 @@ TEST_CASE("window: an event that precedes its page reply is owed", "[table][wind
     GenericPage reply = pageOf(0, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, cols, 20);
     reply.unloadedRows = {{.index = 3, .levels = {"recipe"}, .failed = {}},
                           {.index = 4, .levels = {"recipe"}, .failed = {}}};
-    REQUIRE(window.accept(fetches[0], std::move(reply)));
+    bool const accepted = window.accept(fetches[0], std::move(reply));
+    REQUIRE(accepted);
     auto const plan = window.owed();
     REQUIRE(plan.kind == Refresh::Rows);
     CHECK(std::ranges::is_permutation(plan.rows.keys, ids({3, 4, 0})));  // the keys and the run's probe
@@ -465,7 +471,8 @@ TEST_CASE("window: a column scrolled in is fetched for held pages and merged by 
 
     auto reply = pageOf(0, range(0, 10), b, 20);
     reply.rows[3][0] = Cell{std::int64_t{33}};
-    REQUIRE(window.accept(more[0], std::move(reply)));
+    bool const accepted = window.accept(more[0], std::move(reply));
+    REQUIRE(accepted);
     CHECK(intCell(window, 3, "b") == 33);
     CHECK(intCell(window, 3, "a") == 3);
 
@@ -522,7 +529,8 @@ TEST_CASE("window: a reply without a total keeps the known one", "[table][window
     REQUIRE(window.accept(fetches[0], pageOf(0, range(0, 10), cols, 20)));
     auto second = pageOf(10, range(10, 10), cols, 0);
     second.total.reset();
-    REQUIRE(window.accept(fetches[1], std::move(second)));
+    bool const accepted = window.accept(fetches[1], std::move(second));
+    REQUIRE(accepted);
     CHECK(window.total() == 20);
     CHECK(window.visible(0, 5, cols).empty());  // page 0 was not marked stale
 }
@@ -539,7 +547,8 @@ TEST_CASE("window: a patch drops the columns its reply lacks", "[table][window]"
     REQUIRE(plan.kind == Refresh::Rows);
     auto reply = keyedOf({{0, 0}, {3, 3}}, a, 10);
     reply.rows[1][0] = Cell{std::int64_t{30}};
-    CHECK(window.patch(plan.rows, std::move(reply)) == std::vector<std::int64_t>{0, 3});
+    auto const patched = window.patch(plan.rows, std::move(reply));
+    CHECK(patched == std::vector<std::int64_t>{0, 3});
     CHECK(intCell(window, 3, "a") == 30);
     CHECK_FALSE(window.holds(3, "b"));
     auto const refetch = window.visible(0, 5, ab);
@@ -583,10 +592,12 @@ TEST_CASE("window: an older keyed reply never overwrites a newer one", "[table][
     REQUIRE(f2.kind == Refresh::Rows);
     auto newer = keyedOf({{0, 0}, {7, 7}}, cols, 20);
     newer.rows[1][0] = Cell{std::int64_t{2}};
-    CHECK(window.patch(f2.rows, std::move(newer)) == std::vector<std::int64_t>{0, 7});
+    auto const patchedNewer = window.patch(f2.rows, std::move(newer));
+    CHECK(patchedNewer == std::vector<std::int64_t>{0, 7});
     auto older = keyedOf({{0, 0}, {7, 7}}, cols, 20);
     older.rows[1][0] = Cell{std::int64_t{1}};
-    CHECK(window.patch(f1.rows, std::move(older)).empty());
+    auto const patchedOlder = window.patch(f1.rows, std::move(older));
+    CHECK(patchedOlder.empty());
     CHECK(intCell(window, 7, "a") == 2);
     auto const before = window.revision();
     CHECK(window.patch(f1.rows, keyedOf({{0, 0}}, cols, 20)).empty());
@@ -614,7 +625,8 @@ TEST_CASE("window: an awaited order or too many keys refetches pages", "[table][
     REQUIRE_FALSE(first.empty());
     auto page = pageOf(0, range(0, 10), cols, 10);
     page.awaiting = {"recipe"};
-    REQUIRE(awaited.accept(first[0], std::move(page)));
+    bool const accepted = awaited.accept(first[0], std::move(page));
+    REQUIRE(accepted);
     auto const before = awaited.revision();
     CHECK(awaited.refresh(ids({3})).kind == Refresh::Pages);
     CHECK(awaited.revision() == before + 1);
@@ -663,7 +675,8 @@ TEST_CASE("window: unloaded levels agree with the page after accept", "[table][w
     REQUIRE_FALSE(fetches.empty());
     auto page = pageOf(0, range(0, 10), cols, 10);
     page.unloadedRows = {{.index = 2, .levels = {"recipe"}, .failed = {"recipe"}}};
-    REQUIRE(window.accept(fetches[0], std::move(page)));
+    bool const accepted = window.accept(fetches[0], std::move(page));
+    REQUIRE(accepted);
     std::vector<std::string> const recipe{"recipe"};
     CHECK(std::ranges::equal(window.unloadedLevels(2).levels, recipe));
     CHECK(std::ranges::equal(window.unloadedLevels(2).failed, recipe));

@@ -99,6 +99,7 @@ TableQuery randomQuery(std::mt19937& random) {
     TableQuery query;
     auto const keys = 1 + (random() % 2);
     for (std::uint32_t i = 0; i < keys; ++i) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index): `random() % 4` is below the 4 entries of `kColumns`
         std::string const column{kColumns[random() % 4]};
         if (std::ranges::find(query.sort, column, &SortKey::column) == query.sort.end()) {
             query.sort.push_back(SortKey{
@@ -107,6 +108,7 @@ TableQuery randomQuery(std::mt19937& random) {
     }
     auto const entries = 1 + (random() % 2);
     for (std::uint32_t i = 0; i < entries; ++i) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index): `random() % 4` is below the 4 entries of `kColumns`
         std::string const column{kColumns[random() % 4]};
         FilterEntry entry;
         if (column == "a") {
@@ -114,6 +116,7 @@ TableQuery randomQuery(std::mt19937& random) {
         } else if (column == "c") {
             entry.ge = std::to_string(random() % 40);
         } else {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index): `random() % 5` is below the 5 characters of the literal
             entry.contains = std::string(1, "abcde"[random() % 5]);
         }
         query.filters.columns.insert_or_assign(
@@ -204,6 +207,7 @@ TEST_CASE("view cache: a cached view is the view", "[table][views]") {
 // Mutation: as the case above (an entry valid whatever its order levels' generations).
 TEST_CASE("view cache: an arrival on an order level computes again; on a display level it does not",
           "[table][views]") {
+    // NOLINTNEXTLINE(bugprone-random-generator-seed, cert-msc32-c, cert-msc51-cpp): the fixed seed 7 replays the same sequence on every run, so a failing case reproduces
     std::mt19937 random{7};
     {
         Table const table{random};
@@ -241,7 +245,7 @@ TEST_CASE("view cache: a request on a newer snapshot does not join an older comp
     auto const s2 = source->snapshot();
     ViewCache views;
     auto const key = keyOf("a");
-    auto const computation = [](std::vector<std::uint32_t> rows) {
+    auto const computation = [](std::vector<std::uint32_t> const& rows) {
         return [rows]() -> std::expected<ViewComputation, TableError> {
             return ViewComputation{.view = {.rows = rows, .undecided = {}}, .awaiting = {}, .failed = {}};
         };
@@ -303,6 +307,7 @@ TEST_CASE("view cache: fifty requests compute once", "[table][views][threads]") 
     std::latch release{1};
     std::vector<std::future<ViewCache::Found>> found;
     for (int i = 0; i < 50; ++i) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `found` is a fixture list built once; sizing it first would not change what the case checks
         found.push_back(std::async(std::launch::async, [&] {
             return views.find(keyOf("a"), snapshot, {}, [&]() -> std::expected<ViewComputation, TableError> {
                 release.wait();
@@ -330,11 +335,12 @@ TEST_CASE("view cache: fifty requests compute once", "[table][views][threads]") 
 TEST_CASE("view cache: the bound evicts least recently used", "[table][views]") {
     std::vector<std::vector<Cell>> rows;
     for (std::int64_t row = 0; row < 10'000; ++row) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
         rows.push_back({Cell{row % 97}});
     }
     auto const source = tabletest::makeSource({tabletest::col("a", ColumnKind::Integer)}, std::move(rows));
     auto const snapshot = source->snapshot();
-    ViewCache views{ViewCacheOptions{.maxBytes = 2 * 4 * 10'000, .onCompute = {}}};
+    ViewCache views{ViewCacheOptions{.maxBytes = 2UZ * 4 * 10'000, .onCompute = {}}};
     auto const compute = [&]() -> std::expected<ViewComputation, TableError> {
         ViewComputation out;
         out.view.rows.resize(10'000);
@@ -358,6 +364,7 @@ TEST_CASE("view cache: the bound counts a view's order keys", "[table][views]") 
     constexpr std::size_t kRows = 10'000;
     std::vector<std::vector<Cell>> rows;
     for (std::size_t row = 0; row < kRows; ++row) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
         rows.push_back({Cell{static_cast<std::int64_t>(row)}});
     }
     auto const source = tabletest::makeSource({tabletest::col("a", ColumnKind::Integer)}, std::move(rows));
@@ -394,6 +401,7 @@ TEST_CASE("view cache: the bound counts a view's order keys", "[table][views]") 
 TEST_CASE("view cache: a keyed fetch sorts nothing", "[table][views]") {
     std::vector<std::vector<Cell>> rows;
     for (std::int64_t row = 0; row < 1'000; ++row) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
         rows.push_back({Cell{row}, Cell{(row * 37) % 101}});
     }
     auto description = describe(TableDescription{
@@ -513,6 +521,7 @@ TEST_CASE("view cache: an older request does not displace a newer entry", "[tabl
 TEST_CASE("view cache: callers of two scopes over one snapshot get two views", "[table][views]") {
     std::vector<std::vector<Cell>> rows;
     for (std::int64_t row = 0; row < 20; ++row) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
         rows.push_back({Cell{row}, Cell{(row * 7) % 5}});
     }
     auto const description = describe(TableDescription{

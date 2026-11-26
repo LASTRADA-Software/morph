@@ -69,6 +69,7 @@ namespace detail {
 /// @param locale The locale the user types in.
 /// @param chosen The unit's id for text with no unit; empty is the ratio's unit.
 /// @return The amount and the unit's id, or `nullopt` when the text is not a number and a unit of @p units.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): reads sign, digits, separator, digits and unit in one left-to-right pass over the text with a running index
 [[nodiscard]] inline std::optional<TypedMeasure> parseMeasure(std::string_view text,
                                                               std::span<table::UnitInfo const> units,
                                                               LocaleFacts const& locale,

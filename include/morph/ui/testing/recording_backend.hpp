@@ -824,6 +824,7 @@ public:
     /// @param widgetId  The widget.
     /// @param container The container.
     /// @return `true` when @p container is @p widgetId or one of its ancestors.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`widgetId`, `container`): the widget then its candidate ancestor, as the name reads at each call
     [[nodiscard]] bool within(int widgetId, int container) const {
         for (auto found = _records.find(widgetId); found != _records.end();
              found = _records.find(found->second.parent)) {
@@ -2865,8 +2866,11 @@ public:
     /// @param widths     Their widths.
     /// @param totalWidth Every visible column's width together.
     /// @param pinned     How many of @p columns are pinned.
-    void setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
-                         std::span<int const> widths, int totalWidth, std::size_t pinned) override {
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): overrides `Table::setColumnWindow`; the declaration says how its spans are told apart
+    void setColumnWindow(
+        std::span<std::size_t const> columns, std::span<int const> offsets,
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): overrides `Table::setColumnWindow`; the declaration says how its totals are told apart
+        std::span<int const> widths, int totalWidth, std::size_t pinned) override {
         static_cast<void>(offsets);
         static_cast<void>(widths);
         _window = std::vector<std::size_t>(columns.begin(), columns.end());
@@ -4821,6 +4825,7 @@ private:
         }
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): matches a chord against the widget's own keys, then its table's, then its cells'; each tier has the checks the one before leaves
     bool ownKey(int widgetId, std::string const& chord) {
         detail::Record const& record = _store->at(widgetId);
         bool const enter = chord == "Enter";

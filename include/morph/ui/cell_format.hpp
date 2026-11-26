@@ -120,6 +120,7 @@ struct Digits {
 /// @param rounding The rule for a half.
 /// @param pad      Whether fewer places are padded with zeros.
 /// @return The canonical text.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): the rounding decision reads the dropped tail, the half cases of each Rounding mode and the pad rule in sequence, each step needing the digits the one before left
 [[nodiscard]] inline std::string roundText(Digits digits, std::size_t places, table::Rounding rounding, bool pad) {
     if (digits.fraction.size() > places) {
         std::string_view const dropped = std::string_view{digits.fraction}.substr(places);

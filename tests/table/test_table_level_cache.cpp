@@ -25,6 +25,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -85,8 +86,8 @@ struct Announced {
 // A cache over one text column, a manual executor for its loads, an injected clock, a loader that logs its keys,
 // and an announce sink that records what it is told.
 struct Rig {
-    explicit Rig(std::function<void(LevelCacheOptions&)> const& adjust = {}, Body body = {})
-        : _body{std::move(body)},
+    explicit Rig(std::function<void(LevelCacheOptions&)> const& adjust = {}, Body loader = {})
+        : body{std::move(loader)},
           cache{optionsOf(adjust), [this](std::span<RowId const> asked) { return load(asked); }} {
         cache.bind([this](std::string_view record, std::optional<std::vector<glz::raw_json>> raw) {
             Announced entry{.record = std::string{record}, .keys = std::nullopt};
@@ -102,7 +103,7 @@ struct Rig {
                     readsAtAnnounce.push_back(stateOf(*snapshot, key));
                 }
             }
-            std::scoped_lock const lock{_mutex};
+            std::scoped_lock const lock{mutex};
             announced.push_back(std::move(entry));
         });
     }
@@ -122,11 +123,11 @@ struct Rig {
 
     Values load(std::span<RowId const> asked) {
         {
-            std::scoped_lock const lock{_mutex};
+            std::scoped_lock const lock{mutex};
             calls.emplace_back(asked.begin(), asked.end());
         }
-        if (_body) {
-            return _body(asked);
+        if (body) {
+            return body(asked);
         }
         Values out;
         for (auto const& key : asked) {
@@ -139,7 +140,7 @@ struct Rig {
 
     // Every key the loader was given, sorted.
     std::vector<RowId> loggedKeys() {
-        std::scoped_lock const lock{_mutex};
+        std::scoped_lock const lock{mutex};
         std::vector<RowId> out;
         for (auto const& call : calls) {
             out.insert(out.end(), call.begin(), call.end());
@@ -149,19 +150,19 @@ struct Rig {
     }
 
     std::size_t callCount() {
-        std::scoped_lock const lock{_mutex};
+        std::scoped_lock const lock{mutex};
         return calls.size();
     }
 
     tabletest::ManualExecutor loads;
     std::chrono::steady_clock::time_point now{std::chrono::hours{1}};
-    std::mutex _mutex;
+    std::mutex mutex;
     std::vector<std::vector<RowId>> calls;
     std::vector<Announced> announced;
     bool readOnAnnounce = false;
     std::vector<RowId> readOnWhole;
     std::vector<LevelRead> readsAtAnnounce;
-    Body _body;
+    Body body;
     CellLevelCache cache;
 };
 
@@ -182,6 +183,7 @@ Values valuesOf(std::vector<RowId> const& stored) {
 std::vector<glz::raw_json> rawKeys(std::vector<std::string> const& texts) {
     std::vector<glz::raw_json> out;
     for (auto const& entry : texts) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `out` is a fixture list built once; sizing it first would not change what the case checks
         out.emplace_back(entry);
     }
     return out;
@@ -227,7 +229,7 @@ TEST_CASE("level cache: concurrent wants share one load", "[table][levels][threa
             }};
     std::vector<std::thread> threads;
     for (int i = 0; i < 8; ++i) {
-        threads.emplace_back([&rig] { static_cast<void>(rig.cache.want(keys(60), LevelUse::Display)); });
+        threads.emplace_back([&rig] { std::ignore = (rig.cache.want(keys(60), LevelUse::Display)); });
     }
     for (auto& thread : threads) {
         thread.join();
@@ -462,7 +464,7 @@ TEST_CASE("level cache: a held snapshot blocks no store", "[table][levels][threa
         return finished.wait_for(10s) == std::future_status::ready;
     };
     CHECK(finishes([&rig] {
-        static_cast<void>(rig.cache.want(keyRange(10, 20), LevelUse::Display));
+        std::ignore = (rig.cache.want(keyRange(10, 20), LevelUse::Display));
         rig.drain();
     }));
     CHECK(finishes([&rig] { rig.cache.invalidate(keys(1)); }));
@@ -514,9 +516,9 @@ TEST_CASE("level cache: order uses are leased and the second is refused", "[tabl
         Rig rig{adjust};
         std::size_t afterOne = 0;
         for (int round = 0; round < 10; ++round) {
-            static_cast<void>(rig.cache.want(keys(100), LevelUse::Order));
+            std::ignore = (rig.cache.want(keys(100), LevelUse::Order));
             rig.drain();
-            static_cast<void>(rig.cache.want(keyRange(100, 200), LevelUse::Order));
+            std::ignore = (rig.cache.want(keyRange(100, 200), LevelUse::Order));
             rig.drain();
             if (round == 0) {
                 afterOne = rig.callCount();
@@ -621,6 +623,7 @@ public:
         queue.post(std::move(task));
     }
     [[nodiscard]] bool isSerial() const noexcept override { return false; }
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): `queue` is the manual executor the cases step directly
     tabletest::ManualExecutor queue;
 
 private:
@@ -650,12 +653,14 @@ TEST_CASE("level cache: a throwing callback or post does not stop the loads", "[
         REQUIRE(rig.cache.want(keys(100), LevelUse::Display));
         try {
             rig.drain();
+            // NOLINTNEXTLINE(bugprone-empty-catch): the case looks for a throw escaping the load; what the cache does next shows its effect, so the throw itself is not inspected
         } catch (...) {
             // A throw escaping the load is the defect this case looks for; what follows shows its effect.
         }
         REQUIRE(rig.cache.want(keyRange(100, 120), LevelUse::Display));
         try {
             rig.drain();
+            // NOLINTNEXTLINE(bugprone-empty-catch): the same drain as above, repeated after the second batch; a throw escaping it is what the following checks would show
         } catch (...) {
         }
         CHECK(rig.loggedKeys() == keys(120));
@@ -1130,7 +1135,7 @@ TEST_CASE("level cache: a set superseded by the level's generation is released a
     CHECK_FALSE(detail::LevelCacheAccess::kept(rig.cache, RowId{std::int64_t{0}}));
     // Eleven values (SX's ten and the one stored) and SY's keys; SX's keys have left the count.
     auto const setYBytes = sizeof(std::vector<RowId>) + (10 * rowIdBytes(RowId{std::int64_t{10}}));
-    CHECK(rig.cache.stats().bytes == 11 * smallValueBytes() + setYBytes);
+    CHECK(rig.cache.stats().bytes == (11 * smallValueBytes()) + setYBytes);
 }
 
 // Mutation: the fit leaving out the set's own key bytes (the set is accepted, and the cache holds more than its

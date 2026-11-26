@@ -259,6 +259,7 @@ public:
     /// @param table    The table.
     /// @param column   The column's index among the table's columns.
     /// @param position Its new place among the visible columns.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`column`, `position`): the column to move then where it goes, as the backend's `moveColumn` reads
     virtual void moveColumn(Widget& table, std::size_t column, std::size_t position) {
         static_cast<void>(table);
         static_cast<void>(column);
@@ -4514,6 +4515,7 @@ struct MinColumnGridSpec {
         std::move(columns), [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
         [count](reactive::Signal<Entry> const& entry) {
             std::vector<Node> cells;
+            cells.reserve(count);
             for (std::size_t column = 0; column < count; ++column) {
                 cells.push_back(
                     ui::text({.text = [&entry, column] { return entry.get().label + std::to_string(column); }}));
@@ -4600,7 +4602,7 @@ struct MinColumnGridSpec {
         }
         return std::vector<MenuEntry>{{.label = "Sort ascending"}, {.separator = true}, {.label = "Hide column"}};
     };
-    options.onMenu = [&chosen](std::optional<std::size_t> column, std::vector<std::size_t> path) {
+    options.onMenu = [&chosen](std::optional<std::size_t> column, std::vector<std::size_t> const& path) {
         std::string text = column ? std::to_string(*column) : std::string{"-"};
         for (std::size_t const index : path) {
             text += "/" + std::to_string(index);

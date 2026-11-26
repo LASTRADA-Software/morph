@@ -1389,6 +1389,7 @@ struct TuiWindowFixture {
           rows{std::make_shared<FakeRows>(rowCount, columnCount, owner)} {
         std::vector<ui::TableColumn> columns;
         for (std::size_t column = 0; column < columnCount; ++column) {
+            // NOLINTNEXTLINE(performance-inefficient-vector-operation): `columns` is a fixture list built once; sizing it first would not change what the case checks
             columns.push_back(
                 ui::TableColumn{.id = "c" + std::to_string(column),
                                 .label = "C" + std::to_string(column),

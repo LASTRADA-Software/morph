@@ -243,6 +243,7 @@ public:
         for (std::size_t begin = first; begin < last; begin += kRun) {
             auto const end = std::min(last, begin + kRun);
             for (std::size_t row = begin; row < end; ++row) {
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index): `row - begin` is below the buffer's size, which was sized for `end - begin` rows
                 buffer[row - begin] = cellOf(data, row);
             }
             sink.cells(begin, std::span<Cell const>{buffer.data(), end - begin});
@@ -348,7 +349,12 @@ std::shared_ptr<morph::table::UnitRegistry const> const& wideUnits() {
     static auto const built = [] {
         morph::table::UnitRegistryBuilder builder;
         auto const add = [&builder](std::string id, std::string dimension, Rational toBase, std::uint32_t decimals) {
-            auto symbol = id == "percent" ? std::string{"%"} : id == "permille" ? std::string{"\xE2\x80\xB0"} : id;
+            std::string symbol = id;
+            if (id == "percent") {
+                symbol = "%";
+            } else if (id == "permille") {
+                symbol = "\xE2\x80\xB0";
+            }
             if (!builder.add(morph::table::UnitInfo{.id = std::move(id),
                                                     .symbol = std::move(symbol),
                                                     .dimension = std::move(dimension),
@@ -500,10 +506,9 @@ morph::table::TableDescription wideDescription(std::string id, int columns) {
 
 std::size_t approximateCellBytes(Cell const& cell) noexcept {
     std::size_t bytes = sizeof(Cell);
-    if (auto const* const text = std::get_if<std::string>(&cell)) {
-        if (text->capacity() > std::string{}.capacity()) {
-            bytes += text->capacity() + 1;
-        }
+    if (auto const* const text = std::get_if<std::string>(&cell);
+        text != nullptr && text->capacity() > std::string{}.capacity()) {
+        bytes += text->capacity() + 1;
     }
     return bytes;
 }
@@ -551,6 +556,7 @@ std::size_t WideTableSource::residentBytes() const noexcept {
     return bytes;
 }
 
+// NOLINTNEXTLINE(performance-unnecessary-value-param): `WideTableSource::setCell` overrides `DataSource::setCell`, which takes the cell by value
 void WideTableSource::setCell(std::int64_t row, std::string_view column, Cell value) {
     auto const at = std::ranges::find(_columns, column, &ColumnInfo::id);
     if (at == _columns.end()) {
@@ -597,6 +603,7 @@ void WideTableSource::regenerate(std::uint64_t seed) {
 namespace {
 
 // Whether row `row` starts loaded: its draw, uniform in [0, 1), is below the fraction.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `drawnLoaded(seed, row, noexcept)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 [[nodiscard]] bool drawnLoaded(std::uint64_t seed, std::size_t row, double loadedFraction) noexcept {
     constexpr double kUnit = 1.0 / 9007199254740992.0;  // 2^-53
     auto const bits = cellBits(seed, "loaded", static_cast<std::int64_t>(row));
@@ -656,9 +663,11 @@ private:
 
 }  // namespace
 
-UnloadedSource::UnloadedSource(std::shared_ptr<morph::table::DataSource> source,
-                               std::vector<std::string> const& columns, std::string level, double loadedFraction,
-                               std::uint64_t seed)
+UnloadedSource::UnloadedSource(
+    std::shared_ptr<morph::table::DataSource> source, std::vector<std::string> const& columns,
+    std::string const& level,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `UnloadedSource(...)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+    double loadedFraction, std::uint64_t seed)
     : _source{std::move(source)},
       _columns{_source->columns().begin(), _source->columns().end()},
       _loadedFraction{loadedFraction},
@@ -998,6 +1007,7 @@ morph::table::TableDescription without(morph::table::TableDescription base, std:
     return morph::table::describe(std::move(base));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `numbered(prefix)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::vector<std::string> numbered(char prefix, int count) {
     std::vector<std::string> out;
     for (int i = 0; i < count; ++i) {

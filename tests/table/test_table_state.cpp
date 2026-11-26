@@ -16,7 +16,7 @@ using namespace morph::table;
 
 namespace {
 
-TableColumn stateColumn(std::string id, ColumnKind kind, std::string group = {}) {
+TableColumn stateColumn(std::string const& id, ColumnKind kind, std::string group = {}) {
     return TableColumn{.info = {.id = id, .kind = kind, .comparator = {}, .format = {}, .level = {}},
                        .label = id,
                        .group = std::move(group),
@@ -29,7 +29,7 @@ TableColumn stateColumn(std::string id, ColumnKind kind, std::string group = {})
 // `g1 = {name, alias}`. No column `gone`, `a` or `b`, and no group `g2`. `weight` holds measures, and the
 // description lists the units `g` and `kg` of dimension `mass`.
 TableDescription describedSamples() {
-    auto const unit = [](std::string id, morph::math::Rational toBase) {
+    auto const unit = [](std::string const& id, morph::math::Rational toBase) {
         return UnitInfo{.id = id, .symbol = id, .dimension = "mass", .toBase = toBase, .decimals = 0};
     };
     return describe(TableDescription{
@@ -53,6 +53,7 @@ StateDocument userGroups() {
         .value();
 }
 
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp, cppcoreguidelines-avoid-non-const-global-variables): the suite's one manual executor; every case drains it and none shares it across threads
 morph::testing::StepExecutor executor;
 
 SaveResult saveNow(ITableStateStore& store, TableStateKey const& key, std::string json, std::string expected = {}) {

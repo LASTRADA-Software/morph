@@ -258,6 +258,7 @@ struct Server {
 
 // One client as `principal`: raw envelopes over a socket, and the `changes` events it receives.
 struct Client {
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `Client(url)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     Client(std::string const& url, std::string principal) : _principal{std::move(principal)} {
         socket = std::make_unique<morph::net::SocketBackend>(url);
         REQUIRE(socket->waitForConnected());
@@ -274,7 +275,8 @@ struct Client {
             &owner);
         morph::wire::Envelope hello;
         hello.kind = std::string{kHello};
-        REQUIRE(send(std::move(hello)).kind == "ok");
+        auto const sent = send(std::move(hello));
+        REQUIRE(sent.kind == "ok");
     }
 
     morph::wire::Envelope send(morph::wire::Envelope request) {
@@ -305,6 +307,7 @@ struct Client {
         return reply.modelId;
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `execute(instance, modelType, action)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     morph::wire::Envelope execute(std::uint64_t instance, std::string_view modelType, std::string const& action,
                                   std::string body) {
         morph::wire::Envelope env;
@@ -356,10 +359,12 @@ struct Client {
         return keys;
     }
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the client's executor, socket, exchange and received changes, which the cases drive and read directly
     morph::exec::MainThreadExecutor owner;
     std::unique_ptr<morph::net::SocketBackend> socket;
     ui::Exchange exchange;
     std::vector<morph::wire::ChangesBody> changes;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
     std::string _principal;
@@ -642,8 +647,10 @@ public:
 
     [[nodiscard]] ui::ChannelFacts facts() const override { return _inner->facts(); }
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the request counters the cases read after a run
     int pageRequests = 0;
     int keyedRequests = 0;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
     std::shared_ptr<ui::ModelChannel> _inner;
@@ -694,6 +701,7 @@ struct SessionClient {
     }
 
     // Reads an action's reply text through `Session::read`.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `read(action)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     std::string read(std::string const& action, std::string const& body) {
         auto json = ui::parseJson(body);
         REQUIRE(json);
@@ -823,6 +831,7 @@ TEST_CASE("table over the bridge: exactly the arrived rows update, without polli
     auto const replaced = window.patch(plan.rows, std::move(*reply));
     std::vector<std::int64_t> rows;
     for (auto const& key : expected) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
         rows.push_back(std::get<std::int64_t>(key) - 1);
     }
     std::ranges::sort(rows);
@@ -867,6 +876,7 @@ public:
         return total;
     }
 
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): `channels` collects the counting channels the case inspects
     std::vector<std::shared_ptr<CountingChannel>> channels;
 
 private:
@@ -947,6 +957,7 @@ TEST_CASE("table benchmark: E1 E2 a window over the bridge", "[.benchmark][net]"
     morph::table::PageWindow<morph::table::GenericRow> window{200, 8};
     std::vector<std::string> columns;
     for (auto const& column : description.columns) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `columns` is a fixture list built once; sizing it first would not change what the case checks
         columns.push_back(column.info.id);
     }
     auto const started = std::chrono::steady_clock::now();

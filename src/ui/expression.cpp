@@ -2506,12 +2506,14 @@ bool valuesEqual(Value const& lhs, Value const& rhs, UnitTable const& units) {
         return false;
     }
     if (ValueList const* const lhsItems = lhs.asList()) {
+        // NOLINTNEXTLINE(misc-no-recursion): equality over lists recurses into the items, one level per nesting of the document's value; the depth is the data's
         return std::ranges::equal(*lhsItems, *rhs.asList(), [&units](Value const& left, Value const& right) {
             return sameElement(left, right, units);
         });
     }
     if (ValueRecord const* const lhsFields = lhs.asRecord()) {
         // Records are ordered by field name, so equal records have equal sequences of fields.
+        // NOLINTNEXTLINE(misc-no-recursion): equality over records recurses into the fields, one level per nesting of the document's value; the depth is the data's
         return std::ranges::equal(*lhsFields, *rhs.asRecord(), [&units](auto const& left, auto const& right) {
             return left.first == right.first && sameElement(left.second, right.second, units);
         });

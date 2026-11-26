@@ -391,6 +391,7 @@ TEST_CASE("header menu: entries, order and enablement", "[ui][table][config]") {
     std::vector<ui::MenuEntry> const entries = ui::menuEntries(ui::headerMenu(input));
     std::vector<std::string> labels;
     for (ui::MenuEntry const& entry : entries) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `labels` is a fixture list built once; sizing it first would not change what the case checks
         labels.push_back(entry.separator ? "-" : entry.label);
     }
     CHECK(labels == std::vector<std::string>{"Sort ascending", "Sort descending", "Add to sort", "Remove from sort",
@@ -450,6 +451,7 @@ TEST_CASE("header menu: entries, order and enablement", "[ui][table][config]") {
         ui::menuEntries(ui::tableMenu({.anyFilter = false, .groups = {}, .allowed = ui::Configure::All}));
     std::vector<std::string> tableLabels;
     for (ui::MenuEntry const& entry : table) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `tableLabels` is a fixture list built once; sizing it first would not change what the case checks
         tableLabels.push_back(entry.separator ? "-" : entry.label);
     }
     CHECK(tableLabels == std::vector<std::string>{"Columns…", "Sort…", "Clear all filters", "Reset columns", "-",
@@ -462,6 +464,7 @@ TEST_CASE("header menu: entries, order and enablement", "[ui][table][config]") {
                                        .allowed = ui::Configure::None}));
     std::vector<std::string> fixedLabels;
     for (ui::MenuEntry const& entry : fixed) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `fixedLabels` is a fixture list built once; sizing it first would not change what the case checks
         fixedLabels.push_back(entry.separator ? "-" : entry.label);
     }
     CHECK(fixedLabels == std::vector<std::string>{"Sort…", "Filter Company, 3 columns…", "Clear all filters", "-",

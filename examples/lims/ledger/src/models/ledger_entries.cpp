@@ -212,12 +212,12 @@ template <typename AccountCode>
     for (std::size_t first = 0; first < headers.size(); first += kIdsPerQuery) {
         ids.clear();
         for (std::size_t i = first; i < std::min(first + kIdsPerQuery, headers.size()); ++i) {
-            ids.push_back(static_cast<std::int64_t>(headers[i].id.Value()));
+            ids.push_back(static_cast<std::int64_t>(headers.at(i).id.Value()));
         }
         for (auto& line : mapper.Query<db::EntryLineRecord>()
                               .WhereIn(::Lightweight::FieldNameOf<&db::EntryLineRecord::entry>, ids)
                               .All()) {
-            lines[line.entry.Value()].push_back(std::move(line));
+            lines[line.entry.Value()].push_back(line);
         }
     }
     auto const accountCode = [&codes](std::int64_t account) -> std::optional<std::string> {
@@ -226,7 +226,7 @@ template <typename AccountCode>
     };
     entries.reserve(headers.size());
     for (auto& header : headers) {
-        LoadedEntry entry{.header = std::move(header), .lines = {}};
+        LoadedEntry entry{.header = header, .lines = {}};
         if (auto const found = lines.find(static_cast<std::int64_t>(entry.header.id.Value())); found != lines.end()) {
             entry.lines = std::move(found->second);
             std::ranges::sort(entry.lines, {}, [](db::EntryLineRecord const& line) { return line.position.Value(); });

@@ -277,6 +277,7 @@ public:
         }
     }
     // Ctrl+Shift+Left or Right on the focused header, once per place, while the column moves.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): overrides the conformance suite's `moveColumn`, which documents (`column`, `position`)
     void moveColumn(ui::Widget& table, std::size_t column, std::size_t position) override {
         if (!focusHeader(table, column)) {
             return;

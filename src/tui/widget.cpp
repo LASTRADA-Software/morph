@@ -1195,7 +1195,9 @@ void reportWindowRanges(Context& context, std::vector<TableImpl*> const& tables)
     };
     try {
         for (std::size_t i = 0; i < tables.size(); ++i) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `i` is the loop index over `alive`
             if (alive[i] != nullptr) {
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `tables` is built beside `alive` with one entry each, and `i` is the loop index over `alive`
                 tables[i]->reportRanges();
             }
         }

@@ -49,6 +49,7 @@ struct SelectionModel {
         {tabletest::col("status", ColumnKind::Text), tabletest::col("mass", ColumnKind::Decimal)}, [] {
             std::vector<std::vector<Cell>> rows;
             for (int i = 0; i < 10; ++i) {
+                // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
                 rows.push_back(
                     {Cell{std::string{i < 6 ? "open" : "closed"}}, Cell{tabletest::dec(std::to_string(i) + ".0")}});
             }
@@ -537,6 +538,7 @@ namespace {
 std::vector<RowId> pageKeys(VectorSource const& source, PageRows const& page) {
     std::vector<RowId> out;
     for (auto const row : page.rows) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `out` is a fixture list built once; sizing it first would not change what the case checks
         out.push_back(source.snapshot()->rowId(row));
     }
     return out;
@@ -566,8 +568,9 @@ TEST_CASE("retained rows: they stay in the view, listed in unmatched", "[table][
     }
     auto const page = apply(*model.source, query).value();
     std::vector<RowId> keys;
-    for (std::size_t i = 0; i < page.rows.size(); ++i) {
-        keys.push_back(model.source->snapshot()->rowId(page.rows[i]));
+    for (auto const row : page.rows) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `keys` is a fixture list built once; sizing it first would not change what the case checks
+        keys.push_back(model.source->snapshot()->rowId(row));
     }
     CHECK(keys == std::vector<RowId>{std::int64_t{8}, std::int64_t{7}, std::int64_t{5}, std::int64_t{4},
                                      std::int64_t{3}, std::int64_t{2}, std::int64_t{1}, std::int64_t{0}});
@@ -607,6 +610,7 @@ TEST_CASE("retained rows: the shared view entry is not changed by one request's 
 // another.
 
 TEST_CASE("retained rows: retaining adds, never removes", "[table][retain][property]") {
+    // NOLINTNEXTLINE(bugprone-random-generator-seed, cert-msc32-c, cert-msc51-cpp): the fixed seed 20261120 replays the same sequence on every run, so a failing case reproduces
     std::mt19937 random{20261120};
     for (int table = 0; table < 200; ++table) {
         std::uniform_int_distribution<int> rowsOf{0, 40};
@@ -614,6 +618,7 @@ TEST_CASE("retained rows: retaining adds, never removes", "[table][retain][prope
         int const count = rowsOf(random);
         std::vector<std::vector<Cell>> rows;
         for (int row = 0; row < count; ++row) {
+            // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
             rows.push_back({Cell{std::int64_t{valueOf(random)}}, Cell{std::string{valueOf(random) < 5 ? "x" : "y"}}});
         }
         auto const source = tabletest::makeSource(
@@ -721,6 +726,7 @@ TEST_CASE("retained rows: a client-mode engine does the same", "[table][retain]"
     CHECK(viewKeys(engine) == keysOf({8, 7, 5, 4, 3, 2, 1, 0}));
     std::vector<bool> unmatched;
     for (std::size_t row = 0; row < engine.viewRowCount(); ++row) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `unmatched` is a fixture list built once; sizing it first would not change what the case checks
         unmatched.push_back(engine.isUnmatched(row));
     }
     CHECK(unmatched == std::vector<bool>{true, true, false, false, false, false, true, false});

@@ -929,6 +929,7 @@ std::string selectTable() { return withTableKey(kModelTable, R"("selectionMode":
 
 // `kModelTable` with a state `hk`, null, as the table's `highlightKey`, and three buttons that set it to 5012, 77 and
 // null.
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kHighlight` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
 std::string const kHighlight =
     R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},)"
     R"("state":{"hk":{"init":{"lit":null}}},)"
@@ -1049,6 +1050,7 @@ TEST_CASE("model table: highlightKey scrolls to the row and marks it", "[ui][tab
 namespace {
 
 // A model-backed table whose `name` column's cell is a button `pick`, and a button that focuses `pick` in row 250.
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kPick` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
 std::string const kPick =
     R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},)"
     R"("view":{"kind":"column","children":[)"
@@ -2019,6 +2021,7 @@ std::unique_ptr<table::Engine> engineOver(RowsFixture& h, std::shared_ptr<ValueR
 std::vector<std::int64_t> keysInView(table::Engine const& engine) {
     std::vector<std::int64_t> keys;
     for (std::size_t at = 0; at < engine.viewRowCount(); ++at) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `keys` is a fixture list built once; sizing it first would not change what the case checks
         keys.push_back(std::get<std::int64_t>(engine.rowIdAt(at)));
     }
     return keys;
@@ -2070,6 +2073,7 @@ TEST_CASE("value rows source: a change to what one row's sortBy reads updates th
     RowsFixture h;
     std::vector<std::unique_ptr<reactive::Signal<std::int64_t>>> rank;
     for (int i = 0; i < 10; ++i) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rank` is a fixture list built once; sizing it first would not change what the case checks
         rank.push_back(std::make_unique<reactive::Signal<std::int64_t>>(h.runtime, i));
     }
     reactive::Signal<std::int64_t> scale{h.runtime, 1};
@@ -3256,6 +3260,7 @@ using morph::ui::testing::moveColumn;
 using morph::ui::testing::resizeColumn;
 
 // A document's text with a top-level `state` entry @p name initialised to @p init (JSON).
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withState(text, name)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::string withState(std::string_view text, std::string_view name, std::string_view init) {
     auto json = morph::ui::parseJson(text);
     REQUIRE(json.has_value());
@@ -3270,6 +3275,7 @@ std::string withState(std::string_view text, std::string_view name, std::string_
 }
 
 // A document's text whose table's first column part takes the member @p member, written `"key":value`.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withFirstColumnKey(text)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::string withFirstColumnKey(std::string_view text, std::string_view member) {
     auto json = morph::ui::parseJson(text);
     REQUIRE(json.has_value());
@@ -3920,6 +3926,7 @@ void pressButton(TableHarness& h, std::string_view testId) {
 std::string optionsOf(std::vector<std::string> const& labels) {
     std::vector<morph::ui::SelectOption> options;
     for (std::string const& label : labels) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `options` is a fixture list built once; sizing it first would not change what the case checks
         options.push_back(morph::ui::SelectOption{.key = Key{label}, .label = label});
     }
     return morph::ui::testing::detail::formatList(options, [](morph::ui::SelectOption const& option) {
@@ -4013,6 +4020,7 @@ std::string dayValues(std::string_view month, int days) {
     std::string out = R"({"values":[)";
     for (int day = 1; day <= days; ++day) {
         std::string const text = std::format("{}-{:02}", month, day);
+        // NOLINTNEXTLINE(performance-inefficient-string-concatenation): builds the case's small document text once; the temporaries cost nothing next to the mount it feeds
         out += std::string{day == 1 ? "" : ","} + R"({"text":")" + text + R"(","operand":")" + text + ".." + text +
                R"(","count":1})";
     }
@@ -5430,6 +5438,7 @@ std::string menuDoc(std::string_view tableKeys) {
 std::vector<std::string> menuLabels(std::vector<morph::ui::MenuEntry> const& entries) {
     std::vector<std::string> out;
     for (morph::ui::MenuEntry const& entry : entries) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `out` is a fixture list built once; sizing it first would not change what the case checks
         out.push_back(entry.separator ? std::string{"-"} : entry.label);
     }
     return out;
@@ -5774,6 +5783,7 @@ inline constexpr std::string_view kSelectionMutations = R"({
     "tag":{"model":"sample","action":"Lims_TagRows","body":{"obj":{"rows":{"ref":"t.selectionSet"}}}}})";
 
 // The document of @p table and @p mutations: the table, and a button `run-<name>` running each mutation.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `selectionDoc(table, mutations)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::string selectionDoc(std::string_view table, std::string_view mutations, TableHarness& h) {
     auto const parsed = morph::ui::parseJson(mutations);
     REQUIRE(parsed.has_value());
@@ -5781,8 +5791,10 @@ std::string selectionDoc(std::string_view table, std::string_view mutations, Tab
     for (auto const& [name, mutation] : std::get<morph::ui::Json::object_t>(parsed->data)) {
         auto const& fields = std::get<morph::ui::Json::object_t>(mutation.data);
         h.mutationActions.insert_or_assign(name, std::get<std::string>(fields.at("action").data));
+        // NOLINTBEGIN(performance-inefficient-string-concatenation): builds the case's small document text once; the temporaries cost nothing next to the mount it feeds
         children += R"(,{"kind":"button","testId":"run-)" + name + R"(","label":")" + name +
                     R"(","onClick":[{"run":")" + name + R"("}]})";
+        // NOLINTEND(performance-inefficient-string-concatenation)
     }
     return doc(R"({"kind":"column","children":[)" + children + "]}", mutations);
 }
@@ -6404,6 +6416,7 @@ inline constexpr std::string_view kLockText = "Being edited by another user";
 std::vector<SelRow> tenRows() {
     std::vector<SelRow> rows;
     for (std::int64_t key = 0; key < 10; ++key) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
         rows.push_back(SelRow{.key = key,
                               .status = key < 6 ? "open" : "closed",
                               .lockedBy = key == 6 ? std::string{kLockText} : std::string{}});
@@ -6441,18 +6454,23 @@ std::string keyedAt(std::vector<std::pair<std::int64_t, SelRow>> const& placed, 
 }
 
 // The document: @p table, a button `run-<name>` for each mutation, and buttons `pick-<key>` setting `picked`.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `actingDoc(h, table)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::string actingDoc(TableHarness& h, std::string_view table, std::string_view mutations) {
     h.mutationActions.insert_or_assign("save", "Lims_SaveAs");
     h.mutationActions.insert_or_assign("touch", "Lims_TouchRow");
     std::string children{table};
     for (std::string const name : {"save", "touch"}) {
+        // NOLINTBEGIN(performance-inefficient-string-concatenation): builds the case's small document text once; the temporaries cost nothing next to the mount it feeds
         children += R"(,{"kind":"button","testId":"run-)" + name + R"(","label":")" + name +
                     R"(","onClick":[{"run":")" + name + R"("}]})";
+        // NOLINTEND(performance-inefficient-string-concatenation)
     }
     for (int const key : {2, 4, 5}) {
         std::string const text = std::to_string(key);
+        // NOLINTBEGIN(performance-inefficient-string-concatenation): builds the case's small document text once; the temporaries cost nothing next to the mount it feeds
         children += R"(,{"kind":"button","testId":"pick-)" + text + R"(","label":"pick )" + text +
                     R"(","onClick":[{"set":"picked","value":{"lit":)" + text + "}}]}";
+        // NOLINTEND(performance-inefficient-string-concatenation)
     }
     return R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
            R"("state":{"picked":{"init":{"lit":null}}},"mutations":)" +
@@ -7123,6 +7141,7 @@ TEST_CASE("model table: Enter after an edit that moves its row lands on the row 
 namespace {
 
 // The text of the cell of a mounted table's row in a column.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `mountedText(backend, rowWidget)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::string mountedText(morph::ui::testing::RecordingBackend const& backend, int rowWidget, std::size_t column) {
     for (int const cell : backend.children(rowWidget)) {
         if (backend.prop(cell, "column") == std::to_string(column)) {
@@ -7826,7 +7845,12 @@ TEST_CASE("model table: a focused row a new order moves off the window is locate
     int const table = mountLargeAndFocus(h, screen);
     h.backend.clickHeader(table, 1);  // a new order: the window resets
     h.settle();
-    auto const reordered = [](std::int64_t at) { return at == 7 ? std::int64_t{10'000} : (at == 5'000 ? 8 : at + 1); };
+    auto const reordered = [](std::int64_t at) -> std::int64_t {
+        if (at == 7) {
+            return 10'000;
+        }
+        return at == 5'000 ? 8 : at + 1;
+    };
     answerEdits(h, false, reordered, {}, 9'093);
     answerEdits(h, true, reordered, {{8, 5'000}}, 9'093);  // the mount's locate: row 8 is at 5,000
     CHECK(h.backend.focusCell(table).first == 5'000);

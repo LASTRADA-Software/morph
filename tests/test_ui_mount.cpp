@@ -1444,6 +1444,7 @@ struct WindowFixture {
           highlight{runtime, std::nullopt} {
         std::vector<ui::TableColumn> columns;
         for (std::size_t column = 0; column < columnCount; ++column) {
+            // NOLINTNEXTLINE(performance-inefficient-vector-operation): `columns` is a fixture list built once; sizing it first would not change what the case checks
             columns.push_back(ui::TableColumn{.id = "c" + std::to_string(column),
                                               .label = "C" + std::to_string(column),
                                               .width = ui::Sizing::fixed(100)});
@@ -1569,6 +1570,7 @@ struct WindowFixture {
 };
 
 // The indices 0 to n - 1 without @p left.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `allColumnsBut(n)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::vector<std::size_t> allColumnsBut(std::size_t n, std::size_t left) {
     std::vector<std::size_t> out;
     for (std::size_t column = 0; column < n; ++column) {
@@ -1648,7 +1650,7 @@ TEST_CASE("table window: 1,999 × 300 realizes only the windows", "[ui][mount]")
     f.scrollRows(500);
     f.scrollColumns(10'000);        // columns 100 to 119 in view
     CHECK(f.realizedRows() == 50);  // 30 and overscan 10 each side
-    CHECK(f.backend.windowColumns(f.table).size() == 2 + 20 + 2 * 4);
+    CHECK(f.backend.windowColumns(f.table).size() == 2 + 20 + (2 * 4));
     CHECK(f.cellsAlive() == f.realizedRows() * f.backend.windowColumns(f.table).size());
     CHECK(f.headerCellsAlive() == f.backend.windowColumns(f.table).size());
     CHECK(f.backend.totalWidth(f.table) == 300 * 100);
@@ -2088,8 +2090,10 @@ TEST_CASE("mount: a cell selection is shown by its corners' positions now", "[ui
 
 namespace {
 
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kMassBand` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
 std::vector<table::BandInfo> const kMassBand{
     {.label = "Mass retained", .unit = "g", .columns = {"m8", "m4", "m2"}, .bands = {}}};
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kIds` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
 std::vector<std::string> const kIds{"name", "m8", "m4", "m2", "total"};
 
 // The keys of a table's realized rows in child order, a text key without its quotes.
@@ -2161,6 +2165,7 @@ TEST_CASE("bands: the mount draws the runs of the arrangement and drops a band's
     auto const rows = std::make_shared<FakeRows>(3, 5, runtime.owner());
     std::vector<ui::TableColumn> columns;
     for (std::string const& id : kIds) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `columns` is a fixture list built once; sizing it first would not change what the case checks
         columns.push_back(
             ui::TableColumn{.id = id, .label = id, .unit = id == "name" ? std::string{} : std::string{"g"}});
     }
@@ -2390,16 +2395,16 @@ TEST_CASE("summary: a data row that enters as a summary row leaves is drawn as a
     REQUIRE(backend.prop(rowWith(backend, table, "\"\x1Fsummary:head\""), "summary") == "true");
     backend.scrollTable(table, 120, 30);
     owner.runAll();
-    std::size_t data_rows = 0;
+    std::size_t dataRows = 0;
     for (int const row : backend.children(table)) {
         std::string const key = backend.prop(row, "rowKey");
         if (key.empty() || key.front() == '"') {
             continue;
         }
-        ++data_rows;
+        ++dataRows;
         CHECK(backend.prop(row, "summary").empty());
     }
-    CHECK(data_rows > 0);
+    CHECK(dataRows > 0);
     backend.activateRow(table, Key{std::int64_t{125}});
     owner.runAll();
     CHECK(activated == std::vector<Key>{Key{std::int64_t{125}}});

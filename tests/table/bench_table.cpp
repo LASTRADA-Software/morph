@@ -640,6 +640,7 @@ Page<tbench::WideRow30> typedPage30(bench::WideTableSource const& source, PageRo
     return page;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `firstRows(count)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 PageRows firstRows(std::size_t count, std::int64_t total) {
     PageRows rows;
     for (std::size_t i = 0; i < count; ++i) {
@@ -1000,7 +1001,7 @@ TEST_CASE("table benchmark: partial pages and keyed replies", "[.benchmark][tabl
     keyed.columns = named;
     keyed.keys.emplace();
     for (std::int64_t i = 0; i < 20; ++i) {
-        keyed.keys->emplace_back(std::int64_t{1 + (i * 50)});
+        keyed.keys->emplace_back(1 + (i * 50));
     }
     auto const keyedRows = apply(*wide, keyed, wideOptions());
     REQUIRE(keyedRows.has_value());
@@ -1260,7 +1261,7 @@ TEST_CASE("table benchmark: S7 S9 the view cache", "[.benchmark][views]") {
     std::println("\nThe view cache, 100,000 x 300\n\n| Id | scenario | ms |\n|---|---|---:|");
     std::vector<double> later;
     for (int request = 0; request < 10; ++request) {
-        query.page = PageRequest{.offset = request * 200, .limit = 200};
+        query.page = PageRequest{.offset = static_cast<std::int64_t>(request) * 200, .limit = 200};
         auto const began = Clock::now();
         REQUIRE(detail::answerQuery(served, query, context).has_value());
         auto const ms = std::chrono::duration<double, std::milli>(Clock::now() - began).count();
@@ -1297,6 +1298,7 @@ TEST_CASE("table benchmark: S7 S9 the view cache", "[.benchmark][views]") {
 
 namespace {
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `windowPage(offset, rows)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 GenericPage windowPage(std::int64_t offset, std::int64_t rows, std::vector<std::string> const& columns) {
     GenericPage page;
     page.columns = columns;
@@ -1312,6 +1314,7 @@ GenericPage windowPage(std::int64_t offset, std::int64_t rows, std::vector<std::
 std::vector<std::string> windowColumns(std::size_t count) {
     std::vector<std::string> out;
     for (std::size_t column = 0; column < count; ++column) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `out` is a fixture list built once; sizing it first would not change what the case checks
         out.push_back(std::format("c{:03}", column));
     }
     return out;
@@ -1324,6 +1327,7 @@ namespace {
 // D1-D4's table: 100,000 rows; `t` a text of 50,000 distinct values of 3 to 10 lowercase letters, `o1` an integer
 // 0..99, `o2` an integer 0..99 at level "slow", unloaded in 30% of the rows. From std::mt19937{7}.
 std::shared_ptr<VectorSource> distinctBenchSource() {
+    // NOLINTNEXTLINE(bugprone-random-generator-seed, cert-msc32-c, cert-msc51-cpp): the fixed seed 7 replays the same sequence on every run, so a failing case reproduces
     std::mt19937 rng{7};
     std::vector<std::string> words;
     std::set<std::string> seen;
@@ -1370,7 +1374,8 @@ TEST_CASE("table benchmark: K1 K2 K3 the window", "[.benchmark][window]") {
         REQUIRE_FALSE(fetches.empty());
         auto page = windowPage(0, 200, wide);
         auto const began = Clock::now();
-        REQUIRE(window.accept(fetches[0], std::move(page)));
+        bool const accepted = window.accept(fetches[0], std::move(page));
+        REQUIRE(accepted);
         accepts.push_back(std::chrono::duration<double, std::milli>(Clock::now() - began).count());
     }
     auto spread = spreadOf(accepts);
@@ -1406,6 +1411,7 @@ TEST_CASE("table benchmark: K1 K2 K3 the window", "[.benchmark][window]") {
     for (int run = 0; run < 31; ++run) {
         std::vector<RowId> keys;
         for (std::int64_t key = 0; key < 200; ++key) {
+            // NOLINTNEXTLINE(performance-inefficient-vector-operation): `keys` is a fixture list built once; sizing it first would not change what the case checks
             keys.emplace_back(key);
         }
         auto const rows = held.refresh(keys);
@@ -1437,7 +1443,7 @@ TEST_CASE("table benchmark: C1 C2 C3 many requests through an in-process server"
     bench::WideTableModel::recipeGate().release();
     bench::WideTableModel::configure({.rows = 100'000, .columns = 300, .seed = 7, .loadDelay = {}},
                                      {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}});
-    constexpr std::size_t kViewBytes = 4 * 100'000;
+    constexpr std::size_t kViewBytes = 4UZ * 100'000;
     // Ten base-column views and one view sorted by a level, which also keeps its 100,000 integer order keys: about
     // twenty base-column views once the level-sorted one is evicted.
     constexpr std::size_t kBound = (10 * kViewBytes) + sizeof(std::vector<RowId>) + (100'000 * sizeof(RowId));
@@ -1488,6 +1494,7 @@ TEST_CASE("table benchmark: C1 C2 C3 many requests through an in-process server"
     auto const began = Clock::now();
     std::vector<std::shared_ptr<morph::testing::WaitReply>> waiters;
     for (std::size_t request = 0; request < 50; ++request) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `waiters` is a fixture list built once; sizing it first would not change what the case checks
         waiters.push_back(send(sorted, request));
     }
     for (auto const& waiter : waiters) {
@@ -1591,13 +1598,13 @@ TEST_CASE("table benchmark: distinct values and value sets", "[.benchmark][table
     REQUIRE(first->values.size() == 200);
     REQUIRE(first->distinct == 50'000);
     printRow("D1 distinctValues, 50,000 distinct, first 200, keys built", 100'000,
-             timedRuns(kRuns, [&] { static_cast<void>(sorted.distinctValues({.column = "t"})); }));
+             timedRuns(kRuns, [&] { std::ignore = (sorted.distinctValues({.column = "t"})); }));
 
     auto const searched = sorted.distinctValues({.column = "t", .search = "abc"});
     REQUIRE(searched);
     REQUIRE(searched->distinct > 0);
     printRow("D2 the same, search \"abc\"", 100'000,
-             timedRuns(kRuns, [&] { static_cast<void>(sorted.distinctValues({.column = "t", .search = "abc"})); }));
+             timedRuns(kRuns, [&] { std::ignore = (sorted.distinctValues({.column = "t", .search = "abc"})); }));
 
     Engine filtered{source};
     require(filtered.setSort({SortKey{.column = "t", .dir = kAsc}}));
@@ -1611,11 +1618,12 @@ TEST_CASE("table benchmark: distinct values and value sets", "[.benchmark][table
     REQUIRE(partial);
     REQUIRE(partial->partial);
     printRow("D3 the same, filters on o1 and on o2 (30% unloaded)", 100'000,
-             timedRuns(kRuns, [&] { static_cast<void>(filtered.distinctValues({.column = "t"})); }));
+             timedRuns(kRuns, [&] { std::ignore = (filtered.distinctValues({.column = "t"})); }));
 
     std::vector<std::string> members;
     auto const snapshot = source->snapshot();
     for (std::size_t row = 0; row < 10'000; ++row) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `members` is a fixture list built once; sizing it first would not change what the case checks
         members.push_back(std::get<std::string>(snapshot->cell(row * 5, 0)));
     }
     auto const columns = source->columns();
@@ -1625,7 +1633,7 @@ TEST_CASE("table benchmark: distinct values and value sets", "[.benchmark][table
     std::vector<KeyColumn const*> const pointers{&keys, nullptr, nullptr};
     auto const spec = filterOn("t", FilterEntry{.oneOf = members});
     printRow("D4 compile a 10,000-value oneOf", 100'000,
-             timedRuns(kRuns, [&] { static_cast<void>(compileFilter(spec, columns, services)); }));
+             timedRuns(kRuns, [&] { std::ignore = (compileFilter(spec, columns, services)); }));
     auto const compiled = compileFilter(spec, columns, services);
     REQUIRE(compiled);
     std::size_t passed = 0;
@@ -1646,6 +1654,7 @@ namespace {
 // G1-G7's table: 100,000 rows; a group of 3 (h0..h2) and a group of 16 (k0..k15) text columns, each cell one of
 // "v0".."v31" from std::mt19937{7}; every column at level "slow", so `unloaded` can make a third of them Unloaded.
 std::shared_ptr<VectorSource> groupBenchSource(bool unloaded) {
+    // NOLINTNEXTLINE(bugprone-random-generator-seed, cert-msc32-c, cert-msc51-cpp): the fixed seed 7 replays the same sequence on every run, so a failing case reproduces
     std::mt19937 rng{7};
     std::vector<ColumnInfo> columns;
     std::vector<std::string> three;
@@ -1660,6 +1669,7 @@ std::shared_ptr<VectorSource> groupBenchSource(bool unloaded) {
     }
     std::vector<std::string> values;
     for (int v = 0; v < 32; ++v) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `values` is a fixture list built once; sizing it first would not change what the case checks
         values.push_back(std::format("v{}", v));
     }
     std::vector<std::vector<Cell>> rows(100'000);
@@ -1680,9 +1690,11 @@ std::shared_ptr<VectorSource> groupBenchSource(bool unloaded) {
 }
 
 // The members "v0".."v{n-1}", then "w0".. to make up `count` (values no cell holds).
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `setOf(held)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::vector<std::string> setOf(int held, int count) {
     std::vector<std::string> out;
     for (int v = 0; v < count; ++v) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `out` is a fixture list built once; sizing it first would not change what the case checks
         out.push_back(v < held ? std::format("v{}", v) : std::format("w{}", v));
     }
     return out;
@@ -1721,6 +1733,7 @@ TEST_CASE("table benchmark: column groups", "[.benchmark][table][groups]") {
             std::vector<FilterEntry> together;
             auto const k = name == "three" ? 3 : 16;
             for (int e = 0; e < (k == 3 ? 2 : 16); ++e) {
+                // NOLINTNEXTLINE(performance-inefficient-vector-operation): `together` is a fixture list built once; sizing it first would not change what the case checks
                 together.push_back(FilterEntry{.eq = std::format("v{}", e)});
             }
             time("G1 any, oneOf of 2, " + name, {.group = name, .include = {FilterEntry{.oneOf = setOf(2, 2)}}});
@@ -1743,7 +1756,7 @@ TEST_CASE("table benchmark: column groups", "[.benchmark][table][groups]") {
                 REQUIRE(first);
                 REQUIRE(first->values.size() == 32);
                 printRow("G6 pooled distinct values, first 200, " + name, 100'000,
-                         timedRuns(kRuns, [&] { static_cast<void>(engine.distinctValues({.group = name})); }));
+                         timedRuns(kRuns, [&] { std::ignore = (engine.distinctValues({.group = name})); }));
             }
         }
     }
@@ -1758,6 +1771,7 @@ TEST_CASE("table state benchmark: parse, fit and apply 300 columns, 8 keys, 32 f
     std::vector<std::string> ids;
     for (std::size_t at = 0; at < kColumns; ++at) {
         auto id = std::format("c{:03}", at);
+        // NOLINTNEXTLINE(readability-avoid-nested-conditional-operator): a three-way pick of the column kind by `at % 3`
         auto const kind = at % 3 == 0 ? ColumnKind::Integer : at % 3 == 1 ? ColumnKind::Text : ColumnKind::Decimal;
         description.columns.push_back(TableColumn{
             .info = {.id = id, .kind = kind, .comparator = {}, .format = {}, .level = {}}, .label = id, .group = {}});
@@ -1876,6 +1890,7 @@ TEST_CASE("table benchmark: values with units", "[.benchmark][table][measure]") 
              timedRuns(31, [&] { REQUIRE(compileFilter(oneOf, columns, options.services).has_value()); }));
     std::vector<UnitInfo> listed;
     for (UnitId unit = 0; unit < units->size(); ++unit) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `listed` is a fixture list built once; sizing it first would not change what the case checks
         listed.push_back(units->info(unit));
     }
     auto const& de = morph::ui::localeFacts("de");

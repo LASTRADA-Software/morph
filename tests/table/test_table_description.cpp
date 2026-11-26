@@ -49,6 +49,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <type_traits>
 #include <typeindex>
 #include <utility>
@@ -72,7 +73,7 @@ namespace {
 constexpr auto kInt64Max = std::numeric_limits<std::int64_t>::max();
 constexpr auto kInt64Min = std::numeric_limits<std::int64_t>::min();
 
-TableColumn column(std::string id, ColumnKind kind) {
+TableColumn column(std::string const& id, ColumnKind kind) {
     return TableColumn{
         .info = {.id = id, .kind = kind, .comparator = {}, .format = {}, .level = {}}, .label = id, .group = {}};
 }
@@ -84,6 +85,7 @@ TableDescription describedOf(std::vector<TableColumn> columns) {
 std::vector<RowId> intKeys(std::size_t count, std::int64_t first = 1) {
     std::vector<RowId> keys;
     for (std::size_t i = 0; i < count; ++i) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `keys` is a fixture list built once; sizing it first would not change what the case checks
         keys.emplace_back(first + static_cast<std::int64_t>(i));
     }
     return keys;
@@ -109,6 +111,7 @@ std::vector<CellState> statesOf(ColumnKind kind, std::vector<Cell> cells) {
     VectorSource source{{info}};
     std::vector<std::vector<Cell>> rows;
     for (auto& cell : cells) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
         rows.push_back({std::move(cell)});
     }
     auto const count = rows.size();
@@ -121,6 +124,7 @@ std::vector<CellState> statesOf(ColumnKind kind, std::vector<Cell> cells) {
 std::vector<Cell> columnOf(GenericPage const& page, std::size_t column) {
     std::vector<Cell> out;
     for (auto const& row : page.rows) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `out` is a fixture list built once; sizing it first would not change what the case checks
         out.push_back(row.at(column));
     }
     return out;
@@ -136,6 +140,7 @@ OneColumn throughTheWire(ColumnKind kind, std::vector<Cell> cells) {
     VectorSource source{{ColumnInfo{.id = "v", .kind = kind, .comparator = {}, .format = {}, .level = {}}}};
     std::vector<std::vector<Cell>> rows;
     for (auto& cell : cells) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
         rows.push_back({std::move(cell)});
     }
     auto const count = rows.size();
@@ -375,6 +380,7 @@ TEST_CASE("table query: columns round-trip and are bounded", "[table][query]") {
     CHECK(b.error().column == "b");
     std::vector<std::string> many;
     for (int i = 0; i < 513; ++i) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `many` is a fixture list built once; sizing it first would not change what the case checks
         many.push_back("c" + std::to_string(i));
     }
     auto const tooMany = check(many);
@@ -746,6 +752,7 @@ std::vector<RowId> keysOfApply(DataSource const& source, TableQuery const& query
 std::vector<std::string> idsOf(TableDescription const& description) {
     std::vector<std::string> out;
     for (auto const& entry : description.columns) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `out` is a fixture list built once; sizing it first would not change what the case checks
         out.push_back(entry.info.id);
     }
     return out;
@@ -779,6 +786,7 @@ morph::effects::RecordChange const* changeOf(morph::effects::Changes const& chan
     return found == changes.records.end() ? nullptr : &*found;
 }
 
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kRanOn` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
 morph::effects::InstanceChange const kRanOn{.modelType = "WideTableModel", .instance = 1, .primary = {}};
 
 }  // namespace
@@ -1172,6 +1180,7 @@ namespace {
 ServedTable threeRowTable(bool keyed) {
     std::vector<std::vector<Cell>> cells;
     for (std::int64_t row = 0; row < 3; ++row) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `cells` is a fixture list built once; sizing it first would not change what the case checks
         cells.push_back({Cell{row}});
     }
     auto description =
@@ -1324,8 +1333,10 @@ public:
         ++calls;
         return {};
     }
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): `wanted` and `calls` record what the source was asked, which the case compares
     std::size_t wanted = 0;
     std::size_t calls = 0;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
     std::string _level;
@@ -1342,6 +1353,7 @@ TEST_CASE("level cache: a level no cache serves is unloaded and awaited", "[tabl
     description = describe(std::move(description));
     std::vector<std::vector<Cell>> rows;
     for (std::int64_t row = 0; row < 5; ++row) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
         rows.push_back({Cell{row}, Cell{std::string{"abc"}}});
     }
     auto const served = detail::pinned(ServedTable{
@@ -1460,8 +1472,10 @@ public:
         return {};
     }
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): `wanted` records the requests and `refuseOrder` switches the refusal; the cases read and set both directly
     std::vector<Wanted> wanted;
     bool refuseOrder = false;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
     std::vector<ColumnInfo> _columns{tabletest::levelCol("r", ColumnKind::Text, "recipe")};
@@ -1473,6 +1487,7 @@ ServedTable scriptedTable(std::shared_ptr<ScriptedLevel> const& level) {
     description.levels = {"recipe"};
     std::vector<std::vector<Cell>> rows;
     for (std::int64_t row = 0; row < 10; ++row) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
         rows.push_back({Cell{row}});
     }
     return detail::pinned(
@@ -1530,7 +1545,7 @@ TEST_CASE("view cache: a view keeps order keys only when its query has an order 
     CHECK(views.stats().bytes == 4 * 10);  // the view's ten rows and nothing else
     query.sort = {SortKey{.column = "r", .dir = SortDirection::Ascending}};
     REQUIRE(detail::answerQuery(scriptedTable(level), query, answer).has_value());
-    CHECK(views.stats().bytes >= 2 * 4 * 10 + 10 * sizeof(RowId));  // the level-sorted view keeps its ten keys
+    CHECK(views.stats().bytes >= (2UZ * 4 * 10) + (10 * sizeof(RowId)));  // the level-sorted view keeps its ten keys
 }
 
 // Mutation: a failed row read as merely unloaded (its `failed` left empty).
@@ -1638,6 +1653,7 @@ public:
     }
     void unwant(std::span<RowId const> keys) override { unwanted += keys.size(); }
 
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): `unwanted` counts the requests the source should not have seen; the case reads it
     std::size_t unwanted = 0;
 
 private:
@@ -1659,6 +1675,7 @@ TEST_CASE("table: a refused order use takes back the other levels' leases", "[ta
     description.levels = {"recipe", "stock"};
     std::vector<std::vector<Cell>> rows;
     for (std::int64_t row = 0; row < 4; ++row) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
         rows.push_back({Cell{row}});
     }
     auto const served = detail::pinned(
@@ -1713,6 +1730,7 @@ struct DistinctLevels {
         description.levels = {"recipe", "stock"};
         std::vector<std::vector<Cell>> rows;
         for (std::int64_t row = 0; row < 4; ++row) {
+            // NOLINTNEXTLINE(performance-inefficient-vector-operation): `rows` is a fixture list built once; sizing it first would not change what the case checks
             rows.push_back({Cell{row}});
         }
         served = detail::pinned(
@@ -1963,6 +1981,7 @@ public:
         }
         return _inner->want(keys, use, retry);
     }
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): `wanted` records the requests the source saw; the case reads it
     std::vector<std::pair<RowId, LevelUse>> wanted;
 
 private:
@@ -2018,6 +2037,7 @@ TEST_CASE("answer query: a distinct request reads a slow column through its leve
     std::ranges::sort(wantedKeys);
     std::vector<RowId> allSixKeys;
     for (std::int64_t row = 0; row < 6; ++row) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `allSixKeys` is a fixture list built once; sizing it first would not change what the case checks
         allSixKeys.emplace_back(row);
     }
     CHECK(wantedKeys == allSixKeys);
@@ -2184,6 +2204,7 @@ namespace {
 ServedTable fortyColumns(std::size_t bound) {
     std::vector<TableColumn> columns;
     for (int at = 0; at < 40; ++at) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `columns` is a fixture list built once; sizing it first would not change what the case checks
         columns.push_back(column(std::format("k{:02}", at), ColumnKind::Integer));
     }
     ServedTable served{
@@ -2231,12 +2252,12 @@ struct MeasureRow {
 inline std::shared_ptr<UnitRegistry const> const& modelUnits() {
     static auto const built = [] {
         UnitRegistryBuilder builder;
-        static_cast<void>(builder.add(UnitInfo{.id = "t",
-                                               .symbol = "t",
-                                               .dimension = "mass",
-                                               .toBase = Rational{1000, DecimalPlaces{0}},
-                                               .decimals = 3}));
-        static_cast<void>(builder.add(UnitInfo{
+        std::ignore = (builder.add(UnitInfo{.id = "t",
+                                            .symbol = "t",
+                                            .dimension = "mass",
+                                            .toBase = Rational{1000, DecimalPlaces{0}},
+                                            .decimals = 3}));
+        std::ignore = (builder.add(UnitInfo{
             .id = "kg", .symbol = "kg", .dimension = "mass", .toBase = Rational{1, DecimalPlaces{0}}, .decimals = 3}));
         return std::move(builder).build();
     }();
@@ -2502,6 +2523,7 @@ TEST_CASE("description: a column that shows its cells plainly writes no display"
 
 namespace {
 
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kMassBand` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
 std::vector<BandInfo> const kMassBand{
     {.label = "Mass retained", .unit = "g", .columns = {"m8", "m4", "m2"}, .bands = {}}};
 
@@ -2586,8 +2608,8 @@ std::function<std::optional<std::string>(std::string_view)> editSchemas(std::str
     };
 }
 
-TableColumn editedColumn(std::string id, ColumnKind kind, EditInfo edit) {
-    TableColumn out = column(std::move(id), kind);
+TableColumn editedColumn(std::string const& id, ColumnKind kind, EditInfo edit) {
+    TableColumn out = column(id, kind);
     out.edit = std::move(edit);
     return out;
 }
@@ -2711,7 +2733,8 @@ namespace descedit {
 
 namespace {
 
-morph::table::ServedTable editedTable(std::string id, std::string action) {
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `editedTable(id)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+morph::table::ServedTable editedTable(std::string const& id, std::string action) {
     morph::table::ServedTable served;
     served.description.id = id;
     served.description.label = id;

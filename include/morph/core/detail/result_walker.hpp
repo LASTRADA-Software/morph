@@ -200,6 +200,7 @@ void visitMembers(Walk& walk, std::string const& path, std::index_sequence<I...>
 /// @param walk The walk's state.
 /// @param path Where the value sits in the result.
 template <typename T>
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): `visit` dispatches on the shape of T (optional, variant, map, sequence, struct) and every branch extends the same walk path and error state
 void visit(Walk& walk, std::string const& path) {
     if constexpr (!std::is_void_v<typename Element<T>::type>) {
         result_walker::visit<std::remove_cvref_t<typename Element<T>::type>>(walk, path);

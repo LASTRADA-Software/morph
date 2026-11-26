@@ -25,6 +25,7 @@
 
 namespace morph::qt_quick::detail {
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): the constructor wires every signal of the QML table to its handler in one place; the connections share the locals they capture
 TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
     : ContainerItemWidget{
           context, QStringLiteral("MorphTable"), parent,
@@ -551,8 +552,10 @@ void TableImpl::setCellAccent(ui::Widget& row, std::size_t column, ui::CellAccen
     tableRow->setAccent(column, accent);
 }
 
-void TableImpl::setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
-                                std::span<int const> widths, int totalWidth, std::size_t pinned) {
+void TableImpl::setColumnWindow(
+    std::span<std::size_t const> columns, std::span<int const> offsets,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): overrides `Table::setColumnWindow`; the declaration says how its totals are told apart
+    std::span<int const> widths, int totalWidth, std::size_t pinned) {
     QVariantList window;
     for (auto const [column, offset, width] : std::views::zip(columns, offsets, widths)) {
         window.append(QVariantMap{{QStringLiteral("column"), static_cast<int>(column)},
@@ -590,6 +593,7 @@ void TableImpl::setOnColumnMeasured(
     _onColumnMeasured = std::move(handler);
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): overrides `Table::setFocusCell`; the declaration says how its pair is told apart
 void TableImpl::setFocusCell(std::size_t viewRow, std::size_t column) {
     write("focusedRowIndex", static_cast<qlonglong>(viewRow));
     write("focusedColumnIndex", static_cast<int>(column));
@@ -619,6 +623,7 @@ void TableImpl::setOnFocusOut(std::function<void()> onFocusOut) {
 // `editorColumn` says which column and `editorItem` the editor, whose own popups the table's focus watch counts as
 // inside the table. An editor that holds the focus when it closes gives it back to the table, so the next key reaches
 // the table.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): places the editor over its cell and hands focus back on close; the open and close paths share the row's editor state
 void TableImpl::setCellEditor(ui::Widget& row, std::size_t column, ui::Widget* editor) {
     auto const* const tableRow = dynamic_cast<TableRowImpl*>(&row);
     if (tableRow == nullptr || tableRow->container() != this) {
@@ -717,6 +722,7 @@ void TableImpl::scrollToRow(std::size_t viewRow) {
 
 // A cell with no column is pooled: hidden, as a covered cell is, and placed nowhere. `measuredIndex` is the column
 // the row places it in and the one its widths are reported for.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): overrides `Table::setCellColumn`; the declaration says how its pair is told apart
 void TableImpl::setCellColumn(ui::Widget& row, ui::Widget& cell, std::optional<std::size_t> column) {
     auto const* const tableRow = dynamic_cast<TableRowImpl const*>(&row);
     if (tableRow == nullptr || tableRow->container() != this) {
@@ -793,6 +799,7 @@ void TableImpl::releasing(ItemBase& child) noexcept {
 
 // Coverage follows the rows' order, so it is worked out here from the rows as they stand, whenever a row comes, goes,
 // moves or is told its spans, and never from a span alone.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): works out coverage in one pass in the rows' order: the spans carried from earlier rows decide what each next row covers
 void TableImpl::planSpans(ItemBase const* leaving) {
     if (_spans.empty() && !_planned) {
         return;

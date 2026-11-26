@@ -108,6 +108,7 @@ BRIDGE_REGISTER_ACTION(BoundedPickModel, BoundedPick, "T_BoundedPick")
 
 // A const member beside a derived one: clearing reaches only what can be assigned.
 struct ConstTagged {
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members): the case needs a const member beside a derived one, to show that clearing reaches only what can be assigned
     std::int64_t const kind = 7;
     std::int64_t limit = 0;  // derived
     static const std::array<morph::forms::FieldMeta, 1> fieldMetadata;

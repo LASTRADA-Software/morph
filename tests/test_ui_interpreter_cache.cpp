@@ -90,6 +90,7 @@ constexpr char const* kOneTablePage = R"({
 morph::wire::ChangesBody changesOf(std::string record, std::vector<std::string> const& keys) {
     std::vector<glz::raw_json> raw;
     for (auto const& key : keys) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `raw` is a fixture list built once; sizing it first would not change what the case checks
         raw.emplace_back(key);
     }
     morph::wire::ChangesBody body;
@@ -195,6 +196,7 @@ TEST_CASE("cache: a read makes no entry", "[push][cache][table]") {
             std::rethrow_exception(error);
         } catch (core::async::OperationCancelled const&) {
             cancelled = true;
+            // NOLINTNEXTLINE(bugprone-empty-catch): the case asserts `cancelled` for the cancellation and ignores any other error, which `resolved` and `cancelled` stay false for
         } catch (...) {
         }
     });
@@ -274,7 +276,7 @@ TEST_CASE("cache: a watch without an entry joins the watch set", "[push][cache][
     REQUIRE(heard[1].has_value());
     CHECK(heard[1]->size() == 2);
 
-    auto second = std::make_optional(*copy);
+    auto second = copy;
     copy.reset();
     h.settle();
     CHECK(names());
@@ -311,6 +313,7 @@ TEST_CASE("cache: an opaque entry keeps a fractional number", "[push][cache][tab
         REQUIRE(rows != nullptr);
         auto const* const row = rows->at(0).asList();
         REQUIRE(row != nullptr);
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `operator()(at, expected)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
         auto const decimalAt = [&](std::size_t at, double expected, std::uint32_t places) {
             INFO("cell " << at);
             auto const* const decimal = row->at(at).asDecimal();

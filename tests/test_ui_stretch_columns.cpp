@@ -92,6 +92,7 @@ TEST_CASE("stretch columns: no columns, and a column whose widths are out of ord
 }
 
 TEST_CASE("stretch columns: random input stays within its bounds and fills the room", "[ui][stretch]") {
+    // NOLINTNEXTLINE(bugprone-random-generator-seed, cert-msc32-c, cert-msc51-cpp): the fixed seed 7 replays the same sequence on every run, so a failing case reproduces
     std::mt19937 random{7};
     for (int round = 0; round < 500; ++round) {
         std::vector<StretchColumn> columns;

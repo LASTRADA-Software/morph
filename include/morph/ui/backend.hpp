@@ -914,8 +914,11 @@ public:
     ///                 table's menu (none).
     /// @param onChoose Called with the menu's column, or none, and the chosen entry's path, an index per level from
     ///                 the top; never for a separator, a heading, a disabled entry or one with a submenu.
-    virtual void setMenu(std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> entries,
-                         std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) {
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `entries` by value to move it into their widget, and an override must match this signature; the default only discards it
+    virtual void setMenu(
+        std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> entries,
+        // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onChoose` by value to move it into their widget, and an override must match this signature; the default only discards it
+        std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) {
         static_cast<void>(entries);
         static_cast<void>(onChoose);
     }
@@ -953,6 +956,7 @@ public:
     ///        (one less, or one more, for the keys). A move to the place the column holds, or past either end,
     ///        reports nothing.
     /// @param handler The handler; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
     virtual void setOnColumnMove(std::function<void(std::size_t column, std::size_t position)> handler) {
         static_cast<void>(handler);
     }
@@ -961,12 +965,14 @@ public:
     ///        (`tableMeasure`'s unit), or none for a double click on the edge. Called only for a table whose columns
     ///        can be resized; a backend that draws no edge to drag ignores it.
     /// @param handler The handler; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
     virtual void setOnColumnResize(std::function<void(std::size_t column, std::optional<int> units)> handler) {
         static_cast<void>(handler);
     }
 
     /// @brief Sets what a filterable column's filter button calls, with the column.
     /// @param handler The handler; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
     virtual void setOnFilter(std::function<void(std::size_t column)> handler) { static_cast<void>(handler); }
 
     /// @brief Fills the filter buttons of the columns that have a filter, and names their headers "{label},
@@ -988,10 +994,12 @@ public:
 
     /// @brief Sets what a group's filter button calls, with the group's index among those `setColumnGroups` gave.
     /// @param handler The handler; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
     virtual void setOnGroupFilter(std::function<void(std::size_t group)> handler) { static_cast<void>(handler); }
 
     /// @brief Sets what `Ctrl+C` on the focused table calls.
     /// @param onCopy The handler; empty lets the key go on.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onCopy` by value to move it into their widget, and an override must match this signature; the default only discards it
     virtual void setOnCopy(std::function<void()> onCopy) { static_cast<void>(onCopy); }
 
     /// @brief Tells the backend which contiguous range of view rows is realized and how many rows exist in total, so
@@ -1029,6 +1037,7 @@ public:
     ///        reporting them: the caller selects the whole view, and sets the selection back through `setSelection`.
     ///        A backend that does not take it selects as before.
     /// @param onSelectAll The handler; empty to select as before.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onSelectAll` by value to move it into their widget, and an override must match this signature; the default only discards it
     virtual void setOnSelectAll(std::function<void()> onSelectAll) { static_cast<void>(onSelectAll); }
 
     /// @brief Marks every row of the table selected but those whose key is in @p except, rows the backend does not
@@ -1043,6 +1052,7 @@ public:
     /// @brief Sets what choosing one of the status line's entries (`TableStatus::entries` and `standingEntries`, each
     ///        drawn as a button with its label) calls, with the entry's id.
     /// @param onStatusEntry The handler; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onStatusEntry` by value to move it into their widget, and an override must match this signature; the default only discards it
     virtual void setOnStatusEntry(std::function<void(std::string entryId)> onStatusEntry) {
         static_cast<void>(onStatusEntry);
     }
@@ -1066,6 +1076,7 @@ public:
 
     /// @brief Sets what choosing the status line's "Retry" calls.
     /// @param onRetry The handler; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onRetry` by value to move it into their widget, and an override must match this signature; the default only discards it
     virtual void setOnRetry(std::function<void()> onRetry) { static_cast<void>(onRetry); }
 
     /// @brief Sets a cell's load state; called after the row's key, and on every change, for a table whose rows come
@@ -1107,8 +1118,11 @@ public:
     /// @param totalWidth The width of every visible column together, in the backend's measure, which sizes the
     ///                   horizontal scroll bar.
     /// @param pinned     How many of @p columns are pinned.
-    virtual void setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
-                                 std::span<int const> widths, int totalWidth, std::size_t pinned) {
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `offsets` and `widths` are the window's two parallel int spans, and the mount builds both with `columns` from one window and passes them in this order
+    virtual void setColumnWindow(
+        std::span<std::size_t const> columns, std::span<int const> offsets,
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `totalWidth` is a width and `pinned` a column count; the one call site in the mount passes the extents' total first, then the pinned count
+        std::span<int const> widths, int totalWidth, std::size_t pinned) {
         static_cast<void>(columns);
         static_cast<void>(offsets);
         static_cast<void>(widths);
@@ -1120,6 +1134,7 @@ public:
     ///        columns. A backend that never calls it gets every visible column realized.
     /// @param handler The handler, with the scroll offset and the viewport's width, both in the backend's measure
     ///        (`tableMeasure`); empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
     virtual void setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler) {
         static_cast<void>(handler);
     }
@@ -1134,6 +1149,7 @@ public:
     /// @param handler The handler, with the view rows of the range's anchor and end, and the kind of change; empty
     ///        does nothing.
     virtual void setOnSelectRange(
+        // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
         std::function<void(std::size_t anchorRow, std::size_t focusRow, SelectionChange)> handler) {
         static_cast<void>(handler);
     }
@@ -1141,6 +1157,7 @@ public:
     /// @brief Shows keyboard focus on a cell, and announces it; a row not fetched yet is announced as loading.
     /// @param viewRow The cell's view row.
     /// @param column  The cell's column: an index into the columns `setColumns` gave.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`viewRow`, `column`): the row position then the column, the pair every table seam in this header passes in this order
     virtual void setFocusCell(std::size_t viewRow, std::size_t column) {
         static_cast<void>(viewRow);
         static_cast<void>(column);
@@ -1153,6 +1170,7 @@ public:
     /// @param handler The handler, with the column (an index into the columns `setColumns` gave) and what was
     /// measured,
     ///        in the backend's measure (`tableMeasure`), padding included; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
     virtual void setOnColumnMeasured(std::function<void(std::size_t column, ColumnMeasure const& measure)> handler) {
         static_cast<void>(handler);
     }
@@ -1160,10 +1178,12 @@ public:
     /// @brief Sets what the backend calls for a key that moves the focused cell, which the mount resolves over rows
     ///        and columns it may not have realized.
     /// @param handler The handler, with the move; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
     virtual void setOnFocusMove(std::function<void(FocusMove)> handler) { static_cast<void>(handler); }
 
     /// @brief Sets what printable text typed while a cell has focus and no editor is open calls, with the text.
     /// @param onText The handler; empty does nothing and lets the key go on.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onText` by value to move it into their widget, and an override must match this signature; the default only discards it
     virtual void setOnText(std::function<void(std::string)> onText) { static_cast<void>(onText); }
 
     /// @brief Sets what a click on a cell calls: a single click with `false`, the second click of a double click with
@@ -1171,12 +1191,14 @@ public:
     /// @param onClick The handler, with the cell's view row and its column (an index into the columns `setColumns`
     ///        gave); empty does nothing.
     virtual void setOnCellClick(
+        // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onClick` by value to move it into their widget, and an override must match this signature; the default only discards it
         std::function<void(std::size_t viewRow, std::size_t column, bool doubleClick)> onClick) {
         static_cast<void>(onClick);
     }
 
     /// @brief Sets what focus moving to a widget outside the table, its cell editor and its popups calls.
     /// @param onFocusOut The handler; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onFocusOut` by value to move it into their widget, and an override must match this signature; the default only discards it
     virtual void setOnFocusOut(std::function<void()> onFocusOut) { static_cast<void>(onFocusOut); }
 
     /// @brief Draws a cell editor over a cell's area in place of the cell's content, or the cell again.
@@ -1205,9 +1227,11 @@ public:
     ///        chords, declared with `setKeys`, not the backend's.
     /// @param onSelect The handler, with the anchor's and the focus's view rows and visible positions; empty selects
     ///        rows again.
-    virtual void setOnCellSelect(std::function<void(std::size_t anchorRow, std::size_t anchorPosition,
-                                                    std::size_t focusRow, std::size_t focusPosition)>
-                                     onSelect) {
+    virtual void setOnCellSelect(
+        std::function<void(std::size_t anchorRow, std::size_t anchorPosition, std::size_t focusRow,
+                           std::size_t focusPosition)>
+            // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onSelect` by value to move it into their widget, and an override must match this signature; the default only discards it
+            onSelect) {
         static_cast<void>(onSelect);
     }
 
@@ -1257,6 +1281,7 @@ public:
     /// @param row    One of this table's rows.
     /// @param cell   One of @p row's children.
     /// @param column An index into the columns `setColumns` gave, or nothing.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`row`, `cell`): the table's realized row then its child cell, which both call sites in the mount pass in that order
     virtual void setCellColumn(Widget& row, Widget& cell, std::optional<std::size_t> column) {
         static_cast<void>(row);
         static_cast<void>(cell);

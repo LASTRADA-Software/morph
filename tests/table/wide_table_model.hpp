@@ -140,7 +140,7 @@ class UnloadedSource final : public morph::table::DataSource, private morph::tab
 public:
     // Throws std::invalid_argument when `columns` names a column `source` does not have, or `level` is empty.
     UnloadedSource(std::shared_ptr<morph::table::DataSource> source, std::vector<std::string> const& columns,
-                   std::string level, double loadedFraction, std::uint64_t seed);
+                   std::string const& level, double loadedFraction, std::uint64_t seed);
     ~UnloadedSource() override;
     UnloadedSource(UnloadedSource const&) = delete;
     UnloadedSource& operator=(UnloadedSource const&) = delete;

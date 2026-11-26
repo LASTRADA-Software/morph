@@ -480,6 +480,7 @@ TEST_CASE("grid: the held row is let go when focus leaves, on submit, on a click
 // ── Derived values ──────────────────────────────────────────────────────────
 
 using namespace std::chrono_literals;
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kNoValues` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
 std::string const kNoValues = R"({"values":[]})";
 
 // Mutations: loadDerived resolving `specimens[i]` against the current rows (the value lands on the inserted row);
@@ -1228,6 +1229,7 @@ struct GridScreen {
         screen = h.mount(kGridDocument);
         ui::testing::elementOf(*screen, "rec").form->prefill(R"({"sampleId":4,"specimens":[{},{}]})");
         h.settle();
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): `table` is looked up only after the screen is mounted and settled, so it cannot be set in the constructor's initializer list
         table = h.byTestId("Table", "grid");
     }
 
@@ -1300,6 +1302,7 @@ TEST_CASE("grid: the cell menu offers copy and filter before the grid's own entr
     std::vector<ui::MenuEntry> const entries = g.h.backend.rightClickCell(g.table, ui::Key{std::int64_t{1}}, 1);
     std::vector<std::string> labels;
     for (ui::MenuEntry const& shown : entries) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `labels` is a fixture list built once; sizing it first would not change what the case checks
         labels.push_back(shown.label);
     }
     CHECK(labels == std::vector<std::string>{"Copy", "Copy with headers", "Filter by this value", "Exclude this value",
@@ -1758,7 +1761,7 @@ TEST_CASE("grid: the loader checks a form's derive keys and keeps a grid column'
           "[ui][grid][interpreter][derive]") {
     ui::testing::TableHarness h;
     addDeriveActions(h);
-    auto const refusal = [&h](std::string text) {
+    auto const refusal = [&h](std::string const& text) {
         auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
         return loaded.has_value() ? std::string{} : loaded.error().reason;
     };
@@ -2184,13 +2187,14 @@ using morph::test::grid::fieldCell;
 using morph::test::grid::FixedGridFixture;
 using morph::test::grid::textCell;
 
-ui::FixedRow fixedRow(std::string key, std::map<std::string, ui::FixedCell, std::less<>> cells) {
+ui::FixedRow fixedRow(std::string const& key, std::map<std::string, ui::FixedCell, std::less<>> cells) {
     return ui::FixedRow{.key = key, .label = key, .cells = std::move(cells)};
 }
 
 std::vector<ui::GridColumn> fixedColumns(std::vector<std::string> const& ids) {
     std::vector<ui::GridColumn> columns;
     for (std::string const& id : ids) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `columns` is a fixture list built once; sizing it first would not change what the case checks
         columns.push_back(ui::GridColumn{.id = id, .label = id, .field = {}, .value = {}});
     }
     return columns;
@@ -2269,6 +2273,7 @@ void addLimitsAction(ui::testing::TableHarness& h) {
                            ui::ActionInfo{.modelType = "Lims_SampleModel"});
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `replaced(text, from)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::string replaced(std::string_view text, std::string_view from, std::string_view to) {
     std::string out{text};
     REQUIRE(out.find(from) != std::string::npos);
@@ -2549,7 +2554,7 @@ TEST_CASE("fixed grid: a unit the user picks survives another field's load, and 
 }
 
 // A row whose weight is entered in the given unit.
-std::vector<std::variant<ui::FixedRow, ui::FixedBlock>> weightIn(std::string unit) {
+std::vector<std::variant<ui::FixedRow, ui::FixedBlock>> weightIn(std::string const& unit) {
     ui::FixedCell weight = fieldCell("limits.weight");
     weight.unit = [unit](forms::RowState const*) { return std::optional<std::string>{unit}; };
     return {fixedRow("weight", {{"min", std::move(weight)}})};

@@ -220,9 +220,9 @@ struct FixedGridFixture {
 inline FixedGridFixture::FixedGridFixture(std::string_view body,
                                           std::vector<std::variant<ui::FixedRow, ui::FixedBlock>> rows,
                                           std::vector<ui::GridColumn> columns) {
-    form = h.session("Lims_SetLimits", std::string{kSetLimits},
+    form = h.session("Lims_SetLimits", kSetLimits,
                      forms::FormSessionOptions{.locale = ui::localeFacts("de").numeric, .bcp47 = "de"});
-    form->prefill(std::string{body});
+    form->prefill(body);
     h.settle();
     source = std::make_unique<ui::FixedGridSource>(
         h.rt, form.get(), std::move(rows), std::move(columns),
@@ -263,6 +263,7 @@ inline std::vector<ui::TableColumn> columnsOf(GridFixture const& f) {
 inline std::vector<std::string> labelsOf(std::vector<ui::MenuItem> const& items) {
     std::vector<std::string> labels;
     for (ui::MenuItem const& item : items) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `labels` is a fixture list built once; sizing it first would not change what the case checks
         labels.push_back(item.label.evaluate());
     }
     return labels;
@@ -293,9 +294,11 @@ public:
         bool fetched = true;
         std::set<std::string> unloaded;  // the levels the row has not loaded
     };
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the fake source's view, row states and recorded moves, which the cases arrange and read directly
     std::vector<Row> view;  // in view order
     ui::RowStates rowStates;
     std::vector<std::pair<table::RowId, table::RowId>> moved;  // moveKey's calls
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
     // Marks the row fetched; reports it changed.
     void deliver(std::size_t index) {
@@ -341,6 +344,7 @@ public:
     }
     [[nodiscard]] std::size_t handlers() const { return _handlerSets; }  // how often onChange was set
     // Gives a row a new key; reports it changed.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `rekey(from)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     void rekey(table::RowId const& from, table::RowId const& to) {
         auto const at = std::ranges::find(view, from, &Row::key);
         at->key = to;
@@ -365,9 +369,11 @@ public:
     }
     [[nodiscard]] std::size_t locatesAsked() const { return _locates.size(); }
     // Rows past `view` the total counts and nothing holds: a large view's window.
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the fake source's unheld-row count and read counter, which the cases set and read directly
     std::int64_t unheld = 0;
     // How often `row` was read.
     mutable std::size_t rowReads = 0;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
     [[nodiscard]] ui::TableTotal total() const override {
         return {
@@ -554,12 +560,12 @@ struct ModelGridFixture {
     std::unique_ptr<ui::GridController> grid;
     // One fetched row per key, in that order. In `EditMode::Row` Enter moves along the row, so a row's cells are
     // entered with Enter as with Tab.
-    explicit ModelGridFixture(std::vector<std::int64_t> keys, ui::EditMode mode = ui::EditMode::Cell);
+    explicit ModelGridFixture(std::vector<std::int64_t> const& keys, ui::EditMode mode = ui::EditMode::Cell);
     // The table columns the grid shows, for a mount: one per grid column.
     [[nodiscard]] static std::vector<ui::TableColumn> tableColumns();
 };
 
-inline ModelGridFixture::ModelGridFixture(std::vector<std::int64_t> keys, ui::EditMode mode) {
+inline ModelGridFixture::ModelGridFixture(std::vector<std::int64_t> const& keys, ui::EditMode mode) {
     for (std::int64_t const key : keys) {
         rows->view.push_back(
             FakeRows::Row{.key = table::RowId{key}, .record = specimenRecord(key), .fetched = true, .unloaded = {}});

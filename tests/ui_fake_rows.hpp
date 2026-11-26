@@ -31,6 +31,7 @@ public:
         std::vector<std::string> columns;
     };
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `FakeRows(rows, columns, owner)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     FakeRows(std::int64_t rows, std::size_t columns, exec::IExecutor& owner,
              table::TotalKind kind = table::TotalKind::Exact)
         : _rows{rows}, _columns{columns}, _kind{kind}, _owner{&owner} {}
@@ -158,9 +159,11 @@ public:
         changed(index);
     }
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the fake rows' call counters and last window, which the cases read directly
     std::size_t visibleCalls = 0;
     std::size_t locateCalls = 0;
     Visible lastVisible;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
     struct Entry {

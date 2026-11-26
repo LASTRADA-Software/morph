@@ -189,6 +189,7 @@ namespace {
 Value decimalOrText(double number) {
     std::array<char, 512> buffer{};
     auto const [end, error] =
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic): `buffer.data() + buffer.size()` is the end pointer `to_chars` takes
         std::to_chars(buffer.data(), buffer.data() + buffer.size(), number, std::chars_format::fixed);
     if (error == std::errc{}) {
         if (auto const decimal = ::morph::table::parseDecimal(std::string_view{buffer.data(), end})) {
@@ -466,6 +467,7 @@ struct TableConfig {
           viewDialog{runtime, ViewDialog{}} {}
 
     /// The table's element, whose sort, status line and commands the gestures reach.
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): TableConfig is the table's configuring state: the mount, the menus and the document's wiring read and assign these slots directly, each slot set by whichever mount owns it
     ElementState* element = nullptr;
     /// The columns, each with its id, label, lock and kind; those declared hidden; and which of them sort.
     std::vector<LayoutColumn> columns;
@@ -549,6 +551,7 @@ struct TableConfig {
     reactive::Signal<ViewDialog> viewDialog;
     /// What a views change answers into: nothing once the configuring is gone.
     async::CallbackScope viewsScope;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
     /// Starts a mount: the slots it sets are its own until a later mount starts.
     void beginMount() { ++_mount; }
@@ -591,6 +594,7 @@ namespace {
 
 /// What a table's literal `configurable` lets its user change, and whether it has menus: `true` and an absent key
 /// allow everything, `false` nothing and offers no menu, a list what it names. The loader refused any other value.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): reads the `configurable` literal: true, false or a list of names, each name adding a bit to the allowed set
 [[nodiscard]] std::pair<Configure, bool> configurableOf(DocNode const& node) {
     ExprPtr const expr = node.prop("configurable");
     if (!expr || expr->kind != ExprKind::Literal) {
@@ -604,11 +608,15 @@ namespace {
         for (Value const& item : *names) {
             std::string const* const name = item.asString();
             std::string_view const named = name == nullptr ? std::string_view{} : std::string_view{*name};
-            allowed = allowed | (named == "reorder"  ? Configure::Reorder
-                                 : named == "hide"   ? Configure::Hide
-                                 : named == "pin"    ? Configure::Pin
-                                 : named == "resize" ? Configure::Resize
-                                                     : Configure::None);
+            allowed =
+                allowed |
+                (named == "reorder" ? Configure::Reorder
+                 // NOLINTBEGIN(readability-avoid-nested-conditional-operator): a flat pick over the configurable names, one per line
+                 : named == "hide"   ? Configure::Hide
+                 : named == "pin"    ? Configure::Pin
+                 : named == "resize" ? Configure::Resize
+                                     : Configure::None);
+            // NOLINTEND(readability-avoid-nested-conditional-operator)
         }
     }
     return {allowed, true};
@@ -755,6 +763,7 @@ std::vector<std::string> chordsOf(std::span<DocNodePtr const> parts, std::vector
     std::vector<std::string> const visible = layout.visible();
     bool plain = visible.size() == columns.size() && layout.pinned() == 0 && layout.widths().empty();
     for (std::size_t at = 0; plain && at < visible.size(); ++at) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `at` is below `visible.size()` and `columns.size()` by the loop condition above
         plain = visible[at] == columns[at].id;
     }
     TableArrangement out;
@@ -902,6 +911,7 @@ struct ModelTable {
     ModelTable& operator=(ModelTable&&) = delete;
 
     /// A change not yet saved is saved at once: the table is unmounting.
+    // NOLINTNEXTLINE(bugprone-exception-escape): the table's teardown has no recovery if unlinking the runs observer or flushing the state throws, so terminating is the outcome
     ~ModelTable() {
         if (core != nullptr) {
             std::erase(core->modelTables, element);
@@ -1225,6 +1235,7 @@ struct RowsTable {
 
     /// Its computations stop first; then the columns' tracked `sortBy`s and the `group`'s `by`, which read the
     /// table's scope, leave the source, which the mount may keep longer; a change not yet saved is saved at once.
+    // NOLINTNEXTLINE(bugprone-exception-escape): the table's teardown has no recovery if unlinking the engine, the source or the state store throws, so terminating is the outcome
     ~RowsTable() {
         effects.clear();
         if (engine != nullptr) {
@@ -2020,6 +2031,7 @@ void keyedRowsAt(Value const& value, std::span<std::string const> path, std::str
 [[nodiscard]] bool memberSetAt(Value const& value, std::span<std::string const> path) {
     if (!path.empty()) {
         if (ValueList const* const items = value.asList()) {
+            // NOLINTNEXTLINE(misc-no-recursion): recurses into the nested items of a value, one level per nesting; the depth is the data's
             return std::ranges::any_of(*items, [&](Value const& item) { return memberSetAt(item, path); });
         }
         ValueRecord const* const record = value.asRecord();
@@ -2460,6 +2472,7 @@ void Session::settleReply(detail::CacheEntry& entry, std::string const& reply) {
     bool const opaque = std::ranges::any_of(entry.records, &ActionRecordInfo::opaque);
     auto json = parseJson(reply);
     auto value =
+        // NOLINTNEXTLINE(readability-avoid-nested-conditional-operator): a three-way pick: the opaque rule, the strict rule or the parse error
         json ? (opaque ? detail::tableValueFromJson(*json) : valueFromJson(*json)) : std::unexpected(json.error());
     if (!value) {
         settleFailure(entry, "the reply is not a document value: " + value.error(), "error");
@@ -3499,7 +3512,7 @@ async::Completion<WatchHolder> Session::watchRecord(std::string const& record,
 }
 
 async::Completion<std::string> Session::read(std::shared_ptr<ModelChannel> const& channel, std::string const& actionId,
-                                             Value const& body, ::core::async::StopToken stop) {
+                                             Value const& body, ::core::async::StopToken const& stop) {
     using Promise = async::Completion<std::string>::Promise;
     auto [completion, promise] = async::Completion<std::string>::makeSettleable(&_runtime->owner());
     auto const settle = std::make_shared<Promise>(std::move(promise));
@@ -4983,6 +4996,7 @@ struct SortKey {
 }
 }  // namespace
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): builds the table's view from the page and the groups in one pass, a heading before the first row of each group
 TableView ScreenCore::tableView(RowsTable const& table) {
     static_cast<void>(table.version.get());
     DocNode const& node = *table.node;
@@ -5212,17 +5226,23 @@ Value ScreenCore::elementValue(ElementState const& element, std::string_view nam
         return Value{};
     }
     if (kind == "table" && (name == "layout" || name == "visibleColumns" || name == "hiddenCount")) {
-        TableConfig const* const config = element.rowsTable != nullptr    ? &element.rowsTable->config
-                                          : element.modelTable != nullptr ? &element.modelTable->config
-                                          : element.gridTable != nullptr  ? &element.gridTable->config
-                                                                          : nullptr;
+        TableConfig const* const config =
+            element.rowsTable != nullptr ? &element.rowsTable->config
+            // NOLINTBEGIN(readability-avoid-nested-conditional-operator): a flat pick through the element's table kinds in the order they are wired
+            : element.modelTable != nullptr ? &element.modelTable->config
+            : element.gridTable != nullptr  ? &element.gridTable->config
+                                            : nullptr;
+        // NOLINTEND(readability-avoid-nested-conditional-operator)
         return config == nullptr ? Value{} : layoutElementValue(*config, name);
     }
     if (kind == "table" && name == "filters") {
-        TableConfig const* const config = element.rowsTable != nullptr    ? &element.rowsTable->config
-                                          : element.modelTable != nullptr ? &element.modelTable->config
-                                          : element.gridTable != nullptr  ? &element.gridTable->config
-                                                                          : nullptr;
+        TableConfig const* const config =
+            element.rowsTable != nullptr ? &element.rowsTable->config
+            // NOLINTBEGIN(readability-avoid-nested-conditional-operator): a flat pick through the element's table kinds in the order they are wired
+            : element.modelTable != nullptr ? &element.modelTable->config
+            : element.gridTable != nullptr  ? &element.gridTable->config
+                                            : nullptr;
+        // NOLINTEND(readability-avoid-nested-conditional-operator)
         return config == nullptr || !config->filters ? Value{} : filtersValueOf(config->filters());
     }
     if (kind == "table" && element.gridTable != nullptr) {
@@ -8542,13 +8562,16 @@ void ScreenCore::deriveForm(ElementState& element, ModelAlias* alias) {
     }
     options.refused = [this, path = node.path, derive](std::vector<std::string> const& paths) {
         for (std::string const& refused : paths) {
-            report(path + "/derive",
-                   "the reply of `" + derive + "` names `" + refused + "`, which is not a derived member of the form");
+            report(
+                path + "/derive",
+                // NOLINTNEXTLINE(performance-inefficient-string-concatenation): builds one refusal message from five pieces, once, on the error path
+                "the reply of `" + derive + "` names `" + refused + "`, which is not a derived member of the form");
         }
     };
     element.form->deriveWith(std::move(options));
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): lowers a form: its fields, collections, actions and derives in document order, each reading the form state before
 Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     forms::FormSession* const form = element == nullptr ? nullptr : element->form.get();
     if (form == nullptr) {
@@ -8750,6 +8773,7 @@ void ScreenCore::gridOptions(DocNode const& part, LowerCtx const& ctx, GridOptio
     DetachedLower const detached = detachedLower(ctx);
     std::string_view const enter = part.name("enterMoves");
     options.enterMoves =
+        // NOLINTNEXTLINE(readability-avoid-nested-conditional-operator): a three-way map of the enterMoves text to the enum
         enter == "right" ? EnterMoves::Right : (enter == "none" ? EnterMoves::None : EnterMoves::Down);
     options.walk = part.name("walk") == "columns" ? Walk::Columns : Walk::Rows;
     options.appendRows = part.flag("appendRows");
@@ -8868,6 +8892,7 @@ Node ScreenCore::lowerFixedGrid(DocNode const& node, LowerCtx const& ctx, Elemen
             Bindings bindings = live.bindings != nullptr ? *live.bindings : Bindings{};
             if (row != nullptr) {
                 Value const record = gridRowRecord(*row);
+                // NOLINTNEXTLINE(performance-no-automatic-move): the binding's read runs on every evaluation and each returns a copy of the captured record, so the capture stays const
                 bindings.push_back(Binding{.name = "row", .read = [record] { return record; }});
             }
             return std::pair{evalIn(*live.scope, &bindings, expr), live.scope->formatting()};
@@ -8878,6 +8903,7 @@ Node ScreenCore::lowerFixedGrid(DocNode const& node, LowerCtx const& ctx, Elemen
             expr != nullptr && expr->kind == ExprKind::Literal ? expr->literal.asInt() : nullptr;
         return literal != nullptr && *literal > 0 ? static_cast<std::size_t>(*literal) : std::size_t{1};
     };
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): lowers one row part of a grid: its cells and options in document order, each reading the row part before
     auto const rowOf = [&](DocNode const& part) {
         ExprPtr const label = part.prop("label");
         std::string const key{part.name("key")};
@@ -9043,6 +9069,7 @@ Node ScreenCore::lowerFixedGrid(DocNode const& node, LowerCtx const& ctx, Elemen
         std::vector<StatusEntry> const offered = held->grid.grid->messageEntries();
         runtime().untracked([&] {
             std::vector<std::pair<StatusEntry, std::function<void()>>> entries;
+            entries.reserve(offered.size());
             for (StatusEntry const& entry : offered) {
                 entries.emplace_back(entry, [held, entryId = entry.id] { held->grid.grid->chooseEntry(entryId); });
             }
@@ -9092,7 +9119,9 @@ Node ScreenCore::formGridTable(DocNode const& part, LowerCtx const& ctx, Element
                          .label = column.label,
                          .locked = false,
                          .kind = edits && !perRow ? detail::columnKindOf(member->kind) : table::ColumnKind::Text});
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): guarded by `at < parts.size()` in the same expression
         config.sortable.push_back(edits && at < parts.size() && parts[at]->flag("sortable"));
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `at >= parts.size()` short-circuits before the index in the same expression
         filterable.push_back(edits && (at >= parts.size() || parts[at]->flag("filterable", true)));
         held->shown.push_back(TableColumn{.id = column.id, .label = column.label, .sortable = config.sortable.back()});
     }
@@ -9121,6 +9150,7 @@ Node ScreenCore::formGridTable(DocNode const& part, LowerCtx const& ctx, Element
     }
     // The slots a mount owns, set again before each mount begins: a mount that ends while it is the latest clears
     // them, and a later lowering of the same grid must find them set.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): sets a mount's slots in one pass; each slot is set from the same held grid and checked against the later mount
     held->setMountSlots = [this, held, filterable] {
         TableConfig& slots = held->config;
         slots.filterTarget = [held, filterable](std::string const& columnId) -> std::optional<FilterTarget> {
@@ -9228,6 +9258,7 @@ Node ScreenCore::formGridTable(DocNode const& part, LowerCtx const& ctx, Element
                 }
                 Value const record = gridRowRecord(row);
                 Bindings bindings = live.bindings != nullptr ? *live.bindings : Bindings{};
+                // NOLINTNEXTLINE(performance-no-automatic-move): the binding's read runs on every evaluation and each returns a copy of the captured record, so the capture stays const
                 bindings.push_back(Binding{.name = "row", .read = [record] { return record; }});
                 return evalIn(*live.scope, &bindings, groupBy);
             });
@@ -9324,6 +9355,7 @@ Node ScreenCore::formGridTable(DocNode const& part, LowerCtx const& ctx, Element
         std::vector<StatusEntry> const offered = held->grid.grid->messageEntries();
         runtime().untracked([&] {
             std::vector<std::pair<StatusEntry, std::function<void()>>> entries;
+            entries.reserve(offered.size());
             for (StatusEntry const& entry : offered) {
                 entries.emplace_back(entry, [held, entryId = entry.id] { held->grid.grid->chooseEntry(entryId); });
             }
@@ -9334,6 +9366,7 @@ Node ScreenCore::formGridTable(DocNode const& part, LowerCtx const& ctx, Element
 }
 
 // The table node of a grid kept in @p element: its status line, its configuring and its columns' filter buttons.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): builds the grid's table node: its status line, its configuring and each column's filter button in order
 Node ScreenCore::gridTableNode(DocNode const& part, LowerCtx const& ctx, ElementState& element) {
     GridTable* const held = element.gridTable.get();
     TableOptions table;
@@ -10188,14 +10221,17 @@ constexpr std::string_view kUnreadable = "The value could not be read";
             std::chrono::duration_cast<std::chrono::seconds>(instant->value.time_since_epoch()).count()};
     }
     if (std::string const* const text = value->asString()) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `text->size() == 10` is the previous operand of this condition, so indices 4 and 7 are in range
         if (column.info.kind == ColumnKind::Date && text->size() == 10 && (*text)[4] == '-' && (*text)[7] == '-') {
             int year = 0;
             unsigned month = 0;
             unsigned day = 0;
             char const* const cursor = text->data();
+            // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic): from_chars takes a pointer range; the ranges are fixed offsets into the 10-character `YYYY-MM-DD` text the size and separator checks above validated
             bool const read = std::from_chars(cursor, cursor + 4, year).ec == std::errc{} &&
                               std::from_chars(cursor + 5, cursor + 7, month).ec == std::errc{} &&
                               std::from_chars(cursor + 8, cursor + 10, day).ec == std::errc{};
+            // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
             std::chrono::year_month_day const date{std::chrono::year{year}, std::chrono::month{month},
                                                    std::chrono::day{day}};
             if (read && date.ok()) {
@@ -10210,12 +10246,15 @@ constexpr std::string_view kUnreadable = "The value could not be read";
 /// What a rows table's column shows for a value, by the kind the value has: a rows table declares no kinds.
 [[nodiscard]] table::TableColumn columnFor(Value const& value, table::ColumnDisplay const& display) {
     using table::ColumnKind;
-    ColumnKind const kind = value.asInt() != nullptr         ? ColumnKind::Integer
-                            : value.asDecimal() != nullptr   ? ColumnKind::Decimal
-                            : value.asQuantity() != nullptr  ? ColumnKind::Decimal
-                            : value.asBool() != nullptr      ? ColumnKind::Bool
-                            : value.asTimestamp() != nullptr ? ColumnKind::DateTime
-                                                             : ColumnKind::Text;
+    ColumnKind const kind =
+        value.asInt() != nullptr ? ColumnKind::Integer
+        // NOLINTBEGIN(readability-avoid-nested-conditional-operator): a flat pick over the value's kind, one test per line in the order the kinds are tried
+        : value.asDecimal() != nullptr   ? ColumnKind::Decimal
+        : value.asQuantity() != nullptr  ? ColumnKind::Decimal
+        : value.asBool() != nullptr      ? ColumnKind::Bool
+        : value.asTimestamp() != nullptr ? ColumnKind::DateTime
+                                         : ColumnKind::Text;
+    // NOLINTEND(readability-avoid-nested-conditional-operator)
     return table::TableColumn{.info = {.id = {}, .kind = kind}, .display = display};
 }
 
@@ -10228,6 +10267,7 @@ struct CellExprs {
 
 }  // namespace
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): lowers one `rows` table: its columns, groups, summaries, selection and options in document order, each reading the element and config the previous set up
 Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     ExprPtr const rowsExpr = node.prop("rows");
     if (!rowsExpr) {
@@ -10388,6 +10428,7 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     }
     // A column's display parts, read once; a rows table's columns have no other source of them.
     std::vector<std::optional<table::ColumnDisplay>> displays;
+    displays.reserve(cells.size());
     for (DocNode const* const column : cells) {
         displays.push_back(
             column != nullptr && givesDisplay(*column)
@@ -11197,6 +11238,7 @@ void loadStateAndViews(TableStates& states, table::TableStateKey const& key, Tab
 
 }  // namespace
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): builds a rows table: the engine, the columns, the sort, the filter and the state wiring in order, each taking the engine and config before
 std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std::shared_ptr<Bindings const> bindings,
                                                      bool persisted) {
     DocNode const& node = *element.node;
@@ -11342,9 +11384,11 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
         auto const parts = declared.partList("columns");
         for (std::size_t at = 0; at < parts.size() && at < infos.size(); ++at) {
             table::TableColumn column;
+            // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `at` runs below `parts.size()`, and `infos` was built in step with `parts`
             column.info = infos[at];
             column.label = parts[at]->id;
             column.sortable = parts[at]->flag("sortable");
+            // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
             column.filterable = true;
             description.columns.push_back(std::move(column));
         }
@@ -11399,6 +11443,7 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
         table.bump();
         if (table.engine->restoring()) {
             // The page stays empty while the rows are held back; the mount draws the engine's rows as placeholders.
+            // NOLINTNEXTLINE(readability-ambiguous-smartptr-reset-call): `reset()` here is the TableRows interface's own, which empties the page; it is not the smart pointer's
             table.rows->reset();
         } else {
             // Shown now, from the view the change made, so the change reaches the mount as it is.
@@ -11582,6 +11627,7 @@ void ScreenCore::rowsTableChanged(RowsTable& table) {
     }
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): applies a stored state: layout, sort, filters and groups each fit to the description and report their own refusal, in that order
 void ScreenCore::storedRowsState(RowsTable& table, std::optional<std::string> const& json,
                                  std::string const& failure) {
     DocNode const& node = *table.node;
@@ -11620,7 +11666,7 @@ void ScreenCore::storedRowsState(RowsTable& table, std::optional<std::string> co
         table::fitState(std::move(*start), table.config.description().value_or(table::TableDescription{}), fitted);
     // A table started from the default view, with nothing stored, holds it as its state: the next change saves on
     // top of it rather than over nothing.
-    if (!json) {
+    if (!json && table.states != nullptr && table.stateKey) {
         table.states->start(*table.stateKey, document);
     }
     if (element.sortBound == nullptr && document.sort) {
@@ -11691,6 +11737,7 @@ struct CollectionRecords {
 
 }  // namespace
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): wires a collection's table to its model: rows, state, runs and actions in the order each needs the one before
 void ScreenCore::wireCollectionTable(ElementState& element, std::string modelType) {
     forms::CollectionSession& collection = *element.collection;
     element.rowsTable = std::make_unique<RowsTable>(runtime());
@@ -11880,7 +11927,7 @@ void ScreenCore::storedCollectionState(RowsTable& table, std::optional<std::stri
         table::fitState(std::move(*start), table.config.description().value_or(table::TableDescription{}), fitted);
     // A table started from the default view, with nothing stored, holds it as its state: the next change saves on
     // top of it rather than over nothing.
-    if (!json) {
+    if (!json && table.states != nullptr && table.stateKey) {
         table.states->start(*table.stateKey, document);
     }
     if (element.sortBound == nullptr && document.sort) {
@@ -11915,6 +11962,7 @@ void ScreenCore::storedCollectionState(RowsTable& table, std::optional<std::stri
     }));
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): lowers a collection's rows table: columns, engine, selection, filters and options in document order
 Node ScreenCore::lowerCollectionRows(ElementState& element, LowerCtx const& ctx,
                                      std::function<Node(std::string const&)> const& buttons) {
     RowsTable& table = *element.rowsTable;
@@ -12092,6 +12140,7 @@ struct ViewColumn {
 /// canonical unit, at `x-decimalPlaces`, and each `x-unitAlternatives` entry (`id`, `display`, `decimals`, and
 /// `num`/`den`, its factor to the canonical unit, 1 when absent), all in one dimension named by the canonical unit's
 /// id. An alternative whose factor is zero or less is left out and said in @p problems.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): reads each `v-columns` entry's canonical unit and its alternatives into one dimension, in the order the schema lists them
 std::vector<table::UnitInfo> viewUnitsOf(Json::object_t const& fields, std::vector<std::string>& problems) {
     std::vector<table::UnitInfo> out;
     auto const member = [](Json::object_t const& object, std::string_view name) -> Json const* {
@@ -12427,6 +12476,7 @@ public:
         drop(left);
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): handles a settled run: its refusal, field errors, failed rows and replies in the order the run reports them
     void settled(RunSettled const& run) override {
         bool const held = _held.erase(run.run) > 0;
         if (_model->rows != nullptr) {
@@ -12645,6 +12695,7 @@ private:
     // from that key to the new one: the selection, the retained rows and the states. Every `from` goes to the mount,
     // which moves its focus and highlight by its own keys: focus the action's own event already moved off the old row
     // is held only there. @p moved gets each old key moved here.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): applies a reply: failed rows are marked, then each changed row with a `from` moves what the session holds; the second step reads the first's marks
     void applyReply(RunSettled const& run, std::vector<Key>& moved) {
         auto const& catalog = _core->session.options().catalog;
         std::optional<ActionInfo> const info = catalog.action ? catalog.action(run.action) : std::nullopt;
@@ -12764,6 +12815,7 @@ std::string editFailureOf(std::exception_ptr const& error) {
 // succeeded. A changed row with a `from` moves what the table holds by key. A success whose replies name the row as
 // changed waits for the change event's refetch; one that names it nowhere changed nothing the window would fetch, so
 // the row counts as fetched at once.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): sends one row commit: a call per cell and per action, settled once every call has, merging each call's outcome in order
 void sendRowEdit(ScreenCore& core, ModelTable& model, table::RowEditRequest const& request, table::RowEditDone done) {
     table::TableDescription const* const description = model.window->description();
     std::string const key = std::visit(
@@ -12805,9 +12857,11 @@ void sendRowEdit(ScreenCore& core, ModelTable& model, table::RowEditRequest cons
         }
     }
     for (auto const& [action, values] : rowEdits) {
-        calls.push_back(Call{.action = action,
-                             .body = R"({"key":)" + key + R"(,"values":{)" + values + "}}",
-                             .names = rowNames[action]});
+        calls.push_back(Call{
+            .action = action,
+            // NOLINTNEXTLINE(performance-inefficient-string-concatenation): builds one request body from four pieces, once per call, on a path that waits on the network
+            .body = R"({"key":)" + key + R"(,"values":{)" + values + "}}",
+            .names = rowNames[action]});
     }
     if (!calls.empty() && !model.calls) {
         refused.push_back(table::FieldError{.column = {}, .message = "This table cannot save edits"});
@@ -12906,6 +12960,7 @@ void sendRowEdit(ScreenCore& core, ModelTable& model, table::RowEditRequest cons
 
 }  // namespace
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): wires a model's table: rows, runs, states, selection and actions, each taking the config and element the previous stage set up
 void ScreenCore::wireModelTable(ElementState& element) {
     DocNode const& node = *element.node;
     RtScope& scope = *element.scope;
@@ -13052,6 +13107,7 @@ void ScreenCore::wireModelTable(ElementState& element) {
             model.marksRevision.set(model.marksRevision.peek() + 1);
             fitViewSelection(*this, element, model);
             if (model.runs != nullptr) {
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast): `model.runs` is created as a `TableRuns` by this table's own wiring, so the downcast cannot fail
                 static_cast<TableRuns&>(*model.runs).rowsChanged();
             }
         }),
@@ -13100,6 +13156,7 @@ void ScreenCore::wireModelTable(ElementState& element) {
         }));
     };
     // A literal sort is the default a stored one replaces; any other expression binds it.
+    // NOLINTNEXTLINE(readability-simplify-boolean-expr): the literal-null test is kept as written so the comment above it reads as the condition
     if (ExprPtr const sort = node.prop("sort"); sort && !(sort->kind == ExprKind::Literal && sort->literal.isNull())) {
         if (sort->kind == ExprKind::Literal) {
             element.sort.set(sort->literal);
@@ -13236,6 +13293,7 @@ void ScreenCore::wireModelTable(ElementState& element) {
                       });
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): applies a stored table state to a model table: layout, sort, filter and groups each fit to the description and report their own refusal
 void ScreenCore::storedTableState(ElementState& element, std::optional<std::string> const& json,
                                   std::string const& failure) {
     ModelTable& model = *element.modelTable;
@@ -13287,7 +13345,7 @@ void ScreenCore::storedTableState(ElementState& element, std::optional<std::stri
     }
     // A table started from the default view, with nothing stored, holds it as its state: the next change saves on
     // top of it rather than over nothing.
-    if (!json) {
+    if (!json && model.states != nullptr && model.stateKey) {
         model.states->start(*model.stateKey, document);
     }
     if (element.sortBound == nullptr && document.sort) {
@@ -13541,6 +13599,7 @@ void ScreenCore::tableMessage(ElementState& table, std::string text,
     model->entries.set(std::move(shown));
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): derives each point of a table element in document order, each reading the element's config and engine
 void ScreenCore::tablePoints(ElementState& table) {
     ModelTable const* const model = table.modelTable.get();
     // A table over `rows` that keeps a state shows its layout at a `columns` point and its saved view's name at a
@@ -13641,7 +13700,8 @@ void ScreenCore::tableSaveFailed(table::TableStateKey const& key, table::SaveRes
     std::vector<ElementState*> tables;
     for (ElementState* const element : modelTables) {
         std::optional<table::TableStateKey> const* const held =
-            element->modelTable != nullptr  ? &element->modelTable->stateKey
+            element->modelTable != nullptr ? &element->modelTable->stateKey
+            // NOLINTNEXTLINE(readability-avoid-nested-conditional-operator): a two-way fall-through over the element's table kinds, in the order they are wired
             : element->rowsTable != nullptr ? &element->rowsTable->stateKey
                                             : nullptr;
         if (held != nullptr && *held == key) {
@@ -13714,9 +13774,9 @@ void ScreenCore::modelLayoutColumns(ElementState& element) const {
     config.version.set(config.version.peek() + 1);
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity): the sort, the layout, then the menus that reach both.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity, readability-function-size): the sort, the layout, then the menus that reach both; each option wires a handler that reads the same config and nodes
 Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableOptions& options,
-                                std::shared_ptr<void const> keep) {
+                                std::shared_ptr<void const> const& keep) {
     ElementState& element = *config.element;
     DocNode const& node = *element.node;
     // This mount's columns: a new description mounts the table again, with its own.
@@ -13760,6 +13820,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
     // A copy: the selected rows in view order by the visible columns in layout order, or with no row selected the
     // focused cell alone; over `maxCopyRows` keys it is refused and nothing is copied. The rows say how each cell
     // shows; an unloaded cell is copied as empty and counted in the message.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): a copy: the selected rows in view order by the visible columns in layout order, or the focused cell alone, refusing past the key limit
     auto const copy = [this, &config, &element, layoutHeld, keep, slots = config.mountSlots(),
                        scope = ctx.scope](bool headers) {
         static_cast<void>(keep);
@@ -14128,11 +14189,13 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             config.message(std::string{tableText::kHeaderBusy});
             return true;
         };
+        // NOLINTNEXTLINE(bugprone-exception-escape): copying a `Prop` throws `bad_variant_access` only from a valueless source, which `copyOf` documents and nothing here builds
         options.onSort = [refused, sort = std::move(options.onSort)](std::size_t index, HeaderClick click) {
             if (!refused()) {
                 sort(index, click);
             }
         };
+        // NOLINTNEXTLINE(bugprone-exception-escape): copying a `Prop` throws `bad_variant_access` only from a valueless source, which `copyOf` documents and nothing here builds
         options.onColumnMove = [refused, move = std::move(options.onColumnMove)](std::size_t column,
                                                                                  std::size_t position) {
             if (!refused()) {
@@ -14140,6 +14203,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             }
         };
         if (options.onColumnResize) {
+            // NOLINTNEXTLINE(bugprone-exception-escape): copying a `Prop` throws `bad_variant_access` only from a valueless source, which `copyOf` documents and nothing here builds
             options.onColumnResize = [refused, resize = std::move(options.onColumnResize)](std::size_t column,
                                                                                            std::optional<int> units) {
                 if (!refused()) {
@@ -14147,11 +14211,13 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 }
             };
         }
+        // NOLINTNEXTLINE(bugprone-exception-escape): copying a `Prop` throws `bad_variant_access` only from a valueless source, which `copyOf` documents and nothing here builds
         options.onFilter = [refused, filter = std::move(options.onFilter)](std::size_t column) {
             if (!refused()) {
                 filter(column);
             }
         };
+        // NOLINTNEXTLINE(bugprone-exception-escape): copying a `Prop` throws `bad_variant_access` only from a valueless source, which `copyOf` documents and nothing here builds
         options.onGroupFilter = [refused, filter = std::move(options.onGroupFilter)](std::size_t group) {
             if (!refused()) {
                 filter(group);
@@ -14164,6 +14230,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
     // cell's operand, or `isEmpty` on an empty cell, and are disabled on a cell not loaded or not readable, and while
     // the header is disabled, when one chosen anyway is refused as the header's gestures are.
     if (config.heldCell) {
+        // NOLINTNEXTLINE(bugprone-exception-escape, readability-function-cognitive-complexity): builds the cell menu: copy, filter and group entries each gated by the column's kind and the header's state, in menu order; copying a `Prop` throws `bad_variant_access` only from a valueless source, which `copyOf` documents and nothing here builds
         options.cellMenu = [this, ctx, &config, &node, columns, filterable, copy, refilter, filtersNow, keep,
                             headerOn](Key const& key, std::size_t column) {
             static_cast<void>(keep);
@@ -14190,6 +14257,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 return item;
             };
             auto const filtering = [&config, headerOn](std::function<void()> run) {
+                // NOLINTNEXTLINE(bugprone-exception-escape): copying a `Prop` throws `bad_variant_access` only from a valueless source, which `copyOf` documents and nothing here builds
                 return [&config, headerOn, run = std::move(run)] {
                     if (!headerOn()) {
                         config.message(std::string{tableText::kHeaderBusy});
@@ -14262,8 +14330,10 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 Value const* const field = record.field(columnId);
                 return field == nullptr ? Value{} : *field;
             }();
+            // NOLINTNEXTLINE(performance-no-automatic-move): the binding's read runs on every evaluation and each returns a copy of the captured record, so the capture stays const
             bindings->push_back(Binding{.name = "row", .read = [record] { return record; }});
             bindings->push_back(Binding{.name = "column", .read = [columnId] { return Value{columnId}; }});
+            // NOLINTNEXTLINE(performance-no-automatic-move): the binding's read runs on every evaluation and each returns a copy of the captured value, so the capture stays const
             bindings->push_back(Binding{.name = "value", .read = [value] { return value; }});
             std::vector<MenuItem> own =
                 menuItems(parts, LowerCtx{.scope = scope, .bindings = std::move(bindings), .boundary = ctx.boundary});
@@ -14331,9 +14401,11 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         input.currentShared = config.viewShared;
         input.defaultOnMount = views->own().defaultOnMount;
         input.shares = views->shares();
-        table::SavedView const* const current = !config.savedView   ? nullptr
-                                                : config.viewShared ? views->sharedView(*config.savedView)
-                                                                    : views->ownView(*config.savedView);
+        table::SavedView const* const current =
+            !config.savedView ? nullptr
+            // NOLINTNEXTLINE(readability-avoid-nested-conditional-operator): a three-way pick: none, the shared view or the user's own view
+            : config.viewShared ? views->sharedView(*config.savedView)
+                                : views->ownView(*config.savedView);
         if (current != nullptr) {
             table::StateDocument const view = fittedView(*current);
             table::SavedView const now = arrangementNow();
@@ -14576,6 +14648,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         });
     };
     // While the header is disabled the table's menu offers copy alone; the mount greys a column's menu itself.
+    // NOLINTNEXTLINE(bugprone-exception-escape): copying a `Prop` throws `bad_variant_access` only from a valueless source, which `copyOf` documents and nothing here builds
     options.menu = [entriesOf, headerOn](std::optional<std::size_t> column) {
         std::vector<TableMenuEntry> entries = entriesOf(column);
         if (!column && !headerOn()) {
@@ -14587,6 +14660,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         }
         return menuEntries(entries);
     };
+    // NOLINTNEXTLINE(bugprone-exception-escape): copying a `Prop` throws `bad_variant_access` only from a valueless source, which `copyOf` documents and nothing here builds
     options.onMenu = [&config, &menu, entriesOf, sortBy, arrange, columns, openColumn, openGroup, refilter, copy,
                       headerOn, viewCommand](std::optional<std::size_t> column, std::vector<std::size_t> const& path) {
         config.touch();
@@ -14843,7 +14917,7 @@ Node ScreenCore::lowerModelTable(DocNode const& node, LowerCtx const& ctx, Eleme
     return ui::column(std::move(wrapper));
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity): the columns, the cells, the row's parts and the handlers.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity, readability-function-size): the columns, the cells, the row's parts and the handlers; each stage hands the next the same element, options and config
 Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementState& element) {
     ModelTable& model = *element.modelTable;
     TableOptions options;
@@ -14983,6 +15057,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     }
     std::vector<std::string> const companions = table::companionColumns(*description);
     table::CompanionOverrides overrides{.tone = {}, .tooltip = {}, .rowTone = node.prop("rowTone") != nullptr};
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): adds one described column: its kind, layout, display, filter and edit parts each read the same part and description
     auto const add = [&](table::TableColumn const& described, DocNode const* part) {
         TableColumn column{.id = described.info.id,
                            .label = described.label.empty() ? described.info.id : described.label,
@@ -15108,6 +15183,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         }
     }
     std::vector<std::string> ids;
+    ids.reserve(columns.size());
     for (TableColumn const& column : columns) {
         ids.push_back(column.id);
     }
@@ -15337,6 +15413,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     options.bands = node.partList("bands").empty() ? description->bands : bandsOf(node.partList("bands"));
     if (!options.bands.empty()) {
         std::vector<std::string> described;
+        described.reserve(description->columns.size());
         for (table::TableColumn const& column : description->columns) {
             described.push_back(column.info.id);
         }
@@ -15355,9 +15432,11 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     }
     std::string const mode =
         node.prop("selectionMode") ? textOf(once(ctx, node.prop("selectionMode")), format) : std::string{};
-    options.selectionMode = mode == "single"     ? SelectionMode::Single
-                            : mode == "multiple" ? SelectionMode::Multiple
-                                                 : SelectionMode::None;
+    options.selectionMode =
+        mode == "single" ? SelectionMode::Single
+        // NOLINTNEXTLINE(readability-avoid-nested-conditional-operator): a three-way map of the mode text to the enum
+        : mode == "multiple" ? SelectionMode::Multiple
+                             : SelectionMode::None;
     options.selection = slotProp<std::vector<Key>>([&element] {
         std::vector<Key> keys;
         if (Value const itemsValue = tableSelection(element); ValueList const* const items = itemsValue.asList()) {
@@ -15454,6 +15533,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     // A range the backend reports as view rows: its keys come from the rows, fetched as pages of keys alone where the
     // window does not hold them, and select as the gesture says. Past `maxRangeRows` it is refused and selects
     // nothing.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): resolves a reported range to keys, fetching pages of keys where the window lacks them, and applies the gesture; the paths share the range state
     options.onSelectRange = [this, ctx, &element, &model, select](std::size_t anchor, std::size_t focus,
                                                                   SelectionChange change) {
         tableGesture(element);
@@ -15688,6 +15768,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                       done(std::move(gathered));
                   });
     };
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): the gather of a model table: it formats each row's cells by the visible columns with the units, registry and places; the steps share those
     model.config.gather = [&model, shown, displayUnits, registry, headers, textOfCell, scope = ctx.scope](
                               std::vector<Key> keys, std::vector<std::string> const& columnIds, CopyDone const& done) {
         std::vector<std::size_t> places;
@@ -15793,6 +15874,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
 // cells the field of its edit action, read from the catalog's schema, read-only where the principal may not run it.
 // The grid's controller owns its source and what follows the table for it: the status line's notices, the rows'
 // busy and failed states, and the layout the walk follows. Null for a table with no editable column.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): builds an editable model table: each editable column's field, its read-only state and the controller's ownership of source and status line
 std::shared_ptr<GridController> ScreenCore::editableModelTable(
     DocNode const& node, LowerCtx const& ctx, ElementState& element, table::TableDescription const& description,
     std::vector<table::TableColumn> const& shown, TableSource& source, TableOptions const& options,
@@ -16401,6 +16483,7 @@ RowRecord gridHeading(GridTable& held, std::size_t ordinal) {
     }
     auto const [run, occurrence] = held.runOrder.at(ordinal);
     std::span<Value const> const records = held.grid.source->view().source().runRecords();
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): guarded by `run < records.size()` in the same expression
     Value record = run < records.size() ? records[run] : Value{};
     Value const* const key = record.field(kGroupHeadingField);
     std::string text = key != nullptr && key->asString() != nullptr ? *key->asString() : std::string{"\x1Fgroup"};
@@ -16440,6 +16523,7 @@ ValueList rowsSummaryScope(RowsTable const& table, Value const& record) {
     TableView const& view = table.view->get();
     Value const* const run = record.field(kSummaryRunField);
     if (run == nullptr || run->asInt() == nullptr) {
+        // NOLINTNEXTLINE(modernize-return-braced-init-list): the explicit type states that the rows are copied from the iterator range into a ValueList
         return ValueList(view.rows.begin(), view.rows.end());
     }
     auto const ordinal = static_cast<std::size_t>(std::max<std::int64_t>(*run->asInt(), 0));
@@ -16491,6 +16575,7 @@ std::string summaryTestId(Value const& record, std::string const& column) {
 
 }  // namespace
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static): a ScreenCore member so the summary lookup stays beside the other value readers that use the core's state
 std::optional<Value> ScreenCore::summaryValue(DocNode const& table, Value const& record, std::string const& column,
                                               LowerCtx const& ctx, ValueList rows) {
     DocNode const* const part = summaryPartOf(table, record);

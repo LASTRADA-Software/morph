@@ -151,6 +151,7 @@ struct LevelRow {
 inline std::vector<LevelRow> levelRows(std::int64_t count) {
     std::vector<LevelRow> out;
     for (std::int64_t i = 0; i < count; ++i) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `out` is a fixture list built once; sizing it first would not change what the case checks
         out.push_back(LevelRow{.id = i, .name = "n" + std::to_string(i), .qty = 10 * i});
     }
     return out;

@@ -101,6 +101,7 @@ Rows must(std::expected<Rows, TableError> const& result) {
 std::vector<FilterEntry> eqEntries(std::vector<std::string> const& values) {
     std::vector<FilterEntry> out;
     for (auto const& value : values) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `out` is a fixture list built once; sizing it first would not change what the case checks
         out.push_back(eq(value));
     }
     return out;
@@ -541,6 +542,7 @@ TEST_CASE("table: the filter is sound under every completion", "[table][filter][
     std::array<std::string, 3> const ids{"i", "t", "b"};
     std::vector<ColumnInfo> columns;
     for (std::size_t c = 0; c < kinds.size(); ++c) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `columns` is a fixture list built once; sizing it first would not change what the case checks
         columns.push_back(tabletest::levelCol(ids.at(c), kinds.at(c), "slow"));
     }
     // The view, sorted, and the undecided rows of `rows` under `spec`, as source rows.
@@ -660,6 +662,7 @@ TEST_CASE("table: a oneOf of any size is one lookup a cell", "[table][filter]") 
     auto const source = tabletest::column(ColumnKind::Text, std::move(cells));
     std::vector<std::string> members;
     for (int value = 0; value < 10'000; ++value) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `members` is a fixture list built once; sizing it first would not change what the case checks
         members.push_back("v" + std::to_string(value));
     }
     Services const services;
@@ -704,6 +707,7 @@ TEST_CASE("table: oneOf is the OR of its eq entries over random tables", "[table
                       "2026-01-08"}},
         {.kind = ColumnKind::Bool, .cells = {true, false}, .operands = {"true", "false"}},
     };
+    // NOLINTNEXTLINE(bugprone-random-generator-seed, cert-msc32-c, cert-msc51-cpp): the fixed seed 23 replays the same sequence on every run, so a failing case reproduces
     std::mt19937 rng{23};
     for (int table = 0; table < 200; ++table) {
         auto const& kind = kinds.at(static_cast<std::size_t>(table) % kinds.size());
@@ -722,6 +726,7 @@ TEST_CASE("table: oneOf is the OR of its eq entries over random tables", "[table
         std::vector<std::string> values;
         auto const count = 1 + (rng() % 6);
         for (std::size_t i = 0; i < count; ++i) {
+            // NOLINTNEXTLINE(performance-inefficient-vector-operation): `values` is a fixture list built once; sizing it first would not change what the case checks
             values.push_back(kind.operands.at(rng() % kind.operands.size()));
         }
         REQUIRE(f.by(on("c", {oneOf(values)})));
@@ -889,6 +894,7 @@ TEST_CASE("groups: three-valued over unloaded cells", "[table][filter][groups]")
         auto const& c = cases[at];
         std::vector<Cell> row;
         for (auto const* const cell : c.cells) {
+            // NOLINTNEXTLINE(performance-inefficient-vector-operation): `row` is a fixture list built once; sizing it first would not change what the case checks
             row.push_back(std::string_view{cell} == "U" ? Cell{Unloaded{}} : Cell{std::string{cell}});
         }
         auto const source = companySource({row}, true);
@@ -957,6 +963,7 @@ TEST_CASE("groups: more than 32 entries on a side is refused where the filter co
 TEST_CASE("groups: a declared group is checked where the columns are read", "[table][filter][groups]") {
     std::vector<ColumnInfo> columns;
     for (int i = 0; i < 18; ++i) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `columns` is a fixture list built once; sizing it first would not change what the case checks
         columns.push_back(tabletest::col("t" + std::to_string(i), ColumnKind::Text));
     }
     columns.push_back(tabletest::col("n", ColumnKind::Integer));
@@ -967,6 +974,7 @@ TEST_CASE("groups: a declared group is checked where the columns are read", "[ta
     };
     std::vector<std::string> seventeen;
     for (int i = 0; i < 17; ++i) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `seventeen` is a fixture list built once; sizing it first would not change what the case checks
         seventeen.push_back("t" + std::to_string(i));
     }
     std::vector<std::vector<ColumnGroupInfo>> const malformed{
@@ -1053,6 +1061,7 @@ FilterEntry randomGroupEntry(std::mt19937& rng) {
             std::vector<std::string> members;
             auto const count = 1 + (rng() % 3);
             for (std::size_t i = 0; i < count; ++i) {
+                // NOLINTNEXTLINE(performance-inefficient-vector-operation): `members` is a fixture list built once; sizing it first would not change what the case checks
                 members.push_back(letter());
             }
             return oneOf(std::move(members));
@@ -1128,6 +1137,7 @@ std::vector<std::vector<Cell>> completions(std::vector<Cell> const& row) {
 std::shared_ptr<VectorSource> groupColumnsSource(std::size_t k, std::vector<std::vector<Cell>> rows) {
     std::vector<ColumnInfo> columns;
     for (std::size_t c = 0; c < k; ++c) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `columns` is a fixture list built once; sizing it first would not change what the case checks
         columns.push_back(tabletest::levelCol("c" + std::to_string(c), ColumnKind::Text, "slow"));
     }
     return tabletest::makeSource(std::move(columns), std::move(rows));
@@ -1189,6 +1199,7 @@ bool oracle(Oracle const& definition, std::vector<Cell> const& row) {
         // Try every injective assignment of entries to columns.
         std::vector<std::size_t> columns(row.size());
         std::ranges::iota(columns, std::size_t{0});
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-do-while): the permutation walk must run its body once before the first permutation step, which a `for` would reorder
         do {
             bool all = true;
             for (std::size_t e = 0; e < filter.include.size() && all; ++e) {
@@ -1204,7 +1215,9 @@ bool oracle(Oracle const& definition, std::vector<Cell> const& row) {
     for (auto const& column : hits) {
         bool const any = std::ranges::any_of(column, [](bool hit) { return hit; });
         bool const all = std::ranges::all_of(column, [](bool hit) { return hit; });
-        satisfied += (filter.combine == Combine::All ? all : any) ? 1 : 0;
+        if (filter.combine == Combine::All ? all : any) {
+            ++satisfied;
+        }
     }
     switch (filter.match.kind) {
         case ColumnCount::Kind::All:
@@ -1223,6 +1236,7 @@ bool oracle(Oracle const& definition, std::vector<Cell> const& row) {
 
 // Mutation: Together decided as atLeast with n = the entry count.
 TEST_CASE("groups: invariant 24 over random tables", "[table][filter][groups]") {
+    // NOLINTNEXTLINE(bugprone-random-generator-seed, cert-msc32-c, cert-msc51-cpp): the fixed seed 24 replays the same sequence on every run, so a failing case reproduces
     std::mt19937 rng{24};
     for (int table = 0; table < 300; ++table) {
         auto const k = 2 + (rng() % 4);
@@ -1250,6 +1264,7 @@ TEST_CASE("groups: invariant 24 over random tables", "[table][filter][groups]") 
 // Gate G7's oracle. Mutation: the known pass reading an unknown column as matching every entry: a Yes row has a
 // failing completion.
 TEST_CASE("groups: invariant 1 over random completions", "[table][filter][groups]") {
+    // NOLINTNEXTLINE(bugprone-random-generator-seed, cert-msc32-c, cert-msc51-cpp): the fixed seed 1 replays the same sequence on every run, so a failing case reproduces
     std::mt19937 rng{1};
     for (int table = 0; table < 200; ++table) {
         std::vector<std::vector<Cell>> rows(30);
@@ -1279,6 +1294,7 @@ TEST_CASE("groups: invariant 1 over random completions", "[table][filter][groups
 
 // Gate G7. Mutation: Together's wildcard pass skipped (No instead of Unknown): `undecided` is below the oracle's.
 TEST_CASE("groups: undecided rows are the three-valued rule's", "[table][filter][groups]") {
+    // NOLINTNEXTLINE(bugprone-random-generator-seed, cert-msc32-c, cert-msc51-cpp): the fixed seed 7 replays the same sequence on every run, so a failing case reproduces
     std::mt19937 rng{7};
     std::vector<std::vector<Cell>> rows(1000);
     for (auto& row : rows) {
@@ -1351,6 +1367,7 @@ TEST_CASE("groups: undecided rows are the three-valued rule's", "[table][filter]
 // started again from no assignment for each entry (136 searches on a covered row, not 16).
 TEST_CASE("groups: a row costs k lookups and at most one augmentation an entry", "[table][filter][groups]") {
     constexpr std::uint32_t kRows = 1000;
+    // NOLINTNEXTLINE(bugprone-random-generator-seed, cert-msc32-c, cert-msc51-cpp): the fixed seed 5 replays the same sequence on every run, so a failing case reproduces
     std::mt19937 rng{5};
     std::vector<ColumnInfo> columns;
     std::vector<std::string> ids;
@@ -1388,6 +1405,7 @@ TEST_CASE("groups: a row costs k lookups and at most one augmentation an entry",
     auto const heldSetCounters = counted({.columns = ids, .include = {oneOf({"v0", "v1"})}});
     std::vector<FilterEntry> sixteen;
     for (int e = 0; e < 16; ++e) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `sixteen` is a fixture list built once; sizing it first would not change what the case checks
         sixteen.push_back(eq("v" + std::to_string(e)));
     }
     GroupFilter const together{.columns = ids, .mode = GroupMode::Together, .include = sixteen};

@@ -100,7 +100,7 @@ inline table::TableDescription samplesDescription(int columns) {
     description.id = "samples";
     description.label = "Samples";
     description.key = "id";
-    auto const add = [&description](std::string id, table::ColumnKind kind) {
+    auto const add = [&description](std::string const& id, table::ColumnKind kind) {
         table::TableColumn column;
         column.info = table::ColumnInfo{.id = id, .kind = kind};
         column.label = forms::detail::inferTitle(id);
@@ -1070,6 +1070,7 @@ public:
 ///
 /// The session's catalog, and the one `mount` loads against, look in `extraActions` first, so an action a test adds
 /// before `mount` is known to both. The session's locale is `en`.
+// NOLINTNEXTLINE(misc-multiple-inheritance): the harness adds the extra actions to the rows fixture; both are test helpers that share no state
 struct TableHarness : ExtraActions, RowsFixture {
     /// @brief A harness whose session keeps no table state.
     TableHarness() : TableHarness(nullptr) {}
@@ -1112,6 +1113,7 @@ struct TableHarness : ExtraActions, RowsFixture {
     }
 
     /// @brief Runs everything posted to the owner and to `storeExecutor()` until both are idle.
+    // NOLINTNEXTLINE(bugprone-derived-method-shadowing-base-method): the harness's `settle` also drains the store's executor, which the fixture's does not know of
     void settle() {
         for (int round = 0; round < 100; ++round) {
             std::size_t const ran = owner.runAll() + storeExecutor().runAll();
@@ -1124,6 +1126,7 @@ struct TableHarness : ExtraActions, RowsFixture {
 
     /// @brief Advances the clock, then settles.
     /// @param delta How far.
+    // NOLINTNEXTLINE(bugprone-derived-method-shadowing-base-method): the harness's `advance` settles through its own `settle`, which also drains the store's executor
     void advance(std::chrono::milliseconds delta) {
         scheduler.advance(delta);
         settle();
@@ -1199,6 +1202,7 @@ inline void fireEvent(TableHarness& h, std::string record, std::vector<std::int6
     if (!keys.empty()) {
         std::vector<glz::raw_json> raw;
         for (auto const key : keys) {
+            // NOLINTNEXTLINE(performance-inefficient-vector-operation): `raw` is a fixture list built once; sizing it first would not change what the case checks
             raw.emplace_back(std::to_string(key));
         }
         change.keys = std::move(raw);
@@ -1260,6 +1264,7 @@ inline constexpr std::string_view kStored =
 /// @param text   The document.
 /// @param member The member.
 /// @return The document.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withTableKey(text)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 inline std::string withTableKey(std::string_view text, std::string_view member) {
     auto json = parseJson(text);
     REQUIRE(json.has_value());
@@ -1273,6 +1278,7 @@ inline std::string withTableKey(std::string_view text, std::string_view member) 
 }
 
 /// @brief `kModelTable` sorted by the state `order`, bound: `id` ascending.
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kBoundSort` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
 inline std::string const kBoundSort =
     R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},)"
     R"("state":{"order":{"init":{"lit":[{"column":"id","direction":"asc"}]}}},)"
@@ -1280,12 +1286,14 @@ inline std::string const kBoundSort =
     R"("empty":[{"kind":"text","text":"No samples"}]}})";
 
 /// @brief `kModelTable` with `"persist": false`.
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kNoPersist` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
 inline std::string const kNoPersist =
     R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},)"
     R"("view":{"kind":"table","id":"list","testId":"list","model":"lab","table":"samples","persist":false,)"
     R"("empty":[{"kind":"text","text":"No samples"}]}})";
 
 /// @brief `kModelTable` with `"status": false`.
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kNoStatus` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
 inline std::string const kNoStatus =
     R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},)"
     R"("view":{"kind":"table","id":"list","testId":"list","model":"lab","table":"samples","status":false,)"
@@ -1439,6 +1447,7 @@ inline void replyDescribe(TableHarness& h, std::string json) {
 inline std::vector<std::string> reportsOf(TableHarness const& h) {
     std::vector<std::string> out;
     for (Refusal const& refusal : h.diagnostics) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `out` is a fixture list built once; sizing it first would not change what the case checks
         out.push_back(refusal.reason);
     }
     return out;
@@ -1544,6 +1553,7 @@ inline void change(TableHarness& h, std::vector<std::int64_t> const& keys) {
     if (!keys.empty()) {
         std::vector<glz::raw_json> raw;
         for (auto const key : keys) {
+            // NOLINTNEXTLINE(performance-inefficient-vector-operation): `raw` is a fixture list built once; sizing it first would not change what the case checks
             raw.emplace_back(std::to_string(key));
         }
         record.keys = std::move(raw);
@@ -1832,7 +1842,7 @@ inline table::TableDescription describedFrom(std::string_view rows) {
         }
         table::TableColumn column;
         column.info = table::ColumnInfo{.id = std::string{id}, .kind = morph::ui::detail::inferredKind(counts, votes)};
-        column.label = forms::detail::inferTitle(std::string{id});
+        column.label = forms::detail::inferTitle(id);
         column.sortable = true;
         description.columns.push_back(std::move(column));
     }
@@ -1956,6 +1966,7 @@ inline table::Engine& engineOf(Screen& screen, std::string_view id) {
 /// @param column The column's id.
 /// @param member The member.
 /// @return The document.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withColumnKey(text, column)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 inline std::string withColumnKey(std::string_view text, std::string_view column, std::string_view member) {
     auto json = parseJson(text);
     REQUIRE(json.has_value());
@@ -2295,6 +2306,7 @@ public:
     }
 
     /// @brief The calls, in the order they were made.
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): the store's call log, which the cases read
     std::vector<StoreCall> calls;
 
 private:
@@ -2303,6 +2315,7 @@ private:
         return found == _stored.end() ? std::nullopt : std::optional{found->second};
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `conflictOf(part)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     [[nodiscard]] std::optional<table::SaveResult> conflictOf(std::string const& part,
                                                               std::string const& expected) const {
         auto const stored = storedOf(part);
@@ -2316,6 +2329,7 @@ private:
                                  .reason = {}};
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `store(part, json)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
     table::SaveResult store(std::string const& part, std::string json, std::string const& expected) {
         if (auto conflict = conflictOf(part, expected)) {
             return *conflict;
@@ -2410,6 +2424,7 @@ public:
     }
 
     /// @brief The calls, in order.
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): the store's call log, which the cases read
     std::vector<StoreCall> calls;
 
 private:

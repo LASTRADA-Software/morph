@@ -200,6 +200,7 @@ void setOptionalColorFlags(QObject& theme, ui::ThemeValues const& values, std::v
 
 // The colours, the stale and muted opacities, the background and the dimensions; each property that would not take
 // its value is added to @p unset.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): applies each token group to its property and collects the ones the property refused; the groups share the `unset` list
 void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
     for (auto const& [path, property] : kColorProperties) {
         auto const found = values.colors.find(path);

@@ -915,7 +915,7 @@ TEST_CASE("cell edits: a refusal lands on the cell whose member it names", "[tab
 
 // Mutation: moveRow moving only drafts (the error stays on the old key).
 TEST_CASE("cell edits: drafts are held by key and follow a key change", "[table][edits]") {
-    table::CellEdits edits{[](auto const&, auto) {}};
+    table::CellEdits edits{[](auto const&, auto const&) {}};
     edits.setDraft(table::RowId{std::int64_t{5}}, "count", "abc", "Not a number");
     CHECK(edits.errorCount() == 1);
     edits.moveRow(table::RowId{std::int64_t{5}}, table::RowId{std::int64_t{9}});
@@ -946,7 +946,7 @@ TEST_CASE("cell edits: an edit in flight settles on the row's new key", "[table]
 
 // Mutation: keepColumns dropping drafts but not their errors.
 TEST_CASE("cell edits: a new revision drops drafts of a removed column", "[table][edits]") {
-    table::CellEdits edits{[](auto const&, auto) {}};
+    table::CellEdits edits{[](auto const&, auto const&) {}};
     edits.setDraft(k1, "count", "abc", "Not a number");
     edits.setDraft(k1, "note", "kept", std::nullopt);
     std::vector<std::string> const kept{"label", "note"};

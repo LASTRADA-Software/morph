@@ -82,6 +82,7 @@ public:
         ++folds;
         return _inner.fold(text);
     }
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): `folds` counts the calls the case asserts on, and the fold is const
     mutable std::atomic<std::int64_t> folds{0};
 
 private:
@@ -214,7 +215,7 @@ TEST_CASE("distinct: dates by year, month and day", "[table][distinct]") {
     CHECK(values->values[0].text == "2025-12-31");
 
     auto const stamps =
-        tabletest::column(ColumnKind::DateTime, {(epochDays(2026y / January / 15) * 86'400) + (10 * 3600)}, "t");
+        tabletest::column(ColumnKind::DateTime, {(epochDays(2026y / January / 15) * 86'400L) + (10 * 3600L)}, "t");
     auto const stampDays = distinctValues(*stamps, {}, {.column = "t", .bucket = DateBucket::Day});
     REQUIRE(stampDays);
     REQUIRE(stampDays->values.size() == 1);
@@ -288,6 +289,7 @@ TEST_CASE("distinct: the engine reuses the keys it holds", "[table][distinct]") 
 }
 
 TEST_CASE("distinct: invariant 22 over random tables", "[table][distinct]") {
+    // NOLINTNEXTLINE(bugprone-random-generator-seed, cert-msc32-c, cert-msc51-cpp): the fixed seed 22 replays the same sequence on every run, so a failing case reproduces
     std::mt19937 rng{22};
     auto const pick = [&rng](int bound) { return static_cast<int>(rng() % static_cast<unsigned>(bound)); };
     static constexpr std::array<char const*, 6> kWords{"a", "B", "b", "c", "D", "e"};

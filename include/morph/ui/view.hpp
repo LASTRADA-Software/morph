@@ -387,6 +387,7 @@ enum class HeaderClick : std::uint8_t {
 /// @param place     The key's place in the chain, from 1.
 /// @param count     How many keys the chain holds.
 /// @return `" ▲"` or `" ▼"` for a chain of one key, else the arrow followed by @p place, such as `" ▲2"`.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`place`, `count`): a chain position then the chain length, passed by name at the three call sites
 [[nodiscard]] inline std::string sortMarkText(SortDirection direction, std::size_t place, std::size_t count) {
     std::string mark = direction == SortDirection::Ascending ? " ▲" : " ▼";
     if (count != 1) {

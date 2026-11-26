@@ -363,6 +363,7 @@ public:
     /// @brief Holds the row an editor is open on where it is in the view, whatever its values do to the sort and the
     ///        filter; nothing lets it go. A source whose rows never move under an edit does nothing.
     /// @param key The row's key, or nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): `key` is moved into the source by its overriding implementation, which takes it by value; this default only discards it
     virtual void holdRow(std::optional<Key> key) { static_cast<void>(key); }
 
     /// @brief A cell's editor opened: a choice in it fetches its options from now on. A source with nothing to fetch
@@ -460,11 +461,13 @@ public:
     /// @brief Gives the source what follows the focused row's key when the key changes. A source whose keys never
     ///        change ignores it.
     /// @param link The controller's side; empty members when the controller goes.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): `link` is moved into the source by its overriding implementation, which takes it by value; this default only discards it
     virtual void followFocusWith(FocusLink link) { static_cast<void>(link); }
 
     /// @brief Gives the source what moves focus to a cell while the table has focus: how a refusal that arrives after
     ///        focus left its row brings focus back. A source that never moves focus ignores it.
     /// @param refocus Focuses a cell while the table has focus; empty when the controller goes.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): `refocus` is moved into the source by its overriding implementation, which takes it by value; this default only discards it
     virtual void refocusWith(std::function<void(CellRef const&)> refocus) { static_cast<void>(refocus); }
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
@@ -678,6 +681,7 @@ public:
     /// @brief Does nothing: a form row's key never changes.
     /// @param from Unused.
     /// @param target   Unused.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`from`, `target`): the old key first, as every `moveKey` caller and override reads it
     void moveKey(table::RowId const& from, table::RowId const& target) override {
         static_cast<void>(from);
         static_cast<void>(target);
@@ -1950,6 +1954,7 @@ private:
 
     // The columns' overlays per row, onto each row's member: its places, its entry unit, its options and its
     // placeholder. Rerun when a row, an overlay's reads or the member a row's column edits changes.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): applies each column's overlay to each row's member in one pass over the rows; the places, entry unit, options and placeholder steps read the same row state
     void applyOverlays() {
         // Forget the units applied to members of rows that are gone: a reload builds every row anew.
         if (!_unitApplied.empty()) {
@@ -2040,6 +2045,7 @@ private:
             for (GridColumn const& column : _columns) {
                 declared.push_back(column.id);
             }
+            // NOLINTNEXTLINE(readability-function-cognitive-complexity): one untracked read of the form: the overlay steps share the locals the reads fill, so they stay in one lambda
             _form->runtime().untracked([&] {
                 for (std::size_t row = 0; row < rows; ++row) {
                     std::optional<TableRowRef> const ref = _rows->row(static_cast<std::int64_t>(row));
@@ -2667,6 +2673,7 @@ private:
     }
 
     // The rows from the parts and the collections' rows now, given to the rows' source as one reset.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): rebuilds the rows from the parts and the collections in one pass, each part kind appending in the order the document lists them
     void expand() const {
         std::vector<Expanded> next;
         _blockRows = _rt->untracked([&] { return blockRows(); });
@@ -2820,6 +2827,7 @@ private:
     }
 
     // The coverage of the rows now, computed again once the rows or the layout changed.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): recomputes the coverage once from the rows and the layout; the span walk and the cache check share the running coverage
     [[nodiscard]] Coverage const& coverageNow() const {
         sync();
         if (_coverage && _coverage->expansion == _expansion && _coverage->layout == _layout) {
@@ -2959,7 +2967,7 @@ public:
                 exec::IExecutor* const owner = &_rt->owner();
                 auto session = std::make_unique<forms::FormSession>(
                     *_rt, *column.model,
-                    [owner](std::string_view, std::string) {
+                    [owner](std::string_view, std::string const&) {
                         return async::Completion<std::string>::makeSettleable(owner).first;
                     },
                     _context.choices, _context.session);
@@ -3193,6 +3201,7 @@ public:
             }
             // With no draft held the cell is the row's value now: a session still holding an earlier edit of the
             // cell, whose draft a fetch since ended, is loaded again.
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast): the method is const for readers but refreshes the lazily loaded sessions, which are cache state this object owns
             auto* const self = const_cast<ModelGridSource*>(this);
             if (auto const found = self->_sessions.find(column); found != self->_sessions.end()) {
                 found->second.loadedFor.reset();
@@ -3423,6 +3432,7 @@ private:
     // A held row: its view index and its record, valid until the rows' next change.
     struct Located {
         std::int64_t index = 0;
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members): a view of a record the source holds for the length of the call that returns it; copying the record would defeat the lookup
         Value const& record;
     };
 
@@ -3521,6 +3531,7 @@ private:
     };
 
     // The view indices, after the whole change, of the rows its `Inserted` and `Changed` operations brought.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): walks the change's operations once, shifting the collected indices as each insert or removal passes; the shift depends on the operation kind
     [[nodiscard]] static std::vector<std::size_t> broughtRows(table::ViewChange const& change) {
         std::vector<std::size_t> out;
         for (table::ViewOp const& op : change.ops) {
@@ -3787,14 +3798,17 @@ private:
         }
         if (kind == forms::FieldKind::EpochDate) {
             std::string const* const text = value.asString();
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `text->size() == 10` is the previous operand of this condition, so indices 4 and 7 are in range
             if (text != nullptr && text->size() == 10 && (*text)[4] == '-' && (*text)[7] == '-') {
                 int year = 0;
                 unsigned month = 0;
                 unsigned day = 0;
                 char const* const cursor = text->data();
+                // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic): from_chars takes a pointer range; the ranges are fixed offsets into the 10-character `YYYY-MM-DD` text the size and separator checks above validated
                 bool const read = std::from_chars(cursor, cursor + 4, year).ec == std::errc{} &&
                                   std::from_chars(cursor + 5, cursor + 7, month).ec == std::errc{} &&
                                   std::from_chars(cursor + 8, cursor + 10, day).ec == std::errc{};
+                // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
                 std::chrono::year_month_day const date{std::chrono::year{year}, std::chrono::month{month},
                                                        std::chrono::day{day}};
                 if (read && date.ok()) {
@@ -4030,6 +4044,7 @@ public:
     /// @param chord The chord.
     /// @return `FocusNext` or `FocusPrevious` when `Tab` or `Shift+Tab` runs past the last or the first editable cell,
     ///         `Ignored` for a chord the grid does not take, else `Handled`.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): dispatches one chord across the focus, editing, selection and clipboard states; each branch checks the state the one before left
     KeyOutcome press(std::string_view chord) {
         // The row an editor was open on is let go once the key is handled: the walk moves by view position at the
         // moment of the commit, so the edited row stays where it was while focus moves on.
@@ -4320,7 +4335,9 @@ public:
     /// @brief The cells of the selection, else the focused cell, as clipboard text.
     /// @return Each cell's display text, tab-separated, a line per row in view order and the columns in layout order;
     ///         a tab or a line break inside a cell written as a space. Empty when no cell is selected or focused.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): builds the clipboard text for the selection or the focus in one walk over the rows and the columns in layout order
     [[nodiscard]] std::string copy() const {
+        // NOLINTNEXTLINE(readability-function-cognitive-complexity): the untracked body of `copy`: its row and column walk shares the running text, so it is one lambda
         return _rt->untracked([&] {
             std::optional<Block> const cells = block();
             if (!cells) {
@@ -4394,6 +4411,7 @@ public:
     /// of more than `GridOptions::maxPasteCells` values is refused whole, and nothing is written.
     /// @param text The text.
     /// @return What the paste did with each value.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): parses the block, writes each value and counts the written and the dropped in one pass; both tallies depend on each cell's outcome
     PasteResult paste(std::string_view text) {
         commit();
         letGo();
@@ -4879,6 +4897,7 @@ private:
         if (!row || column == ids.end() || count == 0) {
             return;
         }
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`index`, `delta`, `size`): the lambda is called for the row axis and the column axis, each time with the position, the signed step and the extent in that order
         auto const clamp = [](std::size_t index, int delta, std::size_t size) {
             auto const moved = static_cast<std::int64_t>(index) + delta;
             return static_cast<std::size_t>(std::clamp<std::int64_t>(moved, 0, static_cast<std::int64_t>(size) - 1));
@@ -5082,6 +5101,7 @@ private:
     [[nodiscard]] bool fixedRows() const { return _options.rowsFixed || !_source->rowsEditable(); }
 
     // A row's key changed: the focus and an open editor on it take the new key, at the row's place now.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`from`, `target`): the old key first, which the one call site (the source's move callback) spells out
     void keyMoved(Key const& from, Key const& target) {
         if (std::optional<CellRef> const open = _editing.peek(); open && open->key == from) {
             _editing.set(CellRef{.key = target, .column = open->column});
@@ -5194,6 +5214,7 @@ private:
     // Lands on where a walk stopped.
     void land(Step const& step) {
         if (step.kind == Step::Kind::Found) {
+            // NOLINTNEXTLINE(bugprone-unchecked-optional-access): a `Found` step is built only with its key set (see `Step`), so the optional holds a value here
             focusCell(CellRef{.key = *step.key, .column = step.column});
         } else if (step.kind == Step::Kind::Stop) {
             setPlace(GridFocus{.key = std::nullopt, .viewRow = step.row, .column = step.column});
@@ -5238,6 +5259,7 @@ private:
     }
 
     // Enter after a commit: down the column, along the row, or nowhere.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): the three Enter modes each walk a different axis and share the focus and the editable-cell test
     void enterMove(CellRef const& from) {
         if (_options.enterMoves == EnterMoves::None) {
             return;

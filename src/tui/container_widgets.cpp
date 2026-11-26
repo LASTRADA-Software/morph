@@ -100,6 +100,7 @@ void StackImpl::setCellSlots(std::vector<CellSlot> slots) { _slots = std::move(s
     return {.width = inner.width + leadingColumns() + _paddingColumns, .height = inner.height + (2 * _paddingRows)};
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): sums the children's natural sizes along the axis and takes the maximum across it, with the gap and fill rules in one pass
 ::core::tui::Size StackImpl::innerNaturalSize() const {
     if (!_slots.empty()) {
         int width = 0;
@@ -196,6 +197,7 @@ std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) con
     return areas;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): assigns each child its area along the axis in one pass; the stretch weights and leftover cells depend on the running offset
 std::vector<::core::tui::Rect> StackImpl::innerAreas(::core::tui::Size size) const {
     if (!_slots.empty()) {
         std::vector<::core::tui::Rect> areas(children().size());

@@ -3290,6 +3290,7 @@ private:
         }
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): checks one element against its kind: each branch refuses a different malformed shape and reports into the shared context
     void checkElement(DocNode const& node, CheckContext const& outer, bool part) {
         KindSpec const* const spec = findKind(node.kind, part);
         CheckContext const inner = innerContext(node, outer);
@@ -3479,6 +3480,7 @@ private:
         }
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one rule per element kind, each reading the same node and reporting to the shared check context in document order
     void checkKindRules(DocNode const& node, CheckContext const& context) {
         if (node.kind == "custom") {
             checkCustomProps(node);
@@ -3807,6 +3809,7 @@ private:
     // What a grid takes beyond its table, on a `table` over a form or a field overlay's `grid` part: `enterMoves` and
     // `walk` by name, and columns that each edit a member, named by `field`, or show a `value`. A `field` must name a
     // member of the collection's row type, read from the form action's schema when the catalog has it.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): the grid's two options, each column's member or value and the field lookup in one pass over the parts, refusing in document order
     void checkGridPart(DocNode const& part, DocNode const& form, std::string_view field,
                        std::string const& where) const {
         for (std::string_view const key : {std::string_view{"enterMoves"}, std::string_view{"walk"}}) {
@@ -4062,6 +4065,7 @@ private:
     // Summary rows, on a table and on its group part: a summary is a feature of a table over held rows, so a
     // model-backed table refuses both. Each has a key, unique in its list, a `position` of `bottom` or `top`, and
     // cells named by the table's column ids.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): checks each summary's key, position and cells in one pass over the list; the uniqueness set is shared
     static void checkSummaryParts(DocNode const& node) {
         bool const modelBacked = !node.name("model").empty();
         auto const check = [&node, modelBacked](std::span<DocNodePtr const> summaries, std::string const& where) {
@@ -4135,6 +4139,7 @@ private:
 
     // A table over `rows` declares its column groups: each 2 to 16 of its column parts, of one literal kind, and a
     // column in at most one group. A model's table has its groups from its description.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): checks each group's size, kind and column membership in one pass; the "column in one group" set is shared
     static void checkColumnGroups(DocNode const& node) {
         auto const groups = node.partList("groups");
         if (groups.empty()) {
@@ -5167,6 +5172,7 @@ private:
     // A table column's closed sets: its default cell's text role, and its cells' places; and its display parts,
     // which are literals: `decimals` 0 to 18, `rounding` one of two names, `date` a pattern, `labels` a list of
     // `{operand, text}`.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): the column's closed sets and display parts are each checked against their allowed values and report in document order
     static void checkColumnPart(DocNode const& node, bool gridColumn) {
         checkTextRole(node);
         checkCellPlace(node, "align");
