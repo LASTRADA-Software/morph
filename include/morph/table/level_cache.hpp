@@ -495,7 +495,7 @@ private:
     struct Slot {
         std::optional<Value> value;  // empty: the load failed
         std::uint32_t failures = 0;
-        Clock::time_point failedAt{};
+        Clock::time_point failedAt;
         std::size_t bytes = 0;  // a value's deep bytes; a failure's own size
         mutable std::atomic<std::int64_t> lastUse{0};
         mutable std::atomic<std::int64_t> leaseUntil{0};    // clock ticks; 0: no lease
@@ -633,6 +633,7 @@ private:
         }
 
         // (old, new) per changed key; null for none.
+        // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): read by the cache when it publishes the edit.
         std::vector<std::pair<SlotPtr, SlotPtr>> changes;
 
     private:
@@ -697,13 +698,13 @@ private:
             }
         }
 
-        [[nodiscard]] static std::int64_t ticks(Clock::time_point at) noexcept {
-            return at.time_since_epoch().count();
+        [[nodiscard]] static std::int64_t ticks(Clock::time_point when) noexcept {
+            return when.time_since_epoch().count();
         }
 
         [[nodiscard]] Clock::duration retryDelay(std::uint32_t failures) const {
             auto const doublings = std::min<std::uint32_t>(failures == 0 ? 0 : failures - 1, 30);
-            auto const delay = options.retryAfter * (std::int64_t{1} << doublings);
+            auto const delay = options.retryAfter * static_cast<std::int64_t>(std::uint64_t{1} << doublings);
             return std::min<Clock::duration>(delay, options.retryMax);
         }
 
@@ -751,10 +752,10 @@ private:
                 if (found->second.use == LevelUse::Display && use == LevelUse::Order) {
                     return;
                 }
-                queues[static_cast<std::size_t>(found->second.use)].erase(found->second.priority);
+                queues.at(static_cast<std::size_t>(found->second.use)).erase(found->second.priority);
             }
             queued.insert_or_assign(key, Queued{.use = use, .priority = priority});
-            queues[static_cast<std::size_t>(use)].emplace(priority, key);
+            queues.at(static_cast<std::size_t>(use)).emplace(priority, key);
         }
 
         // The priority of the `index`-th key of the next want.
@@ -767,7 +768,7 @@ private:
             std::vector<Loading> out;
             auto const started = ++sequence;
             for (auto const use : {LevelUse::Display, LevelUse::Order}) {
-                auto& queue = queues[static_cast<std::size_t>(use)];
+                auto& queue = queues.at(static_cast<std::size_t>(use));
                 while (out.size() < options.batch && !queue.empty()) {
                     auto const top = std::prev(queue.end());
                     auto key = std::move(top->second);
@@ -824,7 +825,7 @@ private:
 
         // Under the writer mutex: takes a set out of the accepted sets and out of the bound; the caller unprotects
         // its keys.
-        AcceptedSet takeSet(typename std::unordered_map<std::vector<RowId> const*, AcceptedSet>::iterator found) {
+        AcceptedSet takeSet(std::unordered_map<std::vector<RowId> const*, AcceptedSet>::iterator found) {
             auto out = std::move(found->second);
             sets.erase(found);
             setBytes -= std::min(setBytes, out.bytes);
@@ -869,9 +870,9 @@ private:
                 return want(core, *keys, use, retry, Pass::Lease);
             }
             auto const* const set = keys.get();
-            auto const at = core->now();
-            auto const nowTicks = ticks(at);
-            auto const until = ticks(at + core->options.orderLease);
+            auto const instant = core->now();
+            auto const nowTicks = ticks(instant);
+            auto const until = ticks(instant + core->options.orderLease);
             core->endExpiredSets(nowTicks);
             std::optional<AcceptedSet> lapsed;
             std::uint64_t events = 0;
@@ -896,7 +897,7 @@ private:
                         }
                         found->second.seenEvents = core->setEvents;
                         lock.unlock();
-                        core->requeue(core, *keys, at);
+                        core->requeue(core, *keys, instant);
                         return {};
                     }
                     lapsed = core->takeSet(found);
@@ -947,11 +948,12 @@ private:
         // key is classified, leased or protected, and queued at once: a held key's slot is marked where an
         // eviction's publish check sees it, and a key not held gets a pending lease, or a protection count, that
         // its store moves onto its slot.
+        // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
         static std::expected<void, TableError> want(std::shared_ptr<Core> const& core, std::span<RowId const> keys,
                                                     LevelUse use, bool retry, Pass pass, std::size_t keyBytes = 0) {
-            auto const at = core->now();
-            auto const nowTicks = ticks(at);
-            auto const until = ticks(at + core->options.orderLease);
+            auto const instant = core->now();
+            auto const nowTicks = ticks(instant);
+            auto const until = ticks(instant + core->options.orderLease);
             if (use == LevelUse::Order) {
                 core->fits.fetch_add(1);
                 if (auto fitted = core->fitOrder(keys, nowTicks, keyBytes); !fitted) {
@@ -973,6 +975,7 @@ private:
                 auto const& table = *core->current;
                 auto const last = std::min(keys.size(), first + detail::kWantChunk);
                 for (auto index = first; index < last; ++index) {
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): index < last <= keys.size()
                     auto const& key = keys[index];
                     auto const slot = findIn(table, key);
                     if (protect) {
@@ -989,7 +992,7 @@ private:
                         }
                         continue;
                     }
-                    if (slot != nullptr && !retry && at < slot->failedAt + core->retryDelay(slot->failures)) {
+                    if (slot != nullptr && !retry && instant < slot->failedAt + core->retryDelay(slot->failures)) {
                         if (protect) {
                             core->recheckAt(slot->failedAt + core->retryDelay(slot->failures));
                         }
@@ -1021,11 +1024,11 @@ private:
         }
 
         // Under the writer mutex: a repeat of an accepted set must look at its keys again once `at` has passed.
-        void recheckAt(Clock::time_point at) { setsRecheckAt = std::min(setsRecheckAt, ticks(at)); }
+        void recheckAt(Clock::time_point when) { setsRecheckAt = std::min(setsRecheckAt, ticks(when)); }
 
         // Queues the keys of an accepted set that are neither held, in flight, nor failed inside their delay, a
         // chunk at a time under the writer mutex. Their protection is kept by key, so it needs no change.
-        static void requeue(std::shared_ptr<Core> const& core, std::span<RowId const> keys, Clock::time_point at) {
+        static void requeue(std::shared_ptr<Core> const& core, std::span<RowId const> keys, Clock::time_point when) {
             std::uint64_t want = 0;
             std::vector<Loading> batch;
             for (std::size_t first = 0;; first += detail::kWantChunk) {
@@ -1036,12 +1039,13 @@ private:
                 auto const& table = *core->current;
                 auto const last = std::min(keys.size(), first + detail::kWantChunk);
                 for (auto index = first; index < last; ++index) {
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): index < last <= keys.size()
                     auto const& key = keys[index];
                     auto const slot = findIn(table, key);
                     if (slot != nullptr && slot->value) {
                         continue;
                     }
-                    if (slot != nullptr && at < slot->failedAt + core->retryDelay(slot->failures)) {
+                    if (slot != nullptr && when < slot->failedAt + core->retryDelay(slot->failures)) {
                         core->recheckAt(slot->failedAt + core->retryDelay(slot->failures));
                         continue;
                     }
@@ -1069,6 +1073,7 @@ private:
                 std::scoped_lock const lock{writer};
                 auto const last = std::min(keys.size(), first + detail::kWantChunk);
                 for (auto index = first; index < last; ++index) {
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): index < last <= keys.size()
                     auto const& key = keys[index];
                     auto const found = protectedKeys.find(key);
                     if (found == protectedKeys.end()) {
@@ -1106,6 +1111,7 @@ private:
         // Whether an order use of `keys` fits: the keys times the mean value size, plus the bytes leased or
         // protected for keys other than these, plus the accepted sets' key bytes and `keyBytes`, what the use's own
         // set of keys will hold, against `maxBytes`. Read from the published state with no lock held.
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a time in ticks, then a byte count, in the order the names read.
         [[nodiscard]] std::expected<void, TableError> fitOrder(std::span<RowId const> keys, std::int64_t nowTicks,
                                                                std::size_t keyBytes) {
             std::shared_ptr<Table const> base;
@@ -1125,7 +1131,7 @@ private:
             }
             auto const leasedAll = leasedBytes(*base, nowTicks);
             auto const leasedOther = leasedAll - std::min(ownLeased, leasedAll);
-            if (keys.size() * mean + leasedOther + setsHeld + keyBytes <= options.maxBytes) {
+            if ((keys.size() * mean) + leasedOther + setsHeld + keyBytes <= options.maxBytes) {
                 return {};
             }
             refusedOrders.fetch_add(1);
@@ -1141,6 +1147,7 @@ private:
         }
 
         // Gives a held value an order lease until `until`, one more holder while its lease runs.
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the lease's end, then the current time, as every caller reads them.
         static void lease(Slot const& slot, std::int64_t until, std::int64_t nowTicks) {
             if (slot.leaseUntil.load() > nowTicks) {
                 slot.leaseHolders.fetch_add(1);
@@ -1196,6 +1203,7 @@ private:
                 std::scoped_lock const lock{writer};
                 auto const last = std::min(keys.size(), first + detail::kWantChunk);
                 for (auto index = first; index < last; ++index) {
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): index < last <= keys.size()
                     auto const& key = keys[index];
                     if (auto const slot = findIn(*current, key);
                         slot != nullptr && slot->leaseUntil.load() > nowTicks) {
@@ -1273,6 +1281,7 @@ private:
         // publish. A change published meanwhile makes the store prepare again. `lineage` is the unit lineage the
         // load was issued under: a load whose registry was swapped for another lineage while it ran is dropped, as
         // an invalidated one is, since its unit numbers mean nothing now.
+        // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
         [[nodiscard]] Told store(std::vector<Loading> const& batch, std::vector<std::pair<RowId, Value>>& loaded,
                                  bool counted, std::uint64_t lineage) {
             // Sizes are read once, before any lock: a throwing `sizeOf` fails its key.
@@ -1286,7 +1295,7 @@ private:
                     returned.erase(key);
                 }
             }
-            auto const at = nowOrEpoch();
+            auto const now = nowOrEpoch();
             checkLineage();
             bool const otherLineage = lineage != unitLineage();
             Told told;
@@ -1300,6 +1309,7 @@ private:
                     base = current;
                     seen = version;
                     for (std::size_t index = 0; index < batch.size(); ++index) {
+                        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): index < batch.size() and valid has one flag per batch entry
                         valid[index] = !otherLineage && stillCurrent(batch[index]);
                     }
                 }
@@ -1309,6 +1319,7 @@ private:
                 std::size_t dropped = 0;
                 for (std::size_t index = 0; index < batch.size(); ++index) {
                     auto const& key = batch[index].key;
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): index < batch.size() and valid has one flag per batch entry
                     if (!valid[index]) {
                         ++dropped;
                         continue;
@@ -1322,7 +1333,7 @@ private:
                     } else {
                         slot->bytes = sizeof(Slot);
                         slot->failures = old != nullptr && !old->value ? old->failures + 1 : 1;
-                        slot->failedAt = at;
+                        slot->failedAt = now;
                         failed.push_back(key);
                     }
                     edit.put(key, std::move(slot));
@@ -1347,7 +1358,7 @@ private:
                         auto const slot = findIn(*next, key);
                         slot->lastUse.store(useCounter.fetch_add(1) + 1);
                         if (auto const lease = pendingLeases.find(key); lease != pendingLeases.end()) {
-                            if (lease->second.until > ticks(at)) {
+                            if (lease->second.until > ticks(now)) {
                                 slot->leaseHolders.store(lease->second.holders);
                                 slot->leaseUntil.store(lease->second.until);
                             }
@@ -1386,8 +1397,8 @@ private:
                 break;
             }
             // Leased bytes grow only when a leased value is stored; only then can they have passed the bound.
-            told.overBound = leasedStored && dropLeasesOverBound(at);
-            evict(told.stored, told.failed, at);
+            told.overBound = leasedStored && dropLeasesOverBound(now);
+            evict(told.stored, told.failed, now);
             return told;
         }
 
@@ -1420,20 +1431,20 @@ private:
         // When the leased and protected values, with the accepted sets' keys, exceed the bound, stops loading for
         // order, drops every lease and ends every accepted set. The bytes are summed and the slots cleared over the
         // published state with no lock held; the queue, the pending leases and the sets are changed under it.
-        bool dropLeasesOverBound(Clock::time_point at) {
-            endExpiredSets(ticks(at));
+        bool dropLeasesOverBound(Clock::time_point now) {
+            endExpiredSets(ticks(now));
             auto const table = publishedTable();
             std::size_t setsHeld = 0;
             {
                 std::scoped_lock const lock{writer};
                 setsHeld = setBytes;
             }
-            if (leasedBytes(*table, ticks(at)) + setsHeld <= options.maxBytes) {
+            if (leasedBytes(*table, ticks(now)) + setsHeld <= options.maxBytes) {
                 return false;
             }
             {
                 std::scoped_lock const lock{writer};
-                queues[static_cast<std::size_t>(LevelUse::Order)].clear();
+                queues.at(static_cast<std::size_t>(LevelUse::Order)).clear();
                 std::erase_if(queued, [](auto const& entry) { return entry.second.use == LevelUse::Order; });
                 pendingLeases.clear();
                 endAllSets();  // their keys lose their protection: a repeat of a set must be fitted again
@@ -1452,8 +1463,9 @@ private:
         // that nothing changed and to publish. This batch's keys, stored or failed, are not candidates, nor is a
         // failure still inside its retry delay; when the bound still does not hold, the stored keys are marked to
         // go first.
-        void evict(std::vector<RowId> const& stored, std::vector<RowId> const& failed, Clock::time_point at) {
-            auto const nowTicks = ticks(at);
+        // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
+        void evict(std::vector<RowId> const& stored, std::vector<RowId> const& failed, Clock::time_point now) {
+            auto const nowTicks = ticks(now);
             endExpiredSets(nowTicks);
             std::unordered_set<RowId> fresh(stored.begin(), stored.end());
             fresh.insert(failed.begin(), failed.end());
@@ -1486,7 +1498,7 @@ private:
                         if (kept(*slot, nowTicks) || fresh.contains(key)) {
                             continue;
                         }
-                        if (!slot->value && at < slot->failedAt + retryDelay(slot->failures)) {
+                        if (!slot->value && now < slot->failedAt + retryDelay(slot->failures)) {
                             continue;
                         }
                         candidates.emplace_back(slot->value ? slot->lastUse.load() : std::int64_t{-1}, key,
@@ -1697,12 +1709,12 @@ private:
                 keys.reserve(change.keys->size());
                 bool readable = true;
                 for (auto const& key : *change.keys) {
-                    auto id = rowIdOf(key);
-                    if (!id) {
+                    auto rowId = rowIdOf(key);
+                    if (!rowId) {
                         readable = false;
                         break;
                     }
-                    keys.push_back(std::move(*id));
+                    keys.push_back(std::move(*rowId));
                 }
                 if (readable) {
                     invalidate(keys);
@@ -1727,7 +1739,7 @@ private:
 
         [[nodiscard]] std::size_t queuedEntries() const {
             std::scoped_lock const lock{writer};
-            return queues[0].size() + queues[1].size();
+            return std::get<0>(queues).size() + std::get<1>(queues).size();
         }
 
         [[nodiscard]] std::size_t shardCount() const { return publishedTable()->shards.size(); }
@@ -1843,7 +1855,7 @@ public:
     /// @param base    The table's rows; its snapshot is taken here, once.
     /// @param columns The columns the view has: the description's.
     /// @param levels  The levels the request read, each with its snapshot.
-    LeveledSource(std::shared_ptr<DataSource const> base, std::vector<ColumnInfo> columns,
+    LeveledSource(std::shared_ptr<DataSource const> const& base, std::vector<ColumnInfo> columns,
                   std::vector<LevelInput> levels)
         : _columns{std::move(columns)}, _groups(base->groups().begin(), base->groups().end()) {
         auto const baseColumns = base->columns();
@@ -1852,14 +1864,14 @@ public:
         for (auto const& column : _columns) {
             Plan plan;
             if (column.level.empty()) {
-                if (auto const index = detail::findColumn(baseColumns, column.id)) {
-                    plan.base = *index;
-                }
+                plan.base = detail::findColumn(baseColumns, column.id);
             } else {
                 for (std::size_t input = 0; input < levels.size(); ++input) {
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): input < levels.size()
                     if (levels[input].source == nullptr || levels[input].source->level() != column.level) {
                         continue;
                     }
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): input < levels.size()
                     if (auto const place = detail::findColumn(levels[input].source->columns(), column.id)) {
                         plan.level = input;
                         plan.place = *place;
@@ -1931,6 +1943,7 @@ private:
 
         [[nodiscard]] RowId rowId(std::size_t row) const override { return _base->rowId(row); }
 
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): row, then column, as DataSource::cell declares them.
         [[nodiscard]] Cell cell(std::size_t row, std::size_t column) const override {
             auto const& plan = _plans[column];
             if (plan.base) {

@@ -102,6 +102,7 @@ struct CellEdit {
 
     /// @brief The JSON of the action: `{"key": …, "value": …}`. Declared here so an action deriving from this type
     ///        reads and writes both members, which reflection over the derived type would count as one.
+    // NOLINTNEXTLINE(readability-identifier-naming): glaze looks the meta type up by this name.
     struct glaze {
         /// @brief Each member after its JSON name.
         static constexpr auto value = glz::object("key", &CellEdit::key, "value", &CellEdit::value);
@@ -128,6 +129,7 @@ struct RowEdit {
 
     /// @brief The JSON of the action: `{"key": …, "values": …}`, for an action deriving from this type as for
     ///        `CellEdit`.
+    // NOLINTNEXTLINE(readability-identifier-naming): glaze looks the meta type up by this name.
     struct glaze {
         /// @brief Each member after its JSON name.
         static constexpr auto value = glz::object("key", &RowEdit::key, "values", &RowEdit::values);
@@ -172,6 +174,7 @@ namespace detail {
 
 }  // namespace detail
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): a run of independent rules, one `if` each, in the order they are reported; splitting scatters that order.
 inline std::expected<void, TableError> checkEdits(
     TableDescription const& description,
     std::function<std::optional<std::string>(std::string_view action)> const& schemaOf) {
@@ -183,16 +186,17 @@ inline std::expected<void, TableError> checkEdits(
         if (!column.edit) {
             continue;
         }
-        std::string const& id = column.info.id;
+        std::string const& columnId = column.info.id;
         EditInfo const& edit = *column.edit;
         std::optional<std::string> const schema = schemaOf ? schemaOf(edit.action) : std::nullopt;
         if (!schema) {
-            return refuse(id, "column `" + id + "` is edited by `" + edit.action + "`, which is not an action here");
+            return refuse(columnId,
+                          "column `" + columnId + "` is edited by `" + edit.action + "`, which is not an action here");
         }
         auto model = forms::FormModel::fromSchema(edit.action, *schema);
         if (!model) {
-            return refuse(id, "column `" + id + "`'s edit action `" + edit.action +
-                                  "` has an input schema that does not read: " + model.error().message);
+            return refuse(columnId, "column `" + columnId + "`'s edit action `" + edit.action +
+                                        "` has an input schema that does not read: " + model.error().message);
         }
         std::span<forms::FieldSpec const> const fields = model->fields();
         forms::FieldSpec const* field = nullptr;
@@ -207,20 +211,20 @@ inline std::expected<void, TableError> checkEdits(
             }
         }
         if (field == nullptr) {
-            return refuse(id, edit.member.empty()
-                                  ? "column `" + id + "`'s edit action `" + edit.action + "` has no member `value`"
-                                  : "column `" + id + "`'s edit action `" + edit.action + "` has no member `" +
-                                        edit.member + "` in its `values`");
+            return refuse(columnId, edit.member.empty() ? "column `" + columnId + "`'s edit action `" + edit.action +
+                                                              "` has no member `value`"
+                                                        : "column `" + columnId + "`'s edit action `" + edit.action +
+                                                              "` has no member `" + edit.member + "` in its `values`");
         }
         // A measure is edited in its field's unit: one the table's units lack could hold none of its cells.
         if (column.info.kind == ColumnKind::Measure &&
             !std::ranges::contains(description.units, field->unitAscii, &UnitInfo::id)) {
-            return refuse(id, "column `" + id + "` is a measure edited in `" + field->unitAscii +
-                                  "`, which is not one of the table's units");
+            return refuse(columnId, "column `" + columnId + "` is a measure edited in `" + field->unitAscii +
+                                        "`, which is not one of the table's units");
         }
         if (!detail::editFits(column.info.kind, field->kind)) {
-            return refuse(id, "column `" + id + "` cannot be edited by `" + edit.action + "`'s field of kind `" +
-                                  std::string{forms::fieldKindName(field->kind)} + "`");
+            return refuse(columnId, "column `" + columnId + "` cannot be edited by `" + edit.action +
+                                        "`'s field of kind `" + std::string{forms::fieldKindName(field->kind)} + "`");
         }
     }
     return {};
@@ -318,6 +322,7 @@ public:
     void commitRow(RowEditRequest request) {
         RowId const row = request.row;
         std::vector<std::optional<std::string>> drafts;
+        drafts.reserve(request.cells.size());
         for (EditCell const& cell : request.cells) {
             drafts.push_back(draft(row, cell.column));
         }
@@ -443,33 +448,33 @@ public:
     /// @brief A row's key changed: its drafts, errors, modified marks and row commits move to the new key. Where the
     ///        new key holds a cell of its own, the new key's is kept.
     /// @param from The row's old key.
-    /// @param to   The row's new key.
-    void moveRow(RowId const& from, RowId const& to) {
-        if (from == to) {
+    /// @param destination The row's new key.
+    void moveRow(RowId const& from, RowId const& destination) {
+        if (from == destination) {
             return;
         }
-        if (auto found = _cells.find(from); found != _cells.end()) {
+        if (auto const found = _cells.find(from); found != _cells.end()) {
             auto moved = std::move(found->second);
             _cells.erase(found);
-            auto& target = _cells[to];
+            auto& target = _cells[destination];
             for (auto& [column, cell] : moved) {
                 target.try_emplace(column, std::move(cell));
             }
         }
-        if (auto found = _errors.find(from); found != _errors.end()) {
+        if (auto const found = _errors.find(from); found != _errors.end()) {
             auto moved = std::move(found->second);
             _errors.erase(found);
-            auto& target = _errors[to];
+            auto& target = _errors[destination];
             for (auto& [column, message] : moved) {
                 target.try_emplace(column, std::move(message));
             }
         }
-        if (auto found = _rowQueues.find(from); found != _rowQueues.end()) {
+        if (auto const found = _rowQueues.find(from); found != _rowQueues.end()) {
             auto moved = std::move(found->second);
             _rowQueues.erase(found);
-            auto& target = _rowQueues[to];
+            auto& target = _rowQueues[destination];
             for (RowFlight& flight : moved) {
-                flight.request.row = to;
+                flight.request.row = destination;
                 target.push_back(std::move(flight));
             }
         }
@@ -594,7 +599,7 @@ private:
     // The queue is brought up to date before the patcher is called: patching
     // notifies the source's listeners at once, and their handlers may commit
     // to the same row or destroy this object.
-    void settle(RowId const& row, std::expected<std::vector<Cell>, FieldError>&& outcome) {
+    void settle(RowId const& row, std::expected<std::vector<Cell>, FieldError> outcome) {
         auto const found = _queues.find(row);
         if (found == _queues.end() || found->second.empty()) {
             return;
@@ -684,9 +689,10 @@ private:
         front.sent = true;
         // A copy: a commit that settles at once pops the queue's front, and the commit may still read its request.
         RowEditRequest const request = front.request;
-        _rowCommit(request, _alive.guard([this, id = front.id](std::expected<void, std::vector<FieldError>> outcome) {
-            settleRow(id, std::move(outcome));
-        }));
+        _rowCommit(request,
+                   _alive.guard([this, flightId = front.id](std::expected<void, std::vector<FieldError>> outcome) {
+                       settleRow(flightId, std::move(outcome));
+                   }));
     }
 
     // A refusal lands by name: an error naming a cell's member (its column when it has none) is that cell's; one that
@@ -720,11 +726,11 @@ private:
 
     // A row commit settled. The cells take its outcome, and the row's next commit is sent, before the receiver hears
     // it: it may commit again or destroy this object.
-    void settleRow(std::uint64_t id, std::expected<void, std::vector<FieldError>> outcome) {
+    void settleRow(std::uint64_t flightId, std::expected<void, std::vector<FieldError>> outcome) {
         auto queue = _rowQueues.begin();
         auto flight = std::deque<RowFlight>::iterator{};
         for (; queue != _rowQueues.end(); ++queue) {
-            flight = std::ranges::find(queue->second, id, &RowFlight::id);
+            flight = std::ranges::find(queue->second, flightId, &RowFlight::id);
             if (flight != queue->second.end()) {
                 break;
             }

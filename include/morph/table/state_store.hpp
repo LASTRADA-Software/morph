@@ -213,6 +213,7 @@ struct StoredViews {
     std::vector<StoredView> views;
 
     /// @brief The JSON member names: `defaultView` is `default`.
+    // NOLINTNEXTLINE(readability-identifier-naming): glaze looks the meta type up by this name.
     struct glaze {
         /// @brief The members.
         static constexpr auto value =
@@ -444,8 +445,10 @@ template <typename T>
         return std::ranges::find(document.views, name, &SavedView::name);
     };
     struct Applier {
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members): the applier lives only inside this call, over its locals.
         ViewsDocument& document;
         ViewsPart part;
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members): the applier lives only inside this call, over its locals.
         decltype(find)& at;
 
         std::expected<void, ViewError> operator()(AddView const& add) const {
@@ -736,6 +739,7 @@ private:
     }
 
     /// Stores @p text under @p entry when @p wanted holds; runs on the strand.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the text to store, then the text the entry is expected to hold.
     [[nodiscard]] SaveResult store(Key const& entry, std::string text, std::string const& wanted) {
         if (auto conflict = conflictOf(_documents.find(entry), wanted)) {
             return std::move(*conflict);
@@ -879,13 +883,13 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
 }
 
 /// @brief Whether @p a and @p b hold the same column ids, in any order.
-/// @param a One list.
-/// @param b The other.
+/// @param left One list.
+/// @param right The other.
 /// @return `true` when they hold the same ids.
-[[nodiscard]] inline bool sameColumns(std::vector<std::string> a, std::vector<std::string> b) {
-    std::ranges::sort(a);
-    std::ranges::sort(b);
-    return a == b;
+[[nodiscard]] inline bool sameColumns(std::vector<std::string> left, std::vector<std::string> right) {
+    std::ranges::sort(left);
+    std::ranges::sort(right);
+    return left == right;
 }
 
 /// @brief @p columns joined with `,`.
@@ -949,6 +953,7 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
 /// written in `order`'s order, then any hidden id `order` does not name, as listed.
 /// @param document The document.
 /// @return The JSON text.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
 [[nodiscard]] inline std::string writeState(StateDocument const& document) {
     CarriedState const& carried = document.carried;
     detail::StoredState out;
@@ -979,16 +984,16 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
                 layout.units.insert_or_assign(column.id, column.units);
             }
         }
-        for (auto const& id : layout.hidden) {
-            if (std::ranges::find(layout.order, id) == layout.order.end() &&
-                std::ranges::find(unordered, id) == unordered.end()) {
-                unordered.push_back(id);
+        for (auto const& columnId : layout.hidden) {
+            if (std::ranges::find(layout.order, columnId) == layout.order.end() &&
+                std::ranges::find(unordered, columnId) == unordered.end()) {
+                unordered.push_back(columnId);
             }
         }
         layout.hidden.clear();
-        for (auto const& id : layout.order) {
-            if (hidden.contains(id)) {
-                layout.hidden.push_back(id);
+        for (auto const& columnId : layout.order) {
+            if (hidden.contains(columnId)) {
+                layout.hidden.push_back(columnId);
             }
         }
         layout.hidden.insert(layout.hidden.end(), unordered.begin(), unordered.end());
@@ -1011,8 +1016,8 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
     }
     if (document.filters || !carried.filters.empty() || !carried.groupFilters.empty()) {
         FilterSpec filters = document.filters.value_or(FilterSpec{});
-        for (auto const& [id, filter] : carried.filters) {
-            filters.columns.insert_or_assign(id, filter);
+        for (auto const& [columnId, filter] : carried.filters) {
+            filters.columns.insert_or_assign(columnId, filter);
         }
         filters.groups.insert(filters.groups.end(), carried.groupFilters.begin(), carried.groupFilters.end());
         out.filters = std::move(filters);
@@ -1034,6 +1039,7 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
 /// @param description The caller's description.
 /// @param report      Receives every drop, appended in the order above.
 /// @return The fitted document.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
 [[nodiscard]] inline StateDocument fitState(StateDocument document, TableDescription const& description,
                                             FitReport& report) {
     using What = FitDrop::What;
@@ -1042,9 +1048,9 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
     for (auto const& column : description.columns) {
         columns.emplace(column.info.id, &column);
     }
-    auto const present = [&columns](std::string const& id) { return columns.contains(id); };
-    auto const drop = [&report](What what, std::string id, bool isCarried) {
-        report.dropped.push_back(FitDrop{.what = what, .id = std::move(id), .carried = isCarried});
+    auto const present = [&columns](std::string const& columnId) { return columns.contains(columnId); };
+    auto const drop = [&report](What what, std::string columnId, bool isCarried) {
+        report.dropped.push_back(FitDrop{.what = what, .id = std::move(columnId), .carried = isCarried});
     };
     CarriedState carried;
 
@@ -1057,23 +1063,24 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
         std::unordered_set<std::string> const hidden{layout.hidden.begin(), layout.hidden.end()};
         std::unordered_set<std::string> seen;
         std::string previous;
-        for (auto const& id : layout.order) {
-            if (!present(id) && seen.insert(id).second) {
-                CarriedState::Column column{.id = id, .after = previous, .hidden = hidden.contains(id)};
-                if (auto const width = layout.widths.find(id); width != layout.widths.end()) {
+        for (auto const& columnId : layout.order) {
+            if (!present(columnId) && seen.insert(columnId).second) {
+                CarriedState::Column column{.id = columnId, .after = previous, .hidden = hidden.contains(columnId)};
+                if (auto const width = layout.widths.find(columnId); width != layout.widths.end()) {
                     column.width = width->second;
                 }
-                if (auto const units = layout.units.find(id); units != layout.units.end()) {
+                if (auto const units = layout.units.find(columnId); units != layout.units.end()) {
                     column.units = units->second;
                 }
                 carried.columns.push_back(std::move(column));
-                drop(What::Column, id, true);
+                drop(What::Column, columnId, true);
             }
-            previous = id;
+            previous = columnId;
         }
         userGroups = std::move(layout.groups);
         layout.groups.clear();
         fates.assign(userGroups.size(), Fate::Kept);
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): fates has one slot per user group and at < userGroups.size()
         for (std::size_t at = 0; at < userGroups.size(); ++at) {
             if (std::ranges::all_of(userGroups[at].columns, present)) {
                 layout.groups.push_back(userGroups[at]);
@@ -1105,12 +1112,14 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
                 fates[at] = Fate::Gone;
             }
         }
+        // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
         layout = std::move(fitted);
     }
 
     if (document.sort) {
         SortChain kept;
         for (std::size_t index = 0; index < document.sort->size(); ++index) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): index < document.sort->size()
             SortKey const& key = (*document.sort)[index];
             auto const found = columns.find(key.column);
             if (found == columns.end()) {
@@ -1137,12 +1146,12 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
             return compileFilterGuarded(spec, infos, services, description.groups).has_value();
         };
         for (auto entry = filters.columns.begin(); entry != filters.columns.end();) {
-            auto const& [id, filter] = *entry;
-            if (!present(id)) {
-                carried.filters.insert_or_assign(id, filter);
-                drop(What::Filter, id, true);
-            } else if (!compiles(FilterSpec{.columns = {{id, filter}}, .groups = {}})) {
-                drop(What::Filter, id, false);
+            auto const& [columnId, filter] = *entry;
+            if (!present(columnId)) {
+                carried.filters.insert_or_assign(columnId, filter);
+                drop(What::Filter, columnId, true);
+            } else if (!compiles(FilterSpec{.columns = {{columnId, filter}}, .groups = {}})) {
+                drop(What::Filter, columnId, false);
             } else {
                 ++entry;
                 continue;
@@ -1166,18 +1175,22 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
             auto const owner = std::ranges::find_if(userGroups, [&filter](ColumnGroupInfo const& group) {
                 return detail::sameColumns(group.columns, filter.columns);
             });
+            // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): groupIndex < userGroups.size()
             if (owner != userGroups.end()) {
-                auto const at = static_cast<std::size_t>(std::distance(userGroups.begin(), owner));
-                if (fates[at] == Fate::Carried) {
-                    groupFilterDrops[at].push_back({What::GroupFilter, owner->id, true});
+                auto const groupIndex = static_cast<std::size_t>(std::distance(userGroups.begin(), owner));
+                if (fates[groupIndex] == Fate::Carried) {
+                    groupFilterDrops[groupIndex].push_back(
+                        {.what = What::GroupFilter, .id = owner->id, .carried = true});
                     carried.groupFilters.push_back(std::move(filter));
-                } else if (fates[at] == Fate::Gone || !compiled) {
-                    groupFilterDrops[at].push_back({What::GroupFilter, owner->id, false});
+                } else if (fates[groupIndex] == Fate::Gone || !compiled) {
+                    groupFilterDrops[groupIndex].push_back(
+                        {.what = What::GroupFilter, .id = owner->id, .carried = false});
                 } else {
                     kept.push_back(std::move(filter));
                 }
                 continue;
             }
+            // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
             if (!std::ranges::all_of(filter.columns, present)) {
                 drop(What::GroupFilter, detail::joinedColumns(filter.columns), true);
                 carried.groupFilters.push_back(std::move(filter));
@@ -1206,6 +1219,7 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
         }
     }
 
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): fates and groupFilterDrops have one slot per user group and at < userGroups.size()
     for (std::size_t at = 0; at < userGroups.size(); ++at) {
         if (fates[at] == Fate::Carried) {
             drop(What::Group, userGroups[at].id, true);
@@ -1215,6 +1229,7 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
         }
         report.dropped.insert(report.dropped.end(), groupFilterDrops[at].begin(), groupFilterDrops[at].end());
     }
+    // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
     document.carried = std::move(carried);
     return document;
 }

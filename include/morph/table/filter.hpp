@@ -451,29 +451,29 @@ public:
         if (counters != nullptr) {
             ++counters->setLookups;
         }
-        auto const in = [](auto const& map, auto const& key) -> std::uint32_t {
+        auto const countIn = [](auto const& map, auto const& key) -> std::uint32_t {
             auto const found = map.find(key);
             return found == map.end() ? 0U : found->second;
         };
         switch (_kind) {
             case ColumnKind::Integer:
             case ColumnKind::Key:
-                return in(_exact, math::Rational{keys.ints[row], math::DecimalPlaces{0}});
+                return countIn(_exact, math::Rational{keys.ints[row], math::DecimalPlaces{0}});
             case ColumnKind::Decimal:
             case ColumnKind::Quantity:
-                return in(_exact, keys.exact[row]);
+                return countIn(_exact, keys.exact[row]);
             case ColumnKind::Number: {
                 auto const value = keys.reals[row];
-                return in(_reals, value == 0.0 ? 0.0 : value);
+                return countIn(_reals, value == 0.0 ? 0.0 : value);
             }
             case ColumnKind::Date:
             case ColumnKind::DateTime:
             case ColumnKind::Bool:
-                return in(_ints, keys.ints[row]);
+                return countIn(_ints, keys.ints[row]);
             case ColumnKind::Text:
-                return in(_texts, std::string_view{keys.folded[row]});
+                return countIn(_texts, std::string_view{keys.folded[row]});
             case ColumnKind::Measure:
-                return in(_measures, detail::MeasureKey{.place = keys.places[row], .amount = keys.exact[row]});
+                return countIn(_measures, detail::MeasureKey{.place = keys.places[row], .amount = keys.exact[row]});
             case ColumnKind::Custom:
             default:
                 return 0U;
@@ -696,6 +696,7 @@ public:
     /// @param row      The row.
     /// @param counters Counts cell reads, index lookups and augmentations when not null.
     /// @return The group's answer.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): a per-row hot path: one pass over the group's columns that decides early, kept in one function so the state stays in registers.
     [[nodiscard]] static Match evaluateGroup(Group const& group, std::span<KeyColumn const* const> keys,
                                              std::uint32_t row, FilterCounters* counters = nullptr) {
         constexpr std::size_t kMaxTogether = 16;
@@ -703,30 +704,38 @@ public:
         bool const hasExclude = group.excludeCount > 0;
         auto include = group.includeCount == 0 ? std::optional{Match::Yes} : std::optional<Match>{};
         std::int64_t y = 0;
-        std::int64_t q = 0;
-        std::int64_t r = 0;
+        std::int64_t unloaded = 0;
+        std::int64_t remaining = 0;
         for (auto const& column : group.index) {
-            r += column.usable ? 1 : 0;
+            remaining += column.usable ? 1 : 0;
         }
         auto const k = static_cast<std::int64_t>(group.k);
+        // Yes once `met`, No once `lost`, otherwise still open.
+        auto const settle = [](bool met, bool lost) -> std::optional<Match> {
+            if (met) {
+                return Match::Yes;
+            }
+            if (lost) {
+                return Match::No;
+            }
+            return std::nullopt;
+        };
         auto const decide = [&] {
-            auto const n = group.match.n;
+            auto const needed = group.match.n;
             switch (group.match.kind) {
                 case ColumnCount::Kind::All:
-                    return y == k ? std::optional{Match::Yes}
-                                  : (y + q + r < k ? std::optional{Match::No} : std::optional<Match>{});
+                    return settle(y == k, y + unloaded + remaining < k);
                 case ColumnCount::Kind::AtLeast:
-                    return y >= n ? std::optional{Match::Yes}
-                                  : (y + q + r < n ? std::optional{Match::No} : std::optional<Match>{});
+                    return settle(y >= needed, y + unloaded + remaining < needed);
                 case ColumnCount::Kind::Exactly:
-                    if (y > n || y + q + r < n) {
+                    if (y > needed || y + unloaded + remaining < needed) {
                         return std::optional{Match::No};
                     }
-                    return y == n && q == 0 && r == 0 ? std::optional{Match::Yes} : std::optional<Match>{};
+                    return y == needed && unloaded == 0 && remaining == 0 ? std::optional{Match::Yes}
+                                                                          : std::optional<Match>{};
                 case ColumnCount::Kind::Any:
                 default:
-                    return y >= 1 ? std::optional{Match::Yes}
-                                  : (y + q + r == 0 ? std::optional{Match::No} : std::optional<Match>{});
+                    return settle(y >= 1, y + unloaded + remaining == 0);
             }
         };
         if (!include && !together) {
@@ -757,9 +766,9 @@ public:
                                              cells, row, counters);
                 }
             } else if (!include && index.usable) {
-                --r;
+                --remaining;
                 if (unknown) {
-                    ++q;
+                    ++unloaded;
                 } else {
                     auto const bits = entryBits(column.include, index.includeBits, index.include, index.includeTested,
                                                 cells, row, counters);
@@ -817,9 +826,9 @@ private:
         if (!index.empty()) {
             out = index.lookup(keys, row, counters);
         }
-        for (auto const at : tested) {
-            if (matches(entries[at], keys, row, counters)) {
-                out |= bits[at];
+        for (auto const column : tested) {
+            if (matches(entries[column], keys, row, counters)) {
+                out |= bits[column];
             }
         }
         return out;
@@ -850,7 +859,7 @@ private:
         covered = 0;
         std::size_t usable = 0;
         for (std::size_t at = 0; at < masks.size(); ++at) {
-            if ((unknownColumns >> at) & 1U) {
+            if (((unknownColumns >> at) & 1U) != 0U) {
                 masks[at] = group.index[at].compiled;
             }
             covered |= masks[at];
@@ -897,17 +906,19 @@ private:
     /// @param owner   The entry each column holds, or -1.
     /// @param visited The columns this search has visited.
     /// @return `true` when @p entry was placed.
+    // NOLINTNEXTLINE(misc-no-recursion): the augmenting-path search of a bipartite matching; the path is at most one step per column.
     [[nodiscard]] static bool augment(int entry, std::span<std::uint32_t const> masks, std::span<int> owner,
                                       std::uint32_t& visited) {
+        auto const bit = static_cast<unsigned>(entry);
         for (std::size_t column = 0; column < masks.size(); ++column) {
-            if (((masks[column] >> entry) & 1U) != 0 && owner[column] < 0 && ((visited >> column) & 1U) == 0) {
+            if (((masks[column] >> bit) & 1U) != 0 && owner[column] < 0 && ((visited >> column) & 1U) == 0) {
                 visited |= 1U << column;
                 owner[column] = entry;
                 return true;
             }
         }
         for (std::size_t column = 0; column < masks.size(); ++column) {
-            if (((masks[column] >> entry) & 1U) == 0 || ((visited >> column) & 1U) != 0) {
+            if (((masks[column] >> bit) & 1U) == 0 || ((visited >> column) & 1U) != 0) {
                 continue;
             }
             visited |= 1U << column;
@@ -1124,6 +1135,7 @@ struct RawEntry {
 /// @param kind The column's kind.
 /// @param op   The operator.
 /// @return `true` when the operator applies to the kind.
+// NOLINTNEXTLINE(misc-no-recursion): OneOf is defined as Eq is, one call deep.
 [[nodiscard]] inline bool operatorDefined(ColumnKind kind, CompiledFilter::Op op) {
     using Op = CompiledFilter::Op;
     if (op == Op::IsEmpty || op == Op::NotEmpty) {
@@ -1314,6 +1326,7 @@ struct RawEntry {
         return out;
     }
     if (out.op == CompiledFilter::Op::OneOf) {
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): an entry whose operator is OneOf carries its values.
         auto set = compileValueSet(*entry.oneOf, info, services, out.caseSensitive);
         if (!set) {
             return std::unexpected(std::move(set.error()));
@@ -1447,6 +1460,7 @@ inline void indexEntry(CompiledFilter::Entry const& entry, FilterEntry const& ra
         return;
     }
     CompiledFilter::Entry parsed;
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): an entry whose operator is OneOf carries its values.
     for (auto const& member : *raw.oneOf) {
         if (parseOperand(info, services, member, 0, parsed)) {
             add(parsed);
@@ -1510,6 +1524,7 @@ inline void indexEntry(CompiledFilter::Entry const& entry, FilterEntry const& ra
 /// @param services Collator and date parser.
 /// @param groups   The table's declared groups.
 /// @return The compiled group, or the first error.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
 [[nodiscard]] inline std::expected<CompiledFilter::Group, TableError> compileGroup(
     GroupFilter const& group, std::span<ColumnInfo const> columns, Services const& services,
     std::span<ColumnGroupInfo const> groups) {
@@ -1570,12 +1585,12 @@ inline void indexEntry(CompiledFilter::Entry const& entry, FilterEntry const& ra
     std::vector<std::size_t> excludeApplies(group.exclude.size(), 0);
     std::optional<TableError> lastError;
     for (auto const& columnId : names) {
-        auto const at = findColumn(columns, columnId);
-        if (!at) {
+        auto const found = findColumn(columns, columnId);
+        if (!found) {
             return std::unexpected(unknownColumn(columnId));
         }
-        auto const& info = columns[*at];
-        CompiledFilter::Column column{.column = *at, .combine = group.combine, .include = {}, .exclude = {}};
+        auto const& info = columns[*found];
+        CompiledFilter::Column column{.column = *found, .combine = group.combine, .include = {}, .exclude = {}};
         CompiledFilter::GroupColumn index{.includeBits = {},
                                           .excludeBits = {},
                                           .include = ValueIndex{info.kind},

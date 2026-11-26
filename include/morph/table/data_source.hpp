@@ -298,12 +298,12 @@ class UnitRegistryBuilder;
 /// again. A registry and its successors share a `lineage()`.
 class UnitRegistry {
 public:
-    /// @brief The live unit of id @p id.
-    /// @param id The unit's id.
+    /// @brief The live unit of id @p unitId.
+    /// @param unitId The unit's id.
     /// @return Its number, or nothing when no live unit has the id. Each call is counted in `findCalls()`.
-    [[nodiscard]] std::optional<UnitId> find(std::string_view id) const {
+    [[nodiscard]] std::optional<UnitId> find(std::string_view unitId) const {
         _findCalls.fetch_add(1, std::memory_order_relaxed);
-        auto const found = _ids.find(id);
+        auto const found = _ids.find(unitId);
         return found == _ids.end() ? std::nullopt : std::optional{found->second};
     }
 
@@ -393,14 +393,14 @@ public:
                 .code = TableErrorCode::InvalidSpec, .column = unit.id, .message = "unit \"" + unit.id + "\" " + why});
         };
         constexpr std::size_t kMaxIdBytes = 32;
-        auto const& id = unit.id;
-        if (id.empty() || id.size() > kMaxIdBytes) {
-            return refuse("has an id of " + std::to_string(id.size()) + " bytes, not 1 to 32");
+        auto const& unitId = unit.id;
+        if (unitId.empty() || unitId.size() > kMaxIdBytes) {
+            return refuse("has an id of " + std::to_string(unitId.size()) + " bytes, not 1 to 32");
         }
-        if (id.find_first_of(" \t\n\r\f\v") != std::string::npos) {
+        if (unitId.find_first_of(" \t\n\r\f\v") != std::string::npos) {
             return refuse("has white space in its id");
         }
-        if (char const first = id.front();
+        if (char const first = unitId.front();
             (first >= '0' && first <= '9') || first == '+' || first == '-' || first == '.' || first == ',') {
             return refuse("has an id that begins like a number");
         }
@@ -411,7 +411,7 @@ public:
             return refuse("names no dimension");
         }
         for (std::size_t at = 0; at < _units.size(); ++at) {
-            if (_live[at] != 0 && _units[at].id == id) {
+            if (_live[at] != 0 && _units[at].id == unitId) {
                 return refuse("is registered already");
             }
         }
@@ -421,14 +421,14 @@ public:
     }
 
     /// @brief Removes a live unit; its number becomes a tombstone.
-    /// @param id The unit's id; the ratio's unit `""` cannot be removed.
+    /// @param unitId The unit's id; the ratio's unit `""` cannot be removed.
     /// @return `false` when no live unit has the id, or it is the ratio's.
-    bool remove(std::string_view id) {
-        if (id.empty()) {
+    bool remove(std::string_view unitId) {
+        if (unitId.empty()) {
             return false;
         }
         for (std::size_t at = 0; at < _units.size(); ++at) {
-            if (_live[at] != 0 && _units[at].id == id) {
+            if (_live[at] != 0 && _units[at].id == unitId) {
                 _live[at] = 0;
                 return true;
             }
@@ -515,14 +515,16 @@ private:
 /// @return Nothing, or the first refusal: `InvalidSpec` naming a unit with no path to its dimension's base, or what
 ///         `UnitRegistryBuilder::add` refuses.
 template <units::UnitEnum E>
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
 std::expected<void, TableError> addUnitsOf(UnitRegistryBuilder& builder, std::span<E const> units,
                                            std::string_view (*dimensionOf)(E)) {
     using Base = std::pair<std::string, std::optional<E>>;
     auto const metaOf = [](E unit) -> units::UnitMeta { return units::UnitTraits<E>::meta(unit); };
     auto const one = math::Rational{1, math::DecimalPlaces{0}};
     // The factor that converts one `from` to `to`: a breadth-first search of the relations.
-    auto const factor = [&one](E from, E to) -> std::optional<math::Rational> {
-        if (from == to) {
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
+    auto const factor = [&one](E from, E target) -> std::optional<math::Rational> {
+        if (from == target) {
             return one;
         }
         if constexpr (units::HasUnitRelations<E>) {
@@ -553,7 +555,7 @@ std::expected<void, TableError> addUnitsOf(UnitRegistryBuilder& builder, std::sp
                     if (!scaled) {
                         continue;
                     }
-                    if (reached == to) {
+                    if (reached == target) {
                         return *scaled;
                     }
                     seen.push_back(reached);
@@ -652,10 +654,9 @@ std::expected<void, TableError> addUnitsOf(UnitRegistryBuilder& builder, std::sp
 ///         own small buffer.
 [[nodiscard]] inline std::size_t rowIdBytes(RowId const& key) noexcept {
     std::size_t bytes = sizeof(RowId);
-    if (auto const* const text = std::get_if<std::string>(&key)) {
-        if (text->capacity() > std::string{}.capacity()) {
-            bytes += text->capacity() + 1;
-        }
+    if (auto const* const text = std::get_if<std::string>(&key);
+        text != nullptr && text->capacity() > std::string{}.capacity()) {
+        bytes += text->capacity() + 1;
     }
     return bytes;
 }
@@ -666,10 +667,9 @@ std::expected<void, TableError> addUnitsOf(UnitRegistryBuilder& builder, std::sp
 ///         own small buffer.
 [[nodiscard]] inline std::size_t cellBytes(Cell const& cell) noexcept {
     std::size_t bytes = sizeof(Cell);
-    if (auto const* const text = std::get_if<std::string>(&cell)) {
-        if (text->capacity() > std::string{}.capacity()) {
-            bytes += text->capacity() + 1;
-        }
+    if (auto const* const text = std::get_if<std::string>(&cell);
+        text != nullptr && text->capacity() > std::string{}.capacity()) {
+        bytes += text->capacity() + 1;
     }
     return bytes;
 }
@@ -1322,19 +1322,19 @@ namespace detail {
             return broken("has " + std::to_string(group.columns.size()) + " columns, not 2 to 16");
         }
         std::optional<ColumnKind> kind;
-        for (auto const& id : group.columns) {
-            auto const column = std::ranges::find(columns, id, &ColumnInfo::id);
+        for (auto const& columnId : group.columns) {
+            auto const column = std::ranges::find(columns, columnId, &ColumnInfo::id);
             if (column == columns.end()) {
-                return broken("names no column " + id);
+                return broken("names no column " + columnId);
             }
             if (kind && *kind != column->kind) {
                 return broken("mixes column kinds");
             }
             kind = column->kind;
-            if (std::ranges::find(seen, std::string_view{id}) != seen.end()) {
-                return broken("shares column " + id + " with another group, or names it twice");
+            if (std::ranges::find(seen, std::string_view{columnId}) != seen.end()) {
+                return broken("shares column " + columnId + " with another group, or names it twice");
             }
-            seen.emplace_back(id);
+            seen.emplace_back(columnId);
         }
     }
     return std::nullopt;

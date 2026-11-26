@@ -185,7 +185,7 @@ inline constexpr std::size_t kCheckEvery = 2048;
         return std::pair{*amount, std::string_view{}};
     }
     auto const unit = text.substr(space + 1);
-    if (unit.empty() || unit.find(' ') != std::string_view::npos) {
+    if (unit.empty() || unit.contains(' ')) {
         return std::nullopt;
     }
     return std::pair{*amount, unit};

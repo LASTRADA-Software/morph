@@ -198,6 +198,7 @@ struct glz::meta<morph::table::TableColumn> {
     /// @param context Unused.
     /// @return `true` for a default `display`, an empty `tone` or `tooltip`, and no `edit`.
     template <typename V>
+    // NOLINTNEXTLINE(readability-identifier-naming): glaze looks this hook up by name.
     static constexpr bool skip_if(V const& member, std::string_view key, glz::meta_context const& context) {
         static_cast<void>(context);
         if constexpr (std::is_same_v<V, morph::table::ColumnDisplay>) {
@@ -336,8 +337,8 @@ struct TableDescription {
         return Refused{TableError{
             .code = TableErrorCode::SourceContract, .column = std::move(column), .message = std::move(message)}};
     };
-    auto const isCompanion = [&description](std::string_view id) {
-        auto const found = std::ranges::find(description.columns, id,
+    auto const isCompanion = [&description](std::string_view columnId) {
+        auto const found = std::ranges::find(description.columns, columnId,
                                              [](TableColumn const& column) -> auto const& { return column.info.id; });
         return found != description.columns.end() && found->info.kind == ColumnKind::Text;
     };
@@ -407,22 +408,22 @@ struct CompanionOverrides {
                                                                     std::span<std::string const> columns,
                                                                     CompanionOverrides const& overrides = {}) {
     std::vector<std::string> out;
-    auto const add = [&out](std::string const& id) {
-        if (!id.empty() && !std::ranges::contains(out, id)) {
-            out.push_back(id);
+    auto const add = [&out](std::string const& columnId) {
+        if (!columnId.empty() && !std::ranges::contains(out, columnId)) {
+            out.push_back(columnId);
         }
     };
-    for (std::string const& id : columns) {
-        add(id);
-        auto const found = std::ranges::find(description.columns, id,
+    for (std::string const& columnId : columns) {
+        add(columnId);
+        auto const found = std::ranges::find(description.columns, columnId,
                                              [](TableColumn const& column) -> auto const& { return column.info.id; });
         if (found == description.columns.end()) {
             continue;
         }
-        if (!overrides.tone.contains(id)) {
+        if (!overrides.tone.contains(columnId)) {
             add(found->tone);
         }
-        if (!overrides.tooltip.contains(id)) {
+        if (!overrides.tooltip.contains(columnId)) {
             add(found->tooltip);
         }
     }
@@ -519,7 +520,7 @@ namespace detail {
 /// @param value The integer.
 inline void appendInteger(std::string& out, std::int64_t value) {
     std::array<char, 24> buffer{};
-    auto const result = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
+    auto const result = std::to_chars(std::to_address(buffer.begin()), std::to_address(buffer.end()), value);
     out.append(buffer.data(), result.ptr);
 }
 
@@ -720,8 +721,8 @@ public:
             return std::nullopt;
         }
         std::int64_t value = 0;
-        auto const [end, error] = std::from_chars(token.data(), token.data() + token.size(), value);
-        if (error != std::errc{} || end != token.data() + token.size()) {
+        auto const [end, error] = std::from_chars(std::to_address(token.begin()), std::to_address(token.end()), value);
+        if (error != std::errc{} || end != std::to_address(token.end())) {
             return std::nullopt;
         }
         _at += token.size();
@@ -733,36 +734,36 @@ public:
     /// @return The token: `-?digits(.digits)?([eE][+-]?digits)?`, or empty when
     ///         @p text does not start with one.
     [[nodiscard]] static std::string_view numberToken(std::string_view text) noexcept {
-        std::size_t at = 0;
+        std::size_t position = 0;
         auto const digits = [&] {
-            auto const from = at;
-            while (at < text.size() && text[at] >= '0' && text[at] <= '9') {
-                ++at;
+            auto const from = position;
+            while (position < text.size() && text[position] >= '0' && text[position] <= '9') {
+                ++position;
             }
-            return at > from;
+            return position > from;
         };
-        if (at < text.size() && text[at] == '-') {
-            ++at;
+        if (position < text.size() && text[position] == '-') {
+            ++position;
         }
         if (!digits()) {
             return {};
         }
-        if (at < text.size() && text[at] == '.') {
-            ++at;
+        if (position < text.size() && text[position] == '.') {
+            ++position;
             if (!digits()) {
                 return {};
             }
         }
-        if (at < text.size() && (text[at] == 'e' || text[at] == 'E')) {
-            ++at;
-            if (at < text.size() && (text[at] == '+' || text[at] == '-')) {
-                ++at;
+        if (position < text.size() && (text[position] == 'e' || text[position] == 'E')) {
+            ++position;
+            if (position < text.size() && (text[position] == '+' || text[position] == '-')) {
+                ++position;
             }
             if (!digits()) {
                 return {};
             }
         }
-        return text.substr(0, at);
+        return text.substr(0, position);
     }
 
 private:
@@ -849,11 +850,11 @@ private:
     if (unit == "null") {
         return std::pair{*amount, std::optional<std::string>{}};
     }
-    std::string id;
-    if (unit.empty() || unit.front() != '"' || glz::read<glz::opts{.null_terminated = false}>(id, unit)) {
+    std::string unitId;
+    if (unit.empty() || unit.front() != '"' || glz::read<glz::opts{.null_terminated = false}>(unitId, unit)) {
         return std::nullopt;
     }
-    return std::pair{*amount, std::optional<std::string>{std::move(id)}};
+    return std::pair{*amount, std::optional<std::string>{std::move(unitId)}};
 }
 
 /// @brief The `double` a `Number` column holds for the strings JSON writes
@@ -887,6 +888,7 @@ private:
 /// @param json The cell's JSON text.
 /// @param kind The column's kind, or nothing when it is not known.
 /// @return The cell.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
 [[nodiscard]] inline Cell cellFromJson(std::string_view json, std::optional<ColumnKind> kind) {
     auto const first = json.find_first_not_of(" \t\n\r");
     if (first == std::string_view::npos) {
@@ -921,8 +923,9 @@ private:
     if (CellCursor::numberToken(text).size() == text.size()) {
         if (!number && text.find_first_of(".eE") == std::string_view::npos) {
             std::int64_t value = 0;
-            auto const [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
-            if (error == std::errc{} && end == text.data() + text.size()) {
+            auto const [end, error] =
+                std::from_chars(std::to_address(text.begin()), std::to_address(text.end()), value);
+            if (error == std::errc{} && end == std::to_address(text.end())) {
                 return Cell{value};
             }
         }
@@ -991,6 +994,7 @@ struct glz::meta<morph::table::GenericPage> {
     /// @param context Unused.
     /// @return `true` for an empty `failed`, `indices`, `unmatched` or `viewRevision`.
     template <typename V>
+    // NOLINTNEXTLINE(readability-identifier-naming): glaze looks this hook up by name.
     static constexpr bool skip_if(V const& member, std::string_view key, glz::meta_context const& context) {
         static_cast<void>(context);
         return morph::table::detail::omittedPageMember(member, key);
@@ -1029,6 +1033,7 @@ namespace morph::table {
 /// @param units   The registry the source's measures are numbered in. Not null when a written column is `Measure`:
 ///                a precondition, which `detail::answerQuery` checks before it calls this.
 /// @return The page, its `revision` left empty for the caller to set.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
 [[nodiscard]] inline GenericPage writeGenericPage(PageRows const& page, DataSource const& source,
                                                   std::span<std::string const> columns,
                                                   UnitRegistry const* units = nullptr) {
@@ -1051,10 +1056,15 @@ namespace morph::table {
         cells.reserve(indices.size());
         unloaded.clear();
         for (auto const& index : indices) {
-            cells.push_back(index ? snapshot->cell(row, *index) : Cell{});
+            if (!index) {
+                cells.emplace_back();
+                continue;
+            }
+            cells.push_back(snapshot->cell(row, *index));
             if (std::holds_alternative<Unloaded>(cells.back())) {
                 unloaded.emplace_back(infos[*index].level);
             } else if (auto const* const measure = std::get_if<Measure>(&cells.back())) {
+                // NOLINTNEXTLINE(cert-dcl03-c,misc-static-assert): units is known only at run time.
                 assert(units != nullptr && "writeGenericPage: a measure is written with a unit registry");
                 if (units != nullptr && units->contains(measure->unit)) {
                     out.units.try_emplace(measure->unit, units->info(measure->unit).id);
@@ -1097,6 +1107,7 @@ namespace morph::table {
 ///         length, an `unloadedRows` index is outside the rows or not above the
 ///         one before it, `indices` is neither empty nor one non-negative
 ///         view row per row, or what `registryOf` refuses.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
 [[nodiscard]] inline std::expected<GenericPage, TableError> readGenericPage(std::string_view json,
                                                                             TableDescription const& description,
                                                                             UnitRegistry const* units = nullptr) {
@@ -1110,11 +1121,11 @@ namespace morph::table {
     }
     std::vector<ColumnKind> kinds;
     kinds.reserve(page.columns.size());
-    for (auto const& id : page.columns) {
-        auto const found =
-            std::ranges::find(description.columns, id, [](TableColumn const& c) -> auto const& { return c.info.id; });
+    for (auto const& columnId : page.columns) {
+        auto const found = std::ranges::find(description.columns, columnId,
+                                             [](TableColumn const& column) -> auto const& { return column.info.id; });
         if (found == description.columns.end()) {
-            return std::unexpected(detail::unknownColumn(id));
+            return std::unexpected(detail::unknownColumn(columnId));
         }
         kinds.push_back(found->info.kind);
     }
@@ -1265,6 +1276,7 @@ public:
     /// @param page  The page the server returned.
     /// @return `false` when the reply was ignored: its fetch belongs to an earlier query, or is not the one in
     ///         flight for its page.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
     bool accept(PageFetch const& fetch, GenericPage page) {
         return acceptReply(
             fetch, replyOf(page),
@@ -1281,11 +1293,11 @@ public:
                 // row, so the reply's cells are visited where they lie.
                 std::vector<std::vector<Cell>*> targets(page.columns.size(), nullptr);
                 for (std::size_t column = 0; column < page.columns.size(); ++column) {
-                    auto const& id = page.columns[column];
-                    if (kind == detail::WindowFetchKind::Rest && !content.holds(id)) {
+                    auto const& columnId = page.columns[column];
+                    if (kind == detail::WindowFetchKind::Rest && !content.holds(columnId)) {
                         continue;
                     }
-                    auto& values = content.cells[id];
+                    auto& values = content.cells[columnId];
                     if (kind != detail::WindowFetchKind::Rest) {
                         values.clear();
                     }
@@ -1312,7 +1324,8 @@ public:
         // The columns a page holds that the reply lacks go once per page, not once per row.
         Core::Held const* trimmed = nullptr;
         return patchRows(
-            fetch, replyOf(reply), [&reply, &trimmed](Core::Held& page, std::size_t at, std::size_t from) {
+            // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the page's position, then the reply's row it is taken from.
+            fetch, replyOf(reply), [&reply, &trimmed](Core::Held& page, std::size_t position, std::size_t from) {
                 if (trimmed != &page) {
                     std::erase_if(page.content.cells, [&reply](auto const& entry) {
                         return std::ranges::find(reply.columns, entry.first) == reply.columns.end();
@@ -1322,8 +1335,8 @@ public:
                 auto& cells = reply.rows[from];
                 for (std::size_t column = 0; column < reply.columns.size() && column < cells.size(); ++column) {
                     auto const found = page.content.cells.find(reply.columns[column]);
-                    if (found != page.content.cells.end() && at < found->second.size()) {
-                        found->second[at] = std::move(cells[column]);
+                    if (found != page.content.cells.end() && position < found->second.size()) {
+                        found->second[position] = std::move(cells[column]);
                     }
                 }
             });
@@ -1347,8 +1360,9 @@ public:
             return nullptr;
         }
         auto const found = page->content.cells.find(column);
-        auto const at = static_cast<std::size_t>(index % pageSize());
-        return found == page->content.cells.end() || at >= found->second.size() ? nullptr : &found->second[at];
+        auto const position = static_cast<std::size_t>(index % pageSize());
+        return found == page->content.cells.end() || position >= found->second.size() ? nullptr
+                                                                                      : &found->second[position];
     }
 
     /// @brief Whether a held row's column is held.
@@ -1413,6 +1427,7 @@ namespace morph::table {
 /// @brief Who asks for a table: what a table's function reads to decide what it serves.
 struct TableContext {
     /// @brief The caller's session; an empty one outside a dispatch.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members): a read-only view of the dispatching session, valid for the dispatch it is built in; never reseated or assigned.
     session::Context const& session;
 };
 
@@ -1570,11 +1585,13 @@ template <typename Row, typename Fn>
 }
 
 /// @brief Registration option: callers see different rows, so the table's record keeps its keys private.
+// NOLINTNEXTLINE(readability-identifier-naming): a registration option, spelled in lower case like the registration call it is passed to.
 struct rowScoped {};
 
 /// @brief Registration option: a change of any of @p Records is a change of the table's record.
 /// @tparam Records Registered record types.
 template <typename... Records>
+// NOLINTNEXTLINE(readability-identifier-naming): a registration option, spelled in lower case like the registration call it is passed to.
 struct derivedFrom {};
 
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- row indices are bounded by the snapshot's own counts
@@ -1807,9 +1824,9 @@ struct AnswerContext {
             query.distinct->group.empty()
                 ? std::span<std::string const>{&query.distinct->column, 1}
                 : detail::groupColumns(groups, query.distinct->group).value_or(std::span<std::string const>{});
-        for (auto const& id : listed) {
-            if (auto const index = findColumn(columns, id); index && columns[*index].level == level) {
-                return id;
+        for (auto const& columnId : listed) {
+            if (auto const index = findColumn(columns, columnId); index && columns[*index].level == level) {
+                return columnId;
             }
         }
     }
@@ -1852,6 +1869,7 @@ struct AnswerContext {
 /// @param context What the reply is built with.
 /// @return The page, its `revision` that of `servedDescription(served)`, or the error the client shows:
 ///         `SourceContract` when the table's `limits.maxSortKeys` is out of range.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
 [[nodiscard]] inline std::expected<GenericPage, TableError> answerQuery(ServedTable const& served,
                                                                         TableQuery const& query,
                                                                         AnswerContext const& context = {}) {
@@ -1990,8 +2008,8 @@ struct AnswerContext {
     }
     // Before any view is computed: `writeGenericPage` writes a measure only through a registry.
     for (auto const& column : columns) {
-        if (auto const at = findColumn(infos, column)) {
-            if (auto missing = unitsMissing(infos[*at], served.services)) {
+        if (auto const columnIndex = findColumn(infos, column)) {
+            if (auto missing = unitsMissing(infos[*columnIndex], served.services)) {
                 return std::unexpected(std::move(*missing));
             }
         }
@@ -2137,6 +2155,7 @@ struct AnswerContext {
     }
     for (auto const& level : needed.display) {
         if (auto const source = levelOf(level); source != nullptr && !page.keys.empty()) {
+            // NOLINTNEXTLINE(bugprone-unused-return-value): a display want is never refused: only an order use can exceed the cache's bound.
             static_cast<void>(source->want(page.keys, LevelUse::Display, query.retry));
         }
     }
@@ -2192,7 +2211,7 @@ struct TableRowOf<Typed<Row, Fn>> {
 /// @brief The row type of a registration's function.
 /// @tparam F The registration's function type, as `decltype` gives it.
 template <typename F>
-using TableRow = typename TableRowOf<std::remove_cvref_t<F>>::type;
+using TableRow = TableRowOf<std::remove_cvref_t<F>>::type;
 
 /// @brief The member function a registration keys its table on.
 /// @tparam F The registration's function type.
@@ -2272,27 +2291,28 @@ template <typename Row>
 /// each column names the group it is in. The key is the key member of the record registered for `Row`. @p units
 /// resolves the rows' `MeasureValue` unit ids and is the table's `services.units`.
 /// @tparam Row The row type.
-/// @param id    The table's id.
+/// @param tableId The table's id.
 /// @param rows  The rows the caller may see; null serves none.
 /// @param units The model's unit registry (`tableUnits`); null when the model declares none.
 /// @return The served table.
 /// @throws std::logic_error when `Row` is not a registered record with a key.
 /// @throws std::invalid_argument when `Row::columnLevels()` names no column.
 template <typename Row>
-[[nodiscard]] ServedTable typedTable(std::string_view id, std::shared_ptr<std::vector<Row> const> rows,
+[[nodiscard]] ServedTable typedTable(std::string_view tableId, std::shared_ptr<std::vector<Row> const> rows,
                                      std::shared_ptr<UnitRegistry const> units = nullptr) {
     auto const& records = effects::detail::resolved().records;
     auto const record = std::ranges::find(records, std::type_index{typeid(Row)}, &record::RecordInfo::type);
     if (record == records.end() || !record->keyField) {
-        throw std::logic_error{"table " + std::string{id} + ": its row type is not a registered record with a key"};
+        throw std::logic_error{"table " + std::string{tableId} +
+                               ": its row type is not a registered record with a key"};
     }
     auto key = rowKeyNamed<Row>(*record->keyField);
     if (!key) {
-        throw std::logic_error{"table " + std::string{id} + ": its row type has no member " + *record->keyField};
+        throw std::logic_error{"table " + std::string{tableId} + ": its row type has no member " + *record->keyField};
     }
     ServedTable served;
-    served.description.id = std::string{id};
-    served.description.label = forms::detail::inferTitle(id);
+    served.description.id = std::string{tableId};
+    served.description.label = forms::detail::inferTitle(tableId);
     served.description.key = *record->keyField;
     for (auto& info : reflectedColumns<Row>()) {
         auto const* const meta = forms::detail::findFieldMeta<Row>(info.id);
@@ -2408,7 +2428,7 @@ public:
     /// @brief Posts the answer to the table executor.
     /// @param awaiting The coroutine performing the `co_await`.
     void await_suspend(std::coroutine_handle<> awaiting) {
-        auto shared = _shared;
+        auto const shared = _shared;
         shared->continuation = awaiting;
         shared->context = ::core::async::ResumeTarget::current();
         // Nothing of this awaiter is touched after the post: the work may resume the coroutine, and free the
@@ -2512,10 +2532,11 @@ struct DescribeTable {
             throw detail::refusalOf(described.error());
         }
         if (auto const* const runtime = currentTableRuntime(); runtime != nullptr && runtime->schemaOf) {
-            auto const edits = checkEdits(*described, [runtime](std::string_view id) -> std::optional<std::string> {
-                std::string schema = runtime->schemaOf(id);
-                return schema.empty() ? std::nullopt : std::optional{std::move(schema)};
-            });
+            auto const edits =
+                checkEdits(*described, [runtime](std::string_view tableId) -> std::optional<std::string> {
+                    std::string schema = runtime->schemaOf(tableId);
+                    return schema.empty() ? std::nullopt : std::optional{std::move(schema)};
+                });
             if (!edits) {
                 throw detail::refusalOf(edits.error());
             }
@@ -2532,6 +2553,7 @@ struct DescribeTable {
 /// @throws morph::model::ActionRefusal `table.<reason>` with the argument `column`, for a query the table refuses.
 template <auto Function>
 template <typename Model>
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters): the dispatcher keeps the model and the action alive until the task completes.
 ::core::async::Task<GenericPage> QueryTable<Function>::invoke(Model& model, QueryTable& action) {
     // Read before the first suspension: a server installs the runtime for the dispatch's first step only.
     auto const* const runtime = currentTableRuntime();
@@ -2572,4 +2594,5 @@ struct glz::meta<morph::table::QueryTable<Function>> {
 #include <morph/table/row_selection.hpp>
 
 // The commits of edited cells and the edit actions of a model's table; `checkEdits` above is defined there.
+// NOLINTNEXTLINE(misc-header-include-cycle): edits.hpp needs the declarations above, so it is included after them.
 #include <morph/table/edits.hpp>

@@ -94,6 +94,9 @@ public:
     /// @brief Frees the view and the lookups.
     ~ViewEntry() = default;
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the entry is a record of one
+    // computation, built whole and read by the cache's lookups; no member has an invariant of its own to guard.
+
     /// @brief The rows the view was computed over; held, so the address its identity names is not reused.
     std::shared_ptr<RowSnapshot const> snapshot;
     /// @brief Each order level the view read, with its snapshot's generation.
@@ -107,6 +110,7 @@ public:
     /// @brief The keys of the view's rows and of the undecided rows, for the order levels' wants; null for a
     ///        query with no order level.
     std::shared_ptr<std::vector<RowId> const> orderKeys;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
     /// @brief The view row of each source row, `detail::kNotInView` for a row not in the view.
     /// @return The table, built at the first call.
@@ -136,7 +140,7 @@ public:
     ///         their vector's spare capacity; once the keyed lookups are built, 4 bytes a source row for the view
     ///         rows and one `(hash, row)` pair a source row for the key index.
     [[nodiscard]] std::size_t bytes() const {
-        auto out = 4 * (view.rows.size() + view.undecided.size()) + _orderKeyBytes;
+        auto out = (4 * (view.rows.size() + view.undecided.size())) + _orderKeyBytes;
         if (_built.load()) {
             out += (sizeof(std::uint32_t) + sizeof(std::pair<std::size_t, std::uint32_t>)) * snapshot->rowCount();
         }
@@ -149,7 +153,7 @@ private:
         if (keys == nullptr) {
             return 0;
         }
-        auto out = sizeof(std::vector<RowId>) + (keys->capacity() - keys->size()) * sizeof(RowId);
+        auto out = sizeof(std::vector<RowId>) + ((keys->capacity() - keys->size()) * sizeof(RowId));
         for (auto const& key : *keys) {
             out += rowIdBytes(key);
         }
@@ -245,7 +249,7 @@ public:
             for (auto const& other : _running) {
                 if (other->key == key && other->identity == identity && other->levels == wanted) {
                     _waits.fetch_add(1);
-                    auto done = other->done;
+                    auto const done = other->done;
                     lock.unlock();
                     return done.get();
                 }
@@ -338,13 +342,13 @@ private:
             drop(found, released);
         }
         _recency.push_front(running->key);
-        auto [at, inserted] = _entries.emplace(running->key, Slot{.entry = *result,
-                                                                  .newness = running->newness,
-                                                                  .order = running->order,
-                                                                  .bytes = 0,
-                                                                  .recency = _recency.begin()});
+        auto [slot, inserted] = _entries.emplace(running->key, Slot{.entry = *result,
+                                                                    .newness = running->newness,
+                                                                    .order = running->order,
+                                                                    .bytes = 0,
+                                                                    .recency = _recency.begin()});
         static_cast<void>(inserted);
-        remeasure(at->second);
+        remeasure(slot->second);
         bound(released);
         lock.unlock();
         released.clear();

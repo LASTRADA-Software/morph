@@ -274,15 +274,15 @@ public:
                 }
             }
         }
-        std::string id;
-        for (std::size_t n = 1;; ++n) {
-            id = "g" + std::to_string(n);
-            if (std::ranges::none_of(_groups, [&](ColumnGroupInfo const& group) { return group.id == id; })) {
+        std::string groupId;
+        for (std::size_t number = 1;; ++number) {
+            groupId = "g" + std::to_string(number);
+            if (std::ranges::none_of(_groups, [&](ColumnGroupInfo const& group) { return group.id == groupId; })) {
                 break;
             }
         }
-        _groups.push_back({.id = id, .label = std::move(label), .columns = std::move(columns)});
-        return id;
+        _groups.push_back({.id = groupId, .label = std::move(label), .columns = std::move(columns)});
+        return groupId;
     }
 
     /// @brief Removes a user-formed group.
@@ -365,7 +365,7 @@ public:
     /// @param ids            The new columns, in their declared order.
     /// @param declaredHidden The new declared hidden columns.
     void rebuild(std::vector<std::string> ids, std::vector<std::string> declaredHidden = {}) {
-        auto current = value();
+        auto const current = value();
         _defaults = std::move(ids);
         _declaredHidden = std::move(declaredHidden);
         fit(current);
@@ -374,6 +374,7 @@ public:
 private:
     // The fitting rule: every part of `value` filtered to the declared columns, each declared column it lacks placed
     // after its nearest declared predecessor that is placed, one column kept visible, and the pin count clamped.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
     void fit(ColumnLayoutValue const& value) {
         // Sets, not scans: a stored layout of a few hundred columns is fitted in one pass over each of its parts.
         std::unordered_set<std::string_view> const declaredIds{_defaults.begin(), _defaults.end()};
@@ -522,11 +523,11 @@ struct RetainedOrder {
     out.order.reserve(baseOrder.size() + placed.size());
     auto from = baseOrder.begin();
     for (auto const& [row, decided] : placed) {
-        auto const to =
+        auto const last =
             std::upper_bound(from, baseOrder.end(), row,
                              [&before](std::uint32_t left, std::uint32_t right) { return before(left, right); });
-        out.order.insert(out.order.end(), from, to);
-        from = to;
+        out.order.insert(out.order.end(), from, last);
+        from = last;
         if (decided == Match::No) {
             out.unmatched.push_back(static_cast<std::int64_t>(out.order.size()));
         }
@@ -757,6 +758,7 @@ private:
     // Builds every needed column that has no keys, and patches the dirty rows
     // of every column that has them (on a copy: the old keys may still be
     // read by the owner or another job).
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
     bool buildKeys(Deadline deadline, ::core::async::StopToken const& stop) {
         MORPH_ZONE("table.keyBuild");
         auto const rows = _in.snapshot->rowCount();
@@ -995,8 +997,8 @@ private:
         std::ranges::set_difference(_result.undecided, merged.admitted, std::back_inserter(undecided));
         _result.undecided = std::move(undecided);
         _result.unmatched.clear();
-        for (auto const at : merged.unmatched) {
-            _result.unmatched.push_back(_result.view[static_cast<std::size_t>(at)]);
+        for (auto const column : merged.unmatched) {
+            _result.unmatched.push_back(_result.view[static_cast<std::size_t>(column)]);
         }
         std::ranges::sort(_result.unmatched);
     }
@@ -1681,7 +1683,7 @@ private:
         if (job->failure()) {
             giveBack(input, _runningTicket);
             revert();
-            afterJob(*job->failure());
+            afterJob(job->failure());
             return;
         }
         auto const began = std::chrono::steady_clock::now();

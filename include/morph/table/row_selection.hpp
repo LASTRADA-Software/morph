@@ -27,6 +27,7 @@
 #include <morph/core/completion.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/records.hpp>
+// NOLINTNEXTLINE(misc-header-include-cycle): description.hpp includes this header at its end, after the declarations this one needs.
 #include <morph/table/description.hpp>
 #include <morph/table/query.hpp>
 #include <morph/table/record_name.hpp>
@@ -66,6 +67,7 @@ namespace detail {
             return;
         }
         auto& members = node.get_object();
+        // NOLINTNEXTLINE(readability-qualified-auto): the iterator is a pointer in some standard libraries and a class in others.
         for (auto at = members.begin(); at != members.end();) {
             auto& value = at->second;
             prune(value);
@@ -212,6 +214,7 @@ struct Membership {
 /// @param record   The table's record name, the first member of a view's key; empty caches nothing.
 /// @return The membership, or the error the filter or the bound gives: `LimitExceeded` for a view of more than
 ///         `served.limits.maxSelectedRows` rows.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
 [[nodiscard]] inline std::expected<Membership, TableError> membership(ServedTable const& served,
                                                                       FilterSpec const& filters,
                                                                       std::span<RowId const> retained,
@@ -284,17 +287,17 @@ struct Membership {
         std::unordered_set<std::uint32_t> const inView(out.rows.begin(), out.rows.end());
         std::vector<std::uint32_t> merged;
         for (std::size_t row = 0; row < snapshot->rowCount() && merged.size() < wanted.size(); ++row) {
-            auto const at = static_cast<std::uint32_t>(row);
-            if (wanted.contains(snapshot->rowId(row)) && !inView.contains(at)) {
-                merged.push_back(at);
+            auto const rowIndex = static_cast<std::uint32_t>(row);
+            if (wanted.contains(snapshot->rowId(row)) && !inView.contains(rowIndex)) {
+                merged.push_back(rowIndex);
                 out.digest.add(snapshot->rowId(row));
             }
         }
         auto const middle = static_cast<std::ptrdiff_t>(out.rows.size());
         out.rows.insert(out.rows.end(), merged.begin(), merged.end());
-        std::inplace_merge(out.rows.begin(), out.rows.begin() + middle, out.rows.end());
+        std::ranges::inplace_merge(out.rows, out.rows.begin() + middle);
     }
-    if (static_cast<std::int64_t>(out.rows.size()) > served.limits.maxSelectedRows) {
+    if (std::cmp_greater(out.rows.size(), served.limits.maxSelectedRows)) {
         return std::unexpected(TableError{.code = TableErrorCode::LimitExceeded,
                                           .column = {},
                                           .message = "a selection of the view holds at most " +
@@ -328,7 +331,7 @@ struct Membership {
     SelectedRows out;
     if (!selection.isView) {
         std::unordered_set<RowId> const wanted(selection.keys.begin(), selection.keys.end());
-        if (static_cast<std::int64_t>(wanted.size()) > served.limits.maxSelectedRows) {
+        if (std::cmp_greater(wanted.size(), served.limits.maxSelectedRows)) {
             return std::unexpected(TableError{
                 .code = TableErrorCode::LimitExceeded,
                 .column = {},
@@ -445,7 +448,7 @@ template <auto Function, typename Model>
     }
     auto [completion, promise] = async::Completion<Result>::makeSettleable(runtime->settle);
     // A posted task is a `std::function`, which copies: the promise is shared.
-    auto shared = std::make_shared<typename async::Completion<Result>::Promise>(std::move(promise));
+    auto const shared = std::make_shared<async::Completion<Result>::Promise>(std::move(promise));
     runtime->work->post([shared, served = std::move(served), plain = std::move(plain), policy, rowScoped,
                          views = runtime->views, record = std::move(record), keep = runtime->settleKeep] {
         static_cast<void>(keep);
@@ -483,6 +486,7 @@ struct ResolveTable {
     /// @return The keys.
     /// @throws morph::model::ActionRefusal `table.<reason>` with the argument `column`, as `Table.<id>` refuses.
     template <typename Model>
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters): the dispatcher keeps the model and the action alive until the task completes.
     static ::core::async::Task<SelectedRows> invoke(Model& model, ResolveTable& action) {
         auto const context = detail::callerContext();
         // Its own statement: MSVC cannot tail-call a call that shares a full-expression with a `co_await`.

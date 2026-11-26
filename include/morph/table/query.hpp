@@ -305,7 +305,7 @@ public:
         std::uint64_t hash = 0;
         if (auto const* const number = std::get_if<std::int64_t>(&key)) {
             std::array<char, 24> text{'i', ':'};
-            auto const end = std::to_chars(text.data() + 2, text.data() + text.size(), *number).ptr;
+            char const* const end = std::to_chars(std::next(text.data(), 2), std::to_address(text.end()), *number).ptr;
             hash = model::detail::fnv1a64(std::string_view{text.data(), static_cast<std::size_t>(end - text.data())});
         } else {
             constexpr std::uint64_t kOffsetBasis = 14695981039346656037ULL;
@@ -318,7 +318,9 @@ public:
             };
             step('s');
             step(':');
-            for (char const byte : std::get<std::string>(key)) {
+            // The key is a number or a name, and the number was handled above: `get_if` rather than `get`, which
+            // would throw out of a `noexcept` function.
+            for (char const byte : *std::get_if<std::string>(&key)) {
                 step(byte);
             }
         }
@@ -473,6 +475,7 @@ struct SetTally {
 /// @param mayRead Whether the principal may read a column.
 /// @param groups  The table's declared groups, which a group filter's `group` names.
 /// @return The first violation, or nothing.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): a run of independent rules, one `if` each, in the order they are reported; splitting scatters that order.
 [[nodiscard]] inline std::optional<TableError> checkFilters(FilterSpec const& filters,
                                                             std::span<ColumnInfo const> columns,
                                                             QueryLimits const& limits,
@@ -590,6 +593,7 @@ struct SetTally {
     }
     request.limit = std::min(request.limit, limits.maxLimit);
     auto const& first = listed.front();
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): validate() resolved every column the request names.
     auto const kind = columns[*findColumn(columns, first)].kind;
     if (kind == ColumnKind::Custom) {
         return TableError{.code = TableErrorCode::UnsupportedOperator,
@@ -624,6 +628,7 @@ struct SetTally {
 /// @param groups  The table's declared groups (`DataSource::groups()`), which a group filter's or a distinct
 ///                request's `group` names.
 /// @return The query with its limits clamped and its `columns` ordered, or the first violation.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): a run of independent rules, one `if` each, in the order they are reported; splitting scatters that order.
 [[nodiscard]] inline std::expected<TableQuery, TableError> validate(
     TableQuery query, std::span<ColumnInfo const> columns, QueryLimits const& limits = {},
     std::function<bool(std::string_view)> const& mayRead = {}, std::span<ColumnGroupInfo const> groups = {}) {
@@ -736,6 +741,7 @@ namespace detail {
 ///                 on the date parser. Null members mean their defaults.
 /// @param groups   The table's declared groups.
 /// @return The levels.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): a run of independent rules, one `if` each, in the order they are reported; splitting scatters that order.
 [[nodiscard]] inline LevelsNeeded levelsNeeded(TableQuery const& query, std::span<ColumnInfo const> columns,
                                                std::function<bool(std::string_view)> const& mayRead = {},
                                                Services const& services = {},
@@ -748,14 +754,15 @@ namespace detail {
         }
     }
     std::ranges::sort(levelled);
-    auto const levelOf = [&levelled](std::string_view id) {
-        auto const found = std::ranges::lower_bound(levelled, id, {}, [](auto const& entry) { return entry.first; });
-        return found != levelled.end() && found->first == id ? found->second : std::string_view{};
+    auto const levelOf = [&levelled](std::string_view columnId) {
+        auto const found =
+            std::ranges::lower_bound(levelled, columnId, {}, [](auto const& entry) { return entry.first; });
+        return found != levelled.end() && found->first == columnId ? found->second : std::string_view{};
     };
     std::vector<std::string_view> order;
     std::vector<std::string_view> display;
-    auto const add = [&levelOf](std::vector<std::string_view>& out, std::string_view id) {
-        if (auto const level = levelOf(id); !level.empty()) {
+    auto const add = [&levelOf](std::vector<std::string_view>& out, std::string_view columnId) {
+        if (auto const level = levelOf(columnId); !level.empty()) {
             out.push_back(level);
         }
     };
@@ -1085,9 +1092,9 @@ public:
     [[nodiscard]] std::span<KeyColumn const* const> pointers() const noexcept { return _pointers; }
 
 private:
-    void fill(std::uint32_t at) {
+    void fill(std::uint32_t position) {
         for (auto const column : _needed) {
-            _keys[column]->set(at, _snapshot->cell(_rows[at], column), _columns[column], *_services);
+            _keys[column]->set(position, _snapshot->cell(_rows[position], column), _columns[column], *_services);
         }
     }
 
@@ -1184,8 +1191,8 @@ struct RetainedView {
         return left < right;
     };
     auto const match = [&keys, &filter](std::uint32_t row) {
-        auto const at = keys.local(row);
-        return filter->evaluateRow(keys.pointers(), at);
+        auto const local = keys.local(row);
+        return filter->evaluateRow(keys.pointers(), local);
     };
     auto merged = mergeRetained(base.rows, static_cast<std::int64_t>(base.undecided.size()), base.digest, rows, before,
                                 match, [&snapshot](std::uint32_t row) { return snapshot.rowId(row); });
@@ -1292,8 +1299,9 @@ struct DistinctInput {
 [[nodiscard]] inline std::string isoDateTime(std::int64_t seconds) {
     constexpr std::int64_t kDay = 86'400;
     auto const day = dayOfSeconds(seconds);
-    auto const of = seconds - (day * kDay);
-    return std::format("{}T{:02}:{:02}:{:02}Z", isoDate(day), of / 3600, (of / 60) % 60, of % 60);
+    auto const secondOfDay = seconds - (day * kDay);
+    return std::format("{}T{:02}:{:02}:{:02}Z", isoDate(day), secondOfDay / 3600, (secondOfDay / 60) % 60,
+                       secondOfDay % 60);
 }
 
 /// @brief The first and last day of the bucket a day is in.
@@ -1452,7 +1460,7 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
 [[nodiscard]] inline DistinctValue describeValue(RowSnapshot const& snapshot, std::size_t column,
                                                  ColumnInfo const& info, KeyColumn const& keys, std::uint32_t row,
                                                  DateBucket bucket, UnitRegistry const* units = nullptr) {
-    auto const both = [](std::string text) { return DistinctValue{.text = text, .operand = text, .count = 0}; };
+    auto const both = [](std::string const& text) { return DistinctValue{.text = text, .operand = text, .count = 0}; };
     if (info.kind == ColumnKind::Measure) {
         auto const measure = measureOf(snapshot.cell(row, column), units);
         if (!measure || units == nullptr || !units->contains(measure->unit)) {
@@ -1523,6 +1531,7 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
 /// @param validated The request as `detail::checkDistinct` left it.
 /// @return The values; `ServiceFailed` from a throwing service; `SourceContract` for an unloaded cell in a base-level
 ///         column it reads; or the filter's compile error.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
 [[nodiscard]] inline std::expected<DistinctValues, TableError> distinctOver(DistinctInput const& input,
                                                                             DistinctRequest const& validated) {
     try {
@@ -1534,37 +1543,41 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
         auto const rowCount = snapshot.rowCount();
         std::vector<std::size_t> listed;
         if (validated.group.empty()) {
+            // NOLINTNEXTLINE(bugprone-unchecked-optional-access): validate() resolved every column the request names.
             listed.push_back(*findColumn(input.columns, validated.column));
         } else {
             // A local, not the range-for's own temporary: the optional holding the span must outlive the loop.
             auto const members = groupColumns(input.groups, validated.group);
+            // NOLINTNEXTLINE(bugprone-unchecked-optional-access): validate() resolved every column the request names.
             for (auto const& columnId : *members) {
+                // NOLINTNEXTLINE(bugprone-unchecked-optional-access): validate() resolved every column the request names.
                 listed.push_back(*findColumn(input.columns, columnId));
             }
         }
-        for (auto const at : listed) {
-            if (auto missing = unitsMissing(input.columns[at], input.services)) {
+        for (auto const column : listed) {
+            if (auto missing = unitsMissing(input.columns[column], input.services)) {
                 return std::unexpected(std::move(*missing));
             }
         }
         std::vector<std::shared_ptr<KeyColumn const>> built(input.columns.size());
         std::vector<KeyColumn const*> pointers(input.columns.size(), nullptr);
-        auto const keysOf = [&](std::size_t at) {
-            if (at < input.keys.size() && input.keys[at] != nullptr) {
-                pointers[at] = input.keys[at].get();
+        auto const keysOf = [&](std::size_t column) {
+            if (column < input.keys.size() && input.keys[column] != nullptr) {
+                pointers[column] = input.keys[column].get();
                 return;
             }
-            auto keys = std::make_shared<KeyColumn>(KeyColumn::forColumn(input.columns[at], input.services, rowCount));
-            buildKeys(snapshot, at, input.columns[at], input.services, 0, rowCount, *keys);
-            pointers[at] = keys.get();
-            built[at] = std::move(keys);
+            auto keys =
+                std::make_shared<KeyColumn>(KeyColumn::forColumn(input.columns[column], input.services, rowCount));
+            buildKeys(snapshot, column, input.columns[column], input.services, 0, rowCount, *keys);
+            pointers[column] = keys.get();
+            built[column] = std::move(keys);
         };
-        for (auto const at : filter->columnsUsed()) {
-            keysOf(at);
+        for (auto const column : filter->columnsUsed()) {
+            keysOf(column);
         }
-        for (auto const at : listed) {
-            if (pointers[at] == nullptr) {
-                keysOf(at);
+        for (auto const column : listed) {
+            if (pointers[column] == nullptr) {
+                keysOf(column);
             }
         }
         // As a view job does: an unloaded cell in a base-level column the list reads is a broken source, not a
@@ -1584,12 +1597,13 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
             FilterRun run{*filter, pointers, std::move(candidates)};
             static_cast<void>(run.run(kNoDeadline, ::core::async::StopToken{}));
             out.partial = !std::move(run).takeUndecided().empty();
+            // NOLINTNEXTLINE(bugprone-use-after-move): take and takeUndecided read different marks of the same rows and move nothing.
             candidates = std::move(run).take();
         }
         std::vector<KeyColumn const*> listedKeys;
         listedKeys.reserve(listed.size());
-        for (auto const at : listed) {
-            listedKeys.push_back(pointers[at]);
+        for (auto const column : listed) {
+            listedKeys.push_back(pointers[column]);
         }
         // Every listed column is of one kind: a declared group's are, by `checkGroups`.
         auto const& info = input.columns[listed.front()];
@@ -1649,8 +1663,8 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
                 break;
         }
         auto const describe = [&](DistinctGroup const& group) {
-            auto const at = listed[group.column];
-            return describeValue(snapshot, at, input.columns[at], *listedKeys[group.column], group.first,
+            auto const column = listed[group.column];
+            return describeValue(snapshot, column, input.columns[column], *listedKeys[group.column], group.first,
                                  validated.bucket, input.services.units.get());
         };
         if (!validated.search.empty()) {
@@ -1670,10 +1684,10 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
         auto const end = validated.limit >= count - begin ? count : begin + validated.limit;
         // Only the values up to the page's end are put in order: a menu's first page of 50,000 values sorts 200.
         std::ranges::partial_sort(groups, groups.begin() + static_cast<std::ptrdiff_t>(end),
-                                  [&listedKeys](DistinctGroup const& a, DistinctGroup const& b) {
-                                      int const order = compareValues(*listedKeys[a.column], a.first,
-                                                                      *listedKeys[b.column], b.first);
-                                      return order != 0 ? order < 0 : a.first < b.first;
+                                  [&listedKeys](DistinctGroup const& left, DistinctGroup const& right) {
+                                      int const order = compareValues(*listedKeys[left.column], left.first,
+                                                                      *listedKeys[right.column], right.first);
+                                      return order != 0 ? order < 0 : left.first < right.first;
                                   });
         for (auto at = begin; at < end; ++at) {
             auto const& group = groups[static_cast<std::size_t>(at)];
@@ -1734,7 +1748,9 @@ inline void withoutOwnFilter(FilterSpec& filters, DistinctRequest const& request
                                 .services = options.services.forTask(),
                                 .limits = options.limits,
                                 .groups = source.groups()};
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): validate() accepted the request as a distinct-values one.
     detail::withoutOwnFilter(input.filters, *checked->distinct);
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): validate() accepted the request as a distinct-values one.
     return detail::distinctOver(input, *checked->distinct);
 }
 
@@ -1839,8 +1855,8 @@ inline std::expected<DistinctValues, TableError> Engine::distinctValues(Distinct
         return RowId{std::move(value)};
     }
     std::int64_t value = 0;
-    auto const* const end = text.data() + text.size();
-    auto const [rest, error] = std::from_chars(text.data(), end, value);
+    auto const* const end = std::to_address(text.end());
+    auto const [rest, error] = std::from_chars(std::to_address(text.begin()), end, value);
     if (error != std::errc{} || rest != end) {
         return std::nullopt;
     }
@@ -2272,6 +2288,7 @@ public:
             levels->push_back(column.level);
         }
         _levels = std::move(levels);
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): _levels is built in the body before the snapshot can name it.
         _snapshot = std::make_shared<RowsSnapshot<Row>>(std::move(rows), _key, _readers, _levels, _loaded, _units);
     }
 
@@ -2582,6 +2599,7 @@ public:
     /// @param count   Visible rows.
     /// @param columns The columns shown, in order; empty asks for every column.
     /// @return The fetches to send.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
     [[nodiscard]] std::vector<PageFetch> visibleColumns(std::int64_t first, std::int64_t count,
                                                         std::span<std::string const> columns) {
         columns = columns.first(std::min(columns.size(), _maxColumns));
@@ -2749,8 +2767,8 @@ public:
         if (page == nullptr) {
             return {};
         }
-        auto const at = static_cast<std::size_t>(index % _pageSize);
-        return UnloadedLevels{.levels = page->levels[at], .failed = page->failedLevels[at]};
+        auto const position = static_cast<std::size_t>(index % _pageSize);
+        return UnloadedLevels{.levels = page->levels[position], .failed = page->failedLevels[position]};
     }
 
     /// @brief The view's total rows, when a page reply of this query reported it.
@@ -2845,6 +2863,7 @@ protected:
     /// @param fill  Stores the reply's content.
     /// @return `false` when the reply was ignored.
     template <typename Fill>
+    // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward): called more than once, so it is never forwarded.
     bool acceptReply(PageFetch const& fetch, WindowReply const& reply, Fill&& fill) {
         if (fetch.query != _query) {
             return false;
@@ -2924,6 +2943,7 @@ protected:
     /// @param replace Stores one row's content.
     /// @return The view rows replaced, ascending.
     template <typename Replace>
+    // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward,readability-function-cognitive-complexity): called more than once, so it is never forwarded. one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
     std::vector<std::int64_t> patchRows(RowsFetch const& fetch, WindowReply const& reply, Replace&& replace) {
         if (fetch.query != _query || !_keyed) {
             return {};
@@ -2981,13 +3001,13 @@ protected:
                 continue;
             }
             auto& page = _pages.at(index / _pageSize);
-            auto const at = static_cast<std::size_t>(index % _pageSize);
-            replace(page, at, from);
-            page.levels[at].clear();
-            page.failedLevels[at].clear();
+            auto const position = static_cast<std::size_t>(index % _pageSize);
+            replace(page, position, from);
+            page.levels[position].clear();
+            page.failedLevels[position].clear();
             if (auto const* const unloaded = unloadedOf(reply, from)) {
-                page.levels[at] = unloaded->levels;
-                page.failedLevels[at] = unloaded->failed;
+                page.levels[position] = unloaded->levels;
+                page.failedLevels[position] = unloaded->failed;
             }
             out.push_back(index);
         }
@@ -3043,7 +3063,7 @@ private:
     [[nodiscard]] static UnloadedRow const* unloadedOf(WindowReply const& reply, std::size_t row) {
         auto const found =
             std::ranges::lower_bound(reply.unloadedRows, static_cast<std::int64_t>(row), {}, &UnloadedRow::index);
-        return found != reply.unloadedRows.end() && found->index == static_cast<std::int64_t>(row) ? &*found : nullptr;
+        return found != reply.unloadedRows.end() && std::cmp_equal(found->index, row) ? &*found : nullptr;
     }
 
     [[nodiscard]] bool sameKeys(Held const& held, WindowReply const& reply) const {
@@ -3077,19 +3097,21 @@ private:
             if (unloaded.index < 0 || unloaded.index >= held.rows) {
                 continue;
             }
-            auto const at = static_cast<std::size_t>(unloaded.index);
-            unite(held.levels[at], unloaded.levels);
-            unite(held.failedLevels[at], unloaded.failed);
+            auto const position = static_cast<std::size_t>(unloaded.index);
+            unite(held.levels[position], unloaded.levels);
+            unite(held.failedLevels[position], unloaded.failed);
         }
     }
 
     void completeIf(std::int64_t index, Held& held, bool replyEmpty) {
         auto const end = (index * _pageSize) + held.rows;
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): exactTotal() holds, so the total is known.
         if (held.rows >= _pageSize || (exactTotal() && end >= *_total) || replyEmpty) {
             held.complete = true;
         }
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): page index, then revision, as the window's callers hold them.
     void adoptTotals(std::int64_t index, std::uint64_t revision, WindowReply const& reply) {
         bool const differs =
             (reply.total && (reply.total != _total || reply.totalKind != _totalKind)) || reply.undecided != _undecided;
@@ -3128,6 +3150,7 @@ private:
         if (!exactTotal()) {
             return;
         }
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): exactTotal() holds, so the total is known.
         auto const total = *_total;
         std::erase_if(_pages, [&](auto const& entry) { return entry.first * _pageSize >= total; });
         std::erase_if(_inFlight, [&](auto const& entry) { return entry.first * _pageSize >= total; });
@@ -3318,8 +3341,8 @@ public:
         }
         auto const keys = keysOf(reply);
         return this->patchRows(fetch, replyOf(reply, keys),
-                               [&reply](typename Core::Held& page, std::size_t at, std::size_t from) {
-                                   page.content.rows[at] = std::move(reply.rows[from]);
+                               [&reply](Core::Held& page, std::size_t position, std::size_t from) {
+                                   page.content.rows[position] = std::move(reply.rows[from]);
                                });
     }
 
@@ -3395,6 +3418,7 @@ struct glz::meta<morph::table::Page<Row>> {
     /// @param context Unused.
     /// @return `true` for an empty `failed` or `indices`.
     template <typename T>
+    // NOLINTNEXTLINE(readability-identifier-naming): glaze looks this hook up by name.
     static constexpr bool skip_if(T const& member, std::string_view key, glz::meta_context const& context) {
         static_cast<void>(context);
         return morph::table::detail::omittedPageMember(member, key);
@@ -3412,6 +3436,7 @@ struct glz::meta<morph::table::TableQuery> {
     /// @param context Unused.
     /// @return `true` for an empty `retain`.
     template <typename T>
+    // NOLINTNEXTLINE(readability-identifier-naming): glaze looks this hook up by name.
     static constexpr bool skip_if(T const& member, std::string_view key, glz::meta_context const& context) {
         static_cast<void>(context);
         if constexpr (requires { member.empty(); }) {
@@ -3432,6 +3457,7 @@ struct glz::meta<morph::table::UnloadedRow> {
     /// @param context Unused.
     /// @return `true` for an empty `failed`.
     template <typename T>
+    // NOLINTNEXTLINE(readability-identifier-naming): glaze looks this hook up by name.
     static constexpr bool skip_if(T const& member, std::string_view key, glz::meta_context const& context) {
         static_cast<void>(context);
         return morph::table::detail::omittedPageMember(member, key);

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <format>
 #include <optional>
 #include <span>
 #include <string>
@@ -17,6 +18,7 @@
 namespace morph::table {
 
 /// @brief A heading over columns, drawn above their headers, with the bands one level down beneath it.
+// NOLINTNEXTLINE(misc-no-recursion): a band holds its child bands.
 struct BandInfo {
     /// @brief The band's text.
     std::string label;
@@ -59,17 +61,17 @@ namespace detail {
         if (band.columns.empty()) {
             return named + "names no column";
         }
-        for (std::string const& id : band.columns) {
-            if (known != nullptr && !std::ranges::contains(*known, id)) {
-                return named + "names `" + id + "`, which is not a column of the table";
+        for (std::string const& columnId : band.columns) {
+            if (known != nullptr && !std::ranges::contains(*known, columnId)) {
+                return std::format("{}names `{}`, which is not a column of the table", named, columnId);
             }
-            if (parent != nullptr && !std::ranges::contains(*parent, id)) {
-                return named + "covers `" + id + "`, which its parent band does not";
+            if (parent != nullptr && !std::ranges::contains(*parent, columnId)) {
+                return std::format("{}covers `{}`, which its parent band does not", named, columnId);
             }
-            if (std::ranges::contains(claimed, id)) {
-                return named + "covers `" + id + "`, which another band of its level covers";
+            if (std::ranges::contains(claimed, columnId)) {
+                return std::format("{}covers `{}`, which another band of its level covers", named, columnId);
             }
-            claimed.push_back(id);
+            claimed.push_back(columnId);
         }
         if (auto refused = bandLevelRefusal(band.bands, known, &band.columns, level + 1)) {
             return refused;
