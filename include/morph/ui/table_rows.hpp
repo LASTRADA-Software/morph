@@ -64,6 +64,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <tuple>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
@@ -98,8 +99,10 @@ struct TableTotal {
 /// The references hold until the model's next `onChange`.
 struct TableRowRef {
     /// @brief The row's key.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members): a view onto the model's row.
     table::RowId const& key;
     /// @brief The row as a record keyed by column id. A field the model does not hold for the row is absent.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members): a view onto the model's row.
     Value const& row;
 };
 
@@ -258,6 +261,7 @@ struct ChangedRowsValue {
 /// @param action The action's catalog entry.
 /// @param record The table's record, `<model type>.<id of the table>`.
 /// @return The rows of every such path, in the reply's order; none when the catalog names no path for @p record.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one walk down the reply along the catalog's path.
 [[nodiscard]] inline ChangedRowsValue changedRowsOf(Value const& reply, ActionInfo const& action,
                                                     std::string_view record) {
     ChangedRowsValue out;
@@ -286,16 +290,16 @@ struct ChangedRowsValue {
             } else {
                 continue;
             }
-            Value const* at = &reply;
-            while (at != nullptr && !parent.empty()) {
+            Value const* node = &reply;
+            while (node != nullptr && !parent.empty()) {
                 auto const dot = parent.find('.');
-                at = at->field(parent.substr(0, dot));
+                node = node->field(parent.substr(0, dot));
                 parent = dot == std::string_view::npos ? std::string_view{} : parent.substr(dot + 1);
             }
-            if (at == nullptr) {
+            if (node == nullptr) {
                 continue;
             }
-            if (Value const* const rows = at->field("rows"); rows != nullptr && rows->asList() != nullptr) {
+            if (Value const* const rows = node->field("rows"); rows != nullptr && rows->asList() != nullptr) {
                 for (Value const& row : *rows->asList()) {
                     if (auto key = keyOf(row.field("key"))) {
                         out.rows.push_back(
@@ -303,7 +307,7 @@ struct ChangedRowsValue {
                     }
                 }
             }
-            if (Value const* const failed = at->field("failed"); failed != nullptr && failed->asList() != nullptr) {
+            if (Value const* const failed = node->field("failed"); failed != nullptr && failed->asList() != nullptr) {
                 for (Value const& row : *failed->asList()) {
                     if (auto key = keyOf(row.field("key"))) {
                         Value const* const message = row.field("message");
@@ -379,9 +383,9 @@ public:
     /// @brief Moves a row's busy membership and failed mark from its old key to its new one; where the new key has
     ///        its own, the new key's is kept and the old key's dropped.
     /// @param from The row's old key.
-    /// @param to   The row's new key.
-    void move(table::RowId const& from, table::RowId const& to) {
-        if (from == to) {
+    /// @param target   The row's new key.
+    void move(table::RowId const& from, table::RowId const& target) {
+        if (from == target) {
             return;
         }
         for (auto& [run, keys] : _keyRuns) {
@@ -389,17 +393,17 @@ public:
             if (old == keys.end()) {
                 continue;
             }
-            if (std::ranges::contains(keys, to)) {
+            if (std::ranges::contains(keys, target)) {
                 keys.erase(old);
             } else {
-                *old = to;
+                *old = target;
             }
         }
         // A view run holds a row unless its `except` names it: a busy old key makes the new key busy, and is then
         // left out itself.
         for (auto& [run, view] : _viewRuns) {
             if (!std::ranges::contains(view.except, from)) {
-                std::erase(view.except, to);
+                std::erase(view.except, target);
                 view.except.push_back(from);
             }
         }
@@ -407,10 +411,10 @@ public:
         if (old == _failed.end()) {
             return;
         }
-        if (std::ranges::contains(_failed, to, &table::FailedRow::key)) {
+        if (std::ranges::contains(_failed, target, &table::FailedRow::key)) {
             _failed.erase(old);
         } else {
-            old->key = to;
+            old->key = target;
         }
     }
 
@@ -652,8 +656,8 @@ public:
     ///        states, as `RowStates::move` moves them. An action that gave a row a new key names the old one in a
     ///        `table::ChangedRow::from`.
     /// @param from The row's old key.
-    /// @param to   The row's new key.
-    virtual void moveKey(table::RowId const& from, table::RowId const& to) = 0;
+    /// @param target   The row's new key.
+    virtual void moveKey(table::RowId const& from, table::RowId const& target) = 0;
 
     /// @brief Sets the one receiver of the view's changes, called after the rows changed with the operations that
     ///        turn the old view into the new one.
@@ -717,7 +721,8 @@ inline constexpr char const* kDuplicateKey = "morph::ui: duplicate ForEach key";
     if (std::isfinite(value)) {
         // The longest fixed text of a finite double: 309 integer digits, a sign, a point and 767 fraction digits.
         std::array<char, 1100> fixed{};
-        auto const written = std::to_chars(fixed.data(), fixed.data() + fixed.size(), value, std::chars_format::fixed);
+        auto const written =
+            std::to_chars(fixed.data(), std::to_address(fixed.end()), value, std::chars_format::fixed);
         if (written.ec == std::errc{}) {
             if (auto const parsed = table::parseDecimal(std::string_view{fixed.data(), written.ptr})) {
                 return Value{Decimal{*parsed}};
@@ -725,7 +730,7 @@ inline constexpr char const* kDuplicateKey = "morph::ui: duplicate ForEach key";
         }
     }
     std::array<char, 64> shortest{};
-    auto const written = std::to_chars(shortest.data(), shortest.data() + shortest.size(), value);
+    auto const written = std::to_chars(shortest.data(), std::to_address(shortest.end()), value);
     return Value{std::string{shortest.data(), written.ptr}};
 }
 
@@ -791,9 +796,7 @@ inline constexpr char const* kDuplicateKey = "morph::ui: duplicate ForEach key";
                 return Value{Decimal{value}};
             } else if constexpr (std::is_same_v<T, double>) {
                 return detail::doubleValue(value);
-            } else if constexpr (std::is_same_v<T, std::string>) {
-                return Value{value};
-            } else if constexpr (std::is_same_v<T, bool>) {
+            } else if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, bool>) {
                 return Value{value};
             } else if constexpr (std::is_same_v<T, table::Measure>) {
                 if (units != nullptr && units->contains(value.unit)) {
@@ -830,7 +833,7 @@ inline constexpr char const* kDuplicateKey = "morph::ui: duplicate ForEach key";
         return render::formatCanonicalNumber(std::to_string(number), format.numeric);
     };
     bool const lowerBound = counts.view.kind == table::TotalKind::AtLeast;
-    std::string const view = grouped(counts.view.rows) + (lowerBound ? " or more" : "");
+    std::string view = grouped(counts.view.rows) + (lowerBound ? " or more" : "");
     if (counts.undecided > 0) {
         return grouped(counts.view.rows) + " so far, " + grouped(counts.undecided) + " loading";
     }
@@ -999,20 +1002,20 @@ public:
         auto const infos = _engine->columns();
         std::vector<std::optional<std::size_t>> places;
         places.reserve(columns.size());
-        for (std::string const& id : columns) {
-            auto const found = std::ranges::find(infos, id, &table::ColumnInfo::id);
+        for (std::string const& columnId : columns) {
+            auto const found = std::ranges::find(infos, columnId, &table::ColumnInfo::id);
             places.push_back(found == infos.end() ? std::nullopt
                                                   : std::optional{static_cast<std::size_t>(found - infos.begin())});
         }
         auto const& snapshot = *_engine->viewSnapshot();
         std::vector<FetchedRow> rows;
         for (table::RowId& key : keys) {
-            std::optional<std::size_t> const at = _engine->viewRowOfKey(key);
-            std::optional<std::size_t> const sourceRow = at ? _engine->sourceRowOf(*at) : std::nullopt;
+            std::optional<std::size_t> const viewRow = _engine->viewRowOfKey(key);
+            std::optional<std::size_t> const sourceRow = viewRow ? _engine->sourceRowOf(*viewRow) : std::nullopt;
             if (!sourceRow) {
                 continue;
             }
-            FetchedRow row{.key = std::move(key), .viewRow = static_cast<std::int64_t>(*at), .cells = {}};
+            FetchedRow row{.key = std::move(key), .viewRow = static_cast<std::int64_t>(*viewRow), .cells = {}};
             row.cells.reserve(places.size());
             for (std::optional<std::size_t> const place : places) {
                 row.cells.push_back(place ? snapshot.cell(*sourceRow, *place) : table::Cell{});
@@ -1074,8 +1077,8 @@ public:
     /// @param done Called on the engine's owner with the row's view index, or nothing when the view lacks it.
     void locateRow(table::RowId key, ::core::async::StopToken stop,
                    std::function<void(RowLocation const&)> done) override {
-        std::optional<std::size_t> const at = _engine->viewRowOfKey(key);
-        RowLocation const found{at ? std::optional{static_cast<std::int64_t>(*at)} : std::nullopt};
+        std::optional<std::size_t> const viewRow = _engine->viewRowOfKey(key);
+        RowLocation const found{viewRow ? std::optional{static_cast<std::int64_t>(*viewRow)} : std::nullopt};
         _owner->post([stop = std::move(stop), done = std::move(done), found] {
             if (!stop.stop_requested()) {
                 done(found);
@@ -1105,7 +1108,7 @@ public:
         table::DistinctRequest request) override {
         using Result = std::expected<table::DistinctValues, table::TableError>;
         auto [completion, promise] = async::Completion<Result>::makeSettleable(_owner);
-        auto settle = std::make_shared<async::Completion<Result>::Promise>(std::move(promise));
+        auto const settle = std::make_shared<async::Completion<Result>::Promise>(std::move(promise));
         _owner->post(_scope.token().guard(
             [this, settle, request = std::move(request)] { settle->resolve(_engine->distinctValues(request)); }));
         return std::move(completion);
@@ -1116,7 +1119,7 @@ public:
     [[nodiscard]] TableCountsView counts() const override {
         std::int64_t retained = 0;
         for (table::RowId const& key : _engine->retained()) {
-            if (auto const at = _engine->viewRowOfKey(key); at && _engine->isUnmatched(*at)) {
+            if (auto const viewRow = _engine->viewRowOfKey(key); viewRow && _engine->isUnmatched(*viewRow)) {
                 ++retained;
             }
         }
@@ -1146,7 +1149,7 @@ public:
             return RetainResult::OverBound;
         }
         if (next.size() != held.size()) {
-            static_cast<void>(_engine->retain(std::move(next)));
+            std::ignore = _engine->retain(std::move(next));
         }
         return RetainResult::Retained;
     }
@@ -1154,7 +1157,7 @@ public:
     /// @brief Drops the engine's retained rows.
     void clearRetained() override {
         if (!_engine->retained().empty()) {
-            static_cast<void>(_engine->retain({}));
+            std::ignore = _engine->retain({});
         }
     }
 
@@ -1162,8 +1165,8 @@ public:
     /// @param key The row's key.
     /// @return `false` for a key not in the view.
     [[nodiscard]] bool unmatched(table::RowId const& key) const override {
-        auto const at = _engine->viewRowOfKey(key);
-        return at && _engine->isUnmatched(*at);
+        auto const viewRow = _engine->viewRowOfKey(key);
+        return viewRow && _engine->isUnmatched(*viewRow);
     }
 
     /// @brief The rows an action of this session is working on, and those an action could not change.
@@ -1176,26 +1179,26 @@ public:
 
     /// @brief Moves a row's place among the engine's retained rows and its states to its new key.
     /// @param from The row's old key.
-    /// @param to   The row's new key.
-    void moveKey(table::RowId const& from, table::RowId const& to) override {
-        _states.move(from, to);
+    /// @param target   The row's new key.
+    void moveKey(table::RowId const& from, table::RowId const& target) override {
+        _states.move(from, target);
         auto const held = _engine->retained();
         if (!std::ranges::contains(held, from)) {
             return;
         }
         std::vector<table::RowId> next;
         next.reserve(held.size());
-        bool const toHeld = std::ranges::contains(held, to);
+        bool const toHeld = std::ranges::contains(held, target);
         for (table::RowId const& key : held) {
             if (key == from) {
                 if (!toHeld) {
-                    next.push_back(to);
+                    next.push_back(target);
                 }
             } else {
                 next.push_back(key);
             }
         }
-        static_cast<void>(_engine->retain(std::move(next)));
+        std::ignore = _engine->retain(std::move(next));
     }
 
     /// @brief Sets the one receiver of the engine's view changes.
@@ -1270,8 +1273,10 @@ private:
         ++_built;
         auto const columns = _engine->columns();
         for (std::size_t column = 0; column < columns.size(); ++column) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): column < columns.size() by the loop
             if (!columns[column].level.empty() &&
                 std::holds_alternative<table::Unloaded>(snapshot.cell(*sourceRow, column))) {
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): column < columns.size() by the loop
                 entry.levels.push_back(columns[column].level);
             }
         }
@@ -1531,6 +1536,7 @@ struct ConvertedCell {
 /// @param kind  The column's kind.
 /// @param units The registry a measure's unit is found in; null for none.
 /// @return The cell.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one conversion per column kind, kept together.
 [[nodiscard]] inline ConvertedCell convertedCell(Value const& value, table::ColumnKind kind,
                                                  table::UnitRegistry const* units) {
     using table::ColumnKind;
@@ -1620,8 +1626,8 @@ struct ConvertedCell {
 /// @param right Another.
 /// @return `true` when they hold the same value with the same places.
 [[nodiscard]] inline bool sameCell(table::Cell const& left, table::Cell const& right) {
-    auto const samePlaces = [](math::Rational const& a, math::Rational const& b) {
-        return a.decimalPlaces.value == b.decimalPlaces.value;
+    auto const samePlaces = [](math::Rational const& lhs, math::Rational const& rhs) {
+        return lhs.decimalPlaces.value == rhs.decimalPlaces.value;
     };
     if (left != right) {
         return false;
@@ -1678,9 +1684,11 @@ public:
     /// @param column Column index.
     /// @return The cell; empty for a column not in use.
     [[nodiscard]] table::Cell cell(std::size_t row, std::size_t column) const override {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): column < _columns.size() by the condition above
         if (column >= _columns.size() || _columns[column] == nullptr) {
             return table::Cell{};
         }
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): column < _columns.size() by the condition above
         return _columns[column]->at(row);
     }
 
@@ -1690,10 +1698,12 @@ public:
     /// @param first  First row.
     /// @param last   One past the last row.
     void readColumn(std::size_t column, table::ColumnSink& sink, std::size_t first, std::size_t last) const override {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): column < _columns.size() by the condition above
         if (column >= _columns.size() || _columns[column] == nullptr || first >= last) {
             RowSnapshot::readColumn(column, sink, first, last);
             return;
         }
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): column < _columns.size() by the condition above
         sink.cells(first, std::span<table::Cell const>{*_columns[column]}.subspan(first, last - first));
     }
 
@@ -1804,7 +1814,9 @@ public:
 
     /// @brief Takes a new list: matched to the held rows by key, then by the cells of the columns in use.
     /// @param rows The rows, in source order.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one diff whose steps share their working vectors.
     void assign(ValueList rows) {
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): every vector here is sized to the row count and indexed below it; `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column
         auto keys = std::make_shared<std::vector<Key>>();
         auto kept = std::make_shared<std::vector<Value>>();
         std::unordered_map<Key, std::size_t> index;
@@ -1857,13 +1869,13 @@ public:
         }
         bool runsMoved = false;
         if (_group) {
-            std::vector<Value> by(count);
+            std::vector<Value> groupKeys(count);
             for (std::size_t at = 0; at < count; ++at) {
-                by[at] = same[at] ? _byValues[was[at]] : readBy((*kept)[at]);
+                groupKeys[at] = same[at] ? _byValues[was[at]] : readBy((*kept)[at]);
             }
             auto const before = _runs;
             auto const recordsBefore = _runRecords;
-            _byValues = std::move(by);
+            _byValues = std::move(groupKeys);
             buildRuns(*kept);
             runsMoved = _runs != before;
             if (!runsMoved) {
@@ -1885,9 +1897,9 @@ public:
         }
         if (dropped) {
             std::vector<bool> stays(old.size(), false);
-            for (auto const at : was) {
-                if (at != kNone) {
-                    stays[at] = true;
+            for (auto const heldIndex : was) {
+                if (heldIndex != kNone) {
+                    stays[heldIndex] = true;
                 }
             }
             std::vector<std::size_t> removed;
@@ -1916,6 +1928,7 @@ public:
         if (!changed.empty()) {
             notify(table::RowChange{.kind = table::ChangeKind::Updated, .rows = std::move(changed)});
         }
+        // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
     }
 
     /// @brief Groups the rows by the `group` part's `by`, read per row, and adds the hidden column
@@ -1923,11 +1936,11 @@ public:
     ///
     /// `by` is read untracked: what it reads besides the row regroups the rows when `setGroup` or `assign` is called
     /// again.
-    /// @param by    The `by`; empty: no groups, and the hidden column goes.
+    /// @param groupBy    The `by`; empty: no groups, and the hidden column goes.
     /// @param units The unit table two quantities of a run's `by` are compared through: the screen's, so 1 kg and
     ///              1000 g are one run.
-    void setGroup(std::function<Value(Value const& row)> by, UnitTable units) {
-        _group = std::move(by);
+    void setGroup(std::function<Value(Value const& row)> groupBy, UnitTable units) {
+        _group = std::move(groupBy);
         _groupUnits = std::move(units);
         bool const listed = _infos.size() > _columns.size();
         if (_group && !listed) {
@@ -1957,6 +1970,7 @@ public:
     /// @param sourceRow The row.
     /// @return The run's index; 0 when the table is not grouped or the row is past the rows.
     [[nodiscard]] std::size_t runOf(std::size_t sourceRow) const {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): sourceRow < _runs.size() by the condition
         return sourceRow < _runs.size() ? _runs[sourceRow] : 0;
     }
 
@@ -1969,14 +1983,15 @@ public:
     ///        first use, and a `Reset` is notified so the engine reads them.
     /// @param column The column's id; one the source does not have is ignored.
     void use(std::string_view column) {
-        auto const at = columnOf(column);
-        if (!at) {
+        auto const columnIndex = columnOf(column);
+        if (!columnIndex) {
             return;
         }
-        if (_held[*at].uses++ > 0) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column (columnOf returns an index into `_columns`)
+        if (_held[*columnIndex].uses++ > 0) {
             return;
         }
-        rebuild(*at);
+        rebuild(*columnIndex);
         _snapshot.reset();
         notify(table::RowChange{.kind = table::ChangeKind::Reset, .rows = {}});
     }
@@ -1984,17 +1999,23 @@ public:
     /// @brief A use of @p column ended; at its last, its cells and tracked `sortBy`s go. Nothing is notified.
     /// @param column The column's id; one not in use is ignored.
     void unuse(std::string_view column) {
-        auto const at = columnOf(column);
-        if (!at || _held[*at].uses == 0 || --_held[*at].uses > 0) {
+        auto const columnIndex = columnOf(column);
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column (columnOf returns an index into `_columns`)
+        if (!columnIndex || _held[*columnIndex].uses == 0) {
             return;
         }
-        _held[*at] = Held{};
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column (columnOf returns an index into `_columns`)
+        if (--_held[*columnIndex].uses > 0) {
+            return;
+        }
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column (columnOf returns an index into `_columns`)
+        _held[*columnIndex] = Held{};
         _snapshot.reset();
     }
 
     /// @brief What `EngineRows` reads a row's key and record through: the snapshot's key and the row's value.
     /// @return The reader; it holds nothing of the source.
-    [[nodiscard]] RecordOf recordOf() const {
+    [[nodiscard]] static RecordOf recordOf() {
         return [](table::RowSnapshot const& snapshot, std::size_t sourceRow) {
             auto const* const rows = dynamic_cast<detail::ValueRowsSnapshot const*>(&snapshot);
             return RowRecord{.key = snapshot.rowId(sourceRow),
@@ -2020,11 +2041,12 @@ public:
     /// @param column The column's id.
     /// @return The count; 0 for a column not in use.
     [[nodiscard]] std::size_t invalidCells(std::string_view column) const {
-        auto const at = columnOf(column);
-        if (!at) {
+        auto const columnIndex = columnOf(column);
+        if (!columnIndex) {
             return 0;
         }
-        return static_cast<std::size_t>(std::ranges::count(_held[*at].invalid, std::uint8_t{1}));
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column (columnOf returns an index into `_columns`)
+        return static_cast<std::size_t>(std::ranges::count(_held[*columnIndex].invalid, std::uint8_t{1}));
     }
 
 private:
@@ -2056,8 +2078,8 @@ private:
         [[nodiscard]] bool any() const noexcept { return reset || !rows.empty(); }
     };
 
-    [[nodiscard]] std::optional<std::size_t> columnOf(std::string_view id) const {
-        auto const found = std::ranges::find(_columns, id, &ValueColumn::id);
+    [[nodiscard]] std::optional<std::size_t> columnOf(std::string_view columnId) const {
+        auto const found = std::ranges::find(_columns, columnId, &ValueColumn::id);
         if (found == _columns.end()) {
             return std::nullopt;
         }
@@ -2073,20 +2095,26 @@ private:
 
     // A field column's value for a row.
     [[nodiscard]] Value fieldOf(std::size_t column, Value const& row) const {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column
         auto const* const field = row.field(_columns[column].id);
         return field == nullptr ? Value{} : *field;
     }
 
     // The value a column's cell of a row converts: the tracked `sortBy`'s last, or the row's field.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): column index, then row index, in every call here.
     [[nodiscard]] Value valueOf(std::size_t column, std::size_t row, Value const& input) const {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column; row < trackers.size() by the condition
         auto const& trackers = _held[column].trackers;
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column; row < trackers.size() by the condition
         if (row < trackers.size() && trackers[row] != nullptr) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column; row < trackers.size() by the condition
             return trackers[row]->value;
         }
         return fieldOf(column, input);
     }
 
     // A new tracked `sortBy` for a row: its first run derives the value.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): column index, then row index, in every call here.
     std::unique_ptr<Tracker> track(std::size_t column, std::size_t row, Value const& input) {
         auto tracker = std::make_unique<Tracker>();
         tracker->column = column;
@@ -2100,6 +2128,7 @@ private:
 
     // A tracked `sortBy`'s run: the first stores the value, a later one updates the row's cell.
     void rerun(Tracker& tracker) {
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column; `row` is below the row count every per-row vector here is sized to
         Value value;
         try {
             value = _columns[tracker.column].sortBy(tracker.input);
@@ -2132,6 +2161,7 @@ private:
             _posted = true;
             _runtime->owner().post(_alive.guard([this] { flushTracked(); }));
         }
+        // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
     }
 
     // One notification for the tracked `sortBy`s that ran: `Reset` when every row's ran or a kind changed.
@@ -2152,7 +2182,9 @@ private:
     }
 
     // Changes one row's vote and returns the column's kind after it.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): column index, then row index, in every call here.
     table::ColumnKind vote(Held& held, std::size_t column, std::size_t row, detail::ValueVote next) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `row` is below the row count every per-row vector here is sized to
         auto& current = held.votes[row];
         --held.counts.at(static_cast<std::size_t>(current));
         ++held.counts.at(static_cast<std::size_t>(next));
@@ -2161,14 +2193,15 @@ private:
     }
 
     [[nodiscard]] table::ColumnKind kindOf(std::size_t column, Held const& held) const {
-        if (_columns[column].kind) {
-            return *_columns[column].kind;
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column
+        if (auto const& declared = _columns[column].kind) {
+            return *declared;
         }
         return detail::inferredKind(held.counts, held.votes);
     }
 
     // The column's cells, copied first when a snapshot still shares them.
-    std::vector<table::Cell>& writable(Held& held) {
+    static std::vector<table::Cell>& writable(Held& held) {
         if (held.cells.use_count() > 1) {
             held.cells = std::make_shared<std::vector<table::Cell>>(*held.cells);
         }
@@ -2177,6 +2210,7 @@ private:
 
     // Every cell of a column converted again for its kind, from the values held.
     void reconvert(std::size_t column) {
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column; `row` is below the row count every per-row vector here is sized to
         auto& held = _held[column];
         auto const kind = _infos[column].kind;
         auto cells = std::make_shared<std::vector<table::Cell>>(_rows->size());
@@ -2187,10 +2221,12 @@ private:
         }
         held.cells = std::move(cells);
         _snapshot.reset();
+        // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
     }
 
     // A column's first use: every row's cell derived.
     void rebuild(std::size_t column) {
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column; `row` is below the row count every per-row vector here is sized to
         auto& held = _held[column];
         std::size_t const count = _rows->size();
         held.votes.assign(count, detail::ValueVote::None);
@@ -2213,12 +2249,14 @@ private:
         }
         _infos[column].kind = kindOf(column, held);
         reconvert(column);
+        // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
     }
 
     // A held column over a new list: kept rows keep their cells, others are derived and compared. Marks the rows
     // whose cell changed in @p updated; returns whether the column's kind changed.
     bool reassign(std::size_t column, std::vector<Value> const& rows, std::vector<std::size_t> const& was,
                   std::vector<bool> const& same, std::vector<bool>& updated) {
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `column` indexes `_columns`, and `_held` and `_infos` hold one entry per column; `row` is below the row count every per-row vector here is sized to
         auto& held = _held[column];
         bool const tracked = static_cast<bool>(_columns[column].sortBy);
         std::size_t const count = rows.size();
@@ -2257,8 +2295,12 @@ private:
             if (same[row] && !changedKind) {
                 continue;
             }
-            Value const value =
-                same[row] ? (tracked ? next.trackers[row]->value : fieldOf(column, rows[row])) : std::move(fresh[row]);
+            Value value;
+            if (same[row]) {
+                value = tracked ? next.trackers[row]->value : fieldOf(column, rows[row]);
+            } else {
+                value = std::move(fresh[row]);
+            }
             auto converted = detail::convertedCell(value, kind, _units.get());
             next.invalid[row] = converted.invalid ? 1 : 0;
             if (!changedKind && was[row] != std::numeric_limits<std::size_t>::max() &&
@@ -2271,6 +2313,7 @@ private:
         _infos[column].kind = kind;
         held = std::move(next);
         return changedKind;
+        // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
     }
 
     // Each row's run, each run's first row and each run's heading record, from the `by` values held. A run's key is
@@ -2292,6 +2335,7 @@ private:
         ValueList run;
         std::size_t first = 0;
         auto const close = [&] {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): first and row are below the row count _byValues is sized to
             Value const& key = _byValues[first];
             std::string const json = ui::detail::canonicalJson(key);
             Value const record = runRecord(key, std::exchange(run, {}));
@@ -2302,12 +2346,14 @@ private:
             _runFirst.push_back(first);
         };
         for (std::size_t row = 0; row < rows.size(); ++row) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): first and row are below the row count _byValues is sized to
             if (!run.empty() && !detail::sameElement(_byValues[first], _byValues[row], _groupUnits)) {
                 close();
             }
             if (run.empty()) {
                 first = row;
             }
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): first and row are below the row count _byValues is sized to
             run.push_back(rows[row]);
             _runs.push_back(_runRecords.size());
             cells->emplace_back(static_cast<std::int64_t>(_runRecords.size()));
@@ -2397,25 +2443,25 @@ struct JsonDecimal {
         return std::nullopt;
     }
     auto const integer = [object](std::string_view name) -> std::optional<std::int64_t> {
-        auto const found = object->find(name);
+        auto const* const found = object->find(name);
         return found == object->end() ? std::nullopt : jsonInteger(found->second);
     };
     auto const num = integer("num");
     auto const den = integer("den");
-    auto const dp = integer("dp");
-    if (!num || !den || !dp || *den == 0 || *dp < 0 || *dp > static_cast<std::int64_t>(math::kMaxDecimalPlaces)) {
+    auto const places = integer("dp");
+    if (!num || !den || !places || *den == 0 || *places < 0 || std::cmp_greater(*places, math::kMaxDecimalPlaces)) {
         return std::nullopt;
     }
     std::string const* unit = nullptr;
     if (object->size() == 4) {
-        auto const found = object->find("unit");
+        auto const* const found = object->find("unit");
         unit = found == object->end() ? nullptr : found->second.get_if<std::string>();
         if (unit == nullptr) {
             return std::nullopt;
         }
     }
     auto const amount = math::Rational::from(math::Numerator{*num}, math::Denominator{*den},
-                                             math::DecimalPlaces{static_cast<std::uint32_t>(*dp)});
+                                             math::DecimalPlaces{static_cast<std::uint32_t>(*places)});
     if (!amount) {
         return std::nullopt;
     }
@@ -2479,7 +2525,7 @@ struct JsonDecimal {
         if (object == nullptr) {
             continue;
         }
-        auto const found = object->find(column);
+        auto const* const found = object->find(column);
         if (found == object->end()) {
             continue;
         }
@@ -2528,6 +2574,7 @@ struct JsonDecimal {
 /// @param units  The registry a measure's unit is found in; null finds none.
 /// @param named  The unit ids of the page's measures, by number: what a measure found adds to.
 /// @return The cell.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per column kind.
 [[nodiscard]] inline table::Cell typedCell(glz::generic_u64 const& member, table::ColumnKind kind,
                                            table::UnitRegistry const* units,
                                            std::map<table::UnitId, std::string>& named) {
@@ -2644,11 +2691,12 @@ struct JsonDecimal {
     page.rows.reserve(dom.rows.size());
     glz::generic_u64 const absent{};
     for (std::size_t at = 0; at < dom.rows.size(); ++at) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): at < dom.rows.size() by the loop
         auto const* const object = dom.rows[at].get_if<glz::generic_u64::object_t>();
         if (object == nullptr) {
             return invalid("row " + std::to_string(at) + " is not an object");
         }
-        auto const keyMember = object->find(description.key);
+        auto const* const keyMember = object->find(description.key);
         auto key = keyMember == object->end() ? std::nullopt : typedKey(keyMember->second);
         if (!key) {
             return invalid("row " + std::to_string(at) + " has no key `" + description.key + "`");
@@ -2657,7 +2705,7 @@ struct JsonDecimal {
         table::GenericRow cells;
         cells.reserve(description.columns.size());
         for (auto const& column : description.columns) {
-            auto const found = object->find(column.info.id);
+            auto const* const found = object->find(column.info.id);
             cells.push_back(
                 typedCell(found == object->end() ? absent : found->second, column.info.kind, units, page.units));
         }
@@ -2887,10 +2935,11 @@ public:
     WindowRows& operator=(WindowRows&&) = delete;
 
     /// @brief Cancels every fetch in flight.
+    // NOLINTNEXTLINE(bugprone-exception-escape): only allocation can throw, and that ends the process either way.
     ~WindowRows() override {
         stopAll();
-        for (auto& [id, stop] : _distinctFlights) {
-            static_cast<void>(id);
+        for (auto& [flightId, stop] : _distinctFlights) {
+            static_cast<void>(flightId);
             stop.request_stop();
         }
         for (auto const& held : _keyRequests) {
@@ -2958,7 +3007,7 @@ public:
         for (auto const& column : _description->columns) {
             _infos.insert_or_assign(column.info.id, column.info);
         }
-        std::erase_if(_columns, [this](std::string const& id) { return !_infos.contains(id); });
+        std::erase_if(_columns, [this](std::string const& columnId) { return !_infos.contains(columnId); });
         ++_columnsStamp;
         if (another) {
             _error.reset();
@@ -3076,13 +3125,13 @@ public:
         Entry& entry = found->second;
         if (made || entry.stamp != _columnsStamp) {
             ValueRecord fields;
-            auto const convert = [&](std::string const& id) {
-                auto const* const cell = _window.cell(index, id);
-                auto const info = _infos.find(id);
+            auto const convert = [&](std::string const& columnId) {
+                auto const* const cell = _window.cell(index, columnId);
+                auto const info = _infos.find(columnId);
                 if (cell == nullptr || info == _infos.end()) {
                     return;
                 }
-                fields.insert_or_assign(id, cellValue(*cell, info->second, _units.get()));
+                fields.insert_or_assign(columnId, cellValue(*cell, info->second, _units.get()));
                 ++_stats.cellsConverted;
             };
             if (_columns.empty() && _description) {
@@ -3090,8 +3139,8 @@ public:
                     convert(column.info.id);
                 }
             } else {
-                for (auto const& id : _columns) {
-                    convert(id);
+                for (auto const& columnId : _columns) {
+                    convert(columnId);
                 }
             }
             entry.record = Value{std::move(fields)};
@@ -3130,7 +3179,7 @@ public:
         _count = std::max<std::int64_t>(count, 0);
         std::vector<std::string> named(columns.begin(), columns.end());
         if (_description) {
-            std::erase_if(named, [this](std::string const& id) { return !_infos.contains(id); });
+            std::erase_if(named, [this](std::string const& columnId) { return !_infos.contains(columnId); });
         }
         if (named != _columns) {
             _columns = std::move(named);
@@ -3173,8 +3222,8 @@ public:
         std::vector<std::int64_t> missing;
         for (std::int64_t page = first / size; count > 0 && page <= (first + count - 1) / size; ++page) {
             std::int64_t const from = std::max(first, page * size);
-            std::int64_t const to = std::min(first + count, (page + 1) * size);
-            for (std::int64_t at = from; at < to; ++at) {
+            std::int64_t const end = std::min(first + count, (page + 1) * size);
+            for (std::int64_t at = from; at < end; ++at) {
                 if (_window.key(at) == nullptr) {
                     missing.push_back(page);
                     break;
@@ -3328,7 +3377,7 @@ public:
                 }
                 rowsAnswered(*state, fetchedOf(*read, *named));
             });
-            reply.onError(_scope, [this, state](std::exception_ptr const& error) {
+            reply.onError(_scope, [state](std::exception_ptr const& error) {
                 // A stopped fetch is the window going: the rows are never answered.
                 if (!wasCancelled(error)) {
                     rowsAnswered(*state, std::unexpected(failureOf(error)));
@@ -3495,15 +3544,15 @@ public:
     /// @brief Moves a row's place among the retained rows and its states to its new key. Nothing is fetched: the
     ///        change event of the action names both keys.
     /// @param from The row's old key.
-    /// @param to   The row's new key.
-    void moveKey(table::RowId const& from, table::RowId const& to) override {
-        _states.move(from, to);
-        if (from == to || !_retainedSet.contains(from)) {
+    /// @param target   The row's new key.
+    void moveKey(table::RowId const& from, table::RowId const& target) override {
+        _states.move(from, target);
+        if (from == target || !_retainedSet.contains(from)) {
             return;
         }
         _retainedSet.erase(from);
-        if (_retainedSet.insert(to).second) {
-            std::ranges::replace(_retained, from, to);
+        if (_retainedSet.insert(target).second) {
+            std::ranges::replace(_retained, from, target);
         } else {
             std::erase(_retained, from);
         }
@@ -3736,7 +3785,7 @@ public:
                 }
                 rowsAnswered(*state, fetchedOf(*read, *named));
             });
-            reply.onError(_scope, [this, state](std::exception_ptr const& error) {
+            reply.onError(_scope, [state](std::exception_ptr const& error) {
                 if (!wasCancelled(error)) {
                     rowsAnswered(*state, std::unexpected(failureOf(error)));
                 }
@@ -3787,8 +3836,11 @@ private:
         } else if (!request.failed) {
             request.failed = std::move(keys.error());
         }
-        if (request.waiting > 0 && --request.waiting == 0) {
-            finishKeys(request);
+        if (request.waiting > 0) {
+            --request.waiting;
+            if (request.waiting == 0) {
+                finishKeys(request);
+            }
         }
     }
 
@@ -3804,7 +3856,7 @@ private:
         keys.reserve(static_cast<std::size_t>(request.count));
         for (std::int64_t at = request.first; at < request.first + request.count; ++at) {
             if (auto const page = request.pages.find(at / size); page != request.pages.end()) {
-                auto const place = static_cast<std::size_t>(at - (at / size) * size);
+                auto const place = static_cast<std::size_t>(at - ((at / size) * size));
                 if (place < page->second.size()) {
                     keys.push_back(page->second.at(place));
                     continue;
@@ -3831,15 +3883,18 @@ private:
         std::vector<::core::async::StopSource> stops;
     };
 
-    void rowsAnswered(RowsRequest& request, std::expected<std::vector<FetchedRow>, table::TableError> rows) {
+    static void rowsAnswered(RowsRequest& request, std::expected<std::vector<FetchedRow>, table::TableError> rows) {
         if (rows) {
             request.rows.insert(request.rows.end(), std::make_move_iterator(rows->begin()),
                                 std::make_move_iterator(rows->end()));
         } else if (!request.failed) {
             request.failed = std::move(rows.error());
         }
-        if (request.waiting > 0 && --request.waiting == 0) {
-            finishRows(request);
+        if (request.waiting > 0) {
+            --request.waiting;
+            if (request.waiting == 0) {
+                finishRows(request);
+            }
         }
     }
 
@@ -3863,8 +3918,8 @@ private:
         }
         std::vector<std::optional<std::size_t>> places;
         places.reserve(columns.size());
-        for (std::string const& id : columns) {
-            auto const found = std::ranges::find(page.columns, id);
+        for (std::string const& columnId : columns) {
+            auto const found = std::ranges::find(page.columns, columnId);
             places.push_back(found == page.columns.end()
                                  ? std::nullopt
                                  : std::optional{static_cast<std::size_t>(found - page.columns.begin())});
@@ -3915,6 +3970,9 @@ private:
     }
 
     [[nodiscard]] std::optional<table::TableError> sortError(SortChain const& sort) const {
+        if (!_description) {
+            return unavailable();
+        }
         auto const error = [](table::TableErrorCode code, std::string column, std::string message) {
             return table::TableError{.code = code, .column = std::move(column), .message = std::move(message)};
         };
@@ -3924,18 +3982,22 @@ private:
                 std::format("{} sort keys; the table takes {}", sort.size(), _description->capabilities.maxSortKeys));
         }
         for (std::size_t at = 0; at < sort.size(); ++at) {
-            auto const& id = sort[at].column;
-            auto const column = std::ranges::find(
-                _description->columns, id, [](table::TableColumn const& c) -> auto const& { return c.info.id; });
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): at < sort.size() by the loop
+            auto const& columnId = sort[at].column;
+            auto const column =
+                std::ranges::find(_description->columns, columnId,
+                                  [](table::TableColumn const& column) -> auto const& { return column.info.id; });
             if (column == _description->columns.end()) {
-                return error(table::TableErrorCode::UnknownColumn, id, "no column " + id);
+                return error(table::TableErrorCode::UnknownColumn, columnId, "no column " + columnId);
             }
             if (!column->sortable) {
-                return error(table::TableErrorCode::InvalidSpec, id, "the column " + id + " is not sortable");
+                return error(table::TableErrorCode::InvalidSpec, columnId,
+                             "the column " + columnId + " is not sortable");
             }
-            if (std::ranges::contains(sort.begin(), sort.begin() + static_cast<std::ptrdiff_t>(at), id,
+            if (std::ranges::contains(sort.begin(), sort.begin() + static_cast<std::ptrdiff_t>(at), columnId,
                                       &table::SortKey::column)) {
-                return error(table::TableErrorCode::InvalidSpec, id, "the column " + id + " is sorted twice");
+                return error(table::TableErrorCode::InvalidSpec, columnId,
+                             "the column " + columnId + " is sorted twice");
             }
         }
         return std::nullopt;
@@ -3974,7 +4036,7 @@ private:
     }
 
     // Whether a fetch goes now rather than when the visible rows settle.
-    [[nodiscard]] bool due(table::PageFetch const& fetch, std::chrono::milliseconds at) const {
+    [[nodiscard]] bool due(table::PageFetch const& fetch, std::chrono::milliseconds instant) const {
         if (_session->options().scheduler == nullptr) {
             return true;
         }
@@ -3985,13 +4047,13 @@ private:
         if (_window.pagesHeld() == 0 && page == _anchor) {
             return true;
         }
-        return at - _anchorSince >= _session->options().tableSettle;
+        return instant - _anchorSince >= _session->options().tableSettle;
     }
 
     // Whether a refetch of a held page waits: the order awaits a level and the last refetch was too recent.
-    [[nodiscard]] bool spaced(std::chrono::milliseconds at) const {
+    [[nodiscard]] bool spaced(std::chrono::milliseconds instant) const {
         return !_window.awaiting().empty() && _session->options().scheduler != nullptr && _awaitedLast &&
-               at - *_awaitedLast < _session->options().tableAwaitedRefetch;
+               instant - *_awaitedLast < _session->options().tableAwaitedRefetch;
     }
 
     // Asks the window for what the visible rows need, cancels what it no longer covers, sends what is due and
@@ -4010,26 +4072,26 @@ private:
             _window.cancelled(superseded);
             ++_stats.cancelled;
         }
-        auto const at = now();
+        auto const instant = now();
         auto const size = std::max<std::int64_t>(_options.pageSize, 1);
         bool settling = false;
         bool spacing = false;
         bool refetched = false;
-        for (auto& fetch : fetches) {
+        for (auto const& fetch : fetches) {
             bool const refetch = heldPage(fetch.request.offset / size);
-            if (refetch && spaced(at)) {
+            if (refetch && spaced(instant)) {
                 _window.cancelled(fetch);
                 spacing = true;
-            } else if (due(fetch, at)) {
+            } else if (due(fetch, instant)) {
                 refetched = refetched || refetch;
-                send(std::move(fetch));
+                send(fetch);
             } else {
                 _window.cancelled(fetch);
                 settling = true;
             }
         }
         if (refetched && !_window.awaiting().empty()) {
-            _awaitedLast = at;
+            _awaitedLast = instant;
         }
         // A retry's fetches carry the flag until the last of them, held back or not, has gone.
         if (!settling && !spacing) {
@@ -4037,14 +4099,14 @@ private:
         }
         auto* const scheduler = _session->options().scheduler;
         if (settling) {
-            auto const wait = _anchorSince + _session->options().tableSettle - at;
+            auto const wait = _anchorSince + _session->options().tableSettle - instant;
             _settleTimer = scheduler->after(std::max(wait, std::chrono::milliseconds{1}), _scope.token().guard([this] {
                 _settleTimer = {};
                 pump();
             }));
         }
-        if (spacing && !_awaitedTimer.active()) {
-            auto const wait = *_awaitedLast + _session->options().tableAwaitedRefetch - at;
+        if (spacing && _awaitedLast && !_awaitedTimer.active()) {
+            auto const wait = *_awaitedLast + _session->options().tableAwaitedRefetch - instant;
             _awaitedTimer =
                 scheduler->after(std::max(wait, std::chrono::milliseconds{1}), _scope.token().guard([this] {
                     _awaitedTimer = {};
@@ -4101,7 +4163,7 @@ private:
         return query;
     }
 
-    void send(table::PageFetch fetch) {
+    void send(table::PageFetch const& fetch) {
         auto body = bodyOf(queryOf(fetch.request, fetch.columns));
         if (!body) {
             _window.fail(fetch, body.error());
@@ -4117,7 +4179,7 @@ private:
         status();
     }
 
-    void send(table::RowsFetch fetch) {
+    void send(table::RowsFetch const& fetch) {
         auto query = queryOf(table::PageRequest{}, fetch.columns);
         query.keys = fetch.keys;
         auto body = bodyOf(query);
@@ -4139,17 +4201,25 @@ private:
     }
 
     void answered() {
-        if (_unanswered > 0 && --_unanswered == 0) {
-            _watched = true;
-            pump();
+        if (_unanswered > 0) {
+            --_unanswered;
+            if (_unanswered == 0) {
+                _watched = true;
+                pump();
+            }
         }
     }
 
     // A reply's page against the held description. A typed list action's first reply with rows also fixes the kinds
     // of the columns `inferKinds` names, from the same DOM the page is read from.
     [[nodiscard]] std::expected<table::GenericPage, table::TableError> decode(std::string const& text) {
+        if (!_description) {
+            return std::unexpected(unavailable());
+        }
+        // Held by reference: the helpers below change the description in place and never replace it.
+        table::TableDescription& description = *_description;
         if (_options.action.empty()) {
-            return table::readGenericPage(text, *_description, _units.get());
+            return table::readGenericPage(text, description, _units.get());
         }
         auto dom = detail::typedPageDom(text);
         if (!dom) {
@@ -4157,15 +4227,15 @@ private:
         }
         if (!_inferring || dom->rows.empty()) {
             listUnits(dom->rows);
-            return detail::typedPageOf(*dom, *_description, _units.get());
+            return detail::typedPageOf(*dom, description, _units.get());
         }
         // The kinds are fixed only by a reply that reads: one that does not leaves them to the next.
-        auto const before = _description->columns;
+        auto const before = description.columns;
         inferKinds(dom->rows);
         listUnits(dom->rows);
-        auto page = detail::typedPageOf(*dom, *_description, _units.get());
+        auto page = detail::typedPageOf(*dom, description, _units.get());
         if (!page) {
-            _description->columns = before;
+            description.columns = before;
             for (auto const& column : before) {
                 _infos.insert_or_assign(column.info.id, column.info);
             }
@@ -4184,6 +4254,9 @@ private:
     // added after the units listed, so the numbers held cells carry keep their meaning; at most
     // `detail::kMaxUnlistedUnits` are, the rest staying unknown.
     void listUnits(std::span<glz::generic_u64 const> rows) {
+        if (!_description) {
+            return;
+        }
         auto const added =
             detail::unlistedUnits(rows, *_description, _units.get(),
                                   detail::kMaxUnlistedUnits - std::min(_unlisted, detail::kMaxUnlistedUnits));
@@ -4201,6 +4274,9 @@ private:
     // The kinds the first rows give the columns `inferKinds` names. The description keeps its revision, so the
     // query, the window and the fetches in flight stand; only the records made of the cells are made again.
     void inferKinds(std::span<glz::generic_u64 const> rows) {
+        if (!_description) {
+            return;
+        }
         for (auto& column : _description->columns) {
             if (std::ranges::contains(_options.inferKinds, column.info.id)) {
                 column.info.kind = detail::inferredJsonKind(rows, column.info.id);
@@ -4264,6 +4340,7 @@ private:
     //   their old places;
     // - the pages the reply evicted are changed places.
     // Rows of other pages do not move, since a page's places are fixed by its index.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity,bugprone-easily-swappable-parameters): page, count
     [[nodiscard]] table::ViewChange pageChange(std::int64_t page, std::int64_t rowsBefore,
                                                std::vector<std::optional<table::RowId>> const& before,
                                                std::set<std::int64_t> const& heldBefore) const {
@@ -4286,9 +4363,12 @@ private:
             static_cast<std::size_t>(std::clamp<std::int64_t>(std::min(rowsBefore, rowsAfter) - start, 0, size));
         std::unordered_map<table::RowId, std::size_t> wasAt;
         std::unordered_map<table::RowId, std::size_t> nowAt;
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): at < places <= slots' size
         for (std::size_t at = 0; at < places; ++at) {
-            bool const unique = (!before[at] || wasAt.emplace(*before[at], at).second) &&
-                                (!after[at] || nowAt.emplace(*after[at], at).second);
+            auto const& previous = before[at];
+            auto const& current = after[at];
+            bool const unique =
+                (!previous || wasAt.emplace(*previous, at).second) && (!current || nowAt.emplace(*current, at).second);
             if (!unique) {
                 return reset();
             }
@@ -4300,34 +4380,37 @@ private:
         };
         std::vector<std::uint32_t> changed;
         for (std::size_t at = 0; at < places; ++at) {
-            if (before[at]) {
-                idOf(*before[at]);
+            if (auto const& previous = before[at]) {
+                idOf(*previous);
             }
-            if (after[at]) {
-                changed.push_back(idOf(*after[at]));
+            if (auto const& current = after[at]) {
+                changed.push_back(idOf(*current));
             }
         }
         auto const emptyBase = static_cast<std::uint32_t>(ids.size());
-        auto const emptyAt = [emptyBase](std::size_t at) { return emptyBase + static_cast<std::uint32_t>(at); };
+        auto const emptyAt = [emptyBase](std::size_t index) { return emptyBase + static_cast<std::uint32_t>(index); };
         std::vector<std::uint32_t> was(places);
         std::vector<std::uint32_t> now(places);
         for (std::size_t at = 0; at < places; ++at) {
-            if (before[at]) {
-                was[at] = ids.at(*before[at]);
-            } else if (after[at] && !wasAt.contains(*after[at])) {
-                was[at] = ids.at(*after[at]);
+            auto const& previous = before[at];
+            auto const& current = after[at];
+            if (previous) {
+                was[at] = ids.at(*previous);
+            } else if (current && !wasAt.contains(*current)) {
+                was[at] = ids.at(*current);
             } else {
                 was[at] = emptyAt(at);
             }
-            if (after[at]) {
-                now[at] = ids.at(*after[at]);
-            } else if (before[at] && !nowAt.contains(*before[at])) {
-                now[at] = ids.at(*before[at]);
+            if (current) {
+                now[at] = ids.at(*current);
+            } else if (previous && !nowAt.contains(*previous)) {
+                now[at] = ids.at(*previous);
             } else {
                 now[at] = emptyAt(at);
             }
         }
-        auto const inPage =
+        // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+        auto inPage =
             table::diffViews(was, now, changed, static_cast<std::size_t>(emptyBase) + places, kResetThreshold);
         if (inPage.isReset()) {
             return inPage;
@@ -4468,12 +4551,12 @@ private:
             if (auto const* const key = _window.key(index)) {
                 _memo.erase(*key);
             }
-            auto const at = static_cast<std::size_t>(index);
-            if (!change.ops.empty() && change.ops.back().first + change.ops.back().count == at) {
+            auto const row = static_cast<std::size_t>(index);
+            if (!change.ops.empty() && change.ops.back().first + change.ops.back().count == row) {
                 ++change.ops.back().count;
             } else {
                 change.ops.push_back(
-                    table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = at, .count = 1, .to = 0});
+                    table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = row, .count = 1, .to = 0});
             }
         }
         announce(change);
@@ -4504,9 +4587,9 @@ private:
         status();
     }
 
-    void planned(table::RefreshPlan plan) {
+    void planned(table::RefreshPlan const& plan) {
         if (plan.kind == table::Refresh::Rows) {
-            send(std::move(plan.rows));
+            send(plan.rows);
         } else if (plan.kind == table::Refresh::Pages) {
             pump();
         }
@@ -4594,7 +4677,7 @@ private:
             pump();
             return;
         }
-        planned(std::move(plan));
+        planned(plan);
     }
 
     // Sends what the events marked while the refetches were held, as one refetch.
@@ -4617,8 +4700,10 @@ private:
     void heardUnmatched(table::GenericPage const& page) {
         for (std::size_t at = 0; at < page.keys.size(); ++at) {
             if (std::ranges::binary_search(page.unmatched, static_cast<std::int64_t>(at))) {
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): at < page.keys.size() by the loop
                 _unmatched.insert(page.keys[at]);
             } else {
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): at < page.keys.size() by the loop
                 _unmatched.erase(page.keys[at]);
             }
         }
