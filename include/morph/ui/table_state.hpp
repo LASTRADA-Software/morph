@@ -100,7 +100,7 @@ public:
         if (upload->text.size() > kPartBytes) {
             upload->id = std::format("{:016x}", _random());
         }
-        sendPart(std::move(upload));
+        sendPart(upload);
         return std::move(completion);
     }
 
@@ -109,7 +109,7 @@ public:
     /// @return Whether a document was stored.
     [[nodiscard]] async::Completion<bool> remove(table::TableStateKey const& key) override {
         auto [completion, promise] = async::Completion<bool>::makeSettleable(_owner);
-        auto settle = std::make_shared<async::Completion<bool>::Promise>(std::move(promise));
+        auto const settle = std::make_shared<async::Completion<bool>::Promise>(std::move(promise));
         channel()
             ->execute("remove", model::ActionTraits<TableStateRemove>::toJson(TableStateRemove{.key = key}),
                       CallOptions{})
@@ -139,7 +139,7 @@ public:
                                                                table::ViewOperation const& operation,
                                                                std::string expected) override {
         auto [completion, promise] = async::Completion<table::SaveResult>::makeSettleable(_owner);
-        auto settle = std::make_shared<async::Completion<table::SaveResult>::Promise>(std::move(promise));
+        auto const settle = std::make_shared<async::Completion<table::SaveResult>::Promise>(std::move(promise));
         TableStatePublish const request{
             .key = key, .operation = table::writeViewOperation(operation), .expected = std::move(expected)};
         channel()
@@ -210,7 +210,7 @@ private:
         }
     }
 
-    void sendLoads(std::shared_ptr<std::vector<std::shared_ptr<Reading>>> batch) {
+    void sendLoads(std::shared_ptr<std::vector<std::shared_ptr<Reading>>> const& batch) {
         TableStateLoad request;
         for (auto const& reading : *batch) {
             request.keys.push_back(reading->key);
@@ -234,6 +234,7 @@ private:
                           return;
                       }
                       for (std::size_t at = 0; at < batch->size(); ++at) {
+                          // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): loaded.entries.size() == batch->size(), checked above
                           start((*batch)[at], std::move(loaded.entries[at]));
                       }
                   })
@@ -242,7 +243,7 @@ private:
                     reading->promise.reject(error);
                 }
             });
-    }
+    }  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the load registers are owned by the scope.
 
     void start(std::shared_ptr<Reading> const& reading, TableStateHead head) {
         if (head.deferred) {
@@ -301,7 +302,7 @@ private:
                       readMore(reading);
                   })
             .onError(_scope, [reading](std::exception_ptr const& error) { reading->promise.reject(error); });
-    }
+    }  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the read registers are owned by the scope.
 
     /// Sends a save the server refused for its open uploads again, after `retryDelay`.
     void retryLater(std::shared_ptr<Upload> const& upload) {
@@ -310,14 +311,15 @@ private:
             _owner->post(std::move(send));
             return;
         }
-        std::uint64_t const id = ++_lastRetry;
-        _retries.insert_or_assign(id, _scheduler->after(_retryDelay, _scope.token().guard([this, id, send] mutable {
-            _retries.erase(id);
-            send();
-        })));
+        std::uint64_t const token = ++_lastRetry;
+        _retries.insert_or_assign(token,
+                                  _scheduler->after(_retryDelay, _scope.token().guard([this, token, send] mutable {
+                                      _retries.erase(token);
+                                      send();
+                                  })));
     }
 
-    void sendPart(std::shared_ptr<Upload> upload) {
+    void sendPart(std::shared_ptr<Upload> const& upload) {
         std::string_view const rest = std::string_view{upload->text}.substr(upload->offset);
         std::size_t const length = upload->id.empty() ? rest.size() : detail::utf8Prefix(rest, kPartBytes);
         TableStateSave const request{.key = upload->key,
@@ -351,7 +353,7 @@ private:
                       sendPart(upload);
                   })
             .onError(_scope, [upload](std::exception_ptr const& error) { upload->promise.reject(error); });
-    }
+    }  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the save registers are owned by the scope.
 
     Dispatcher* _dispatcher;
     exec::IExecutor* _owner;
@@ -370,6 +372,7 @@ private:
 
 /// @brief The parts of a table's state a change touches: a bit set.
 enum class StateParts : std::uint8_t {
+    None = 0,     ///< No part.
     Layout = 1,   ///< The column layout, with the columns and groups carried for an absent column.
     Sort = 2,     ///< The sort chain, with the keys carried for an absent column.
     Filters = 4,  ///< The filters, with those carried for an absent column or group.
@@ -377,11 +380,11 @@ enum class StateParts : std::uint8_t {
 };
 
 /// @brief The union of two sets of parts.
-/// @param a One set.
-/// @param b The other.
+/// @param lhs One set.
+/// @param rhs The other.
 /// @return Every part in either.
-[[nodiscard]] constexpr StateParts operator|(StateParts a, StateParts b) noexcept {
-    return static_cast<StateParts>(static_cast<std::uint8_t>(a) | static_cast<std::uint8_t>(b));
+[[nodiscard]] constexpr StateParts operator|(StateParts lhs, StateParts rhs) noexcept {
+    return static_cast<StateParts>(static_cast<std::uint8_t>(lhs) | static_cast<std::uint8_t>(rhs));
 }
 
 /// @brief Whether @p set holds @p part.
@@ -582,7 +585,7 @@ private:
         _store->load(key)
             .then(_scope, [this, key](std::optional<table::StoredTableState> const& stored) { loaded(key, stored); })
             .onError(_scope, [this, key](std::exception_ptr const& error) { loadFailed(key, error); });
-    }
+    }  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the load registers are owned by the scope.
 
     void loaded(table::TableStateKey const& key, std::optional<table::StoredTableState> const& stored) {
         Entry& entry = _entries[tie(key)];
@@ -644,7 +647,7 @@ private:
         if (!entry.settled || entry.saving || !entry.dirty || entry.timer.active()) {
             return;
         }
-        std::string json = table::writeState(entry.current);
+        std::string const json = table::writeState(entry.current);
         entry.dirty = false;
         entry.saving = true;
         _store->save(key, json)
@@ -655,7 +658,7 @@ private:
                     table::SaveResult{
                         .outcome = table::SaveOutcome::Refused, .revision = {}, .reason = detail::failureText(error)});
             });
-    }
+    }  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the save registers are owned by the scope.
 
     void saved(table::TableStateKey const& key, std::string const& json, table::SaveResult const& result) {
         Entry& entry = _entries[tie(key)];
