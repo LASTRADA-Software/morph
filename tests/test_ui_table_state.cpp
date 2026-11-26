@@ -1714,7 +1714,7 @@ table::TableQuery firstQuery(TableHarness const& h) {
 }  // namespace
 
 // Mutation: Save view… with a taken name sending AddView (refused as NameTaken, the sort change lost).
-TEST_CASE("views: Save view… under a taken name replaces that view", "[ui][table][state]") {
+TEST_CASE("views: Save view... under a taken name replaces that view", "[ui][table][state]") {
     auto const store = std::make_shared<RecordingTableStateStore>(storeExecutor());
     TableHarness h{store};
     std::string const r0 = seed(h, *store, "views",
@@ -1999,7 +1999,7 @@ TEST_CASE(
 // Review Focus 5, a name taken from another window after load. Mutation: `TableViews` deciding add or replace once,
 // against the views loaded, and not at each attempt (the retry after the Conflict sends the same AddView, refused as
 // "A view named A exists").
-TEST_CASE("views: Save view… under a name another window took after load replaces it", "[ui][table][state]") {
+TEST_CASE("views: Save view... under a name another window took after load replaces it", "[ui][table][state]") {
     auto const store = std::make_shared<RecordingTableStateStore>(storeExecutor());
     TableHarness h{store};
     auto const screen = h.mount(morph::ui::testing::kNine);

@@ -1645,7 +1645,7 @@ TEST_CASE("windowing: the three thresholds", "[ui][mount]") {
 }
 
 // Mutation: the column window never on (`windowColumns` is all 300).  Gate F2.
-TEST_CASE("table window: 1,999 × 300 realizes only the windows", "[ui][mount]") {
+TEST_CASE("table window: 1,999 x 300 realizes only the windows", "[ui][mount]") {
     WindowFixture f{1'999, 300, {.pinned = 2}};
     f.scrollRows(500);
     f.scrollColumns(10'000);        // columns 100 to 119 in view
@@ -1921,7 +1921,7 @@ TEST_CASE("table focus: the reported row count is the total, or unknown for a lo
 
 // Mutation: the column window ignoring `cellThreshold` (thirty columns are under `columnThreshold`, so all 30 are in
 // the window).  Gate F2.
-TEST_CASE("table window: 1,000 × 30 is windowed by its cells alone", "[ui][mount]") {
+TEST_CASE("table window: 1,000 x 30 is windowed by its cells alone", "[ui][mount]") {
     WindowFixture f{1'000, 30};
     CHECK(f.backend.windowColumns(f.table).size() == 20 + 4);  // twenty in view, four overscan on the right
     CHECK(f.cellsAlive() == f.realizedRows() * 24);
