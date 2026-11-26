@@ -2451,7 +2451,7 @@ private:
     /// and lets the rows through once the stored order is in place.
     void rowsTableChanged(RowsTable& table);
     /// Shows @p text in the status line of a table over `rows`, as `tableMessage` does for a table's element.
-    void rowsTableMessage(RowsTable& table, std::string text) const;
+    void rowsTableMessage(RowsTable& rows, std::string text) const;
     /// Applies a table over `rows`' stored state once its load completed, or reports why it could not.
     void storedRowsState(RowsTable& table, std::optional<std::string> const& json, std::string const& failure);
     void collect(DocNode const& node, RtScope& scope, std::vector<Commands const*>& commands);

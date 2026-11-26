@@ -2005,9 +2005,9 @@ private:
         // A fixed grid's cells: one cell part per column id, its id the column's.
         if (made.kind == "layoutCells") {
             for (auto const& [column, cell] : object) {
-                auto made_ = std::make_shared<DocNode>(*part(cell, "layoutCell", pointerAppend(path, column)));
-                made_->id = column;
-                made.parts["cells"].push_back(std::move(made_));
+                auto cellNode = std::make_shared<DocNode>(*part(cell, "layoutCell", pointerAppend(path, column)));
+                cellNode->id = column;
+                made.parts["cells"].push_back(std::move(cellNode));
             }
         }
         if (made.kind == "fields") {
@@ -4023,12 +4023,12 @@ private:
             refuse(pointerAppend(part.path, "columns"), "a band's `columns` is a literal list of its columns' ids");
         }
         for (Value const& member : *list) {
-            std::string const* const id = member.asString();
-            if (id == nullptr) {
+            std::string const* const columnId = member.asString();
+            if (columnId == nullptr) {
                 refuse(pointerAppend(part.path, "columns"),
                        "a band's `columns` is a literal list of its columns' ids");
             }
-            band.columns.push_back(*id);
+            band.columns.push_back(*columnId);
         }
         for (DocNodePtr const& child : part.partList("bands")) {
             band.bands.push_back(bandOf(*child));
@@ -4164,16 +4164,17 @@ private:
             }
             std::optional<std::string_view> kind;
             for (Value const& member : *list) {
-                std::string const* const id = member.asString();
-                auto const part =
-                    id == nullptr
-                        ? columns.end()
-                        : std::ranges::find_if(columns, [id](DocNodePtr const& column) { return column->id == *id; });
+                std::string const* const columnId = member.asString();
+                auto const part = columnId == nullptr
+                                      ? columns.end()
+                                      : std::ranges::find_if(columns, [columnId](DocNodePtr const& column) {
+                                            return column->id == *columnId;
+                                        });
                 if (part == columns.end()) {
                     refuse(where, "a group's columns are the ids of the table's column parts");
                 }
-                if (!grouped.insert(*id).second) {
-                    refuse(where, "the column `" + *id + "` is in another group");
+                if (!grouped.insert(*columnId).second) {
+                    refuse(where, "the column `" + *columnId + "` is in another group");
                 }
                 std::string_view const named = (*part)->name("kind");
                 if (kind && *kind != named) {
@@ -5210,7 +5211,7 @@ private:
                                          text->asString() != nullptr;
                               });
             if (!read) {
-                refuse(labels->path, "`labels` is a literal list of `{\"operand\": text, \"text\": text}`");
+                refuse(labels->path, R"(`labels` is a literal list of `{"operand": text, "text": text}`)");
             }
         }
     }

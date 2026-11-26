@@ -48,6 +48,7 @@ namespace detail {
         return character >= 'A' && character <= 'Z' ? static_cast<char>(character - 'A' + 'a') : character;
     };
     for (std::size_t at = 0; at < left.size(); ++at) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `at` is below both sizes, which are equal; `.at()` could throw out of a noexcept function.
         if (lower(left[at]) != lower(right[at])) {
             return false;
         }
@@ -78,28 +79,28 @@ namespace detail {
     }
     text = text.substr(first, text.find_last_not_of(' ') - first + 1);
     std::string canonical;
-    std::size_t at = 0;
+    std::size_t index = 0;
     auto const negative = locale.numeric.negativeSign.empty() ? std::string_view{"-"} : locale.numeric.negativeSign;
     if (text.starts_with('-')) {
         canonical += '-';
-        at = 1;
+        index = 1;
     } else if (text.starts_with(negative)) {
         canonical += '-';
-        at = negative.size();
+        index = negative.size();
     }
     auto const digits = [&] {
-        auto const from = at;
-        while (at < text.size() && text[at] >= '0' && text[at] <= '9') {
-            canonical += text[at++];
+        auto const from = index;
+        while (index < text.size() && text.at(index) >= '0' && text.at(index) <= '9') {
+            canonical += text.at(index++);
         }
-        return at > from;
+        return index > from;
     };
     if (!digits()) {
         return std::nullopt;
     }
     auto const separator = locale.numeric.decimalSeparator;
-    if (!separator.empty() && text.substr(at).starts_with(separator)) {
-        at += separator.size();
+    if (!separator.empty() && text.substr(index).starts_with(separator)) {
+        index += separator.size();
         canonical += '.';
         if (!digits()) {
             return std::nullopt;
@@ -109,10 +110,10 @@ namespace detail {
     if (!amount) {
         return std::nullopt;
     }
-    while (at < text.size() && text[at] == ' ') {
-        ++at;
+    while (index < text.size() && text.at(index) == ' ') {
+        ++index;
     }
-    auto const named = text.substr(at);
+    auto const named = text.substr(index);
     if (named.empty()) {
         return TypedMeasure{.amount = *amount, .unit = std::string{chosen}};
     }

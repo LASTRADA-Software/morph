@@ -79,8 +79,8 @@ private:
             std::string const part = shared.substr(begin, end - begin);
             auto const key = part.substr(0, part.find('='));
             bool const isDatabase =
-                key.size() == 8 && std::ranges::equal(key, std::string_view{"database"}, [](char a, char b) {
-                    return std::tolower(static_cast<unsigned char>(a)) == b;
+                key.size() == 8 && std::ranges::equal(key, std::string_view{"database"}, [](char lhs, char rhs) {
+                    return std::tolower(static_cast<unsigned char>(lhs)) == rhs;
                 });
             if (!isDatabase && !part.empty()) {
                 out += part + ";";

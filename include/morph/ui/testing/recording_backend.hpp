@@ -2510,7 +2510,7 @@ public:
 
     /// @brief Stores the handler `RecordingBackend::chooseStatusEntry` calls.
     /// @param onStatusEntry The handler.
-    void setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) override {
+    void setOnStatusEntry(std::function<void(std::string entryId)> onStatusEntry) override {
         _onStatusEntry = std::move(onStatusEntry);
     }
 
@@ -2911,9 +2911,9 @@ public:
         std::optional<Key> named;
         for (int const child : store().at(id()).children) {
             auto const& props = store().at(child).props;
-            auto const at = props.find("viewRow");
+            auto const found = props.find("viewRow");
             auto const key = _rowKeys.find(child);
-            if (at != props.end() && at->second == std::to_string(viewRow) && key != _rowKeys.end()) {
+            if (found != props.end() && found->second == std::to_string(viewRow) && key != _rowKeys.end()) {
                 named = key->second;
             }
         }
@@ -4885,7 +4885,7 @@ private:
     // A chord of the table's cell menu keys runs the focused cell's menu entry that declares it: the first enabled one
     // without a submenu, in the order the menu lists them, a submenu's entries after the entry that opens it. Any
     // other chord asks for nothing.
-    bool cellKey(detail::Record const& record, std::string const& chord) {
+    static bool cellKey(detail::Record const& record, std::string const& chord) {
         auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
         std::optional<std::pair<Key, std::size_t>> const cell =
             table == nullptr ? std::nullopt : table->focusedCellKey();

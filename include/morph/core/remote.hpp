@@ -22,6 +22,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -951,7 +952,7 @@ public:
         observer->bind(
             [weak = weak_from_this()](std::string_view record, std::optional<std::vector<glz::raw_json>> keys) {
                 if (auto const self = weak.lock()) {
-                    static_cast<void>(self->announce(record, std::move(keys)));
+                    std::ignore = (self->announce(record, std::move(keys)));
                 }
             });
         _strand.postTask([self = shared_from_this(), observer = std::move(observer)]() mutable {

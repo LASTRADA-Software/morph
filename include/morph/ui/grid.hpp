@@ -609,8 +609,8 @@ public:
     /// @param done Called on the owner with the index, or nothing when the view lacks the key.
     void locateRow(table::RowId key, ::core::async::StopToken stop,
                    std::function<void(RowLocation const&)> done) override {
-        std::optional<std::size_t> const at = positionOf(key);
-        RowLocation const found{at ? std::optional{static_cast<std::int64_t>(*at)} : std::nullopt};
+        std::optional<std::size_t> const position = positionOf(key);
+        RowLocation const found{position ? std::optional{static_cast<std::int64_t>(*position)} : std::nullopt};
         _source->form().runtime().owner().post([stop = std::move(stop), done = std::move(done), found] {
             if (!stop.stop_requested()) {
                 done(found);
@@ -677,10 +677,10 @@ public:
 
     /// @brief Does nothing: a form row's key never changes.
     /// @param from Unused.
-    /// @param to   Unused.
-    void moveKey(table::RowId const& from, table::RowId const& to) override {
+    /// @param target   Unused.
+    void moveKey(table::RowId const& from, table::RowId const& target) override {
         static_cast<void>(from);
-        static_cast<void>(to);
+        static_cast<void>(target);
     }
 
     /// @brief Sets the one receiver of the view's changes.
@@ -713,9 +713,9 @@ public:
 
     /// @brief Groups the rows (`FormRowsSource::setGroup`) and takes the change in at once, so a sort that names
     ///        `kGroupRunColumn` is accepted from the next call.
-    /// @param by A row's group value; empty: no groups.
-    void setGroup(std::function<Value(forms::RowState const&)> by) {
-        _source->setGroup(std::move(by));
+    /// @param groupBy A row's group value; empty: no groups.
+    void setGroup(std::function<Value(forms::RowState const&)> groupBy) {
+        _source->setGroup(std::move(groupBy));
         _engine->engine().flush();
         rebuild();
     }
@@ -987,13 +987,13 @@ public:
         if (mountedRow < 0 || static_cast<std::size_t>(mountedRow) >= _entries.size()) {
             return std::nullopt;
         }
-        auto const at = static_cast<std::size_t>(mountedRow);
+        auto const index = static_cast<std::size_t>(mountedRow);
         for (std::size_t distance = 0; distance < _entries.size(); ++distance) {
-            if (distance <= at && _entries.at(at - distance).kind == Entry::Kind::Data) {
-                return _entries.at(at - distance).data;
+            if (distance <= index && _entries.at(index - distance).kind == Entry::Kind::Data) {
+                return _entries.at(index - distance).data;
             }
-            if (at + distance < _entries.size() && _entries.at(at + distance).kind == Entry::Kind::Data) {
-                return _entries.at(at + distance).data;
+            if (index + distance < _entries.size() && _entries.at(index + distance).kind == Entry::Kind::Data) {
+                return _entries.at(index + distance).data;
             }
         }
         return std::nullopt;
@@ -1011,8 +1011,8 @@ public:
     /// @param index The mounted index.
     /// @return The levels.
     [[nodiscard]] table::UnloadedLevels unloadedLevels(std::int64_t index) const override {
-        std::optional<std::int64_t> const at = exact(index);
-        return at ? _data->unloadedLevels(*at) : table::UnloadedLevels{};
+        std::optional<std::int64_t> const position = exact(index);
+        return position ? _data->unloadedLevels(*position) : table::UnloadedLevels{};
     }
 
     /// @brief Tells the data rows the data rows of a mounted range.
@@ -1142,8 +1142,8 @@ public:
 
     /// @brief Moves a data row's key.
     /// @param from The old key.
-    /// @param to   The new key.
-    void moveKey(table::RowId const& from, table::RowId const& to) override { _data->moveKey(from, to); }
+    /// @param target   The new key.
+    void moveKey(table::RowId const& from, table::RowId const& target) override { _data->moveKey(from, target); }
 
     /// @brief Sets the one receiver of the changes, in mounted indices.
     /// @param handler The receiver; empty to stop receiving.
@@ -1225,8 +1225,9 @@ private:
         std::vector<std::pair<std::int64_t, std::int64_t>> const runs =
             _runs ? _runs() : std::vector<std::pair<std::int64_t, std::int64_t>>{};
         _entries.clear();
-        auto const data = [this](std::int64_t at) {
-            _entries.push_back(Entry{.kind = Entry::Kind::Data, .data = at, .perRun = false, .key = {}, .record = {}});
+        auto const data = [this](std::int64_t index) {
+            _entries.push_back(
+                Entry{.kind = Entry::Kind::Data, .data = index, .perRun = false, .key = {}, .record = {}});
         };
         auto const summaries = [this](std::vector<SummarySpec> const& specs, bool top, std::optional<std::size_t> run,
                                       std::int64_t first, std::int64_t count) {
@@ -1931,8 +1932,8 @@ private:
         return most && _form->runtime().untracked([&] { return heldRows(); }) >= *most;
     }
 
-    [[nodiscard]] GridColumn const* columnOf(std::string_view id) const {
-        auto const found = std::ranges::find(_columns, id, &GridColumn::id);
+    [[nodiscard]] GridColumn const* columnOf(std::string_view columnId) const {
+        auto const found = std::ranges::find(_columns, columnId, &GridColumn::id);
         return found == _columns.end() ? nullptr : &*found;
     }
 
@@ -2987,6 +2988,7 @@ public:
         auto units = table::registryOf(description);
         _units = units ? *std::move(units) : nullptr;
         std::vector<std::string> ids;
+        ids.reserve(description.columns.size());
         for (table::TableColumn const& column : description.columns) {
             ids.push_back(column.info.id);
         }
@@ -3035,15 +3037,15 @@ public:
     /// @brief A row's key changed: the rows, the drafts, the cells held for the row's request and the focus move
     ///        what they hold by it.
     /// @param from The row's old key.
-    /// @param to   The row's new key.
-    void moveKey(Key const& from, Key const& to) {
-        if (from == to) {
+    /// @param destination   The row's new key.
+    void moveKey(Key const& from, Key const& destination) {
+        if (from == destination) {
             return;
         }
-        _rows->moveKey(from, to);
-        _edits->moveRow(from, to);
+        _rows->moveKey(from, destination);
+        _edits->moveRow(from, destination);
         if (auto const held = _held.extract(from); !held.empty()) {
-            std::vector<table::EditCell>& target = _held[to];
+            std::vector<table::EditCell>& target = _held[destination];
             for (table::EditCell& cell : held.mapped()) {
                 if (!std::ranges::contains(target, cell.column, &table::EditCell::column)) {
                     target.push_back(std::move(cell));
@@ -3052,14 +3054,14 @@ public:
         }
         for (CellRef& cell : _resend) {
             if (cell.key == from) {
-                cell.key = to;
+                cell.key = destination;
             }
         }
         _positionsVersion.reset();
         bump();
         if (_focus.moved) {
             std::function<void(Key const&, Key const&)> const moved = _focus.moved;
-            moved(from, to);
+            moved(from, destination);
         }
     }
 
@@ -3213,7 +3215,7 @@ public:
         if (described == nullptr || !row) {
             return {};
         }
-        return formatCell(cellOf(row->record.field(std::string{column})), *described, _context.format);
+        return formatCell(cellOf(row->record.field(column)), *described, _context.format);
     }
 
     /// @brief Why the cell's value is refused: its draft does not encode, or the edit action refused it. Tracked.
@@ -3371,6 +3373,7 @@ public:
     /// @brief `Ctrl+Enter`: every row's held cells are sent.
     void commitHeld() override {
         std::vector<Key> rows;
+        rows.reserve(_held.size());
         for (auto const& [row, cells] : _held) {
             rows.push_back(row);
         }
@@ -3489,7 +3492,7 @@ private:
         [[nodiscard]] std::vector<std::pair<std::int64_t, std::int64_t>> heldRanges() const override {
             return _inner->heldRanges();
         }
-        void moveKey(table::RowId const& from, table::RowId const& to) override { _source->moveKey(from, to); }
+        void moveKey(table::RowId const& from, table::RowId const& target) override { _source->moveKey(from, target); }
         void onChange(std::function<void(table::ViewChange const&)> handler) override {
             _handler = std::move(handler);
         }
@@ -3526,14 +3529,15 @@ private:
                     out.clear();
                     break;
                 case table::ViewOp::Kind::Removed:
-                    std::erase_if(out, [&op](std::size_t at) { return at >= op.first && at < op.first + op.count; });
-                    for (std::size_t& at : out) {
-                        at -= at >= op.first + op.count ? op.count : 0;
+                    std::erase_if(
+                        out, [&op](std::size_t index) { return index >= op.first && index < op.first + op.count; });
+                    for (std::size_t& index : out) {
+                        index -= index >= op.first + op.count ? op.count : 0;
                     }
                     break;
                 case table::ViewOp::Kind::Inserted:
-                    for (std::size_t& at : out) {
-                        at += at >= op.first ? op.count : 0;
+                    for (std::size_t& index : out) {
+                        index += index >= op.first ? op.count : 0;
                     }
                     for (std::size_t at = op.first; at < op.first + op.count; ++at) {
                         out.push_back(at);
@@ -3547,13 +3551,13 @@ private:
                     }
                     break;
                 case table::ViewOp::Kind::Moved:
-                    for (std::size_t& at : out) {
-                        if (at == op.first) {
-                            at = op.to;
+                    for (std::size_t& index : out) {
+                        if (index == op.first) {
+                            index = op.to;
                             continue;
                         }
-                        std::size_t const removed = at > op.first ? at - 1 : at;
-                        at = removed >= op.to ? removed + 1 : removed;
+                        std::size_t const removed = index > op.first ? index - 1 : index;
+                        index = removed >= op.to ? removed + 1 : removed;
                     }
                     break;
                 default:
@@ -3565,17 +3569,18 @@ private:
 
     void bump() { _version.set(_version.peek() + 1); }
 
-    [[nodiscard]] ModelColumn const* columnOf(std::string_view id) const {
-        auto const found = std::ranges::find(_columns, id, &ModelColumn::id);
+    [[nodiscard]] ModelColumn const* columnOf(std::string_view columnId) const {
+        auto const found = std::ranges::find(_columns, columnId, &ModelColumn::id);
         return found == _columns.end() ? nullptr : &*found;
     }
 
-    [[nodiscard]] table::TableColumn const* describedColumn(std::string_view id) const {
+    [[nodiscard]] table::TableColumn const* describedColumn(std::string_view columnId) const {
         if (!_description) {
             return nullptr;
         }
-        auto const found = std::ranges::find_if(
-            _description->columns, [id](table::TableColumn const& column) { return column.info.id == id; });
+        auto const found = std::ranges::find_if(_description->columns, [columnId](table::TableColumn const& column) {
+            return column.info.id == columnId;
+        });
         return found == _description->columns.end() ? nullptr : &*found;
     }
 
@@ -3627,7 +3632,7 @@ private:
             _description && lockText(TableRowRef{.key = key, .row = row->record}, *_description).has_value();
         table::TableColumn const* const shown = describedColumn(column);
         table::UnloadedLevels const levels = _rows->unloadedLevels(row->index);
-        Value const* const value = row->record.field(std::string{column});
+        Value const* const value = row->record.field(column);
         facts.unloaded = value == nullptr || (shown != nullptr && !shown->info.level.empty() &&
                                               std::ranges::contains(levels.levels, shown->info.level));
         if (Quantity const* const measure = value == nullptr ? nullptr : value->asQuantity();
@@ -3651,7 +3656,7 @@ private:
         }
         _rt->untracked([&] {
             std::optional<Located> const row = locate(key);
-            Value const* const value = row ? row->record.field(std::string{column}) : nullptr;
+            Value const* const value = row ? row->record.field(column) : nullptr;
             std::string const json = value == nullptr ? std::string{"null"} : wireOf(*value, fieldOf(column)->spec());
             std::string const body = described->edit->member.empty()
                                          ? R"({"value":)" + json + "}"
@@ -3697,22 +3702,25 @@ private:
         }
         std::erase_if(_resend, [&](CellRef const& cell) { return cell.key == key && cell.column == column; });
         hold(key, column);
-        if (!_edits->draft(key, column) || _edits->error(key, column)) {
+        auto const draft = _edits->draft(key, column);
+        if (!draft || _edits->error(key, column)) {
             return std::nullopt;
         }
         if (_rt->untracked([&] { return readOnly(key, column); })) {
             // Refused at the cell, as a held cell is: the draft keeps why, and its next commit sends it.
             std::optional<std::string> const why = _rt->untracked([&] { return refusal(key, column); });
-            _edits->setDraft(key, column, *_edits->draft(key, column), why.value_or(std::string{kReadOnlyText}));
+            _edits->setDraft(key, column, *draft, why.value_or(std::string{kReadOnlyText}));
             _resend.push_back(CellRef{.key = key, .column = column});
             return std::nullopt;
         }
         forms::Encoding const encoding = _rt->untracked([&] { return fieldOf(column)->encoded().get(); });
         ModelColumn const* const described = columnOf(column);
-        return table::EditCell{
-            .column = column,
-            .json = encoding && encoding->has_value() ? (*encoding)->json : std::string{"null"},
-            .member = described->edit->member.empty() ? std::string{"value"} : described->edit->member};
+        std::string member = described != nullptr && described->edit && !described->edit->member.empty()
+                                 ? described->edit->member
+                                 : std::string{"value"};
+        return table::EditCell{.column = column,
+                               .json = encoding && encoding->has_value() ? (*encoding)->json : std::string{"null"},
+                               .member = std::move(member)};
     }
 
     // Sends a row's held cells as one request. A cell that became read-only since it was held (its row busy with
@@ -3783,10 +3791,10 @@ private:
                 int year = 0;
                 unsigned month = 0;
                 unsigned day = 0;
-                char const* const at = text->data();
-                bool const read = std::from_chars(at, at + 4, year).ec == std::errc{} &&
-                                  std::from_chars(at + 5, at + 7, month).ec == std::errc{} &&
-                                  std::from_chars(at + 8, at + 10, day).ec == std::errc{};
+                char const* const cursor = text->data();
+                bool const read = std::from_chars(cursor, cursor + 4, year).ec == std::errc{} &&
+                                  std::from_chars(cursor + 5, cursor + 7, month).ec == std::errc{} &&
+                                  std::from_chars(cursor + 8, cursor + 10, day).ec == std::errc{};
                 std::chrono::year_month_day const date{std::chrono::year{year}, std::chrono::month{month},
                                                        std::chrono::day{day}};
                 if (read && date.ok()) {
@@ -3808,11 +3816,11 @@ private:
     [[nodiscard]] std::optional<math::Rational> inFieldUnit(Quantity const& measure,
                                                             forms::FieldSpec const& spec) const {
         std::optional<table::UnitId> const from = _units ? _units->find(measure.unit) : std::nullopt;
-        std::optional<table::UnitId> const to = _units ? _units->find(spec.unitAscii) : std::nullopt;
-        if (!from || !to || _units->info(*from).dimension != _units->info(*to).dimension) {
+        std::optional<table::UnitId> const toUnit = _units ? _units->find(spec.unitAscii) : std::nullopt;
+        if (!from || !toUnit || _units->info(*from).dimension != _units->info(*toUnit).dimension) {
             return std::nullopt;
         }
-        auto const factor = math::checkedDiv(_units->info(*from).toBase, _units->info(*to).toBase);
+        auto const factor = math::checkedDiv(_units->info(*from).toBase, _units->info(*toUnit).toBase);
         auto const amount = factor ? math::checkedMul(measure.value, *factor) : std::unexpected(factor.error());
         return amount ? std::optional{*amount} : std::nullopt;
     }
@@ -3898,7 +3906,8 @@ public:
                 focusCell(cell);
             }
         });
-        _source->followFocusWith(FocusLink{.moved = [this](Key const& from, Key const& to) { keyMoved(from, to); }});
+        _source->followFocusWith(
+            FocusLink{.moved = [this](Key const& from, Key const& target) { keyMoved(from, target); }});
     }
 
     GridController(GridController const&) = delete;
@@ -3962,11 +3971,11 @@ public:
             commit();
             letGo();
         }
-        std::optional<std::size_t> const at = _source->positionOf(cell.key);
-        if (!at) {
+        std::optional<std::size_t> const position = _source->positionOf(cell.key);
+        if (!position) {
             return;
         }
-        setPlace(GridFocus{.key = cell.key, .viewRow = *at, .column = cell.column});
+        setPlace(GridFocus{.key = cell.key, .viewRow = *position, .column = cell.column});
         if (_selection.peek() && !inBlock(cell)) {
             setSelection(std::nullopt);
         }
@@ -4074,8 +4083,18 @@ public:
             return KeyOutcome::Handled;
         }
         if (chord == "Shift+Up" || chord == "Shift+Down" || chord == "Shift+Left" || chord == "Shift+Right") {
-            extend(chord == "Shift+Up" ? -1 : (chord == "Shift+Down" ? 1 : 0),
-                   chord == "Shift+Left" ? -1 : (chord == "Shift+Right" ? 1 : 0));
+            int rows = 0;
+            int columns = 0;
+            if (chord == "Shift+Up") {
+                rows = -1;
+            } else if (chord == "Shift+Down") {
+                rows = 1;
+            } else if (chord == "Shift+Left") {
+                columns = -1;
+            } else {
+                columns = 1;
+            }
+            extend(rows, columns);
             return KeyOutcome::Handled;
         }
         if (chord == "Ctrl+A") {
@@ -4130,7 +4149,7 @@ public:
         _kept = _source->draft(focused->key, focused->column);
         _source->holdRow(focused->key);
         _source->write(focused->key, focused->column, std::string{text});
-        _editing.set(*focused);
+        _editing.set(focused);
         _source->editorOpened(focused->key, focused->column);
     }
 
@@ -4160,7 +4179,7 @@ public:
 
     /// @brief A click on a cell: focuses it, and flips a Boolean's.
     /// @param cell The cell.
-    void click(CellRef cell) {
+    void click(CellRef const& cell) {
         focusCell(cell);
         if (_rt->untracked([&] { return focus(); }) == cell && _source->toggles(cell.key, cell.column)) {
             toggle(cell);
@@ -4194,11 +4213,11 @@ public:
 
     /// @brief An entry chosen in the status line: `recalculate` makes one more round of derived values, `undo` puts
     ///        back the rows the last deletion removed (`undo`).
-    /// @param id The entry's id; one the grid does not offer is ignored.
-    void chooseEntry(std::string_view id) {
-        if (id == "recalculate") {
+    /// @param entryId The entry's id; one the grid does not offer is ignored.
+    void chooseEntry(std::string_view entryId) {
+        if (entryId == "recalculate") {
             _source->recalculate();
-        } else if (id == "undo") {
+        } else if (entryId == "undo") {
             undo();
         }
     }
@@ -4213,13 +4232,13 @@ public:
     [[nodiscard]] std::vector<MenuItem> cellEntries(Key const& row, std::string_view column) {
         GridController* const self = this;
         GridSource* const source = _source;
-        std::string const id{column};
+        std::string const columnId{column};
         MenuItem cell;
         cell.label = std::string{"Revert cell"};
-        cell.enabled = Prop<bool>{[source, row, id] { return source->marks(row, id).modified; }};
-        cell.onSelect = [self, source, row, id] {
+        cell.enabled = Prop<bool>{[source, row, columnId] { return source->marks(row, columnId).modified; }};
+        cell.onSelect = [self, source, row, columnId] {
             self->noteChange();
-            source->revertCell(row, id);
+            source->revertCell(row, columnId);
             source->committed();
         };
         MenuItem whole;
@@ -4313,12 +4332,12 @@ public:
                 std::optional<std::size_t> const last = _source->positionOf(cells->keys.back());
                 std::optional<std::int64_t> const from =
                     first ? _summaries->mounted(static_cast<std::int64_t>(*first)) : std::nullopt;
-                std::optional<std::int64_t> const to =
+                std::optional<std::int64_t> const target =
                     last ? _summaries->mounted(static_cast<std::int64_t>(*last)) : std::nullopt;
-                if (from && to) {
+                if (from && target) {
                     // The rectangle's rows as the table draws them: a summary row between its corners is copied with
                     // its cells' text, a heading row is not a row of cells.
-                    for (std::int64_t at = *from; at <= *to; ++at) {
+                    for (std::int64_t at = *from; at <= *target; ++at) {
                         std::optional<TableRowRef> const ref = _summaries->row(at);
                         if (!ref) {
                             continue;
@@ -4406,8 +4425,8 @@ public:
         }
         if (start) {
             firstRow = _source->positionOf(start->key).value_or(0);
-            auto const at = std::ranges::find(columns, start->column);
-            firstColumn = at == columns.end() ? 0 : static_cast<std::size_t>(at - columns.begin());
+            auto const found = std::ranges::find(columns, start->column);
+            firstColumn = found == columns.end() ? 0 : static_cast<std::size_t>(found - columns.begin());
         }
         // The keys each line lands on: the rows there, then the rows appended for the lines past the last.
         std::vector<std::optional<Key>> keys;
@@ -4611,10 +4630,10 @@ public:
             ids->push_back(column.id);
         }
         auto const idOf = [ids](std::size_t column) { return column < ids->size() ? ids->at(column) : std::string{}; };
-        auto const marksOf = [source](reactive::Signal<Value> const* row, std::string id) {
-            return Prop<CellMarks>{[source, row, id] {
+        auto const marksOf = [source](reactive::Signal<Value> const* row, std::string const& columnId) {
+            return Prop<CellMarks>{[source, row, columnId] {
                 std::optional<Key> const key = source->keyOf(row->get());
-                return key ? source->marks(*key, id) : CellMarks{};
+                return key ? source->marks(*key, columnId) : CellMarks{};
             }};
         };
         TableSource made;
@@ -4656,9 +4675,9 @@ public:
                         return out;
                     }
                     for (CellSpan const& span : source->spans(*key)) {
-                        auto const at = std::ranges::find(*ids, span.column);
-                        if (at != ids->end()) {
-                            out.push_back(RowSpan{.column = static_cast<std::size_t>(at - ids->begin()),
+                        auto const found = std::ranges::find(*ids, span.column);
+                        if (found != ids->end()) {
+                            out.push_back(RowSpan{.column = static_cast<std::size_t>(found - ids->begin()),
                                                   .rows = span.rows,
                                                   .columns = span.columns});
                         }
@@ -4719,7 +4738,7 @@ public:
         };
         options.onKey = [self](std::string const& chord) { return self->press(chord); };
         options.keyChords = Prop<std::vector<std::string>>{[self] { return self->keyChords(); }};
-        options.onText = [self](std::string text) { self->type(text); };
+        options.onText = [self](std::string const& text) { self->type(text); };
         options.onActivateCell = [self](CellRef cell) { self->activate(std::move(cell)); };
         options.onClickCell = [self, toData](CellRef cell) {
             if (std::optional<Key> const key = toData(cell.key)) {
@@ -4766,7 +4785,7 @@ public:
                 return status;
             }};
             if (!options.onStatusEntry) {
-                options.onStatusEntry = [self](std::string const& id) { self->chooseEntry(id); };
+                options.onStatusEntry = [self](std::string const& entryId) { self->chooseEntry(entryId); };
             }
         }
         if (!_options.appendRows || fixedRows()) {
@@ -4860,8 +4879,8 @@ private:
         if (!row || column == ids.end() || count == 0) {
             return;
         }
-        auto const clamp = [](std::size_t at, int by, std::size_t size) {
-            auto const moved = static_cast<std::int64_t>(at) + by;
+        auto const clamp = [](std::size_t index, int delta, std::size_t size) {
+            auto const moved = static_cast<std::int64_t>(index) + delta;
             return static_cast<std::size_t>(std::clamp<std::int64_t>(moved, 0, static_cast<std::int64_t>(size) - 1));
         };
         std::optional<Key> const key = _source->keyAt(clamp(*row, rows, count));
@@ -4957,11 +4976,11 @@ private:
         if (fixedRows() || !_rt->untracked([&] { return insertRefusal(); }).empty()) {
             return;
         }
-        std::optional<std::size_t> const at = _source->positionOf(row);
-        if (!at) {
+        std::optional<std::size_t> const position = _source->positionOf(row);
+        if (!position) {
             return;
         }
-        if (_source->insertRow(below ? *at + 1 : *at)) {
+        if (_source->insertRow(below ? *position + 1 : *position)) {
             noteChange();
             _source->committed();
         }
@@ -4976,7 +4995,8 @@ private:
             return;
         }
         std::optional<GridFocus> const shown = _rt->untracked([&] { return place(); });
-        std::optional<std::size_t> const at = shown && shown->key ? _source->positionOf(*shown->key) : std::nullopt;
+        std::optional<std::size_t> const position =
+            shown && shown->key ? _source->positionOf(*shown->key) : std::nullopt;
         noteChange();
         bool const held = _source->removeRows(keys);
         _source->committed();
@@ -4987,7 +5007,7 @@ private:
         if (shown && shown->key && !_source->positionOf(*shown->key)) {
             std::size_t const rows = _source->rowCount();
             std::optional<Key> const next =
-                rows == 0 ? std::nullopt : _source->keyAt(std::min(at.value_or(0), rows - 1));
+                rows == 0 ? std::nullopt : _source->keyAt(std::min(position.value_or(0), rows - 1));
             if (next) {
                 focusCell(CellRef{.key = *next, .column = shown->column});
             } else {
@@ -5062,17 +5082,17 @@ private:
     [[nodiscard]] bool fixedRows() const { return _options.rowsFixed || !_source->rowsEditable(); }
 
     // A row's key changed: the focus and an open editor on it take the new key, at the row's place now.
-    void keyMoved(Key const& from, Key const& to) {
+    void keyMoved(Key const& from, Key const& target) {
         if (std::optional<CellRef> const open = _editing.peek(); open && open->key == from) {
-            _editing.set(CellRef{.key = to, .column = open->column});
+            _editing.set(CellRef{.key = target, .column = open->column});
         }
         std::optional<GridFocus> const shown = _place.peek();
         if (!shown || shown->key != from) {
             return;
         }
-        _focusedRow = to;
+        _focusedRow = target;
         _place.set(GridFocus{
-            .key = to, .viewRow = _source->positionOf(to).value_or(shown->viewRow), .column = shown->column});
+            .key = target, .viewRow = _source->positionOf(target).value_or(shown->viewRow), .column = shown->column});
     }
 
     // Moves the focus, and tells the source when the row it is on changed.
@@ -5147,16 +5167,17 @@ private:
         auto const linear = [&](std::size_t row, std::size_t column) {
             return byRows ? (row * width) + column : (column * rows) + row;
         };
-        std::int64_t at = forward ? -1 : static_cast<std::int64_t>(total);
+        std::int64_t position = forward ? -1 : static_cast<std::int64_t>(total);
         if (from) {
             std::optional<std::size_t> const row = _source->positionOf(from->key);
             auto const column = std::ranges::find(columns, from->column);
             if (row && column != columns.end()) {
-                at = static_cast<std::int64_t>(linear(*row, static_cast<std::size_t>(column - columns.begin())));
+                position = static_cast<std::int64_t>(linear(*row, static_cast<std::size_t>(column - columns.begin())));
             }
         }
-        for (at += forward ? 1 : -1; at >= 0 && std::cmp_less(at, total); at += forward ? 1 : -1) {
-            auto const index = static_cast<std::size_t>(at);
+        for (position += forward ? 1 : -1; position >= 0 && std::cmp_less(position, total);
+             position += forward ? 1 : -1) {
+            auto const index = static_cast<std::size_t>(position);
             std::size_t const row = byRows ? index / width : index % rows;
             std::size_t const column = byRows ? index % width : index / rows;
             std::optional<Key> const key = _source->keyAt(row);
@@ -5255,11 +5276,11 @@ private:
             return;
         }
         std::vector<std::string> const columns = _source->columns();
-        auto const at = std::ranges::find(columns, from.column);
-        if (at == columns.end()) {
+        auto const found = std::ranges::find(columns, from.column);
+        if (found == columns.end()) {
             return;
         }
-        for (auto column = std::next(at); column != columns.end(); ++column) {
+        for (auto column = std::next(found); column != columns.end(); ++column) {
             if (editable(CellRef{.key = from.key, .column = *column})) {
                 focusCell(CellRef{.key = from.key, .column = *column});
                 return;
@@ -5348,8 +5369,8 @@ struct FormGrid {
 /// @param options The walk and the activation.
 /// @param format  How values are shown.
 /// @return The node; it keeps the grid alive.
-[[nodiscard]] inline Node formGrid(forms::FormSession& form, forms::FieldState& array, std::vector<GridColumn> columns,
-                                   GridOptions options, FormatContext format) {
+[[nodiscard]] inline Node formGrid(forms::FormSession& form, forms::FieldState const& array,
+                                   std::vector<GridColumn> columns, GridOptions options, FormatContext format) {
     return makeFormGrid(form, array, std::move(columns), std::move(options), std::move(format)).node;
 }
 

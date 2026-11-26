@@ -733,7 +733,7 @@ public:
     void setExistingKeys(std::vector<ui::Key> const& keys) override;
     void setOnSelectAll(std::function<void()> onSelectAll) override;
     void setSelectionView(std::vector<ui::Key> const& except) override;
-    void setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) override;
+    void setOnStatusEntry(std::function<void(std::string entryId)> onStatusEntry) override;
     void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) override;
     void setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.

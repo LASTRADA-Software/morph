@@ -1780,7 +1780,7 @@ struct Table {
     ///        taken back to the new key. A table over a `TableSource` only.
     Prop<KeyMoves> keyMoves;
     /// @brief Called with the id of the status line's entry the user chose.
-    std::function<void(std::string id)> onStatusEntry;
+    std::function<void(std::string entryId)> onStatusEntry;
     /// @brief Engaged: the table's focus is a grid's. The mount shows the cell it names, at its key's view position
     ///        now, or at `GridFocus::viewRow` while it names no key, and keeps that row realized, fetched or not; a
     ///        click or a `FocusMove` goes to `onGridFocus` and does not move the mount's own focus. A table over a
@@ -2702,7 +2702,7 @@ struct TableOptions {
     ///        taken back to the new key. A table over a `TableSource` only.
     Prop<KeyMoves> keyMoves;
     /// @brief Called with the id of the status line's entry the user chose.
-    std::function<void(std::string id)> onStatusEntry;
+    std::function<void(std::string entryId)> onStatusEntry;
     /// @brief Engaged: the table's focus is a grid's (`Table::gridFocus`).
     std::optional<Prop<std::optional<GridFocus>>> gridFocus;
     /// @brief Called with the cell a click or a `FocusMove` resolves to, while `gridFocus` is engaged.

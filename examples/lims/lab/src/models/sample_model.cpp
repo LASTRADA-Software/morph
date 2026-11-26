@@ -307,7 +307,7 @@ namespace {
         }
     }
     auto page = ::morph::table::apply<SampleView>(
-        rows, [](SampleView const& s) { return ::morph::table::RowId{*s.id}; }, query, options);
+        rows, [](SampleView const& sample) { return ::morph::table::RowId{*sample.id}; }, query, options);
     if (!page) {
         throw ValidationError{std::string{action} + ": " + page.error().message};
     }

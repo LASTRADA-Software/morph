@@ -120,7 +120,7 @@ public:
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
     void setOnSelectAll(std::function<void()> onSelectAll) override;
     void setSelectionView(std::vector<ui::Key> const& except) override;
-    void setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) override;
+    void setOnStatusEntry(std::function<void(std::string entryId)> onStatusEntry) override;
     /// An unmatched row's cells draw dim; a busy row shows the busy glyph and a locked row the lock glyph in gutter
     /// cells of their own (the glyph and a gap), after the selection and cursor marks; the marks' tooltip, or for a
     /// busy or locked row without one a text saying why, is the row's hover text over its own tooltip. Throws
@@ -537,7 +537,7 @@ private:
     struct DrawnEntry {
         int x = 0;
         int width = 0;
-        std::string id;
+        std::string entryId;
     };
     std::vector<DrawnEntry> _entriesDrawn;
 };

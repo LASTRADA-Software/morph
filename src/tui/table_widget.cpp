@@ -400,7 +400,7 @@ void TableImpl::setSelectionView(std::vector<ui::Key> const& except) {
     refresh();
 }
 
-void TableImpl::setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) {
+void TableImpl::setOnStatusEntry(std::function<void(std::string entryId)> onStatusEntry) {
     _onStatusEntry = std::move(onStatusEntry);
 }
 
@@ -416,10 +416,14 @@ void TableImpl::setRowMarks(ui::Widget& row, ui::RowMarks const& marks) {
     }
     base.applyRowMuted(marks.unmatched);
     // The marks' text wins over the row's own tooltip while it lasts; a busy or locked row always says why.
-    std::string_view const said = !marks.tooltip.empty() ? std::string_view{marks.tooltip}
-                                  : marks.locked         ? kLockText
-                                  : marks.busy           ? kBusyText
-                                                         : std::string_view{};
+    std::string_view said = marks.tooltip;
+    if (said.empty()) {
+        if (marks.locked) {
+            said = kLockText;
+        } else if (marks.busy) {
+            said = kBusyText;
+        }
+    }
     base.applyMarksTooltip(said);
     // The gutter takes cells for the glyph from the first busy or locked row on, and keeps it, so the columns do not
     // move as rows start and stop being busy.
@@ -592,8 +596,8 @@ std::optional<int> TableImpl::groupFilterX(std::size_t group) const {
     int right = -1;
     for (DrawnColumn const& column : drawnColumns(_size.width)) {
         auto const place = std::ranges::find(order, column.column);
-        auto const at = static_cast<std::size_t>(std::distance(order.begin(), place));
-        if (place != order.end() && at >= shown.first && at < shown.first + shown.count) {
+        auto const index = static_cast<std::size_t>(std::distance(order.begin(), place));
+        if (place != order.end() && index >= shown.first && index < shown.first + shown.count) {
             right = std::max(right, gutter() + column.x + column.width - 1);
         }
     }
@@ -692,7 +696,7 @@ void TableImpl::openCellMenu(WidgetBase const& row, std::size_t column) {
 EventResult TableImpl::cellKey(::core::tui::KeyEvent const& key) {
     WidgetBase const* const row = _focusCell ? rowAtView(_focusCell->first) : nullptr;
     std::optional<ui::Key> const rowKey = row == nullptr ? std::nullopt : keyOf(row);
-    if (!_cellMenu || !rowKey) {
+    if (!_cellMenu || !rowKey || !_focusCell) {
         return EventResult::Ignored;
     }
     std::size_t const column = _focusCell->second;
@@ -730,6 +734,9 @@ EventResult TableImpl::cellKey(::core::tui::KeyEvent const& key) {
 // Left and Right walk the visible columns; a move is reported one place over and the table waits for the mount to
 // rearrange it, the focus staying on the moved column.
 EventResult TableImpl::headerKey(::core::tui::KeyEvent const& key) {
+    if (!_headerFocus) {
+        return EventResult::Ignored;
+    }
     auto const order = visibleOrder();
     auto const found = std::ranges::find(order, *_headerFocus);
     if (found == order.end()) {
@@ -1099,8 +1106,8 @@ void TableImpl::paintGroups(::core::tui::Canvas& canvas, std::vector<DrawnColumn
         int right = -1;
         for (DrawnColumn const& drawn : columns) {
             auto const place = std::ranges::find(order, drawn.column);
-            auto const at = static_cast<std::size_t>(std::distance(order.begin(), place));
-            if (place != order.end() && at >= group.first && at < group.first + group.count) {
+            auto const index = static_cast<std::size_t>(std::distance(order.begin(), place));
+            if (place != order.end() && index >= group.first && index < group.first + group.count) {
                 left = left < 0 ? gutter() + drawn.x : std::min(left, gutter() + drawn.x);
                 right = std::max(right, gutter() + drawn.x + drawn.width);
             }
@@ -1126,8 +1133,8 @@ void TableImpl::paintBands(::core::tui::Canvas& canvas, std::vector<DrawnColumn>
         int right = -1;
         for (DrawnColumn const& drawn : columns) {
             auto const place = std::ranges::find(order, drawn.column);
-            auto const at = static_cast<std::size_t>(std::distance(order.begin(), place));
-            if (place != order.end() && at >= run.first && at < run.first + run.count) {
+            auto const index = static_cast<std::size_t>(std::distance(order.begin(), place));
+            if (place != order.end() && index >= run.first && index < run.first + run.count) {
                 left = left < 0 ? gutter() + drawn.x : std::min(left, gutter() + drawn.x);
                 right = std::max(right, gutter() + drawn.x + drawn.width);
             }
@@ -1161,7 +1168,13 @@ std::string TableImpl::rowMark(WidgetBase const* row, bool cursor) const {
     if (_selectColumn) {
         mark = isMarked(row) ? "[x]" : "[ ]";
     } else {
-        mark = isMarked(row) || inCells ? "*" : (_modifiedRows.contains(row) ? "+" : " ");
+        std::string_view marker = " ";
+        if (isMarked(row) || inCells) {
+            marker = "*";
+        } else if (_modifiedRows.contains(row)) {
+            marker = "+";
+        }
+        mark = marker;
     }
     mark += cursor ? ">" : " ";
     // A busy or locked row's glyph takes the gutter's own cells, after the selection and cursor marks.
@@ -1169,7 +1182,13 @@ std::string TableImpl::rowMark(WidgetBase const* row, bool cursor) const {
         auto const found = _marks.find(row);
         bool const busy = found != _marks.end() && found->second.busy;
         bool const locked = found != _marks.end() && found->second.locked;
-        mark += busy ? kBusyGlyph : locked ? kLockGlyph : " ";
+        if (busy) {
+            mark += kBusyGlyph;
+        } else if (locked) {
+            mark += kLockGlyph;
+        } else {
+            mark += ' ';
+        }
         mark += ' ';
     }
     return mark;
@@ -1369,7 +1388,7 @@ EventResult TableImpl::key(::core::tui::KeyEvent const& key) {
     for (std::size_t at = 0; at < _entriesDrawn.size() && at < 9; ++at) {
         if (matchesChord("Alt+" + std::to_string(at + 1), key) && _onStatusEntry) {
             auto const handler = _onStatusEntry;
-            handler(_entriesDrawn.at(at).id);
+            handler(_entriesDrawn.at(at).entryId);
             return EventResult::Handled;
         }
     }
@@ -1451,7 +1470,7 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
         for (DrawnEntry const& entry : _entriesDrawn) {
             if (cell.x >= entry.x && cell.x < entry.x + entry.width && _onStatusEntry) {
                 auto const handler = _onStatusEntry;
-                handler(entry.id);
+                handler(entry.entryId);
                 return;
             }
         }
@@ -1907,7 +1926,7 @@ EventResult TableImpl::sourceKey(::core::tui::KeyEvent const& key) {
         return EventResult::Handled;
     }
     WidgetBase const* const row = _focusCell ? rowAtView(_focusCell->first) : nullptr;
-    if (::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::None && row != nullptr) {
+    if (::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::None && row != nullptr && _focusCell) {
         if (key.codepoint == U' ') {
             _anchorRow = _focusCell->first;
             static_cast<void>(pick(*row));
@@ -2199,7 +2218,7 @@ void TableImpl::slotCells(std::vector<DrawnColumn> const& drawn) {
                     slot = CellSlot{.x = 0, .width = across, .place = CellPlace{.across = ui::Align::Start}};
                 }
             } else if (auto const found = column ? byColumn.find(*column) : byColumn.end();
-                       found != byColumn.end() && loadOf(row, *column) == ui::CellLoad::Loaded) {
+                       column && found != byColumn.end() && loadOf(row, *column) == ui::CellLoad::Loaded) {
                 ui::TableColumn const& spec = _columns.at(*column);
                 slot = CellSlot{.x = found->second->x,
                                 .width = found->second->width,
@@ -2335,7 +2354,7 @@ void TableImpl::paintStatus(::core::tui::Canvas& canvas) {
     if (_status.retry) {
         x += lead.empty() ? 0 : displayWidth(kStatusGap);
         _retryX = x;
-        canvas.putString(line, x, std::string{kRetry}, theme.textAccent);
+        canvas.putString(line, x, kRetry, theme.textAccent);
         x += displayWidth(kRetry);
     }
     // What stays while its cause lasts, then each choice as `[Alt+<n> label]`, the key that chooses it.
@@ -2344,7 +2363,7 @@ void TableImpl::paintStatus(::core::tui::Canvas& canvas) {
             std::string const drawn = "[Alt+" + std::to_string(_entriesDrawn.size() + 1) + " " + entry.label + "]";
             x += x == 0 ? 0 : displayWidth(kStatusGap);
             canvas.putString(line, x, drawn, theme.textAccent);
-            _entriesDrawn.push_back(DrawnEntry{.x = x, .width = displayWidth(drawn), .id = entry.id});
+            _entriesDrawn.push_back(DrawnEntry{.x = x, .width = displayWidth(drawn), .entryId = entry.id});
             x += displayWidth(drawn);
         }
     };

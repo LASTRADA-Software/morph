@@ -47,7 +47,11 @@ struct StretchColumn {
 /// @param columns The stretch columns, in layout order.
 /// @param room    The width left after the columns that do not stretch; a negative room is 0.
 /// @return One width per column.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): the steps share the columns' working vectors, and each
+// reads against the sums the one before computed.
 [[nodiscard]] inline std::vector<int> stretchWidths(std::span<StretchColumn const> columns, int room) {
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): every index runs below `count`, the
+    // size of `columns` and of each vector sized from it.
     using Wide = std::int64_t;
     std::size_t const count = columns.size();
     std::vector<int> natural(count);
@@ -108,8 +112,9 @@ struct StretchColumn {
             }
         }
     } else {
-        sizes = floor;
+        sizes = std::move(floor);
     }
+    // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
     return sizes;
 }
 

@@ -72,9 +72,9 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
                                                                  : ui::SelectionChange::Replace);
         }
     });
-    relay().on(QStringLiteral("statusEntry"), [this](QVariant const& id) {
+    relay().on(QStringLiteral("statusEntry"), [this](QVariant const& columnId) {
         if (auto const handler = _onStatusEntry) {
-            handler(id.toString().toStdString());
+            handler(columnId.toString().toStdString());
         }
     });
     relay().on(QStringLiteral("retry"), [this](QVariant const&) {
@@ -141,8 +141,8 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
         if (column == kCellMenuColumn) {
             // A copy: the handler may destroy this table.
             if (auto const handler = _cellChosen; handler && _cellMenuAt) {
-                auto const [key, at] = *_cellMenuAt;
-                handler(key, at, path);
+                auto const [key, index] = *_cellMenuAt;
+                handler(key, index, path);
             }
             return;
         }
@@ -356,7 +356,7 @@ void TableImpl::setSelectionView(std::vector<ui::Key> const& except) {
     mark();
 }
 
-void TableImpl::setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) {
+void TableImpl::setOnStatusEntry(std::function<void(std::string entryId)> onStatusEntry) {
     _onStatusEntry = std::move(onStatusEntry);
 }
 

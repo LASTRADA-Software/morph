@@ -21,6 +21,7 @@
 #include <format>
 #include <functional>
 #include <map>
+#include <memory>
 #include <morph/render/locale_format.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/description.hpp>
@@ -86,7 +87,7 @@ struct Digits {
     if (dot != std::string_view::npos) {
         out.fraction = std::string{text.substr(dot + 1)};
     }
-    auto const digit = [](char c) { return c >= '0' && c <= '9'; };
+    auto const digit = [](char glyph) { return glyph >= '0' && glyph <= '9'; };
     if (out.whole.empty() || !std::ranges::all_of(out.whole, digit) || !std::ranges::all_of(out.fraction, digit) ||
         (dot != std::string_view::npos && out.fraction.empty())) {
         return std::nullopt;
@@ -98,8 +99,8 @@ struct Digits {
 /// @param digits The parts.
 /// @return The text.
 [[nodiscard]] inline std::string textOf(Digits const& digits) {
-    bool const zero = std::ranges::all_of(digits.whole, [](char c) { return c == '0'; }) &&
-                      std::ranges::all_of(digits.fraction, [](char c) { return c == '0'; });
+    bool const zero = std::ranges::all_of(digits.whole, [](char glyph) { return glyph == '0'; }) &&
+                      std::ranges::all_of(digits.fraction, [](char glyph) { return glyph == '0'; });
     std::string out = digits.negative && !zero ? "-" : "";
     out += digits.whole;
     if (!digits.fraction.empty()) {
@@ -122,28 +123,28 @@ struct Digits {
 [[nodiscard]] inline std::string roundText(Digits digits, std::size_t places, table::Rounding rounding, bool pad) {
     if (digits.fraction.size() > places) {
         std::string_view const dropped = std::string_view{digits.fraction}.substr(places);
-        bool const restZero = std::ranges::all_of(dropped.substr(1), [](char c) { return c == '0'; });
+        bool const restZero = std::ranges::all_of(dropped.substr(1), [](char glyph) { return glyph == '0'; });
         char const first = dropped.front();
         digits.fraction.resize(places);
-        bool up = false;
+        bool roundUp = false;
         if (first > '5' || (first == '5' && !restZero)) {
-            up = true;
+            roundUp = true;
         } else if (first == '5') {
             char const last = places > 0 ? digits.fraction.back() : digits.whole.back();
-            up = rounding == table::Rounding::HalfUp || ((last - '0') % 2) != 0;
+            roundUp = rounding == table::Rounding::HalfUp || ((last - '0') % 2) != 0;
         }
-        if (up) {
+        if (roundUp) {
             std::string all = digits.whole + digits.fraction;
-            std::size_t at = all.size();
-            while (at > 0) {
-                --at;
-                if (all.at(at) == '9') {
-                    all.at(at) = '0';
+            std::size_t index = all.size();
+            while (index > 0) {
+                --index;
+                if (all.at(index) == '9') {
+                    all.at(index) = '0';
                 } else {
-                    ++all.at(at);
+                    ++all.at(index);
                     break;
                 }
-                if (at == 0) {
+                if (index == 0) {
                     all.insert(all.begin(), '1');
                 }
             }
@@ -203,7 +204,7 @@ struct Digits {
     }
     // The longest fixed text of a finite double: 309 integer digits, a sign, a point and 767 fraction digits.
     std::array<char, 1100> buffer{};
-    auto const written = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value, std::chars_format::fixed);
+    auto const written = std::to_chars(buffer.data(), std::to_address(buffer.end()), value, std::chars_format::fixed);
     if (written.ec != std::errc{}) {
         return std::nullopt;
     }
@@ -229,8 +230,8 @@ struct Digits {
         case ColumnKind::Integer:
         case ColumnKind::Key: {
             std::int64_t value = 0;
-            auto const read = std::from_chars(text.data(), text.data() + text.size(), value);
-            if (read.ec == std::errc{} && read.ptr == text.data() + text.size() && !text.empty()) {
+            auto const read = std::from_chars(text.data(), std::to_address(text.end()), value);
+            if (read.ec == std::errc{} && read.ptr == std::to_address(text.end()) && !text.empty()) {
                 return table::Cell{value};
             }
             if (kind == ColumnKind::Key) {
@@ -296,7 +297,8 @@ struct Digits {
         if (!rounded) {
             return std::nullopt;
         }
-        std::string const text = exactText(*rounded, places);
+        // NOLINTNEXTLINE(misc-const-correctness): returned by name, which moves it; a const would be copied.
+        std::string text = exactText(*rounded, places);
         if (!display.decimals || display.padPlaces) {
             return text;
         }
@@ -343,15 +345,15 @@ struct Digits {
     math::Rational amount = measure.amount;
     if (auto const chosen = units.byDimension.find(own.dimension); chosen != units.byDimension.end()) {
         if (auto const target = units.units->find(chosen->second); target && *target != measure.unit) {
-            table::UnitInfo const& to = units.units->info(*target);
-            if (to.dimension == own.dimension) {
+            table::UnitInfo const& toUnit = units.units->info(*target);
+            if (toUnit.dimension == own.dimension) {
                 auto const base = math::checkedMul(measure.amount, own.toBase);
-                auto const converted = base ? math::checkedDiv(*base, to.toBase) : base;
+                auto const converted = base ? math::checkedDiv(*base, toUnit.toBase) : base;
                 if (!converted) {
                     return std::nullopt;
                 }
                 amount = *converted;
-                shown = &to;
+                shown = &toUnit;
             }
         }
     }
@@ -466,6 +468,7 @@ struct Digits {
     if (CellLook const look = cellLook(cell, column, units); look != CellLook::Text) {
         return std::nullopt;
     }
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): a cell with a look has a normalized value.
     table::Cell const read = *detail::cells::normalized(cell, column.info.kind);
     return std::visit(
         [&]<typename T>(T const& value) -> std::optional<std::string> {
@@ -507,8 +510,8 @@ struct Digits {
         case ColumnKind::Date:
         case ColumnKind::DateTime: {
             std::int64_t value = 0;
-            auto const read = std::from_chars(text.data(), text.data() + text.size(), value);
-            if (read.ec == std::errc{} && read.ptr == text.data() + text.size() && !text.empty()) {
+            auto const read = std::from_chars(text.data(), std::to_address(text.end()), value);
+            if (read.ec == std::errc{} && read.ptr == std::to_address(text.end()) && !text.empty()) {
                 return table::Cell{value};
             }
             return table::Cell{text};
@@ -533,12 +536,13 @@ struct Digits {
         case ColumnKind::Measure: {
             auto const space = text.find(' ');
             auto const amount = table::parseDecimal(std::string_view{text}.substr(0, space));
-            std::string_view const id =
+            std::string_view const columnId =
                 space == std::string::npos ? std::string_view{} : std::string_view{text}.substr(space + 1);
             if (!amount) {
                 return table::Cell{text};
             }
-            std::optional<table::UnitId> const unit = units.units != nullptr ? units.units->find(id) : std::nullopt;
+            std::optional<table::UnitId> const unit =
+                units.units != nullptr ? units.units->find(columnId) : std::nullopt;
             return table::Cell{table::Measure{.amount = *amount, .unit = unit.value_or(table::kUnknownUnit)}};
         }
         case ColumnKind::Text:
@@ -570,6 +574,7 @@ struct Digits {
     if (look == CellLook::Empty) {
         return column.display.empty;
     }
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): a cell with a look has a normalized value.
     table::Cell const read = *detail::cells::normalized(cell, column.info.kind);
     if (!column.display.labels.empty()) {
         if (std::optional<std::string> const operand = operandOf(read, column, units)) {
@@ -586,13 +591,14 @@ struct Digits {
         return detail::cells::dateText(*days, column, locale);
     }
     if (auto const* const measure = std::get_if<table::Measure>(&read)) {
-        auto const shown = detail::cells::measureText(*measure, units);
-        std::string out = render::formatCanonicalNumber(shown->first, numbers);
-        if (!shown->second.empty()) {
-            out += ' ';
-            out += shown->second;
+        if (auto const shown = detail::cells::measureText(*measure, units)) {
+            std::string out = render::formatCanonicalNumber(shown->first, numbers);
+            if (!shown->second.empty()) {
+                out += ' ';
+                out += shown->second;
+            }
+            return out;
         }
-        return out;
     }
     if (auto const text = detail::cells::numberText(read, column.display)) {
         return render::formatCanonicalNumber(*text, numbers);
@@ -628,7 +634,9 @@ struct Digits {
     ownPlaces.display.decimals.reset();
     std::vector<std::string> const first = out;
     for (std::size_t at = 0; at < out.size(); ++at) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `out` has one text per value.
         if (std::ranges::count(first, first.at(at)) > 1 && !values[at].operand.contains("..")) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `out` has one text per value.
             out.at(at) = formatCell(cellOfOperand(values[at].operand, column, units), ownPlaces, locale, units);
         }
     }

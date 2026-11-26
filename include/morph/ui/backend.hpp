@@ -1043,7 +1043,7 @@ public:
     /// @brief Sets what choosing one of the status line's entries (`TableStatus::entries` and `standingEntries`, each
     ///        drawn as a button with its label) calls, with the entry's id.
     /// @param onStatusEntry The handler; empty does nothing.
-    virtual void setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) {
+    virtual void setOnStatusEntry(std::function<void(std::string entryId)> onStatusEntry) {
         static_cast<void>(onStatusEntry);
     }
 
