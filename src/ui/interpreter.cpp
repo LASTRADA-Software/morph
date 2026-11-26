@@ -11664,41 +11664,6 @@ struct CollectionRecords {
     std::unordered_map<table::RowId, std::size_t> at;
 };
 
-/// @brief The cells a label takes in a monospace font: a combining mark none, an East Asian wide or full-width
-///        character two, any other character one. Malformed UTF-8 counts a cell per byte.
-/// @param text UTF-8 text.
-/// @return The cells.
-[[nodiscard]] int labelCells(std::string_view text) {
-    int cells = 0;
-    for (std::size_t at = 0; at < text.size();) {
-        auto const lead = static_cast<unsigned char>(text[at]);
-        std::size_t const length = lead < 0x80U            ? 1
-                                   : (lead >> 5U) == 0x6U  ? 2
-                                   : (lead >> 4U) == 0xEU  ? 3
-                                   : (lead >> 3U) == 0x1EU ? 4
-                                                           : 1;
-        if (length == 1 || at + length > text.size()) {
-            ++cells;
-            ++at;
-            continue;
-        }
-        char32_t code = lead & (0xFFU >> (length + 1));
-        for (std::size_t next = 1; next < length; ++next) {
-            code = (code << 6U) | (static_cast<unsigned char>(text[at + next]) & 0x3FU);
-        }
-        at += length;
-        bool const combining = (code >= 0x0300 && code <= 0x036F) || (code >= 0x200B && code <= 0x200F) ||
-                               (code >= 0xFE00 && code <= 0xFE0F);
-        bool const wide = (code >= 0x1100 && code <= 0x115F) || (code >= 0x2E80 && code <= 0xA4CF) ||
-                          (code >= 0xAC00 && code <= 0xD7A3) || (code >= 0xF900 && code <= 0xFAFF) ||
-                          (code >= 0xFE30 && code <= 0xFE4F) || (code >= 0xFF00 && code <= 0xFF60) ||
-                          (code >= 0xFFE0 && code <= 0xFFE6) || (code >= 0x1F300 && code <= 0x1FAFF) ||
-                          (code >= 0x20000 && code <= 0x3FFFD);
-        cells += combining ? 0 : wide ? 2 : 1;
-    }
-    return cells;
-}
-
 }  // namespace
 
 void ScreenCore::wireCollectionTable(ElementState& element, std::string modelType) {
@@ -11938,24 +11903,10 @@ Node ScreenCore::lowerCollectionRows(ElementState& element, LowerCtx const& ctx,
         columns.push_back(TableColumn{.id = column.id, .label = column.label, .sortable = true});
     }
     std::size_t const laidOut = columns.size();
-    // A table over a source measures no cell to size a column: the buttons' column is as wide as its buttons, two
-    // units apart. A button is its label's cells and four units of frame, at least the eight units a framed button
-    // keeps on every backend, and two units of side padding beyond, which a proportional font's padding needs.
+    // The buttons' column is sized to its widest cell like any content column: a button's frame and padding are
+    // pixels, not character cells, so no count of units can say how wide a proportional font draws them.
     if (buttons) {
-        forms::CollectionViewOptions const defaults{};
-        int units = 0;
-        auto const add = [&units](std::string_view label) {
-            units += (units == 0 ? 0 : 2) + std::max(labelCells(label) + 4, 8) + 2;
-        };
-        if (collection.model().rowAction().has_value()) {
-            add(defaults.openLabel);
-        }
-        for (forms::CollectionAction const& action : collection.model().actions()) {
-            if (action.scope == forms::CollectionActionScope::Row) {
-                add(action.label);
-            }
-        }
-        columns.push_back(TableColumn{.label = std::string{}, .width = Sizing::fixed(units)});
+        columns.push_back(TableColumn{.label = std::string{}, .width = Sizing::content()});
     }
     config.beginMount();
     config.filterTarget = [&table, &collection](std::string const& id) -> std::optional<FilterTarget> {
