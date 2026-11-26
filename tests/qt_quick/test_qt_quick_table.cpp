@@ -2492,6 +2492,9 @@ TEST_CASE("qt_quick table window: cells and header cells alive are the windows'"
 // Mutation: a pool keyed by column for default cells (a column scrolling in creates 50 cells).  Gate F8.
 TEST_CASE("qt_quick table window: flings create no cell once the pools are warm", "[qt_quick]") {
     QuickWindowFixture f{100'000, 300, {.pinned = 2}};
+    // Two flings warm the rows: the first measures the rows it passes, and the mean height they settle at can put one
+    // more row in the window than the estimate did, which only the second fling's pool has to hold.
+    f.flingRows(2'000);
     f.flingRows(2'000);
     for (int x = 0; x < 200 * f.column; x += 10 * f.column) {
         f.scrollColumns(x);  // warm both ways
@@ -3074,7 +3077,10 @@ TEST_CASE("qt_quick grid: typing on a focused cell opens its editor, Tab walks a
 TEST_CASE("qt_quick grid: a double click opens the editor in the cell and focus leaving commits", "[qt_quick][grid]") {
     QuickGrid g;
     QQuickItem& cell = g.cellAt(1, 1);
-    QRectF const area = cell.mapRectToScene(QRectF{0, 0, cell.width(), cell.height()});
+    // The cell's slot: its column's span across the row's height. A cell draws only as tall as its text, which a wide
+    // font leaves shorter than the editor that replaces it.
+    QRectF const area =
+        cell.parentItem()->mapRectToScene(QRectF{cell.x(), 0, cell.width(), cell.parentItem()->height()});
     g.scene.doubleClick(cell);
     CHECK(g.grid.grid->editing() == morph::test::grid::at(2, "mass"));
     QList<QQuickItem*> const fields = Scene::itemsOf(g.named(QStringLiteral("grid")), "QQuickTextField");
