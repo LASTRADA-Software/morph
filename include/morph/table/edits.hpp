@@ -38,6 +38,7 @@
 #include <morph/core/callback_scope.hpp>
 #include <morph/forms/engine/field_model.hpp>
 #include <morph/table/data_source.hpp>
+// NOLINTNEXTLINE(misc-header-include-cycle): description.hpp includes edits.hpp at its end; the guard ends the cycle.
 #include <morph/table/description.hpp>
 #include <morph/table/engine.hpp>
 #include <morph/table/record_name.hpp>

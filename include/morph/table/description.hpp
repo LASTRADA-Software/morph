@@ -2591,6 +2591,7 @@ struct glz::meta<morph::table::QueryTable<Function>> {
 };
 
 // The selection types `BRIDGE_REGISTER_TABLE` registers `Table.<id>.resolve` with; they build on this header.
+// NOLINTNEXTLINE(misc-header-include-cycle): row_selection.hpp needs the declarations above, so it is included after them.
 #include <morph/table/row_selection.hpp>
 
 // The commits of edited cells and the edit actions of a model's table; `checkEdits` above is defined there.
