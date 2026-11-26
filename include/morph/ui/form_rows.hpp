@@ -378,10 +378,10 @@ public:
     ///        previous row's (`detail::sameElement`). Notifies `Reset`.
     ///
     /// `by` is read untracked, whenever the rows are taken in.
-    /// @param by A row's group value; empty: no groups, and the column goes.
-    void setGroup(std::function<Value(forms::RowState const&)> by) {
+    /// @param groupBy A row's group value; empty: no groups, and the column goes.
+    void setGroup(std::function<Value(forms::RowState const&)> groupBy) {
         bool const listed = _group != nullptr;
-        _group = std::move(by);
+        _group = std::move(groupBy);
         if (_group && !listed) {
             _columns.push_back(
                 table::ColumnInfo{.id = std::string{kGroupRunColumn}, .kind = table::ColumnKind::Integer});
@@ -410,7 +410,7 @@ public:
     /// member's
     ///        encoded value, null when blank or not encoding, …, "#key": the row's key}`.
     /// @return The reader; it holds nothing of the source.
-    [[nodiscard]] RecordOf recordOf() const {
+    [[nodiscard]] static RecordOf recordOf() {
         return [](table::RowSnapshot const& snapshot, std::size_t sourceRow) {
             auto const* const rows = dynamic_cast<detail::FormRowsSnapshot const*>(&snapshot);
             return RowRecord{.key = snapshot.rowId(sourceRow),
@@ -484,6 +484,7 @@ private:
     }
 
     // The rows as the field holds them now, read untracked.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one pass building the snapshot's parallel vectors.
     [[nodiscard]] std::shared_ptr<detail::FormRowsSnapshot const> build() const {
         ++_builds;
         return _form->runtime().untracked([&] {
@@ -548,13 +549,13 @@ private:
         };
         std::size_t index = 0;
         for (auto const& row : _array->rows()) {
-            Value by = _group(*row);
-            if (key && !detail::sameElement(*key, by, UnitTable{})) {
+            Value groupKey = _group(*row);
+            if (key && !detail::sameElement(*key, groupKey, UnitTable{})) {
                 close();
                 key.reset();
             }
             if (!key) {
-                key = std::move(by);
+                key = std::move(groupKey);
             }
             items.push_back(records.at(index));
             cells.at(index).emplace_back(static_cast<std::int64_t>(runs.size()));
