@@ -54,12 +54,13 @@ using SortChain = table::SortChain;
     // The magnitude as unsigned, so the most negative count has one too.
     std::uint64_t magnitude = n < 0 ? std::uint64_t{0} - static_cast<std::uint64_t>(n) : static_cast<std::uint64_t>(n);
     std::string digits;
-    do {
+    for (bool more = true; more; more = magnitude != 0U) {
         digits.push_back(static_cast<char>('0' + (magnitude % 10U)));
         magnitude /= 10U;
-    } while (magnitude != 0U);
+    }
     std::string out = n < 0 ? "-" : "";
     for (std::size_t at = digits.size(); at-- > 0;) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): at < digits.size() by the loop's decrement test
         out.push_back(digits[at]);
         if (at != 0 && at % 3 == 0) {
             out.append(separator);
@@ -271,6 +272,7 @@ struct SortChange {
                 return append();
             }
             SortChain out = chain;
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): held points into chain, and out is a copy of chain
             auto& key = out[static_cast<std::size_t>(held - chain.begin())];
             key.dir = key.dir == SortDirection::Ascending ? SortDirection::Descending : SortDirection::Ascending;
             return {.chain = std::move(out), .refusal = std::nullopt};
@@ -408,18 +410,18 @@ struct GestureNeeds {
 /// @return Its capability, whether `locked` refuses it, and its column.
 [[nodiscard]] inline GestureNeeds needsOf(LayoutGesture const& gesture) {
     return std::visit(
-        [](auto const& g) -> GestureNeeds {
-            using G = std::decay_t<decltype(g)>;
+        [](auto const& alternative) -> GestureNeeds {
+            using G = std::decay_t<decltype(alternative)>;
             if constexpr (std::is_same_v<G, MoveColumn> || std::is_same_v<G, MoveColumnTo>) {
-                return {.capability = Configure::Reorder, .lockable = true, .column = g.id};
+                return {.capability = Configure::Reorder, .lockable = true, .column = alternative.id};
             } else if constexpr (std::is_same_v<G, HideColumn>) {
-                return {.capability = Configure::Hide, .lockable = true, .column = g.id};
+                return {.capability = Configure::Hide, .lockable = true, .column = alternative.id};
             } else if constexpr (std::is_same_v<G, ShowColumn>) {
-                return {.capability = Configure::Hide, .lockable = false, .column = g.id};
+                return {.capability = Configure::Hide, .lockable = false, .column = alternative.id};
             } else if constexpr (std::is_same_v<G, PinColumn> || std::is_same_v<G, UnpinColumn>) {
-                return {.capability = Configure::Pin, .lockable = true, .column = g.id};
+                return {.capability = Configure::Pin, .lockable = true, .column = alternative.id};
             } else if constexpr (std::is_same_v<G, ResizeColumn>) {
-                return {.capability = Configure::Resize, .lockable = true, .column = g.id};
+                return {.capability = Configure::Resize, .lockable = true, .column = alternative.id};
             } else {
                 return {};
             }
@@ -429,25 +431,26 @@ struct GestureNeeds {
 
 /// @brief Moves a column next to another in a layout's order.
 /// @param layout The layout.
-/// @param id     The column to move.
+/// @param columnId     The column to move.
 /// @param anchor The column it moves beside; @p id itself leaves the order as it is.
 /// @param after  `true` to place it right after @p anchor, `false` right before.
-inline void placeBeside(table::ColumnLayout& layout, std::string const& id, std::string const& anchor, bool after) {
-    if (anchor == id) {
+inline void placeBeside(table::ColumnLayout& layout, std::string const& columnId, std::string const& anchor,
+                        bool after) {
+    if (anchor == columnId) {
         return;
     }
     std::vector<std::string> order(layout.order().begin(), layout.order().end());
-    std::erase(order, id);
-    auto const at = static_cast<std::size_t>(std::ranges::find(order, anchor) - order.begin());
-    layout.move(id, after ? at + 1 : at);
+    std::erase(order, columnId);
+    auto const anchorIndex = static_cast<std::size_t>(std::ranges::find(order, anchor) - order.begin());
+    layout.move(columnId, after ? anchorIndex + 1 : anchorIndex);
 }
 
 /// @brief A column's index among the visible columns.
 /// @param visible The visible columns.
-/// @param id      The column.
+/// @param columnId      The column.
 /// @return The index; `visible.size()` when the column is not visible.
-[[nodiscard]] inline std::size_t visibleIndex(std::vector<std::string> const& visible, std::string const& id) {
-    return static_cast<std::size_t>(std::ranges::find(visible, id) - visible.begin());
+[[nodiscard]] inline std::size_t visibleIndex(std::vector<std::string> const& visible, std::string const& columnId) {
+    return static_cast<std::size_t>(std::ranges::find(visible, columnId) - visible.begin());
 }
 
 }  // namespace detail
@@ -469,11 +472,12 @@ inline void placeBeside(table::ColumnLayout& layout, std::string const& id, std:
 /// @param allowed What the table lets its user change.
 /// @param gesture The gesture.
 /// @return Whether the stored layout changed, or the refusal.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one visit over every gesture kind.
 [[nodiscard]] inline LayoutResult applyLayoutGesture(table::ColumnLayout& layout,
                                                      std::span<LayoutColumn const> columns, Configure allowed,
                                                      LayoutGesture const& gesture) {
-    auto const find = [&](std::string_view id) -> LayoutColumn const* {
-        auto const found = std::ranges::find(columns, id, &LayoutColumn::id);
+    auto const find = [&](std::string_view columnId) -> LayoutColumn const* {
+        auto const found = std::ranges::find(columns, columnId, &LayoutColumn::id);
         return found == columns.end() ? nullptr : &*found;
     };
     detail::GestureNeeds const needs = detail::needsOf(gesture);
@@ -498,117 +502,124 @@ inline void placeBeside(table::ColumnLayout& layout, std::string const& id, std:
     table::ColumnLayoutValue const before = layout.value();
     std::optional<std::string> refusal;
     std::visit(
-        [&](auto const& g) {
-            using G = std::decay_t<decltype(g)>;
+        // NOLINTNEXTLINE(readability-function-cognitive-complexity): the visitor's arms are the same decision table.
+        [&](auto const& change) {
+            using G = std::decay_t<decltype(change)>;
             std::vector<std::string> const visible = layout.visible();
             [[maybe_unused]] std::size_t const pinned = layout.pinned();
             if constexpr (std::is_same_v<G, MoveColumn>) {
-                std::size_t const from = detail::visibleIndex(visible, g.id);
-                if (from == visible.size() || g.by == 0) {
+                std::size_t const from = detail::visibleIndex(visible, change.id);
+                if (from == visible.size() || change.by == 0) {
                     return;
                 }
                 // A move stays on its side of the pin boundary; crossing it is Pin's and Unpin's.
                 bool const isPinned = from < pinned;
                 auto const first = static_cast<std::ptrdiff_t>(isPinned ? 0 : pinned);
                 auto const last = static_cast<std::ptrdiff_t>(isPinned ? pinned : visible.size()) - 1;
-                auto const to = std::clamp(static_cast<std::ptrdiff_t>(from) + g.by, first, last);
-                if (static_cast<std::size_t>(to) != from) {
-                    detail::placeBeside(layout, g.id, visible[static_cast<std::size_t>(to)], g.by > 0);
+                auto const target = std::clamp(static_cast<std::ptrdiff_t>(from) + change.by, first, last);
+                if (static_cast<std::size_t>(target) != from) {
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): target is clamped to the visible columns' range
+                    detail::placeBeside(layout, change.id, visible[static_cast<std::size_t>(target)], change.by > 0);
                 }
             } else if constexpr (std::is_same_v<G, MoveColumnTo>) {
-                std::size_t const from = detail::visibleIndex(visible, g.id);
+                std::size_t const from = detail::visibleIndex(visible, change.id);
                 if (from == visible.size()) {
                     return;
                 }
                 std::vector<std::string> others = visible;
-                std::erase(others, g.id);
+                std::erase(others, change.id);
                 if (others.empty()) {
                     return;
                 }
-                std::size_t const to = std::min(g.position, others.size());
-                if (to == others.size()) {
-                    detail::placeBeside(layout, g.id, others.back(), true);
+                std::size_t const target = std::min(change.position, others.size());
+                if (target == others.size()) {
+                    detail::placeBeside(layout, change.id, others.back(), true);
                 } else {
-                    detail::placeBeside(layout, g.id, others[to], false);
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): target < others.size() by the branch above
+                    detail::placeBeside(layout, change.id, others[target], false);
                 }
                 // The other pinned columns stay pinned: a drop among them pins the column, a drop past them unpins
                 // it, and a drop on the boundary keeps its state.
                 bool const wasPinned = from < pinned;
                 std::size_t const otherPinned = pinned - (wasPinned ? 1 : 0);
-                bool const nowPinned = to < otherPinned || (to == otherPinned && wasPinned);
+                bool const nowPinned = target < otherPinned || (target == otherPinned && wasPinned);
                 layout.setPinned(otherPinned + (nowPinned ? 1 : 0));
             } else if constexpr (std::is_same_v<G, HideColumn>) {
-                bool const wasPinned = detail::visibleIndex(visible, g.id) < pinned;
-                if (!layout.setVisible(g.id, false)) {
+                bool const wasPinned = detail::visibleIndex(visible, change.id) < pinned;
+                if (!layout.setVisible(change.id, false)) {
                     refusal = tableText::lastVisible();
                 } else if (wasPinned) {
                     layout.setPinned(pinned - 1);
                 }
             } else if constexpr (std::is_same_v<G, ShowColumn>) {
-                if (detail::visibleIndex(visible, g.id) != visible.size() || !layout.setVisible(g.id, true)) {
+                if (detail::visibleIndex(visible, change.id) != visible.size() ||
+                    !layout.setVisible(change.id, true)) {
                     return;
                 }
                 // A column shown among the pinned columns joins them, so none of them is pushed out.
-                if (detail::visibleIndex(layout.visible(), g.id) < pinned) {
+                if (detail::visibleIndex(layout.visible(), change.id) < pinned) {
                     layout.setPinned(pinned + 1);
                 }
             } else if constexpr (std::is_same_v<G, PinColumn>) {
-                std::size_t const at = detail::visibleIndex(visible, g.id);
-                if (at == visible.size() || at < pinned) {
+                std::size_t const index = detail::visibleIndex(visible, change.id);
+                if (index == visible.size() || index < pinned) {
                     return;
                 }
                 if (pinned == 0) {
-                    detail::placeBeside(layout, g.id, visible.front(), false);
+                    detail::placeBeside(layout, change.id, visible.front(), false);
                 } else {
-                    detail::placeBeside(layout, g.id, visible[pinned - 1], true);
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): pinned is at most the visible count, and nonzero here
+                    detail::placeBeside(layout, change.id, visible[pinned - 1], true);
                 }
                 layout.setPinned(pinned + 1);
             } else if constexpr (std::is_same_v<G, UnpinColumn>) {
-                std::size_t const at = detail::visibleIndex(visible, g.id);
-                if (at >= pinned) {
+                std::size_t const index = detail::visibleIndex(visible, change.id);
+                if (index >= pinned) {
                     return;
                 }
                 std::vector<std::string> others = visible;
-                std::erase(others, g.id);
+                std::erase(others, change.id);
                 if (pinned >= 2) {
-                    detail::placeBeside(layout, g.id, others[pinned - 2], true);
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): pinned is at most the visible count, and others lacks at most the moved column
+                    detail::placeBeside(layout, change.id, others[pinned - 2], true);
                 } else if (!others.empty()) {
-                    detail::placeBeside(layout, g.id, others.front(), false);
+                    detail::placeBeside(layout, change.id, others.front(), false);
                 }
                 layout.setPinned(pinned - 1);
             } else if constexpr (std::is_same_v<G, ResizeColumn>) {
-                static_cast<void>(layout.setWidth(g.id, g.units));
+                static_cast<void>(layout.setWidth(change.id, change.units));
             } else if constexpr (std::is_same_v<G, ResetColumns>) {
                 layout.reset();
             } else if constexpr (std::is_same_v<G, SetDisplayUnit>) {
-                static_cast<void>(layout.setUnit(g.id, g.dimension, g.unit));
+                static_cast<void>(layout.setUnit(change.id, change.dimension, change.unit));
             } else if constexpr (std::is_same_v<G, FormGroup>) {
-                if (std::ranges::any_of(g.columns, [&](std::string const& id) { return find(id) == nullptr; })) {
+                if (std::ranges::any_of(change.columns,
+                                        [&](std::string const& columnId) { return find(columnId) == nullptr; })) {
                     return;
                 }
-                if (g.columns.size() < 2 || g.columns.size() > kMaxGroupColumns) {
+                if (change.columns.size() < 2 || change.columns.size() > kMaxGroupColumns) {
                     refusal = tableText::groupSize();
                     return;
                 }
-                LayoutColumn const& first = *find(g.columns.front());
-                for (std::string const& id : g.columns) {
-                    LayoutColumn const& member = *find(id);
+                LayoutColumn const& first = *find(change.columns.front());
+                for (std::string const& columnId : change.columns) {
+                    LayoutColumn const& member = *find(columnId);
                     if (member.kind != first.kind) {
                         refusal = tableText::groupKind();
                         return;
                     }
                     for (table::ColumnGroupInfo const& group : layout.groups()) {
-                        if (std::ranges::find(group.columns, id) != group.columns.end()) {
+                        if (std::ranges::find(group.columns, columnId) != group.columns.end()) {
                             refusal = tableText::alreadyGrouped(member.label, group.label);
                             return;
                         }
                     }
                 }
-                if (auto formed = layout.formGroup(g.label, g.columns); !formed) {
+                if (auto formed = layout.formGroup(change.label, change.columns); !formed) {
                     refusal = std::move(formed.error().message);
                 }
             } else if constexpr (std::is_same_v<G, RemoveGroup>) {
-                static_cast<void>(layout.removeGroup(g.id));
+                static_cast<void>(layout.removeGroup(change.id));
             }
         },
         gesture);
@@ -889,8 +900,8 @@ namespace detail {
                                                                  std::string_view chosenUnit = {}) {
     using table::ColumnKind;
     auto const number = [&](bool fraction) -> std::optional<std::string> {
-        std::size_t first = typed.find_first_not_of(' ');
-        std::size_t last = typed.find_last_not_of(' ');
+        std::size_t const first = typed.find_first_not_of(' ');
+        std::size_t const last = typed.find_last_not_of(' ');
         if (first == std::string_view::npos) {
             return std::nullopt;
         }
@@ -996,7 +1007,6 @@ enum class GroupMatch : std::uint8_t {
                             .n = n};
             break;
         case GroupMatch::Together:
-            break;
         default:
             break;
     }
@@ -1210,6 +1220,7 @@ enum class MenuCommand : std::uint8_t {
 };
 
 /// @brief One entry of a table's menu: what it shows and what it does.
+// NOLINTNEXTLINE(misc-no-recursion): a submenu is a vector of entries, so copying an entry copies its submenu.
 struct TableMenuEntry {
     /// @brief What a backend shows; its own `items` stay empty, and `menuEntries` fills them from this entry's.
     MenuEntry entry;
@@ -1389,6 +1400,7 @@ namespace detail {
     bool const onShared =
         input.current.has_value() && input.currentShared && std::ranges::contains(input.shared, *input.current);
     std::vector<TableMenuEntry> own;
+    own.reserve(input.own.size());
     for (std::string const& name : input.own) {
         own.push_back(
             detail::viewEntry(name, MenuCommand::ApplyView, onOwn && name == *input.current, input.modified));
@@ -1520,6 +1532,7 @@ namespace detail {
 /// @param entries The menu.
 /// @return Each entry's `MenuEntry`, its submenu filled from the entry's `items`, in the same order, so a path of
 ///         indices names the same entry in both.
+// NOLINTNEXTLINE(misc-no-recursion): one call per submenu level, bounded by the menu's depth.
 [[nodiscard]] inline std::vector<MenuEntry> menuEntries(std::span<TableMenuEntry const> entries) {
     std::vector<MenuEntry> out;
     out.reserve(entries.size());
@@ -1543,6 +1556,7 @@ namespace detail {
         if (index >= entries.size()) {
             return nullptr;
         }
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): index < entries.size() by the check above
         found = &entries[index];
         if (found->entry.separator || found->entry.heading || !found->entry.enabled) {
             return nullptr;
@@ -1571,14 +1585,16 @@ namespace detail {
 /// @param text The cell's text.
 inline void appendField(std::string& out, std::string_view text) {
     for (std::size_t at = 0; at < text.size(); ++at) {
-        char const c = text[at];
-        if (c == '\r' && at + 1 < text.size() && text[at + 1] == '\n') {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): at < text.size() by the loop; at + 1 by the condition
+        char const character = text[at];
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): at < text.size() by the loop; at + 1 by the condition
+        if (character == '\r' && at + 1 < text.size() && text[at + 1] == '\n') {
             ++at;
             out.push_back(' ');
-        } else if (c == '\t' || c == '\r' || c == '\n') {
+        } else if (character == '\t' || character == '\r' || character == '\n') {
             out.push_back(' ');
         } else {
-            out.push_back(c);
+            out.push_back(character);
         }
     }
 }
