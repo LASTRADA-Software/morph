@@ -43,7 +43,7 @@ public:
     /// @param states The session's table states; must outlive the object and every change it starts.
     /// @param key    The table's state key; its `part` is ignored.
     /// @param owner  The session's owner, where completions are delivered. Borrowed: it must outlive them.
-    TableViews(TableStates& states, table::TableStateKey key, exec::IExecutor& owner)
+    TableViews(TableStates& states, table::TableStateKey const& key, exec::IExecutor& owner)
         : _held{std::make_shared<Held>(
               Held{.states = &states,
                    .owner = &owner,
@@ -139,13 +139,15 @@ private:
 
     // The words of an exception a store's completion failed with.
     [[nodiscard]] static std::string reasonOf(std::exception_ptr const& error) {
+        std::string reason;
         try {
             std::rethrow_exception(error);
         } catch (std::exception const& failure) {
-            return failure.what();
+            reason = failure.what();
         } catch (...) {
+            reason.clear();
         }
-        return {};
+        return reason;
     }
 
     // One part's key, the document read or saved last, and its revision; nothing when nothing is stored.
@@ -228,11 +230,8 @@ private:
             })
             .onError([done](std::exception_ptr const& error) {
                 std::string text = "The saved views could not be loaded";
-                try {
-                    std::rethrow_exception(error);
-                } catch (std::exception const& failure) {
-                    text += std::string{": "} + failure.what();
-                } catch (...) {
+                if (auto const cause = reasonOf(error); !cause.empty()) {
+                    text += ": " + cause;
                 }
                 done(std::move(text));
             });
@@ -241,12 +240,12 @@ private:
     [[nodiscard]] async::Completion<Result> start(table::ViewsPart part, table::ViewOperation operation,
                                                   std::optional<table::SavedView> upsert = std::nullopt) {
         auto [completion, promise] = async::Completion<Result>::makeSettleable(_held->owner);
-        auto saving = std::make_shared<Saving>(Saving{.held = _held,
-                                                      .part = part,
-                                                      .operation = std::move(operation),
-                                                      .promise = std::move(promise),
-                                                      .retried = false,
-                                                      .upsert = std::move(upsert)});
+        auto const saving = std::make_shared<Saving>(Saving{.held = _held,
+                                                            .part = part,
+                                                            .operation = std::move(operation),
+                                                            .promise = std::move(promise),
+                                                            .retried = false,
+                                                            .upsert = std::move(upsert)});
         Part const& held = partIn(*_held, part);
         attempt(saving, held.revision.value_or(std::string{table::kNoDocument}));
         return std::move(completion);
@@ -254,7 +253,7 @@ private:
 
     // Applies the operation to the part as held and sends it, expecting @p expected.
     static void attempt(std::shared_ptr<Saving> const& saving, std::string expected) {
-        Part& part = partIn(*saving->held, saving->part);
+        Part const& part = partIn(*saving->held, saving->part);
         // The document held is the one stored now after a reload, so a name another window took meanwhile is replaced
         // rather than refused; a store that applies the operation itself does so under the same revision.
         if (saving->upsert) {
@@ -312,7 +311,7 @@ private:
     // Reads the part again from the store itself, since the session's kept copy is the one that conflicted, keeps
     // what it read, and sends the operation once more over it.
     static void reload(std::shared_ptr<Saving> const& saving) {
-        Part& part = partIn(*saving->held, saving->part);
+        Part const& part = partIn(*saving->held, saving->part);
         saving->held->states->store()
             .load(part.key)
             .then([saving](std::optional<table::StoredTableState> const& stored) {
