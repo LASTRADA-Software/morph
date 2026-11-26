@@ -155,6 +155,9 @@ TEST_CASE("tui forms: a collection document lists rows; Enter on a row opens its
                                                                    ui::testing::corpusCatalog()),
                                            {}, client.backend);
     REQUIRE(screen.has_value());
+    // The buttons' column is sized to its cells, which the table measures as it draws them: the mount widens the
+    // column for the next frame.
+    client.settle();
     client.settle();
     INFO(client.drawn());
     CHECK(client.shows("Samples"));
