@@ -2157,7 +2157,10 @@ MorphWidget {
                                                                               : Accessible.MenuItem
                         Accessible.name: menuEntry.modelData.label ?? ""
                         Accessible.description: menuEntry.modelData.description ?? ""
-                        // On the button itself, not the attached `Accessible`: a button writes its own state over
+                        Accessible.checkable: menuEntry.checkable
+                        Accessible.checked: menuEntry.modelData.checked === true
+                        // Both the attached `Accessible` and the button itself carry the state: which of the two a
+                        // Qt version reports to assistive technology differs, and a button writes its own state over
                         // the attached one once assistive technology is active.
                         checkable: menuEntry.checkable
                         checked: menuEntry.modelData.checked === true
