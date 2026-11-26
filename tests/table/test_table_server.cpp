@@ -394,7 +394,8 @@ TEST_CASE("window: an event that precedes its page reply is owed", "[table][wind
     REQUIRE(fetches.size() == 2);
     CHECK(window.refresh(ids({3, 4})).kind == Refresh::Nothing);  // nothing held yet
     GenericPage reply = pageOf(0, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, cols, 20);
-    reply.unloadedRows = {{3, {"recipe"}, {}}, {4, {"recipe"}, {}}};
+    reply.unloadedRows = {{.index = 3, .levels = {"recipe"}, .failed = {}},
+                          {.index = 4, .levels = {"recipe"}, .failed = {}}};
     REQUIRE(window.accept(fetches[0], std::move(reply)));
     auto const plan = window.owed();
     REQUIRE(plan.kind == Refresh::Rows);
@@ -661,7 +662,7 @@ TEST_CASE("window: unloaded levels agree with the page after accept", "[table][w
     auto const fetches = window.visible(0, 5, cols);
     REQUIRE_FALSE(fetches.empty());
     auto page = pageOf(0, range(0, 10), cols, 10);
-    page.unloadedRows = {{2, {"recipe"}, {"recipe"}}};
+    page.unloadedRows = {{.index = 2, .levels = {"recipe"}, .failed = {"recipe"}}};
     REQUIRE(window.accept(fetches[0], std::move(page)));
     std::vector<std::string> const recipe{"recipe"};
     CHECK(std::ranges::equal(window.unloadedLevels(2).levels, recipe));

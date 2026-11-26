@@ -14,7 +14,7 @@
 #include <utility>
 #include <variant>
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -24,7 +24,7 @@
 #include <Windows.h>
 // Windows.h first: Psapi.h needs its types.
 #include <Psapi.h>
-#elif defined(__linux__)
+#elifdef __linux__
 #include <unistd.h>
 
 #include <fstream>
@@ -748,14 +748,14 @@ std::shared_ptr<UnloadedSource> withUnloaded(std::shared_ptr<morph::table::DataS
 }
 
 std::size_t processBytes() noexcept {
-#if defined(_WIN32)
+#ifdef _WIN32
     PROCESS_MEMORY_COUNTERS_EX counters{};
     if (GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counters),
                              sizeof(counters)) != 0) {
         return counters.PrivateUsage;
     }
     return 0;
-#elif defined(__linux__)
+#elifdef __linux__
     try {
         std::ifstream statm{"/proc/self/statm"};
         std::size_t size = 0;
@@ -864,7 +864,7 @@ std::shared_ptr<morph::table::CellLevelCache> makeRecipeCache(WideModelState& st
     options.columns = recipeColumns();
     options.loads = recipeLoads();
     options.batch = settings.batch;
-    auto log = std::make_shared<WideModelState::CallLog>();
+    auto const log = std::make_shared<WideModelState::CallLog>();
     auto loader = [&state, settings, log](std::span<morph::table::RowId const> keys) {
         {
             std::scoped_lock const lock{log->mutex};
@@ -900,7 +900,7 @@ std::shared_ptr<morph::table::CellLevelCache> makeRecipeCache(WideModelState& st
 }
 
 // Under the state's mutex: stores the drawn fraction of rows [0, rows) the cache does not hold yet.
-void preload(WideModelState& state, std::int64_t rows, std::uint64_t seed) {
+void preload(WideModelState const& state, std::int64_t rows, std::uint64_t seed) {
     auto const fraction = recipeSettings(state).preloaded;
     if (fraction <= 0.0 || rows <= 0) {
         return;

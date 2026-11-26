@@ -260,8 +260,9 @@ TEST_CASE("views document: what is written reads back, and so does every operati
 
     for (ViewOperation const& operation :
          {ViewOperation{addNamed("A")}, ViewOperation{ReplaceView{SavedView{.name = "A"}}},
-          ViewOperation{RenameView{"A", "B"}}, ViewOperation{RemoveView{"B"}}, ViewOperation{SetDefaultView{"B"}},
-          ViewOperation{SetDefaultView{std::nullopt}}, ViewOperation{SetDefaultOnMount{false}}}) {
+          ViewOperation{RenameView{.from = "A", .to = "B"}}, ViewOperation{RemoveView{"B"}},
+          ViewOperation{SetDefaultView{"B"}}, ViewOperation{SetDefaultView{std::nullopt}},
+          ViewOperation{SetDefaultOnMount{false}}}) {
         std::string const text = writeViewOperation(operation);
         CAPTURE(text);
         auto const read = readViewOperation(text);

@@ -388,7 +388,7 @@ struct Digits {
         if (value < (kFirstDay - 1) * kDaySeconds || value >= (kLastDay + 2) * kDaySeconds) {
             return std::to_string(value);
         }
-        seconds = value + std::int64_t{locale.utcOffsetMinutes} * 60;
+        seconds = value + (std::int64_t{locale.utcOffsetMinutes} * 60);
         if (seconds < kFirstDay * kDaySeconds || seconds >= (kLastDay + 1) * kDaySeconds) {
             return std::to_string(value);
         }

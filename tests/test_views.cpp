@@ -97,7 +97,9 @@ struct VtLevelRow {
     std::int64_t id = 0;
     std::string name;
     std::int64_t qty = 0;
-    static constexpr std::array<morph::table::ColumnLevel, 1> columnLevels() noexcept { return {{{"qty", "stock"}}}; }
+    static constexpr std::array<morph::table::ColumnLevel, 1> columnLevels() noexcept {
+        return {{{.column = "qty", .level = "stock"}}};
+    }
 };
 
 struct VtListRows {};

@@ -1191,10 +1191,10 @@ private:
 
     void applyCommon(reactive::Scope& scope, Widget& widget, Common const& common) {
         // The focus chain passes over a hidden or disabled widget and what is inside it.
-        ChainFlags* const flags = common.visible.isBound() || !common.visible.constant() || common.enabled.isBound() ||
-                                          !common.enabled.constant()
-                                      ? &scope.make<ChainFlags>(_chainFlags, &widget)
-                                      : nullptr;
+        ChainFlags const* const flags = common.visible.isBound() || !common.visible.constant() ||
+                                                common.enabled.isBound() || !common.enabled.constant()
+                                            ? &scope.make<ChainFlags>(_chainFlags, &widget)
+                                            : nullptr;
         if (common.visible.isBound() || !common.visible.constant()) {
             bind(scope, common.visible, [&widget, flags](bool shown) {
                 flags->set(true, shown);
@@ -2584,7 +2584,7 @@ private:
             widget.setOnSelectAll(event(spec.onSelectAll));
         }
         bool const sortable = std::ranges::any_of(spec.columns, &TableColumn::sortable);
-        reactive::Computed<std::vector<TableSort>>* sortValue = nullptr;
+        reactive::Computed<std::vector<TableSort>> const* sortValue = nullptr;
         if (sortable) {
             sortValue =
                 bind(scope, spec.sort, [&widget](std::vector<TableSort> const& chain) { widget.setSort(chain); });
@@ -3073,7 +3073,7 @@ private:
                 columnWindow(extents, pinned, table.scrollX, table.viewport, table.virtualize.columnOverscan).columns;
         } else {
             places.resize(table.visible.size());
-            std::iota(places.begin(), places.end(), std::size_t{0});
+            std::ranges::iota(places, std::size_t{0});
         }
         std::vector<std::size_t> window;
         window.reserve(places.size() + 1);
@@ -3236,7 +3236,7 @@ private:
         Widget* const widget = inner ? mount(scope, accented != nullptr ? accented->content : inner, stack)
                                      : &scope.adopt(_backend->createSpacer(stack));
         if (marked != nullptr) {
-            SourceTable::Marks& marks = scope.make<SourceTable::Marks>();
+            auto& marks = scope.make<SourceTable::Marks>();
             cell.marks = &marks;
             bind(scope, marked->marks, [&table, &marks](CellMarks const& value) {
                 marks.last = value;
@@ -3246,7 +3246,7 @@ private:
             });
         }
         if (accented != nullptr) {
-            SourceTable::Accent& accent = scope.make<SourceTable::Accent>();
+            auto& accent = scope.make<SourceTable::Accent>();
             cell.accent = &accent;
             bind(scope, accented->accent, [&table, &accent](CellAccent const& value) {
                 accent.last = value;
@@ -3411,7 +3411,7 @@ private:
 
     // Parks a placed cell in its row's pool: it leaves the row's layout, keeping its widget and its record.
     void park(SourceTable& table, SourceTable::Realized& slot, std::size_t column) {
-        auto found = slot.cells.find(column);
+        auto const found = slot.cells.find(column);
         if (found == slot.cells.end()) {
             return;
         }
@@ -3445,7 +3445,7 @@ private:
         }
         SourceTable::PoolKey const key = poolOf(table, column);
         SourceTable::Cell cell;
-        if (auto pooled = slot.pool.find(key); pooled != slot.pool.end() && !pooled->second.empty()) {
+        if (auto const pooled = slot.pool.find(key); pooled != slot.pool.end() && !pooled->second.empty()) {
             cell = std::move(pooled->second.back());
             pooled->second.pop_back();
             if (cell.accent != nullptr) {
@@ -3532,7 +3532,7 @@ private:
     // One pass of `realizeWindow`.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): rows, cells, the budget, focus and the reports.
     void realizeWindowPass(SourceTable& table, std::function<bool(std::int64_t)> const& updated) {
-        TableRows& rows = *table.source.rows;
+        TableRows const& rows = *table.source.rows;
         TableTotal const total = rows.mountedTotal();
         auto const count = static_cast<std::size_t>(std::max<std::int64_t>(total.rows, 0));
         refreshColumns(table, count);
@@ -3549,8 +3549,8 @@ private:
             targets.push_back(static_cast<std::int64_t>(at));
         }
         // The focused row stays realized: one row beyond the window at most.
-        if (table.focused && table.focusIndex >= 0 && static_cast<std::size_t>(table.focusIndex) < count &&
-            (static_cast<std::size_t>(table.focusIndex) < lo || static_cast<std::size_t>(table.focusIndex) >= hi)) {
+        if (table.focused && table.focusIndex >= 0 && std::cmp_less(table.focusIndex, count) &&
+            (std::cmp_less(table.focusIndex, lo) || std::cmp_greater_equal(table.focusIndex, hi))) {
             targets.insert(std::ranges::upper_bound(targets, table.focusIndex), table.focusIndex);
         }
         if (table.spans != nullptr) {
@@ -3600,7 +3600,7 @@ private:
         std::exception_ptr failure;
         std::vector<SourceTable::Realized> next;
         next.reserve(targets.size());
-        std::vector<bool> moved;
+        std::vector<bool> const moved;
         for (std::size_t at = 0; at < targets.size(); ++at) {
             std::int64_t const index = targets.at(at);
             std::optional<TableRowRef> const ref = rows.row(index);
@@ -3719,9 +3719,9 @@ private:
     // bound or built within the frame's budget, nearest the centre first.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): pooling, the budget, and the order in each row.
     void realizeCells(SourceTable& table, VisibleRange const& shown) {
-        TableRows& rows = *table.source.rows;
+        TableRows const& rows = *table.source.rows;
         std::unordered_set<std::size_t> const inWindow(table.window.begin(), table.window.end());
-        auto const centreRow = static_cast<std::int64_t>(shown.first + shown.count / 2);
+        auto const centreRow = static_cast<std::int64_t>(shown.first + (shown.count / 2));
         std::size_t const centreColumn = table.window.empty() ? 0 : table.window.size() / 2;
         std::vector<CellWork> work;
         for (std::size_t at = 0; at < table.realized.size(); ++at) {
@@ -3750,7 +3750,7 @@ private:
                 }
                 std::size_t const columnDistance = place > centreColumn ? place - centreColumn : centreColumn - place;
                 work.push_back(
-                    CellWork{.slot = at, .column = column, .distance = rowDistance * 1'000'000 + columnDistance});
+                    CellWork{.slot = at, .column = column, .distance = (rowDistance * 1'000'000) + columnDistance});
             }
         }
         std::ranges::stable_sort(work, {}, &CellWork::distance);
@@ -4352,7 +4352,7 @@ private:
         std::size_t const overscan = table.virtualize.overscan;
         std::size_t const first = highlight->row > overscan ? highlight->row - overscan : 0;
         table.source.rows->visible(static_cast<std::int64_t>(first),
-                                   static_cast<std::int64_t>(table.range.count + 2 * overscan), table.fetched);
+                                   static_cast<std::int64_t>(table.range.count + (2 * overscan)), table.fetched);
         table.widget->scrollToRow(highlight->row);
         table.widget->setHighlightedRow(highlight->row);
     }
@@ -4390,7 +4390,7 @@ private:
             table.lastCount = 0;
         }
         auto const followed = [&table, &change](std::int64_t index) -> std::optional<std::int64_t> {
-            if (index >= static_cast<std::int64_t>(table.lastCount)) {
+            if (std::cmp_greater_equal(index, table.lastCount)) {
                 return index;
             }
             return followIndex(change, index);

@@ -172,8 +172,10 @@ TEST_CASE("table fixtures: sameCell tells places apart and operator== does not",
     CHECK(two == four);
     CHECK_FALSE(tabletest::sameCell(two, four));  // Mutation: sameCell delegating to operator==
     CHECK(tabletest::sameCell(two, two));
-    Cell const kg{QuantityCell{std::get<Rational>(two), Rational{Numerator{1000}, Denominator{1}, DecimalPlaces{0}}}};
-    Cell const g{QuantityCell{std::get<Rational>(two), Rational{Numerator{1}, Denominator{1}, DecimalPlaces{0}}}};
+    Cell const kg{QuantityCell{.amount = std::get<Rational>(two),
+                               .toCanonical = Rational{Numerator{1000}, Denominator{1}, DecimalPlaces{0}}}};
+    Cell const g{QuantityCell{.amount = std::get<Rational>(two),
+                              .toCanonical = Rational{Numerator{1}, Denominator{1}, DecimalPlaces{0}}}};
     CHECK(kg == kg);
     CHECK_FALSE(kg == g);  // Mutation: QuantityCell::operator== comparing `amount` only
     CHECK_FALSE(tabletest::sameCell(two, Cell{std::int64_t{2}}));

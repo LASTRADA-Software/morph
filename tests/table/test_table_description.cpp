@@ -92,7 +92,7 @@ std::vector<RowId> intKeys(std::size_t count, std::int64_t first = 1) {
 PageRows pageOf(std::size_t rows, std::optional<std::int64_t> total = std::nullopt) {
     PageRows page;
     page.rows.resize(rows);
-    std::iota(page.rows.begin(), page.rows.end(), std::size_t{0});
+    std::ranges::iota(page.rows, std::size_t{0});
     page.total = total;
     return page;
 }
@@ -170,11 +170,12 @@ std::shared_ptr<VectorSource> eightColumnRows() {
 }  // namespace
 
 TEST_CASE("description: equal descriptions have equal revisions", "[table][description]") {
-    TableDescription base{.id = "designs",
-                          .label = "Designs",
-                          .columns = {TableColumn{.info = {.id = "id", .kind = ColumnKind::Integer}, .label = "Id"},
-                                      TableColumn{.info = {.id = "name", .kind = ColumnKind::Text}, .label = "Name"}},
-                          .key = "id"};
+    TableDescription const base{
+        .id = "designs",
+        .label = "Designs",
+        .columns = {TableColumn{.info = {.id = "id", .kind = ColumnKind::Integer}, .label = "Id"},
+                    TableColumn{.info = {.id = "name", .kind = ColumnKind::Text}, .label = "Name"}},
+        .key = "id"};
     auto const a = describe(base);
     auto const b = describe(base);
     CHECK(a.revision.size() == 16);
@@ -1069,7 +1070,8 @@ TEST_CASE("typed: a row's column levels reach the description", "[table][registr
 }
 
 TEST_CASE("scoped: a scope's source reads the shared rows of its keys", "[table][registration]") {
-    auto base = std::make_shared<VectorSource>(std::vector<ColumnInfo>{tabletest::col("v", ColumnKind::Integer)});
+    auto const base =
+        std::make_shared<VectorSource>(std::vector<ColumnInfo>{tabletest::col("v", ColumnKind::Integer)});
     std::vector<std::vector<Cell>> cells;
     for (std::int64_t key = 1; key <= 5; ++key) {
         cells.push_back({Cell{key * 10}});
@@ -1734,7 +1736,7 @@ struct DistinctLevels {
 
 // Mutation: the distinct branch building a new key set for every request (each request fits a set of its own).
 TEST_CASE("table: distinct requests over one snapshot hold one set of an order level's keys", "[table][levels]") {
-    DistinctLevels table;
+    DistinctLevels const table;
     TableQuery distinct;
     distinct.distinct = DistinctRequest{.column = "r"};
     REQUIRE(detail::answerQuery(table.served, distinct, table.context).has_value());
@@ -1745,7 +1747,7 @@ TEST_CASE("table: distinct requests over one snapshot hold one set of an order l
 
 // Mutation: the distinct branch not taking back the accepted levels' wants (recipe keeps the refused request's set).
 TEST_CASE("table: a refused distinct request takes back its set from the levels that accepted it", "[table][levels]") {
-    DistinctLevels table;
+    DistinctLevels const table;
     TableQuery distinct;
     distinct.filters.columns.emplace(
         "s", ColumnFilter{.combine = Combine::Any, .include = {FilterEntry{.contains = "a"}}, .exclude = {}});
@@ -1976,7 +1978,7 @@ TEST_CASE("answer query: a distinct request reads a slow column through its leve
     auto const status = tabletest::levelCol("status", ColumnKind::Text, "slow");
     tabletest::ManualExecutor loads;
     auto const snapshot = plain->snapshot();
-    auto cache = std::make_shared<CellLevelCache>(
+    auto const cache = std::make_shared<CellLevelCache>(
         LevelCacheOptions{.records = {"d"}, .level = "slow", .columns = {status}, .loads = &loads},
         [snapshot](std::span<RowId const> keys) {
             std::vector<std::pair<RowId, std::vector<Cell>>> out;
@@ -2339,7 +2341,7 @@ TEST_CASE("typed table: a model's units reach its measures", "[table][registrati
 
 // Mutation: validateDisplay skipping rowLock, which accepts `missingLock`.
 TEST_CASE("description: a column's display is refused where it cannot apply", "[table][description][display]") {
-    auto base = [] {
+    auto const base = [] {
         TableDescription d;
         d.id = "samples";
         d.key = "id";
@@ -2437,7 +2439,7 @@ TEST_CASE("description: a served table with a bad companion is refused", "[table
     d.id = "samples";
     d.key = "id";
     d.columns = {TableColumn{.info = {.id = "id", .kind = ColumnKind::Integer}, .label = "Id"}};
-    ServedTable good{
+    ServedTable const good{
         .description = d, .source = source, .levels = {}, .mayRead = {}, .scope = {}, .services = {}, .limits = {}};
     REQUIRE(detail::answerQuery(detail::pinned(good), TableQuery{}).has_value());
     ServedTable bad = good;

@@ -214,7 +214,7 @@ TEST_CASE("distinct: dates by year, month and day", "[table][distinct]") {
     CHECK(values->values[0].text == "2025-12-31");
 
     auto const stamps =
-        tabletest::column(ColumnKind::DateTime, {epochDays(2026y / January / 15) * 86'400 + 10 * 3600}, "t");
+        tabletest::column(ColumnKind::DateTime, {(epochDays(2026y / January / 15) * 86'400) + (10 * 3600)}, "t");
     auto const stampDays = distinctValues(*stamps, {}, {.column = "t", .bucket = DateBucket::Day});
     REQUIRE(stampDays);
     REQUIRE(stampDays->values.size() == 1);
@@ -397,7 +397,7 @@ TEST_CASE("distinct: a group's values are pooled", "[table][distinct][groups]") 
 
 // Mutation: levelsNeeded leaving the group's columns out of `order`.
 TEST_CASE("distinct: a group's levels are order levels of the request", "[table][distinct][groups]") {
-    auto source = pooledSource({"companyB"});
+    auto const source = pooledSource({"companyB"});
     // Only companyB at a level here, so the expected levels are its alone.
     std::vector<ColumnInfo> columns(source->columns().begin(), source->columns().end());
     columns[2].level.clear();

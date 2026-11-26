@@ -845,7 +845,7 @@ TEST_CASE("cell edits: stale until the reply, modified until the next fetch", "[
     RowCommits c;
     table::CellEdits edits{c.commit()};
     edits.setDraft(k1, "count", "9", std::nullopt);
-    edits.commitRow({k1, {{.column = "count", .json = "9"}}});
+    edits.commitRow({.row = k1, .cells = {{.column = "count", .json = "9"}}});
     CHECK(edits.stale(k1, "count"));
     c.done.at(0)(std::expected<void, std::vector<table::FieldError>>{});
     CHECK_FALSE(edits.stale(k1, "count"));
@@ -861,7 +861,7 @@ TEST_CASE("cell edits: a fetch before the reply keeps the cell stale", "[table][
     RowCommits c;
     table::CellEdits edits{c.commit()};
     edits.setDraft(k1, "count", "9", std::nullopt);
-    edits.commitRow({k1, {{.column = "count", .json = "9"}}});
+    edits.commitRow({.row = k1, .cells = {{.column = "count", .json = "9"}}});
     edits.rowFetched(k1);  // the change event's refetch, before the reply
     CHECK(edits.stale(k1, "count"));
     CHECK(edits.draft(k1, "count") == "9");
@@ -875,10 +875,12 @@ TEST_CASE("cell edits: a fetch before the reply keeps the cell stale", "[table][
 TEST_CASE("cell edits: a row's edits run one at a time, a refusal lands on each cell", "[table][edits]") {
     RowCommits c;
     table::CellEdits edits{c.commit()};
-    edits.commitRow({k1, {{.column = "label", .json = R"("a")"}, {.column = "note", .json = R"("b")"}}});
-    edits.commitRow({k1, {{.column = "note", .json = R"("c")"}}});
+    edits.commitRow(
+        {.row = k1, .cells = {{.column = "label", .json = R"("a")"}, {.column = "note", .json = R"("b")"}}});
+    edits.commitRow({.row = k1, .cells = {{.column = "note", .json = R"("c")"}}});
     CHECK(c.sent.size() == 1);
-    c.done.at(0)(std::unexpected(std::vector<table::FieldError>{{"label", "taken"}, {"note", "too long"}}));
+    c.done.at(0)(std::unexpected(std::vector<table::FieldError>{{.column = "label", .message = "taken"},
+                                                                {.column = "note", .message = "too long"}}));
     CHECK(edits.error(k1, "label") == "taken");
     CHECK(edits.error(k1, "note") == "too long");
     CHECK(c.sent.size() == 2);
@@ -890,22 +892,23 @@ TEST_CASE("cell edits: a row's edits run one at a time, a refusal lands on each 
 TEST_CASE("cell edits: a refusal lands on the cell whose member it names", "[table][edits]") {
     RowCommits c;
     table::CellEdits edits{c.commit()};
-    edits.commitRow({k1, {{.column = "count", .json = "11", .member = "value"}}});
-    c.done.at(0)(std::unexpected(std::vector<table::FieldError>{{"value", "must be at most 10"}}));
+    edits.commitRow({.row = k1, .cells = {{.column = "count", .json = "11", .member = "value"}}});
+    c.done.at(0)(
+        std::unexpected(std::vector<table::FieldError>{{.column = "value", .message = "must be at most 10"}}));
     CHECK(edits.error(k1, "count") == "must be at most 10");
     CHECK_FALSE(edits.error(k1, "value").has_value());
     table::RowId const k2{std::int64_t{2}};
-    edits.commitRow({k2,
-                     {{.column = "label", .json = R"("a")", .member = "label"},
-                      {.column = "remark", .json = R"("b")", .member = "remarkText"}}});
-    c.done.at(1)(std::unexpected(std::vector<table::FieldError>{{"remarkText", "too long"}}));
+    edits.commitRow({.row = k2,
+                     .cells = {{.column = "label", .json = R"("a")", .member = "label"},
+                               {.column = "remark", .json = R"("b")", .member = "remarkText"}}});
+    c.done.at(1)(std::unexpected(std::vector<table::FieldError>{{.column = "remarkText", .message = "too long"}}));
     CHECK(edits.error(k2, "remark") == "too long");
     CHECK_FALSE(edits.error(k2, "label").has_value());  // no error reached it
     table::RowId const k3{std::int64_t{3}};
-    edits.commitRow({k3,
-                     {{.column = "label", .json = R"("a")", .member = "label"},
-                      {.column = "remark", .json = R"("b")", .member = "remarkText"}}});
-    c.done.at(2)(std::unexpected(std::vector<table::FieldError>{{"", "The row is closed"}}));
+    edits.commitRow({.row = k3,
+                     .cells = {{.column = "label", .json = R"("a")", .member = "label"},
+                               {.column = "remark", .json = R"("b")", .member = "remarkText"}}});
+    c.done.at(2)(std::unexpected(std::vector<table::FieldError>{{.column = "", .message = "The row is closed"}}));
     CHECK(edits.error(k3, "label") == "The row is closed");  // names no cell: every cell of the request
     CHECK(edits.error(k3, "remark") == "The row is closed");
 }
@@ -928,8 +931,8 @@ TEST_CASE("cell edits: an edit in flight settles on the row's new key", "[table]
     table::CellEdits edits{c.commit()};
     table::RowId const k9{std::int64_t{9}};
     edits.setDraft(k1, "count", "4", std::nullopt);
-    edits.commitRow({k1, {{.column = "count", .json = "4"}}});
-    edits.commitRow({k1, {{.column = "note", .json = R"("n")"}}});
+    edits.commitRow({.row = k1, .cells = {{.column = "count", .json = "4"}}});
+    edits.commitRow({.row = k1, .cells = {{.column = "note", .json = R"("n")"}}});
     edits.moveRow(k1, k9);
     CHECK(edits.stale(k9, "count"));
     CHECK(edits.stale(k9, "note"));
@@ -973,10 +976,10 @@ TEST_CASE("cell edits: a row absent while an edit is in flight sends nothing mor
     RowCommits c;
     table::CellEdits edits{c.commit()};
     edits.setDraft(k1, "count", "4", std::nullopt);
-    edits.commitRow({k1, {{.column = "count", .json = "4"}}});
-    edits.commitRow({k1, {{.column = "note", .json = R"("n")"}}});
+    edits.commitRow({.row = k1, .cells = {{.column = "count", .json = "4"}}});
+    edits.commitRow({.row = k1, .cells = {{.column = "note", .json = R"("n")"}}});
     edits.rowAbsent(k1);
-    c.done.at(0)(std::unexpected(std::vector<table::FieldError>{{"", "gone"}}));
+    c.done.at(0)(std::unexpected(std::vector<table::FieldError>{{.column = "", .message = "gone"}}));
     CHECK(c.sent.size() == 1);
     CHECK(edits.errorCount() == 0);
     CHECK(edits.modifiedCount() == 0);
@@ -990,7 +993,7 @@ TEST_CASE("cell edits: a draft typed after the commit outlives the commit's fetc
     RowCommits c;
     table::CellEdits edits{c.commit()};
     edits.setDraft(k1, "count", "9", std::nullopt);
-    edits.commitRow({k1, {{.column = "count", .json = "9"}}});
+    edits.commitRow({.row = k1, .cells = {{.column = "count", .json = "9"}}});
     edits.setDraft(k1, "count", "7", std::nullopt);
     c.done.at(0)(std::expected<void, std::vector<table::FieldError>>{});
     CHECK(edits.modified(k1, "count"));

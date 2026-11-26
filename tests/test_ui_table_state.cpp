@@ -364,12 +364,12 @@ TEST_CASE("table state: a save stopped after its head leaves no stray segment be
 // Mutation: the bounds "1 to 256" on every member (a rows table's key, model "", is refused).
 TEST_CASE("table state: a key's model may be empty, its table may not", "[ui][state]") {
     StoreFixture h;
-    auto withModel = [](std::string model) {
+    auto const withModel = [](std::string model) {
         auto key = kKey;
         key.model = std::move(model);
         return key;
     };
-    auto withTable = [](std::string tableId) {
+    auto const withTable = [](std::string tableId) {
         auto key = kKey;
         key.table = std::move(tableId);
         return key;
@@ -604,7 +604,7 @@ TEST_CASE("table state: a session's table states follow its store", "[ui][state]
     ui::SessionOptions options;
     options.scheduler = &h.scheduler;
     options.tableState = sharedOf(store);
-    ui::Session withStore{h.runtime, std::move(options)};
+    ui::Session const withStore{h.runtime, std::move(options)};
     REQUIRE(withStore.tableStates() != nullptr);
     CHECK(&withStore.tableStates()->store() == &store);
     CHECK(withStore.options().tableStateTimeout == 300ms);
@@ -764,7 +764,7 @@ TEST_CASE(
     table::ColumnLayoutValue layout;
     for (int at = 0; at < 300; ++at) {
         layout.order.push_back(std::format("c{:03}", at));
-        layout.widths.emplace(std::format("c{:03}", at), 12 + at % 20);
+        layout.widths.emplace(std::format("c{:03}", at), 12 + (at % 20));
     }
     layout.pinned = 1;
     full.layout = layout;
@@ -1281,9 +1281,9 @@ TEST_CASE("table state: a lock handed to a waiter destroyed before it runs passe
     bool first = false;
     bool second = false;
     bool third = false;
-    Started holder = holdLock(locks, "k", first);
+    Started const holder = holdLock(locks, "k", first);
     REQUIRE(first);
-    Started waiter = [&] {
+    Started const waiter = [&] {
         // Queued while running for the step executor, so its turn is posted there rather than run inline.
         ::core::async::ExecutorScope const scope{resumer.coreExecutor()};
         return holdLock(locks, "k", second);
@@ -1292,7 +1292,7 @@ TEST_CASE("table state: a lock handed to a waiter destroyed before it runs passe
     holder.handle.destroy();  // the lease is released: the lock is handed to the waiter, whose turn is queued
     REQUIRE(resumer.pending() > 0);
     waiter.handle.destroy();  // destroyed before its turn ran
-    Started late = holdLock(locks, "k", third);
+    Started const late = holdLock(locks, "k", third);
     CHECK(third);
     late.handle.destroy();
 }
@@ -1339,20 +1339,20 @@ TEST_CASE("table state: five large saves at once are all stored", "[ui][state]")
 TEST_CASE("table state: a session's store sends a busy save again after tableStateTimeout", "[ui][state]") {
     StoreFixture h;
     auto const store = std::make_shared<ui::PreferencesTableStateStore>(h.client, h.owner);  // no timers of its own
-    ui::Session session{h.runtime, ui::SessionOptions{.scheduler = &h.scheduler,
-                                                      .clock = [&h] { return h.scheduler.now(); },
-                                                      .keepUnused = std::chrono::minutes{5},
-                                                      .catalog = {},
-                                                      .classify = {},
-                                                      .developmentTools = ui::DevelopmentTools::Off,
-                                                      .watcher = {},
-                                                      .maxInlineFileBytes = ui::kDefaultInlineFileBytes,
-                                                      .tableSettle = 80ms,
-                                                      .tableAwaitedRefetch = 250ms,
-                                                      .tableState = store,
-                                                      .tableStateTimeout = 300ms,
-                                                      .tableStateDebounce = 500ms,
-                                                      .application = "lims"}};
+    ui::Session const session{h.runtime, ui::SessionOptions{.scheduler = &h.scheduler,
+                                                            .clock = [&h] { return h.scheduler.now(); },
+                                                            .keepUnused = std::chrono::minutes{5},
+                                                            .catalog = {},
+                                                            .classify = {},
+                                                            .developmentTools = ui::DevelopmentTools::Off,
+                                                            .watcher = {},
+                                                            .maxInlineFileBytes = ui::kDefaultInlineFileBytes,
+                                                            .tableSettle = 80ms,
+                                                            .tableAwaitedRefetch = 250ms,
+                                                            .tableState = store,
+                                                            .tableStateTimeout = 300ms,
+                                                            .tableStateDebounce = 500ms,
+                                                            .application = "lims"}};
     REQUIRE(session.tableStates() != nullptr);
     std::vector<std::optional<table::SaveResult>> results(5);
     for (std::size_t at = 0; at < 5; ++at) {
@@ -1590,7 +1590,7 @@ TEST_CASE("views: a mounted table loads its views with its state, and a second m
     };
     for (bool const model : {false, true}) {
         CAPTURE(model);
-        auto store = std::make_shared<RecordingTableStateStore>(storeExecutor(), table::Sharing::Shared);
+        auto const store = std::make_shared<RecordingTableStateStore>(storeExecutor(), table::Sharing::Shared);
         TableHarness h{store};
         auto const mountOne = [&] {
             auto screen = h.mount(model ? std::string{kModelTable} : rowsDoc(kThree));
@@ -1605,7 +1605,7 @@ TEST_CASE("views: a mounted table loads its views with its state, and a second m
         first.reset();
         h.settle();
         std::size_t const before = store->calls.size();
-        auto second = mountOne();
+        auto const second = mountOne();
         CHECK(parts({store->calls.begin() + static_cast<std::ptrdiff_t>(before), store->calls.end()}).empty());
     }
 }
@@ -1704,12 +1704,12 @@ table::TableQuery firstQuery(TableHarness const& h) {
 
 // Mutation: Save view… with a taken name sending AddView (refused as NameTaken, the sort change lost).
 TEST_CASE("views: Save view… under a taken name replaces that view", "[ui][table][state]") {
-    auto store = std::make_shared<RecordingTableStateStore>(storeExecutor());
+    auto const store = std::make_shared<RecordingTableStateStore>(storeExecutor());
     TableHarness h{store};
     std::string const r0 = seed(h, *store, "views",
                                 ownViews({viewSorted("A", nineColumns(), "c1", table::SortDirection::Ascending),
                                           viewSorted("B", nineColumns(), "c2", table::SortDirection::Ascending)}));
-    auto screen = h.mount(morph::ui::testing::kNine);
+    auto const screen = h.mount(morph::ui::testing::kNine);
     int const table = h.backend.all("Table").front();
     h.backend.clickHeader(table, 3, HeaderClick::Plain);  // c4 ascending
     h.settle();
@@ -1734,7 +1734,7 @@ TEST_CASE("views: Save view… under a taken name replaces that view", "[ui][tab
 
 // Mutation: the modified mark compared against the unfitted view.
 TEST_CASE("views: applying a view records its name, and a change marks it modified", "[ui][table][state]") {
-    auto store = std::make_shared<RecordingTableStateStore>(storeExecutor());
+    auto const store = std::make_shared<RecordingTableStateStore>(storeExecutor());
     TableHarness h{store};
     table::SavedView open = viewSorted("Open orders", nineColumns(), "c2", table::SortDirection::Descending, {"c3"});
     table::ColumnFilter gone;
@@ -1744,7 +1744,7 @@ TEST_CASE("views: applying a view records its name, and a change marks it modifi
     atLeastTwo.include.push_back(table::FilterEntry{.ge = "2"});
     open.filters.columns.emplace("c1", atLeastTwo);  // a column it has
     seed(h, *store, "views", ownViews({open}));
-    auto screen = h.mount(morph::ui::testing::kNine);
+    auto const screen = h.mount(morph::ui::testing::kNine);
     int const table = h.backend.all("Table").front();
     chooseMenu(h, table, std::nullopt, {"Views", "Open orders"});
     CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c2","direction":"desc"}])");
@@ -1772,7 +1772,7 @@ TEST_CASE("views: the default view at mount, and Start from the default view", "
     table::SavedView const open =
         viewSorted("Open orders", nineColumns(), "c2", table::SortDirection::Descending, {"c3"});
     SECTION("no state stored: the default view is applied") {
-        auto store = std::make_shared<RecordingTableStateStore>(storeExecutor());
+        auto const store = std::make_shared<RecordingTableStateStore>(storeExecutor());
         TableHarness h{store};
         // Its filter is a range on a column nothing has put in use yet, whose kind the rows learn at mount.
         table::SavedView filtered = open;
@@ -1780,7 +1780,7 @@ TEST_CASE("views: the default view at mount, and Start from the default view", "
         atLeastTwo.include.push_back(table::FilterEntry{.ge = "2"});
         filtered.filters.columns.emplace("c1", atLeastTwo);
         seed(h, *store, "views", ownViews({filtered}, "Open orders"));
-        auto screen = h.mount(morph::ui::testing::kNine);
+        auto const screen = h.mount(morph::ui::testing::kNine);
         CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c2","direction":"desc"}])");
         CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["c1","c2","c4","c5","c6","c7","c8","c9"])");
         CHECK(elementValue(*screen, "t", "viewCount") == "2");
@@ -1796,24 +1796,24 @@ TEST_CASE("views: the default view at mount, and Start from the default view", "
         CHECK(entryOf(viewsOf(h, table), "Start from the default view").checked == std::optional<bool>{true});
     }
     SECTION("a stored state and defaultOnMount: the default's sort and filters, the stored layout") {
-        auto store = std::make_shared<RecordingTableStateStore>(storeExecutor());
+        auto const store = std::make_shared<RecordingTableStateStore>(storeExecutor());
         TableHarness h{store};
         seed(h, *store, "views", ownViews({open}, "Open orders", true));
         seed(h, *store, "state",
              R"({"version":1,"sort":[{"column":"c1","direction":"asc"}],)"
              R"("layout":{"order":["c1","c2","c3","c4","c5","c6","c7","c8","c9"],"hidden":["c4"]}})");
-        auto screen = h.mount(morph::ui::testing::kNine);
+        auto const screen = h.mount(morph::ui::testing::kNine);
         CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c2","direction":"desc"}])");
         CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["c1","c2","c3","c5","c6","c7","c8","c9"])");
     }
     SECTION("a model-backed table's first query is the default view's") {
-        auto store = std::make_shared<RecordingTableStateStore>(storeExecutor());
+        auto const store = std::make_shared<RecordingTableStateStore>(storeExecutor());
         TableHarness h{store};
         seed(h, *store, "views",
              ownViews({viewSorted("Open orders", {"id", "name", "c3", "c4"}, "name", table::SortDirection::Descending,
                                   {"c3"})},
                       "Open orders"));
-        auto screen = h.mount(morph::ui::testing::kModelTable);
+        auto const screen = h.mount(morph::ui::testing::kModelTable);
         morph::ui::testing::replyDescribe(h, morph::ui::testing::samplesDescription(4));
         table::TableQuery const query = firstQuery(h);
         CHECK(query.sort ==
@@ -1835,7 +1835,7 @@ TEST_CASE("views: the Views submenu on a rows table, a model table and a collect
                              Kind{.name = "model", .order = {"id", "name", "c3"}},
                              Kind{.name = "collection", .order = {"id", "name", "weight"}}}) {
         CAPTURE(kind.name);
-        auto store = std::make_shared<RecordingTableStateStore>(storeExecutor());
+        auto const store = std::make_shared<RecordingTableStateStore>(storeExecutor());
         TableHarness h{store};
         h.extraViews.insert_or_assign("Lims_ListSamples", std::string{morph::ui::testing::kMixedSamplesView});
         seed(h, *store, "views", ownViews({viewSorted("Mine", kind.order, "name", table::SortDirection::Descending)}));
@@ -1884,7 +1884,7 @@ TEST_CASE("views: the Views submenu on a rows table, a model table and a collect
 // Ruling: a `saved` point naming a table over `rows` that keeps a state reads and writes that state's `view`.
 // Mutation: the rows table left out of `tablePoint` for a `saved` point (the choice is a plain preference: no save).
 TEST_CASE("views: a saved point naming a rows table edits its state's view", "[ui][table][state]") {
-    auto store = std::make_shared<RecordingTableStateStore>(storeExecutor());
+    auto const store = std::make_shared<RecordingTableStateStore>(storeExecutor());
     TableHarness h{store};
     seed(h, *store, "views",
          ownViews({viewSorted("Mine", {"id", "name", "weight"}, "name", table::SortDirection::Descending)}));
@@ -1926,7 +1926,7 @@ TEST_CASE(
 
     ServerDispatcher aliceClient{server, storeExecutor(), "alice"};
     TableHarness alice{std::make_shared<ui::PreferencesTableStateStore>(aliceClient, storeExecutor())};
-    auto aliceScreen = alice.mount(doc);
+    auto const aliceScreen = alice.mount(doc);
     int const aliceTable = alice.byTestId("Table", "list");
     alice.backend.clickHeader(aliceTable, 1, HeaderClick::Plain);  // name ascending
     alice.settle();
@@ -1944,7 +1944,7 @@ TEST_CASE(
 
     ServerDispatcher bobClient{server, storeExecutor(), "bob"};
     TableHarness bob{std::make_shared<ui::PreferencesTableStateStore>(bobClient, storeExecutor())};
-    auto bobScreen = bob.mount(doc);
+    auto const bobScreen = bob.mount(doc);
     int const bobTable = bob.byTestId("Table", "list");
     CHECK(keptRevision(bob) == published);
     std::vector<MenuEntry> const views = viewsOf(bob, bobTable);
@@ -1972,14 +1972,14 @@ TEST_CASE(
     // Over a store that does not share, nothing offers publishing and no shared part is read.
     {
         TableHarness quiet{std::make_shared<table::MemoryTableStateStore>(storeExecutor())};
-        auto screen = quiet.mount(doc);
+        auto const screen = quiet.mount(doc);
         std::vector<std::string> const labels = labelsOf(viewsOf(quiet, quiet.byTestId("Table", "list")));
         CHECK_FALSE(std::ranges::contains(labels, std::string{"Publish view…"}));
         CHECK_FALSE(std::ranges::contains(labels, std::string{"Save as my view"}));
     }
-    auto recording = std::make_shared<RecordingTableStateStore>(storeExecutor());
+    auto const recording = std::make_shared<RecordingTableStateStore>(storeExecutor());
     TableHarness counted{recording};
-    auto screen = counted.mount(doc);
+    auto const screen = counted.mount(doc);
     CHECK_FALSE(std::ranges::contains(labelsOf(viewsOf(counted, counted.byTestId("Table", "list"))),
                                       std::string{"Publish view…"}));
     CHECK(std::ranges::none_of(recording->calls, [](StoreCall const& call) { return call.part == "shared"; }));
@@ -1989,9 +1989,9 @@ TEST_CASE(
 // against the views loaded, and not at each attempt (the retry after the Conflict sends the same AddView, refused as
 // "A view named A exists").
 TEST_CASE("views: Save view… under a name another window took after load replaces it", "[ui][table][state]") {
-    auto store = std::make_shared<RecordingTableStateStore>(storeExecutor());
+    auto const store = std::make_shared<RecordingTableStateStore>(storeExecutor());
     TableHarness h{store};
-    auto screen = h.mount(morph::ui::testing::kNine);
+    auto const screen = h.mount(morph::ui::testing::kNine);
     int const table = h.backend.all("Table").front();
     // Another window, loaded after this table, adds "A".
     ViewsWindow other{h, *store};
@@ -2025,13 +2025,13 @@ TEST_CASE("views: Save view… under a name another window took after load repla
 // Mutation: the default view applied at mount not taken as the table's state (`TableStates::start` not called): the
 // first change saves only its own part, and the next mount starts from the default no more.
 TEST_CASE("views: a change after the default view at mount saves on top of it", "[ui][table][state]") {
-    auto store = std::make_shared<RecordingTableStateStore>(storeExecutor());
+    auto const store = std::make_shared<RecordingTableStateStore>(storeExecutor());
     TableHarness h{store};
     seed(h, *store, "views",
          ownViews({viewSorted("Open orders", nineColumns(), "c2", table::SortDirection::Descending, {"c3"})},
                   "Open orders"));
     {
-        auto screen = h.mount(morph::ui::testing::kNine);
+        auto const screen = h.mount(morph::ui::testing::kNine);
         int const table = h.backend.all("Table").front();
         chooseMenu(h, table, 4, {"Hide column"});  // c5
         h.advance(500ms);
@@ -2044,7 +2044,7 @@ TEST_CASE("views: a change after the default view at mount saves on top of it", 
     CHECK(read->view == std::optional<std::string>{"Open orders"});
     CHECK(read->sort == std::optional<table::SortChain>{table::SortChain{
                             table::SortKey{.column = "c2", .dir = table::SortDirection::Descending}}});
-    auto screen = h.mount(morph::ui::testing::kNine);
+    auto const screen = h.mount(morph::ui::testing::kNine);
     CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c2","direction":"desc"}])");
     CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["c1","c2","c4","c6","c7","c8","c9"])");
 }
@@ -2084,7 +2084,7 @@ TEST_CASE("shared views on a table: publishing again under a taken name replaces
     StateServer server{TableStateOptions{}};
     std::string const doc = morph::ui::testing::rowsDoc(morph::ui::testing::kThree);
     PersonTable alice{server, "alice"};
-    auto screen = alice.h.mount(doc);
+    auto const screen = alice.h.mount(doc);
     int const table = alice.h.byTestId("Table", "list");
     alice.h.backend.clickHeader(table, 1, HeaderClick::Plain);  // name ascending
     alice.h.settle();
@@ -2110,10 +2110,10 @@ TEST_CASE("shared views on a table: publishing under a name published elsewhere 
     StateServer server{TableStateOptions{}};
     std::string const doc = morph::ui::testing::rowsDoc(morph::ui::testing::kThree);
     PersonTable alice{server, "alice"};
-    auto aliceScreen = alice.h.mount(doc);
+    auto const aliceScreen = alice.h.mount(doc);
     int const aliceTable = alice.h.byTestId("Table", "list");
     PersonTable bob{server, "bob"};
-    auto bobScreen = bob.h.mount(doc);
+    auto const bobScreen = bob.h.mount(doc);
     int const bobTable = bob.h.byTestId("Table", "list");
     chooseMenu(bob.h, bobTable, std::nullopt, {"Views", "Publish view…"});
     nameView(bob.h, "Team");

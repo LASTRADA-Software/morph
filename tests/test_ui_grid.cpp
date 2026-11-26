@@ -596,7 +596,7 @@ TEST_CASE("grid: an older derive reply is ignored", "[ui][grid][derive]") {
     auto const older = f.form->captureRound();
     auto const newer = f.form->captureRound();
     auto const value = [](std::string json) {
-        return forms::Derived{.values = {{"specimens[1].limit", glz::raw_json{std::move(json)}}}};
+        return forms::Derived{.values = {{.path = "specimens[1].limit", .value = glz::raw_json{std::move(json)}}}};
     };
     CHECK(f.form->loadDerived(newer, value(R"({"num":9,"den":1,"dp":2})")).loaded == 1);
     CHECK(f.form->loadDerived(older, value(R"({"num":8,"den":1,"dp":2})")).loaded == 0);
@@ -611,8 +611,9 @@ TEST_CASE("grid: a value for a row removed since the call is dropped", "[ui][gri
     auto const round = f.form->captureRound();  // rows 1, 2 at sending
     f.form->field("specimens").removeRow(1);    // then row 1 goes; row 2 is at position 0
     auto const load = f.form->loadDerived(
-        round, forms::Derived{.values = {{"specimens[0].limit", glz::raw_json{R"({"num":1,"den":1,"dp":2})"}},
-                                         {"specimens[1].limit", glz::raw_json{R"({"num":3,"den":1,"dp":2})"}}}});
+        round, forms::Derived{
+                   .values = {{.path = "specimens[0].limit", .value = glz::raw_json{R"({"num":1,"den":1,"dp":2})"}},
+                              {.path = "specimens[1].limit", .value = glz::raw_json{R"({"num":3,"den":1,"dp":2})"}}}});
     CHECK(load.loaded == 1);
     CHECK(load.refused.empty());                                               // a removed row is dropped, not refused
     CHECK(f.json("specimens[0].limit") == R"({"num":300,"den":100,"dp":2})");  // row 2's own value
@@ -627,8 +628,9 @@ TEST_CASE("grid: a derive reply moves no snapshot", "[ui][grid][derive]") {
     f.grid->press("Enter");
     auto const round = f.form->captureRound();
     auto const load = f.form->loadDerived(
-        round, forms::Derived{.values = {{"specimens[0].limit", glz::raw_json{R"({"num":1,"den":1,"dp":2})"}},
-                                         {"specimens[0].mass", glz::raw_json{R"({"num":5,"den":1,"dp":2})"}}}});
+        round, forms::Derived{
+                   .values = {{.path = "specimens[0].limit", .value = glz::raw_json{R"({"num":1,"den":1,"dp":2})"}},
+                              {.path = "specimens[0].mass", .value = glz::raw_json{R"({"num":5,"den":1,"dp":2})"}}}});
     CHECK(load.loaded == 1);
     CHECK(load.refused == std::vector<std::string>{"specimens[0].mass"});
     CHECK(f.form->modified("specimens#1.mass"));
@@ -904,7 +906,7 @@ TEST_CASE("grid: cell selection", "[ui][grid][cells]") {
 
 // Mutation: the loader accepting selectionMode "cells" on a model-backed table (loadDocumentText succeeds).
 TEST_CASE("grid: cells on a model's table are refused when the document loads", "[ui][grid][cells]") {
-    ui::testing::TableHarness h;
+    ui::testing::TableHarness const h;
     std::string const text = ui::testing::withTableKey(ui::testing::kModelTable, R"("selectionMode":"cells")");
     auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
     REQUIRE_FALSE(loaded.has_value());
@@ -937,7 +939,7 @@ TEST_CASE("grid: paste, fill, clear", "[ui][grid][cells]") {
     f.h.settle();
     REQUIRE(f.json("specimens[0].limit") == R"({"num":700,"den":100,"dp":2})");
     REQUIRE(f.json("specimens[1].limit") == R"({"num":800,"den":100,"dp":2})");
-    f.grid->select(ui::CellRange{at(1, "volume"), at(2, "note")});
+    f.grid->select(ui::CellRange{.anchor = at(1, "volume"), .focus = at(2, "note")});
     f.grid->fillDown();
     CHECK(f.form->field("specimens[1].volume").draft() == "1");
     CHECK(f.form->field("specimens[1].note").draft() == "a");
@@ -1154,7 +1156,7 @@ TEST_CASE("grid: row entries in the cell's menu and Add row", "[ui][grid][rows]"
     entries = f.grid->cellEntries(ui::Key{std::int64_t{1}}, "label");
     CHECK_FALSE(enabledOf(entry(entries, "Insert row below")));
     CHECK(descriptionOf(entry(entries, "Insert row below")) == "A grid holds at most 3 rows");
-    f.grid->select(ui::CellRange{at(1, "label"), at(2, "mass")});
+    f.grid->select(ui::CellRange{.anchor = at(1, "label"), .focus = at(2, "mass")});
     entries = f.grid->cellEntries(ui::Key{std::int64_t{1}}, "label");
     entry(entries, "Delete rows").onSelect();
     CHECK(keysOf(*f.source).size() == 1);
@@ -1189,8 +1191,9 @@ TEST_CASE("grid: each row operation is one change", "[ui][grid][rows]") {
     f.evaluate.resolveSubmit(1, R"({"errors":{},"ready":false})");
     f.derive.resolveSubmit(1, kNoValues);
     f.h.settle();
-    f.grid->select(ui::CellRange{at(1, "label"), at(4, "label")});  // view [1, 4, 2, 3]: rows 1 and 4
-    f.grid->deleteRows();                                           // two rows, one holding a value
+    f.grid->select(
+        ui::CellRange{.anchor = at(1, "label"), .focus = at(4, "label")});  // view [1, 4, 2, 3]: rows 1 and 4
+    f.grid->deleteRows();                                                   // two rows, one holding a value
     CHECK(changes == 3);
     f.scheduler.advance(150ms);
     f.h.settle();
@@ -1236,7 +1239,7 @@ struct GridScreen {
         return *found;
     }
 
-    [[nodiscard]] forms::FormSession& form() { return *ui::testing::elementOf(*screen, "rec").form; }
+    [[nodiscard]] forms::FormSession& form() const { return *ui::testing::elementOf(*screen, "rec").form; }
 
     ui::testing::TableHarness h;
     std::unique_ptr<ui::Screen> screen;
@@ -1256,7 +1259,7 @@ TEST_CASE("grid: submission commits the open editor and places the reply's field
     g.h.settle();
     CHECK(g.value("editing") == ui::Value{});
     CHECK(g.h.backend.prop(g.row(1), "editor:0").empty());
-    auto& call = g.h.dispatcher.calls.at(g.h.dispatcher.last("Lims_RecordSpecimens"));
+    auto const& call = g.h.dispatcher.calls.at(g.h.dispatcher.last("Lims_RecordSpecimens"));
     CHECK(call.body.find(R"("mass":{"num":750,"den":100,"dp":2})") != std::string::npos);
     g.h.dispatcher.reply(g.h.dispatcher.last("Lims_RecordSpecimens"),
                          R"({"errors":{"specimens[1].mass":"must be positive","nosuch":"ignored"}})");
@@ -1390,7 +1393,7 @@ TEST_CASE("grid: the document's cell menu entries follow a separator after the g
     h.backend.chooseCellMenu(table, ui::Key{std::int64_t{1}}, 1, {"Pick"});
     h.settle();
     CHECK(h.text("picked") == "note");
-    forms::FormSession& form = *ui::testing::elementOf(*screen, "rec").form;
+    forms::FormSession const& form = *ui::testing::elementOf(*screen, "rec").form;
     form.field("specimens[0].note").text().set("b");
     form.field("specimens[1].note").text().set("a");
     h.settle();
@@ -1759,7 +1762,7 @@ TEST_CASE("grid: the loader checks a form's derive keys and keeps a grid column'
         auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
         return loaded.has_value() ? std::string{} : loaded.error().reason;
     };
-    std::string text{kDeriveDocument};
+    std::string const text{kDeriveDocument};
     CHECK(refusal(text).empty());
     std::string computed = text;
     computed.replace(computed.find(R"("deriveDebounce":40)"), std::string_view{R"("deriveDebounce":40)"}.size(),
@@ -1830,9 +1833,9 @@ TEST_CASE("grid: spans pass the walk and drop pasted values", "[ui][grid][spans]
 TEST_CASE("summary: a grid's walk, paste and scope do not see summary rows", "[ui][grid][summary]") {
     GridFixture f{2};
     auto const data = std::shared_ptr<ui::TableRows>{std::shared_ptr<void>{}, &f.source->view()};
-    ui::SummaryRows rows{data, {{.key = "stats", .top = false}}, {}, [] {
-                             return std::vector<std::pair<std::int64_t, std::int64_t>>{};
-                         }};
+    ui::SummaryRows const rows{data, {{.key = "stats", .top = false}}, {}, [] {
+                                   return std::vector<std::pair<std::int64_t, std::int64_t>>{};
+                               }};
     CHECK(f.source->rowCount() == 2);
     f.grid->focusCell(at(2, "note"));
     CHECK(f.grid->press("Tab") == ui::KeyOutcome::FocusNext);  // nothing below row 2 for the grid
@@ -2212,7 +2215,7 @@ std::string errorCode(forms::FormSession const& form, std::string_view path) {
 // Mutation: the walk asking the field's spec of the column's first row for every row (one kind per column).
 TEST_CASE("fixed grid: four parameters walk, paste and validate per cell", "[ui][grid][fixed]") {
     FixedGridFixture f{R"({"limits":{}})", fourParameters(), fixedColumns({"min", "max"})};
-    f.grid->focusCell(ui::CellRef{ui::Key{std::string{"density"}}, "min"});
+    f.grid->focusCell(ui::CellRef{.key = ui::Key{std::string{"density"}}, .column = "min"});
     std::vector<std::pair<std::string, std::string>> walked;
     for (int i = 0; i < 5; ++i) {
         f.grid->press("Tab");
@@ -2223,7 +2226,7 @@ TEST_CASE("fixed grid: four parameters walk, paste and validate per cell", "[ui]
           std::vector<std::pair<std::string, std::string>>{
               {"density", "max"}, {"moisture", "min"}, {"moisture", "max"}, {"method", "min"}, {"count", "min"}});
     CHECK(f.grid->press("Tab") == ui::KeyOutcome::FocusNext);  // count.max is text: read-only
-    f.grid->focusCell(ui::CellRef{ui::Key{std::string{"density"}}, "min"});
+    f.grid->focusCell(ui::CellRef{.key = ui::Key{std::string{"density"}}, .column = "min"});
     auto const result = f.grid->paste("1,2345\t2\n0,55\tx");
     CHECK(result.written == 4);
     CHECK(errorCode(*f.form, "limits.density.min") == "too-precise");  // 3 places
@@ -2239,7 +2242,7 @@ TEST_CASE("fixed grid: a forEach block repeats per specimen with stable keys", "
         {ui::FixedBlock{.forEach = "specimens", .rows = {fixedRow("mass", {{"v", fieldCell("mass")}})}}},
         fixedColumns({"v"})};
     CHECK(keysOf(*f.source) == std::vector<ui::Key>{ui::Key{std::string{"1/mass"}}, ui::Key{std::string{"2/mass"}}});
-    f.grid->focusCell(ui::CellRef{ui::Key{std::string{"2/mass"}}, "v"});
+    f.grid->focusCell(ui::CellRef{.key = ui::Key{std::string{"2/mass"}}, .column = "v"});
     f.grid->type("5");
     f.grid->press("Enter");
     std::uint64_t const added = f.form->field("specimens").insertRow(0);
@@ -2371,7 +2374,7 @@ std::vector<std::variant<ui::FixedRow, ui::FixedBlock>> overlaidCells() {
 // (both options offered); the `placeholder` overlay not applied (the schema's placeholder stays).
 TEST_CASE("fixed grid: a cell takes the column overlays and shows a value", "[ui][grid][fixed]") {
     FixedGridFixture f{R"({"limits":{}})", overlaidCells(), fixedColumns({"min", "max"})};
-    f.grid->focusCell(ui::CellRef{ui::Key{std::string{"density"}}, "min"});
+    f.grid->focusCell(ui::CellRef{.key = ui::Key{std::string{"density"}}, .column = "min"});
     CHECK(f.grid->paste("1,23").written == 1);
     CHECK(errorCode(*f.form, "limits.density.min") == "too-precise");  // one place, not the field's three
     CHECK(f.source->readOnly(ui::Key{std::string{"density"}}, "max"));
@@ -2603,7 +2606,8 @@ TEST_CASE("fixed grid: a derived field keeps its unit overlay after a derive rou
     REQUIRE(field.spec().units.at(field.unit().peek()).id == "g");
     std::uint64_t const before = f.form->loadGeneration();
     auto const round = f.form->captureRound();
-    forms::Derived const reply{.values = {{"limits.limit", glz::raw_json{R"({"num":2,"den":1,"dp":3})"}}}};
+    forms::Derived const reply{
+        .values = {{.path = "limits.limit", .value = glz::raw_json{R"({"num":2,"den":1,"dp":3})"}}}};
     REQUIRE(f.form->loadDerived(round, reply).loaded == 1);
     f.h.settle();
     CHECK(f.form->loadGeneration() - before == 1);  // the round is a load; the switch that follows is none

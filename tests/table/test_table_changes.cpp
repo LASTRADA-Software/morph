@@ -263,8 +263,8 @@ struct UndecidedTable {
 
 // Mutation: a repair that ignores previousUndecided (an arrived row stays undecided).
 TEST_CASE("table: an undecided row that arrives is one insert and one count change", "[table][changes][unloaded]") {
-    auto source = tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")},
-                                        {{Cell{std::int64_t{1}}}, {Cell{Unloaded{}}}, {Cell{std::int64_t{3}}}});
+    auto const source = tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")},
+                                              {{Cell{std::int64_t{1}}}, {Cell{Unloaded{}}}, {Cell{std::int64_t{3}}}});
     Engine engine{source};
     REQUIRE(engine.setSort({SortKey{.column = "a"}}));
     REQUIRE(engine.setFilter(FilterSpec{.columns = {{"a", ColumnFilter{.include = {FilterEntry{.gt = "0"}}}}}}));
@@ -348,7 +348,7 @@ TEST_CASE("table: a cell dropped back to unloaded moves to the tail or leaves th
 // Mutation: the repair holding entering rows like updated ones (holdUpdatedRows without the `shown` check).
 TEST_CASE("table: under deferred reorder an undecided row takes its true place at once",
           "[table][changes][unloaded]") {
-    UndecidedTable table{EngineOptions{.reorder = ReorderPolicy::Deferred}};
+    UndecidedTable const table{EngineOptions{.reorder = ReorderPolicy::Deferred}};
     CHECK(viewKeys(table.engine) == ids({0, 2}));
     table.source->updateRow(1, {Cell{std::int64_t{2}}});
     CHECK(viewKeys(table.engine) == ids({0, 1, 2}));

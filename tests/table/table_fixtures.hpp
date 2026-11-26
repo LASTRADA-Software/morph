@@ -142,7 +142,9 @@ struct LevelRow {
     std::int64_t id = 0;
     std::string name;
     std::int64_t qty = 0;
-    static constexpr std::array<morph::table::ColumnLevel, 1> columnLevels() noexcept { return {{{"qty", "stock"}}}; }
+    static constexpr std::array<morph::table::ColumnLevel, 1> columnLevels() noexcept {
+        return {{{.column = "qty", .level = "stock"}}};
+    }
 };
 
 // Rows 0..count-1: id i, name "n<i>", qty 10 * i.

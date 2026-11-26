@@ -281,7 +281,7 @@ public:
         if (!focusHeader(table, column)) {
             return;
         }
-        auto& impl = tableOf(table);
+        auto const& impl = tableOf(table);
         for (std::size_t step = 0; step < impl.visibleOrder().size(); ++step) {
             std::size_t const place = placeOf(impl, column);
             if (place == position) {
@@ -538,7 +538,7 @@ private:
         if (!focus(table) || _fault == Fault::DeadInput) {
             return false;
         }
-        auto& impl = tableOf(table);
+        auto const& impl = tableOf(table);
         for (std::size_t step = 0; step <= impl.children().size() && !impl.focusedHeader(); ++step) {
             send(special(KeyCode::Up));
         }

@@ -440,7 +440,7 @@ morph::table::GenericPage pageOf(morph::wire::Envelope const& reply) {
 }  // namespace
 
 TEST_CASE("tables: a principal allowed one table's action is refused the other", "[net][tables]") {
-    Server server;
+    Server const server;
     Client bob{server.url, "bob"};
     Client alice{server.url, "alice"};
     CHECK(bob.watch({"PtModel.first"}).empty());
@@ -454,7 +454,7 @@ TEST_CASE("tables: a principal allowed one table's action is refused the other",
 }
 
 TEST_CASE("tables: updatesTable on one table marks only its watchers", "[net][tables]") {
-    Server server;
+    Server const server;
     Client c1{server.url, "alice"};
     Client c2{server.url, "alice"};
     REQUIRE(c1.watch({"PtModel.first"}).empty());
@@ -478,7 +478,7 @@ TEST_CASE("tables: updatesTable on one table marks only its watchers", "[net][ta
 }
 
 TEST_CASE("tables: an action changing two tables sends each table its keys", "[net][tables]") {
-    Server server;
+    Server const server;
     Client c1{server.url, "alice"};
     Client c2{server.url, "alice"};
     REQUIRE(c1.watch({"PtModel.first"}).empty());
@@ -501,7 +501,7 @@ TEST_CASE("tables: an action changing two tables sends each table its keys", "[n
 TEST_CASE("tables: a page's columns are the caller's", "[net][tables]") {
     bench::WideTableModel::configure({.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}},
                                      {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}});
-    Server server;
+    Server const server;
     Client alice{server.url, "alice"};
     Client restricted{server.url, "restricted"};
     auto const aliceModel = alice.create(std::string{bench::kWideModelType});
@@ -535,7 +535,7 @@ TEST_CASE("tables: a page's columns are the caller's", "[net][tables]") {
 
 TEST_CASE("tables: a table's reply is built on tableWork", "[net][tables]") {
     auto const tableWork = std::make_shared<RecordingPool>();
-    Server server{tableWork};
+    Server const server{tableWork};
     Client alice{server.url, "alice"};
     auto const instance = alice.create("PtModel");
     push_tables::reads().clear();
@@ -613,7 +613,7 @@ TEST_CASE("table over the bridge: a level's layout is the cache's", "[net][table
     bench::WideTableModel::configure(
         {.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 0.0},
         {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 0.0});
-    ViewServer server;
+    ViewServer const server;
     Client extended{server.url, "extended"};
     Client alice{server.url, "alice"};
     auto const extendedModel = extended.create(std::string{bench::kWideModelType});
@@ -741,7 +741,7 @@ TEST_CASE("table over the bridge: fifty sorts stay inside the bound", "[net][tab
         {.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0},
         {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0});
     std::size_t const viewBytes = 4 * 2'000;  // a view of every row of `wide`
-    ViewServer server{10 * viewBytes};
+    ViewServer const server{10 * viewBytes};
     Client client{server.url, "alice"};
     auto const instance = client.create(std::string{bench::kWideModelType});
     for (int i = 1; i <= 50; ++i) {
@@ -762,7 +762,7 @@ TEST_CASE("table over the bridge: two scopes over one snapshot get two views", "
     bench::WideTableModel::configure(
         {.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0},
         {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0});
-    ViewServer server;
+    ViewServer const server;
     Client alice{server.url, "alice"};
     Client carol{server.url, "carol"};
     auto const aliceModel = alice.create(std::string{bench::kWideModelType});
@@ -783,7 +783,7 @@ TEST_CASE("table benchmark: C1 C2 C3 many clients over the bridge", "[.benchmark
     bench::WideTableModel::configure(
         {.rows = 100'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0},
         {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0});
-    ViewServer server{10 * 4 * 100'000};
+    ViewServer const server{10 * 4 * 100'000};
     std::vector<std::unique_ptr<Client>> clients;
     std::vector<std::uint64_t> instances;
     for (int i = 0; i < 50; ++i) {
@@ -1011,7 +1011,7 @@ struct WideWindow {
 TEST_CASE("table benchmark: a sort change and a text filter over a socket with 50 ms each way",
           "[.benchmark][table]") {
     WideFixture const fixture;
-    ViewServer server{};
+    ViewServer const server{};
     SessionOverLink client{server.url, 50ms};
     WideWindow window{client, {"id", "d000", "t011"}};
     REQUIRE(client.pumpUntil([&] { return window.accepted; }, 60s));
@@ -1053,7 +1053,7 @@ TEST_CASE("table benchmark: a sort change and a text filter over a socket with 5
 // 150 ms from the menu's opening to the list shown, which this figure does not include the client's drawing in).
 TEST_CASE("table benchmark: a server-mode values list from open to shown", "[.benchmark][table]") {
     WideFixture const fixture;
-    ViewServer server{};
+    ViewServer const server{};
     Client client{server.url, "alice"};
     auto const instance = client.create(std::string{bench::kWideModelType});
     auto const began = std::chrono::steady_clock::now();
@@ -1095,7 +1095,7 @@ struct StateServer {
 }  // namespace
 
 TEST_CASE("table state: the person is the store's", "[net][tables][state]") {
-    StateServer server;
+    StateServer const server;
     Client alice{server.url, "alice"};
     Client bob{server.url, "bob"};
     std::string const model{ui::kTableStateModel};
@@ -1134,7 +1134,7 @@ TEST_CASE("table state: the person is the store's", "[net][tables][state]") {
 }
 
 TEST_CASE("shared views: a view published over a socket is read by a second client", "[net][tables][state]") {
-    StateServer server;
+    StateServer const server;
     Client alice{server.url, "alice"};
     Client bob{server.url, "bob"};
     std::string const model{ui::kTableStateModel};
@@ -1194,7 +1194,7 @@ TEST_CASE("shared views: a view published over a socket is read by a second clie
 // client reads with the replacing sort. Mutation: `applyViewOperation` answering a `ReplaceView` as `NameTaken` (the
 // second publish is Refused).
 TEST_CASE("shared views: a view published twice under one name over a socket is replaced", "[net][tables][state]") {
-    StateServer server;
+    StateServer const server;
     Client alice{server.url, "alice"};
     Client bob{server.url, "bob"};
     std::string const model{ui::kTableStateModel};
@@ -1390,7 +1390,7 @@ std::vector<std::int64_t> keysOfReply(std::string const& body, std::string const
 }  // namespace
 
 TEST_CASE("tables: an action resolves a view selection on its own model", "[net][tables][selection]") {
-    Server server;
+    Server const server;
     Client alice{server.url, "alice"};
     auto const model = alice.create("selnet::Rows");
     auto const page =
@@ -1411,7 +1411,7 @@ TEST_CASE("tables: an action resolves a view selection on its own model", "[net]
 // Mutation: viewRevision that ignores the source snapshot, which tags rows under the old revision.
 
 TEST_CASE("tables: Table.<id>.resolve answers for the caller", "[net][tables][selection]") {
-    Server server;
+    Server const server;
     Client bob{server.url, "bob"};
     Client alice{server.url, "alice"};
     auto const bobModel = bob.create("selnet::Rows");
@@ -1444,7 +1444,7 @@ TEST_CASE("tables: a selection's schema names its table", "[net][tables][selecti
 // Mutation: schemaValue returning an empty name, which leaves the client unable to mark busy rows.
 
 TEST_CASE("tables: a changed key's event names both keys", "[net][tables][keys]") {
-    Server server;
+    Server const server;
     Client alice{server.url, "alice"};
     REQUIRE(alice.watch({"selnet::Rows.rows"}).empty());
     auto const model = alice.create("selnet::Rows");
@@ -1539,7 +1539,7 @@ TEST_CASE("push tables: a cell edit reaches the model and the change event refet
     glz::generic_u64 schema;
     REQUIRE_FALSE(glz::read_json(schema, morph::forms::schemaJson<editnet::EditSpecimenCount>()));
     CHECK(schema["x-cellEditOf"].get_string() == "editnet::Specimens.specimens");
-    Server server;
+    Server const server;
     Client alice{server.url, "alice"};
     REQUIRE(alice.watch({"editnet::Specimens.specimens"}).empty());
     auto const model = alice.create("editnet::Specimens");

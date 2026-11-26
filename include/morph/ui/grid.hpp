@@ -489,7 +489,7 @@ public:
         options.owner = &_source->form().runtime().owner();
         options.worker = nullptr;
         options.services.collator = std::make_shared<ValueRowsCollator const>();
-        _engine = std::make_unique<EngineRows>(_source, _source->recordOf(), std::move(options));
+        _engine = std::make_unique<EngineRows>(_source, FormRowsSource::recordOf(), std::move(options));
         rebuild();
         // The engine's change is the view's while both views were the engine's own; a view that kept its keys in
         // order changed only in content; anything else is a reset.
@@ -823,7 +823,8 @@ private:
         auto const snapshot = _source->snapshot();
         for (std::size_t row = 0; row < snapshot->rowCount(); ++row) {
             if (snapshot->rowId(row) == key) {
-                return &_records.insert_or_assign(key, _source->recordOf()(*snapshot, row)).first->second;
+                return &_records.insert_or_assign(key, FormRowsSource::recordOf()(*snapshot, row))
+                            .first->second;
             }
         }
         return nullptr;
@@ -1556,7 +1557,7 @@ public:
         if (declared == nullptr || !edits(*declared)) {
             return nullptr;
         }
-        forms::RowState* const held = _rowsSource->row(row);
+        forms::RowState const* const held = _rowsSource->row(row);
         return held == nullptr ? nullptr : memberOf(*declared, *held);
     }
 
@@ -2620,7 +2621,7 @@ private:
                 members = array->spec().children;
             }
             for (FixedRow const& row : rowsOf(part)) {
-                if (row.key.find('/') != std::string::npos) {
+                if (row.key.contains('/')) {
                     refuse("the key `" + row.key + "` holds a `/`, which joins a block row's keys");
                 }
                 if (row.key.empty() || !keys.insert(row.key).second) {
@@ -2681,7 +2682,7 @@ private:
                 next.push_back(std::move(made));
                 continue;
             }
-            FixedBlock const& repeated = std::get<FixedBlock>(part);
+            auto const& repeated = std::get<FixedBlock>(part);
             for (auto const& [rowKey, specimen] : _blockRows.at(block)) {
                 for (FixedRow const& row : repeated.rows) {
                     Expanded made{.key = Key{std::to_string(rowKey) + "/" + row.key},
@@ -3042,7 +3043,7 @@ public:
         }
         _rows->moveKey(from, to);
         _edits->moveRow(from, to);
-        if (auto held = _held.extract(from); !held.empty()) {
+        if (auto const held = _held.extract(from); !held.empty()) {
             std::vector<table::EditCell>& target = _held[to];
             for (table::EditCell& cell : held.mapped()) {
                 if (!std::ranges::contains(target, cell.column, &table::EditCell::column)) {
@@ -3195,7 +3196,7 @@ public:
             if (auto const found = self->_sessions.find(column); found != self->_sessions.end()) {
                 found->second.loadedFor.reset();
             }
-            Session* const session = self->loaded(key, column);
+            Session const* const session = self->loaded(key, column);
             return session == nullptr ? std::string{} : fieldOf(column)->draft();
         });
     }
@@ -3231,7 +3232,7 @@ public:
     /// @param column The column's id.
     /// @param draft  The draft.
     void write(Key const& key, std::string_view column, std::string draft) override {
-        Session* const session = loaded(key, column);
+        Session const* const session = loaded(key, column);
         if (session == nullptr) {
             return;
         }
@@ -5145,7 +5146,7 @@ private:
         std::size_t const total = rows * width;
         bool const byRows = _options.walk == Walk::Rows;
         auto const linear = [&](std::size_t row, std::size_t column) {
-            return byRows ? row * width + column : column * rows + row;
+            return byRows ? (row * width) + column : (column * rows) + row;
         };
         std::int64_t at = forward ? -1 : static_cast<std::int64_t>(total);
         if (from) {
@@ -5155,7 +5156,7 @@ private:
                 at = static_cast<std::int64_t>(linear(*row, static_cast<std::size_t>(column - columns.begin())));
             }
         }
-        for (at += forward ? 1 : -1; at >= 0 && at < static_cast<std::int64_t>(total); at += forward ? 1 : -1) {
+        for (at += forward ? 1 : -1; at >= 0 && std::cmp_less(at, total); at += forward ? 1 : -1) {
             auto const index = static_cast<std::size_t>(at);
             std::size_t const row = byRows ? index / width : index % rows;
             std::size_t const column = byRows ? index % width : index / rows;
@@ -5318,7 +5319,7 @@ struct FormGrid {
 /// @return The grid.
 /// @throws std::invalid_argument when @p array is not a collection of @p form, a column names no member, or @p shown
 ///         is neither empty nor one per grid column.
-[[nodiscard]] inline FormGrid makeFormGrid(forms::FormSession& form, forms::FieldState& array,
+[[nodiscard]] inline FormGrid makeFormGrid(forms::FormSession& form, forms::FieldState const& array,
                                            std::vector<GridColumn> columns, GridOptions options, FormatContext format,
                                            TableOptions table = {}, std::vector<TableColumn> shown = {}) {
     if (shown.empty()) {

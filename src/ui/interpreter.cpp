@@ -205,7 +205,7 @@ std::expected<Value, std::string> tableValueFromJson(Json const& json) {
 
 }  // namespace detail
 
-std::shared_ptr<TableStates> detail::makeTableStates(Session& session, reactive::Runtime& runtime,
+std::shared_ptr<TableStates> detail::makeTableStates(Session& session, reactive::Runtime const& runtime,
                                                      SessionOptions const& options) {
     if (options.tableState == nullptr) {
         return nullptr;
@@ -4029,13 +4029,13 @@ std::vector<TableInput> tableInputsOf(std::string_view schemaJson) {
     auto const& members = schema.get_object();
     // An edit action is itself the marked type: its keyword sits at the root, and its row is its `key`.
     for (std::string_view const keyword : {std::string_view{"x-cellEditOf"}, std::string_view{"x-rowEditOf"}}) {
-        auto const found = members.find(std::string{keyword});
+        const auto* const found = members.find(std::string{keyword});
         if (found != members.end() && found->second.is_string()) {
             out.push_back(
                 TableInput{.member = "key", .record = found->second.get_string(), .kind = TableInputKind::CellEdit});
         }
     }
-    auto const properties = members.find("properties");
+    const auto* const properties = members.find("properties");
     if (properties == members.end() || !properties->second.is_object()) {
         return out;
     }
@@ -4046,7 +4046,7 @@ std::vector<TableInput> tableInputsOf(std::string_view schemaJson) {
         auto const& keywords = property.get_object();
         for (auto const& [keyword, kind] : {std::pair{std::string_view{"x-selectionOf"}, TableInputKind::Selection},
                                             std::pair{std::string_view{"x-rowOf"}, TableInputKind::Row}}) {
-            auto const found = keywords.find(std::string{keyword});
+            const auto* const found = keywords.find(std::string{keyword});
             if (found != keywords.end() && found->second.is_string()) {
                 out.push_back(TableInput{.member = name, .record = found->second.get_string(), .kind = kind});
             }
@@ -4272,7 +4272,7 @@ void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::optional<Valu
         }
         // The rerun holds the mutation weakly: it may be chosen after the screen that ran it is gone.
         std::weak_ptr<bool> const alive = _alive;
-        auto rerun = [this, alive, bindings = run->bindings](Value body) {
+        auto const rerun = [this, alive, bindings = run->bindings](Value body) {
             if (!alive.expired()) {
                 this->run(std::move(body), bindings, [](bool, Value const&) {});
             }
@@ -4972,7 +4972,7 @@ TableView ScreenCore::tableView(RowsTable const& table) {
     Bindings const* const bindings = table.bindings.get();
     TableView view;
     if (!table.engine->restoring()) {
-        table::Engine& engine = table.engine->engine();
+        table::Engine const& engine = table.engine->engine();
         std::size_t const count = engine.viewRowCount();
         view.rows.reserve(count);
         for (std::size_t index = 0; index < count; ++index) {
@@ -10967,7 +10967,7 @@ namespace {
         {"dateTime", table::ColumnKind::DateTime},
         {"bool", table::ColumnKind::Bool},
     }};
-    auto const found = std::ranges::find(kKinds, name, &std::pair<std::string_view, table::ColumnKind>::first);
+    const auto* const found = std::ranges::find(kKinds, name, &std::pair<std::string_view, table::ColumnKind>::first);
     return found == kKinds.end() ? std::nullopt : std::optional{found->second};
 }
 
@@ -11007,7 +11007,7 @@ namespace {
 /// @param table   The table.
 /// @param runtime The screen's runtime.
 void startRowsEngine(RowsTable& table, reactive::Runtime& runtime) {
-    auto registry = registryOfUnits(table.units, table.unitsSeen);
+    auto const registry = registryOfUnits(table.units, table.unitsSeen);
     auto source = std::make_shared<ValueRowsSource>(runtime, table.columns, table.keyOfRow, registry);
     source->setGroups(table.groups);
     // The runs are the leading key of every sort the engine is given, a column the engine knows from its start.
@@ -11020,7 +11020,8 @@ void startRowsEngine(RowsTable& table, reactive::Runtime& runtime) {
     options.frameBudget = std::chrono::milliseconds{4};
     options.services.collator = std::make_shared<ValueRowsCollator const>();
     options.services.units = registry;
-    auto engine = std::make_shared<EngineRows>(source, source->recordOf(), std::move(options));
+    auto const engine =
+        std::make_shared<EngineRows>(source, morph::ui::ValueRowsSource::recordOf(), std::move(options));
     bool const restoring = table.engine != nullptr && table.engine->restoring();
     table::FilterSpec const filter = table.engine != nullptr ? table.engine->engine().filter() : table::FilterSpec{};
     if (table.engine != nullptr) {
@@ -11350,7 +11351,7 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
     auto const show = [&table](TableView const& view, table::ViewChange const* change) {
         std::vector<PageRows::Entry> entries;
         entries.reserve(view.last - view.first);
-        table::Engine& engine = table.engine->engine();
+        table::Engine const& engine = table.engine->engine();
         for (std::size_t index = view.first; index < view.last; ++index) {
             if (!view.runOf.empty() && (index == view.first || view.runOf.at(index) != view.runOf.at(index - 1))) {
                 Value const& heading = view.runs.at(view.runOf.at(index));
@@ -11974,7 +11975,7 @@ Node ScreenCore::lowerCollectionRows(ElementState& element, LowerCtx const& ctx,
     // The engine keys a row by its integer key's value, the session by the key's text: the selection and the
     // activation the session's options make are translated between the two.
     TableOptions options = forms::detail::engine::rowsTableOptions(collection);
-    forms::CollectionSession* const view = &collection;
+    forms::CollectionSession const* const view = &collection;
     if (options.onActivate) {
         options.onActivate = [inner = std::move(options.onActivate)](Key const& key) {
             inner(Key{collectionKeyText(key)});
@@ -12070,7 +12071,7 @@ struct ViewColumn {
 std::vector<table::UnitInfo> viewUnitsOf(Json::object_t const& fields, std::vector<std::string>& problems) {
     std::vector<table::UnitInfo> out;
     auto const member = [](Json::object_t const& object, std::string_view name) -> Json const* {
-        auto const found = object.find(name);
+        const auto* const found = object.find(name);
         return found == object.end() ? nullptr : &found->second;
     };
     auto const textOf = [&member](Json::object_t const& object, std::string_view name) -> std::string const* {
@@ -12196,18 +12197,18 @@ ActionTable actionTableOf(DocNode const& node, Catalog const& catalog) {
         auto const json = parseJson(*view);
         auto const* const object = json ? std::get_if<Json::object_t>(&json->data) : nullptr;
         if (object != nullptr) {
-            if (auto const key = object->find("v-rowKey"); key != object->end()) {
+            if (const auto* const key = object->find("v-rowKey"); key != object->end()) {
                 if (auto const* const text = std::get_if<std::string>(&key->second.data)) {
                     viewKey = *text;
                 }
             }
-            auto const columns = object->find("v-columns");
+            const auto* const columns = object->find("v-columns");
             auto const* const entries =
                 columns != object->end() ? std::get_if<Json::array_t>(&columns->second.data) : nullptr;
             for (Json const& entry : entries != nullptr ? std::span<Json const>{*entries} : std::span<Json const>{}) {
                 auto const* const fields = std::get_if<Json::object_t>(&entry.data);
                 auto const text = [fields](std::string_view name) -> std::string const* {
-                    auto const found = fields->find(name);
+                    const auto* const found = fields->find(name);
                     return found == fields->end() ? nullptr : std::get_if<std::string>(&found->second.data);
                 };
                 std::string const* const field = fields != nullptr ? text("field") : nullptr;
@@ -12223,7 +12224,7 @@ ActionTable actionTableOf(DocNode const& node, Catalog const& catalog) {
                         column.kind = parsed;
                     }
                 }
-                auto const hidden = fields->find("v-hidden");
+                const auto* const hidden = fields->find("v-hidden");
                 column.hidden = hidden != fields->end() && std::get_if<bool>(&hidden->second.data) != nullptr &&
                                 *std::get_if<bool>(&hidden->second.data);
                 // A column of quantities with units is read as measures, each cell naming its unit.
@@ -13412,7 +13413,7 @@ void ScreenCore::tableGesture(ElementState& element) {
     tableMessage(element, {});
 }
 
-void ScreenCore::rowsTableMessage(RowsTable& rows, std::string text) {
+void ScreenCore::rowsTableMessage(RowsTable& rows, std::string text) const {
     if (text.empty()) {
         rows.messageTimer.cancel();
         rows.message.set({});
@@ -13657,7 +13658,7 @@ namespace {
 
 }  // namespace
 
-void ScreenCore::modelLayoutColumns(ElementState& element) {
+void ScreenCore::modelLayoutColumns(ElementState& element) const {
     ModelTable& model = *element.modelTable;
     TableConfig& config = model.config;
     DocNode const& node = *element.node;
@@ -13754,7 +13755,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         std::size_t const bound = session.options().maxCopyRows;
         std::optional<std::int64_t> const viewing =
             config.viewSelected ? runtime().untracked([&] { return config.viewSelected(); }) : std::nullopt;
-        if (keys.size() > bound || (viewing && *viewing > static_cast<std::int64_t>(bound))) {
+        if (keys.size() > bound || (viewing && std::cmp_greater(*viewing, bound))) {
             config.message(tableText::copyBound(bound, separator));
             return;
         }
@@ -15674,7 +15675,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         FormatContext const formatting = scope->formatting();
         std::unordered_set<Key> wanted{keys.begin(), keys.end()};
         // The rows held with every column copied; a row held without one of them is fetched with the rest.
-        TableRows& rows = *model.rows;
+        TableRows const& rows = *model.rows;
         std::vector<std::int64_t> held;
         for (auto const& [first, count] : model.window->heldRanges()) {
             for (std::int64_t at = first; at < first + count; ++at) {
@@ -15819,7 +15820,7 @@ std::shared_ptr<GridController> ScreenCore::editableModelTable(
         std::shared_ptr<FormatContext const> formatting;
         std::vector<std::unique_ptr<reactive::Effect>> effects;
     };
-    auto held = std::make_shared<Held>(Held{.grid = grid, .formatting = formatting, .effects = {}});
+    auto const held = std::make_shared<Held>(Held{.grid = grid, .formatting = formatting, .effects = {}});
     std::weak_ptr<GridController> const weak = controller;
     ModelGridSource* const cells = grid.get();
     // The grid's refusals and notices go to the status line as the table's messages, each once.
@@ -16331,7 +16332,7 @@ namespace {
 std::vector<std::pair<std::int64_t, std::int64_t>> gridRuns(GridTable& held) {
     std::vector<std::pair<std::int64_t, std::int64_t>> runs;
     held.runOrder.clear();
-    GridRows& view = held.grid.source->view();
+    GridRows const& view = held.grid.source->view();
     FormRowsSource const& source = view.source();
     std::span<table::ColumnInfo const> const columns = source.columns();
     if (columns.empty() || columns.back().id != kGroupRunColumn) {

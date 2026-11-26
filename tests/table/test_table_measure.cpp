@@ -80,7 +80,9 @@ struct morph::units::UnitTraits<tmeasure::TmUnit> {
         }
     }
     static constexpr std::array<morph::units::UnitRelation<tmeasure::TmUnit>, 1> relations{{
-        {tmeasure::TmUnit::g, tmeasure::TmUnit::kg, Rational{Numerator{1}, Denominator{1000}, DecimalPlaces{3}}},
+        {.from = tmeasure::TmUnit::g,
+         .to = tmeasure::TmUnit::kg,
+         .fromTo = Rational{Numerator{1}, Denominator{1000}, DecimalPlaces{3}}},
     }};
 };
 
@@ -180,7 +182,7 @@ std::expected<Rows, TableError> filterRows(VectorSource const& source, FilterEnt
     auto keys = KeyColumn::forColumn(source.columns()[0], services, snapshot->rowCount());
     buildKeys(*snapshot, 0, source.columns()[0], services, 0, snapshot->rowCount(), keys);
     Rows rows(snapshot->rowCount());
-    std::iota(rows.begin(), rows.end(), 0U);
+    std::ranges::iota(rows, 0U);
     FilterRun run{*compiled, {&keys}, rows};
     static_cast<void>(run.run(kNoDeadline, ::core::async::StopToken{}));
     return std::move(run).take();
@@ -381,7 +383,7 @@ TEST_CASE("measure: invariant 25 over random amounts", "[table][measure]") {
     auto const source = tabletest::makeSource({measureCol("w")}, std::move(rows));
     for (auto const dir : {SortDirection::Ascending, SortDirection::Descending}) {
         Order want(expected.size());
-        std::iota(want.begin(), want.end(), std::size_t{0});
+        std::ranges::iota(want, std::size_t{0});
         std::ranges::sort(want, [&](std::size_t a, std::size_t b) {
             auto const& x = expected[a];
             auto const& y = expected[b];

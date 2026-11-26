@@ -154,7 +154,7 @@ void TableImpl::setRowHeading(ui::Widget& row) {
 }
 
 void TableImpl::setRowSummary(ui::Widget& row) {
-    auto& base = WidgetBase::of(row);
+    auto const& base = WidgetBase::of(row);
     if (base.container() != this) {
         throw std::logic_error{"morph::tui: setRowSummary of a widget that is not this table's row"};
     }
@@ -542,7 +542,7 @@ std::vector<std::size_t> TableImpl::visibleOrder() const {
         return _visible;
     }
     std::vector<std::size_t> order(_columns.size());
-    std::iota(order.begin(), order.end(), std::size_t{0});
+    std::ranges::iota(order, std::size_t{0});
     return order;
 }
 
@@ -690,7 +690,7 @@ void TableImpl::openCellMenu(WidgetBase const& row, std::size_t column) {
 }
 
 EventResult TableImpl::cellKey(::core::tui::KeyEvent const& key) {
-    WidgetBase* const row = _focusCell ? rowAtView(_focusCell->first) : nullptr;
+    WidgetBase const* const row = _focusCell ? rowAtView(_focusCell->first) : nullptr;
     std::optional<ui::Key> const rowKey = row == nullptr ? std::nullopt : keyOf(row);
     if (!_cellMenu || !rowKey) {
         return EventResult::Ignored;
@@ -1170,7 +1170,7 @@ std::string TableImpl::rowMark(WidgetBase const* row, bool cursor) const {
         bool const busy = found != _marks.end() && found->second.busy;
         bool const locked = found != _marks.end() && found->second.locked;
         mark += busy ? kBusyGlyph : locked ? kLockGlyph : " ";
-        mark += " ";
+        mark += ' ';
     }
     return mark;
 }
@@ -1750,7 +1750,7 @@ void TableImpl::setOnVisibleRangeChanged(std::function<void(std::size_t, std::si
 }
 
 void TableImpl::setRowIndex(ui::Widget& row, std::size_t viewRow) {
-    auto& base = WidgetBase::of(row);
+    auto const& base = WidgetBase::of(row);
     if (base.container() != this) {
         throw std::logic_error{"morph::tui: setRowIndex of a widget that is not this table's row"};
     }
@@ -1766,7 +1766,7 @@ void TableImpl::setStatus(ui::TableStatus const& status) {
 void TableImpl::setOnRetry(std::function<void()> onRetry) { _onRetry = std::move(onRetry); }
 
 void TableImpl::setCellLoad(ui::Widget& row, std::size_t column, ui::CellLoad load) {
-    auto& base = WidgetBase::of(row);
+    auto const& base = WidgetBase::of(row);
     if (base.container() != this) {
         throw std::logic_error{"morph::tui: setCellLoad of a widget that is not this table's row"};
     }
@@ -1793,7 +1793,7 @@ void TableImpl::setCellAccent(ui::Widget& row, std::size_t column, ui::CellAccen
         _accents[&base].insert_or_assign(column, accent);
     }
     // The cell's own tone wins over its row's: the nearest tone is the one drawn.
-    if (auto* const stack = dynamic_cast<StackImpl*>(&base)) {
+    if (auto const* const stack = dynamic_cast<StackImpl*>(&base)) {
         for (auto* const cell : stack->children()) {
             if (columnOf(&base, cell, 0) == column) {
                 cell->applyRowTone(accent.tone);
@@ -1906,7 +1906,7 @@ EventResult TableImpl::sourceKey(::core::tui::KeyEvent const& key) {
         handler(*move);
         return EventResult::Handled;
     }
-    WidgetBase* const row = _focusCell ? rowAtView(_focusCell->first) : nullptr;
+    WidgetBase const* const row = _focusCell ? rowAtView(_focusCell->first) : nullptr;
     if (::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::None && row != nullptr) {
         if (key.codepoint == U' ') {
             _anchorRow = _focusCell->first;
@@ -1967,7 +1967,7 @@ void TableImpl::setOnCellClick(std::function<void(std::size_t, std::size_t, bool
 void TableImpl::setOnFocusOut(std::function<void()> onFocusOut) { _onFocusOut = std::move(onFocusOut); }
 
 void TableImpl::setCellEditor(ui::Widget& row, std::size_t column, ui::Widget* editor) {
-    auto& base = WidgetBase::of(row);
+    auto const& base = WidgetBase::of(row);
     if (base.container() != this) {
         throw std::logic_error{"morph::tui: setCellEditor of a widget that is not this table's row"};
     }
@@ -1985,7 +1985,7 @@ void TableImpl::setCellEditor(ui::Widget& row, std::size_t column, ui::Widget* e
 }
 
 void TableImpl::setCellMarks(ui::Widget& row, std::size_t column, ui::CellMarks const& marks) {
-    auto& base = WidgetBase::of(row);
+    auto const& base = WidgetBase::of(row);
     if (base.container() != this) {
         throw std::logic_error{"morph::tui: setCellMarks of a widget that is not this table's row"};
     }
@@ -2000,7 +2000,7 @@ void TableImpl::setCellMarks(ui::Widget& row, std::size_t column, ui::CellMarks 
 }
 
 void TableImpl::setRowModified(ui::Widget& row, bool modified) {
-    auto& base = WidgetBase::of(row);
+    auto const& base = WidgetBase::of(row);
     if (base.container() != this) {
         throw std::logic_error{"morph::tui: setRowModified of a widget that is not this table's row"};
     }
@@ -2025,7 +2025,7 @@ void TableImpl::scrollToRow(std::size_t viewRow) {
 }
 
 void TableImpl::setCellColumn(ui::Widget& row, ui::Widget& cell, std::optional<std::size_t> column) {
-    auto& base = WidgetBase::of(row);
+    auto const& base = WidgetBase::of(row);
     if (base.container() != this) {
         throw std::logic_error{"morph::tui: setCellColumn of a widget that is not this table's row"};
     }
@@ -2261,7 +2261,7 @@ bool TableImpl::headerActs() const {
 bool TableImpl::contextPress(::core::tui::Point cell) {
     // A right press on a row's cell opens the cell's menu.
     if (_cellMenu && cell.y >= headerLines()) {
-        WidgetBase* const row = rowAtLine(cell.y);
+        WidgetBase const* const row = rowAtLine(cell.y);
         if (row == nullptr) {
             return false;
         }

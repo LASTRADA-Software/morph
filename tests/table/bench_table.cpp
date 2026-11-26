@@ -1033,7 +1033,7 @@ std::vector<Cell> recipeLikeValue(std::int64_t key) {
     std::vector<Cell> out;
     out.reserve(20);
     for (std::int64_t column = 0; column < 10; ++column) {
-        out.emplace_back(tabletest::dec(std::to_string((key * 31 + column) % 100000) + ".25"));
+        out.emplace_back(tabletest::dec(std::to_string(((key * 31) + column) % 100000) + ".25"));
     }
     for (std::int64_t column = 0; column < 10; ++column) {
         out.emplace_back(std::string(static_cast<std::size_t>(4 + ((key + column) % 57)), 'a'));
@@ -1076,7 +1076,8 @@ std::shared_ptr<CellLevelCache> benchCache(morph::exec::IExecutor* loads) {
 
 morph::effects::Changes keyedChange(std::string record, std::int64_t count) {
     auto const keys = rowKeys(0, count);
-    return morph::effects::Changes{.records = {{std::move(record), changeKeys(keys)}}, .instances = {}};
+    return morph::effects::Changes{.records = {{.record = std::move(record), .keys = changeKeys(keys)}},
+                                   .instances = {}};
 }
 
 }  // namespace
@@ -1439,7 +1440,7 @@ TEST_CASE("table benchmark: C1 C2 C3 many requests through an in-process server"
     constexpr std::size_t kViewBytes = 4 * 100'000;
     // Ten base-column views and one view sorted by a level, which also keeps its 100,000 integer order keys: about
     // twenty base-column views once the level-sorted one is evicted.
-    constexpr std::size_t kBound = 10 * kViewBytes + sizeof(std::vector<RowId>) + 100'000 * sizeof(RowId);
+    constexpr std::size_t kBound = (10 * kViewBytes) + sizeof(std::vector<RowId>) + (100'000 * sizeof(RowId));
     morph::exec::ThreadPoolExecutor pool{4};
     morph::backend::ServerConfig config;
     config.tableWork = std::make_shared<morph::exec::ThreadPoolExecutor>(8);

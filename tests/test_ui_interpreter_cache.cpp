@@ -40,7 +40,7 @@ namespace {
 
 ui::Catalog tableCatalog() {
     ui::Catalog catalog = ui::testing::corpusCatalog();
-    auto base = catalog.action;
+    auto const base = catalog.action;
     catalog.action = [base](std::string_view action) -> std::optional<ui::ActionInfo> {
         auto info = base(action);
         if (!info) {
@@ -114,7 +114,7 @@ ui::Value valueOf(std::string_view json) {
 // Mutation: the cache ignoring `open`.
 TEST_CASE("cache: an open entry is marked by a change to a key it does not hold", "[push][cache][table]") {
     Harness h{tableCatalog()};
-    auto screen = h.mount(kPageList);
+    auto const screen = h.mount(kPageList);
     REQUIRE(h.dispatcher.calls.size() == 1);
     h.reply(0, R"({"rows":[{"code":1}],"awaiting":["recipe"],"unloadedRows":[]})");
     h.session.applyChanges(changesOf("T_Row", {"99"}));
@@ -129,7 +129,7 @@ TEST_CASE("cache: an open entry is marked by a change to a key it does not hold"
 // Mutation: the cache ignoring `partial`.
 TEST_CASE("cache: a partial entry is not merged into", "[push][cache][table]") {
     Harness h{tableCatalog()};
-    auto screen = h.mount(kPageList);
+    auto const screen = h.mount(kPageList);
     h.reply(0, R"({"rows":[{"code":1,"qty":1}],"awaiting":[],"unloadedRows":[{"index":0,"levels":["recipe"]}]})");
     h.session.actionSucceeded("Lims_SampleModel", "Push_EditRow", valueOf(R"({"code":1,"qty":5})"),
                               ui::ReplyUse::Applied, "private#1");
@@ -147,7 +147,7 @@ TEST_CASE("cache: a partial entry is not merged into", "[push][cache][table]") {
 // Mutation: the cache looking for a key member in an opaque entry.
 TEST_CASE("cache: an opaque entry is marked by every change and never merged", "[push][cache][table]") {
     Harness h{tableCatalog()};
-    auto screen = h.mount(kTablePages);
+    auto const screen = h.mount(kTablePages);
     REQUIRE(h.dispatcher.calls.size() == 2);
     for (std::size_t call = 0; call < 2; ++call) {
         if (h.dispatcher.calls[call].body.contains("distinct")) {
@@ -186,7 +186,7 @@ TEST_CASE("cache: a read makes no entry", "[push][cache][table]") {
     CHECK(text == reply);
     CHECK(h.session.cacheSize() == entries);
 
-    ::core::async::StopSource stop;
+    ::core::async::StopSource const stop;
     bool cancelled = false;
     bool resolved = false;
     auto stopped = h.session.read(channel, "T_Page", valueOf("{}"), stop.get_token());
@@ -296,7 +296,7 @@ TEST_CASE("cache: an opaque entry keeps a fractional number", "[push][cache][tab
         R"({"revision":"r","columns":["n","big","i","small","quarter"],"keys":[1],"rows":[[2.5,1e300,7,0.0001,0.00025]],"total":1,"totalKind":"exact","offset":0})";
     {
         Harness h{tableCatalog()};
-        auto screen = h.mount(kOneTablePage);
+        auto const screen = h.mount(kOneTablePage);
         h.reply(0, kReply);
         auto const shown = queryJson(*screen, "page");
         INFO(shown);
@@ -328,7 +328,7 @@ TEST_CASE("cache: an opaque entry keeps a fractional number", "[push][cache][tab
     }
     {
         Harness h{tableCatalog()};
-        auto screen = h.mount(kPageList);
+        auto const screen = h.mount(kPageList);
         h.reply(0, kReply);
         CHECK(queryJson(*screen, "page") == "null");
         CHECK(ui::testing::readJson(*screen, R"({"error":"page"})").contains("the reply is not a document value"));

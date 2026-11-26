@@ -4128,7 +4128,7 @@ public:
     /// @throws std::logic_error when the widget is not a table or has no select-all handler.
     void selectAll(int widgetId) {
         detail::Record const& record = expectKind(widgetId, "selectAll", {"Table"});
-        auto* const table = dynamic_cast<detail::FakeTable*>(record.widget);
+        auto const* const table = dynamic_cast<detail::FakeTable*>(record.widget);
         if (table == nullptr || !table->onSelectAll()) {
             throw std::logic_error{"RecordingBackend: selectAll of Table#" + std::to_string(widgetId) +
                                    ", which has no select-all handler"};
@@ -4145,7 +4145,7 @@ public:
     /// @throws std::logic_error when the widget is not a table, has no handler, or its status shows no such entry.
     void chooseStatusEntry(int widgetId, std::string const& entry) {
         detail::Record const& record = expectKind(widgetId, "chooseStatusEntry", {"Table"});
-        auto* const table = dynamic_cast<detail::FakeTable*>(record.widget);
+        auto const* const table = dynamic_cast<detail::FakeTable*>(record.widget);
         bool const shown =
             table != nullptr && (std::ranges::contains(table->status().entries, entry, &StatusEntry::id) ||
                                  std::ranges::contains(table->status().standingEntries, entry, &StatusEntry::id));
@@ -4489,7 +4489,7 @@ public:
     /// @param text     The text.
     /// @throws std::logic_error when the widget is not a table.
     void typeInto(int widgetId, std::string text) {
-        detail::FakeTable& table = fakeTable(widgetId, "typeInto");
+        detail::FakeTable const& table = fakeTable(widgetId, "typeInto");
         if (reachable(_store->at(widgetId)) && table.onText()) {
             std::function<void(std::string)> const handler = table.onText();
             handler(std::move(text));
@@ -4505,7 +4505,7 @@ public:
     /// @throws std::logic_error when the widget is not a table.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a row and a column, as every cell driver takes them.
     void clickCell(int widgetId, std::size_t viewRow, std::size_t column, bool doubleClick = false) {
-        detail::FakeTable& table = fakeTable(widgetId, "clickCell");
+        detail::FakeTable const& table = fakeTable(widgetId, "clickCell");
         if (!reachable(_store->at(widgetId)) || !table.onCellClick()) {
             return;
         }

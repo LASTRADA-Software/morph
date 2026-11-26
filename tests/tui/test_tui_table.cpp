@@ -823,7 +823,7 @@ TEST_CASE("tui table: a busy or locked row says why on hover", "[tui][table]") {
     Harness harness{30, 5};
     Fruit fruit{harness, ui::SelectionMode::Single};
     auto& apple = morph::tui::detail::WidgetBase::of(*fruit.rows.at(0));
-    auto& kiwi = morph::tui::detail::WidgetBase::of(*fruit.rows.at(1));
+    auto const& kiwi = morph::tui::detail::WidgetBase::of(*fruit.rows.at(1));
     apple.applyTooltip("Fresh today");
     fruit.table->setRowMarks(*fruit.rows.at(0), ui::RowMarks{.busy = true});
     fruit.table->setRowMarks(*fruit.rows.at(1),
@@ -1359,7 +1359,7 @@ struct TuiWindowOptions {
     std::vector<Level> levels;
     ui::SelectionMode selection = ui::SelectionMode::None;
     // Each column's unit, by index; a column past the list has none.
-    std::vector<std::string> units = {};
+    std::vector<std::string> units;
 };
 
 // `n` with its thousands grouped by commas.
@@ -1541,7 +1541,7 @@ TEST_CASE("tui table: an unloaded cell draws its placeholder and a failed one it
     f.rows->fail(1, "recipe");
     f.settle();
     CHECK(f.screenLine(1).contains("···"));
-    CHECK(f.screenLine(2).contains("!"));
+    CHECK(f.screenLine(2).contains('!'));
     CHECK_FALSE(f.screenLine(3).contains("···"));
 }
 
@@ -1556,7 +1556,7 @@ TEST_CASE("tui table: a header with a unit reads Mass [kg]", "[tui][table]") {
                            ui::CellAccent{.tone = {}, .tooltip = "The value could not be read", .invalid = true});
     f.settle();
     CHECK_FALSE(f.screenLine(1).contains("r0c1"));
-    CHECK(f.screenLine(1).contains("!"));
+    CHECK(f.screenLine(1).contains('!'));
     CHECK(f.screenLine(1).contains("r0c2"));
     f.table->setCellAccent(row, 1, ui::CellAccent{});
     f.settle();
@@ -1922,7 +1922,7 @@ TEST_CASE("tui grid: a double click on a Boolean cell flips it once", "[tui][gri
     TuiGridFixture g{morph::test::grid::specimensWithChoices()};
     REQUIRE(g.table != nullptr);
     std::size_t headerLine = 0;
-    while (headerLine < 12 && g.line(headerLine).find("checked") == std::string::npos) {
+    while (headerLine < 12 && !g.line(headerLine).contains("checked")) {
         ++headerLine;
     }
     std::size_t const checkedAt = g.line(headerLine).find("checked");
@@ -1955,7 +1955,7 @@ TEST_CASE("tui grid: typing on a focused cell opens its editor, Enter commits an
     CHECK(focused != &g.table->view());
     CHECK(morph::tui::detail::isWithin(focused, g.table->view()));
     std::size_t headerLine = 0;
-    while (headerLine < 12 && g.line(headerLine).find("mass") == std::string::npos) {
+    while (headerLine < 12 && !g.line(headerLine).contains("mass")) {
         ++headerLine;
     }
     std::size_t const massAt = g.line(headerLine).find("mass");

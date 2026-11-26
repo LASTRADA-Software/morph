@@ -227,7 +227,7 @@ template <typename AccountCode>
     entries.reserve(headers.size());
     for (auto& header : headers) {
         LoadedEntry entry{.header = std::move(header), .lines = {}};
-        if (auto found = lines.find(static_cast<std::int64_t>(entry.header.id.Value())); found != lines.end()) {
+        if (auto const found = lines.find(static_cast<std::int64_t>(entry.header.id.Value())); found != lines.end()) {
             entry.lines = std::move(found->second);
             std::ranges::sort(entry.lines, {}, [](db::EntryLineRecord const& line) { return line.position.Value(); });
         }

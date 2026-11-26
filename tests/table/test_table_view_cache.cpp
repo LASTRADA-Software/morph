@@ -206,7 +206,7 @@ TEST_CASE("view cache: an arrival on an order level computes again; on a display
           "[table][views]") {
     std::mt19937 random{7};
     {
-        Table table{random};
+        Table const table{random};
         ViewCache views;
         TableQuery query;
         query.sort = {SortKey{.column = "c", .dir = SortDirection::Ascending}};
@@ -217,7 +217,7 @@ TEST_CASE("view cache: an arrival on an order level computes again; on a display
         CHECK(views.stats().computations == 2);
     }
     {
-        Table table{random};
+        Table const table{random};
         ViewCache views;
         TableQuery query;
         query.sort = {SortKey{.column = "a", .dir = SortDirection::Ascending}};
@@ -338,7 +338,7 @@ TEST_CASE("view cache: the bound evicts least recently used", "[table][views]") 
     auto const compute = [&]() -> std::expected<ViewComputation, TableError> {
         ViewComputation out;
         out.view.rows.resize(10'000);
-        std::iota(out.view.rows.begin(), out.view.rows.end(), 0U);
+        std::ranges::iota(out.view.rows, 0U);
         return out;
     };
     for (auto const* const name : {"one", "two", "three"}) {
@@ -374,12 +374,12 @@ TEST_CASE("view cache: the bound counts a view's order keys", "[table][views]") 
     for (auto const& key : orderKeys) {
         keyBytes += rowIdBytes(key);
     }
-    auto const entryBytes = 4 * kRows + keyBytes;
+    auto const entryBytes = (4 * kRows) + keyBytes;
     ViewCache views{ViewCacheOptions{.maxBytes = 2 * entryBytes, .onCompute = {}}};
     auto const compute = [&]() -> std::expected<ViewComputation, TableError> {
         ViewComputation out;
         out.view.rows.resize(kRows);
-        std::iota(out.view.rows.begin(), out.view.rows.end(), 0U);
+        std::ranges::iota(out.view.rows, 0U);
         out.orderKeys = std::make_shared<std::vector<RowId> const>(orderKeys);
         return out;
     };
@@ -467,7 +467,7 @@ TEST_CASE("view cache: an evicted entry is released outside the mutex", "[table]
     std::promise<void> release;
     auto const releaseFuture = release.get_future().share();
     {
-        auto slow = std::make_shared<SlowToFree const>(entered, releaseFuture);
+        auto const slow = std::make_shared<SlowToFree const>(entered, releaseFuture);
         REQUIRE(views.find(keyOf("slow"), slow, {}, oneRowView).has_value());
     }
     auto const source = tabletest::makeSource({tabletest::col("a", ColumnKind::Integer)}, {{Cell{std::int64_t{1}}}});
@@ -515,7 +515,7 @@ TEST_CASE("view cache: callers of two scopes over one snapshot get two views", "
     for (std::int64_t row = 0; row < 20; ++row) {
         rows.push_back({Cell{row}, Cell{(row * 7) % 5}});
     }
-    auto description = describe(TableDescription{
+    auto const description = describe(TableDescription{
         .id = "t",
         .label = "T",
         .columns = {TableColumn{.info = tabletest::col("id", ColumnKind::Integer), .label = "id", .group = {}},

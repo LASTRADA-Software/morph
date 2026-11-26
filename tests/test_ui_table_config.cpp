@@ -43,7 +43,7 @@ std::vector<table::UnitInfo> massUnits() {
 TEST_CASE("sort gesture: a click replaces the chain; Shift adds a key or flips one in place", "[ui][table][config]") {
     using table::SortDirection::Ascending;
     using table::SortDirection::Descending;
-    ui::SortChain const two{{"name", Ascending}, {"mass", Descending}};
+    ui::SortChain const two{{.column = "name", .dir = Ascending}, {.column = "mass", .dir = Descending}};
     CHECK(ui::applySortGesture(two, "name", ui::SortGesture::Click, 8).chain == ui::SortChain{{"name", Descending}});
     CHECK(ui::applySortGesture(two, "mass", ui::SortGesture::Click, 8).chain == ui::SortChain{{"mass", Ascending}});
     CHECK(ui::applySortGesture({{"name", Descending}}, "name", ui::SortGesture::Click, 8).chain ==
@@ -62,7 +62,7 @@ TEST_CASE("sort gesture: at the bound a new key is refused and a key in the chai
           "[ui][table][config]") {
     using table::SortDirection::Ascending;
     using table::SortDirection::Descending;
-    ui::SortChain const full{{"a", Ascending}, {"b", Ascending}};
+    ui::SortChain const full{{.column = "a", .dir = Ascending}, {.column = "b", .dir = Ascending}};
     ui::SortChange const added = ui::applySortGesture(full, "c", ui::SortGesture::Extend, 2);
     CHECK(added.chain == full);
     CHECK(added.refusal == "A table sorts by at most 2 columns");
@@ -76,8 +76,10 @@ TEST_CASE("sort gesture: at the bound a new key is refused and a key in the chai
 TEST_CASE("layout gesture: moves, hides, pins and resets, refusing a locked column and the last visible one",
           "[ui][table][config]") {
     table::ColumnLayout layout{{"id", "name", "mass", "site"}};
-    std::vector<ui::LayoutColumn> const columns{
-        {"id", "ID", true}, {"name", "Name"}, {"mass", "Mass"}, {"site", "Site"}};
+    std::vector<ui::LayoutColumn> const columns{{.id = "id", .label = "ID", .locked = true},
+                                                {.id = "name", .label = "Name"},
+                                                {.id = "mass", .label = "Mass"},
+                                                {.id = "site", .label = "Site"}};
     CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumn{"mass", -1}).changed);
     CHECK(std::ranges::equal(layout.order(), std::vector<std::string>{"id", "mass", "name", "site"}));
     CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumn{"id", 1}).refusal ==
@@ -93,7 +95,7 @@ TEST_CASE("layout gesture: moves, hides, pins and resets, refusing a locked colu
     CHECK(layout.visible() == std::vector<std::string>{"id"});
     CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::HideColumn{"id"}).refusal == "ID is locked");
     table::ColumnLayout lone{{"a", "b"}};
-    std::vector<ui::LayoutColumn> const ab{{"a", "A"}, {"b", "B"}};
+    std::vector<ui::LayoutColumn> const ab{{.id = "a", .label = "A"}, {.id = "b", .label = "B"}};
     CHECK(ui::applyLayoutGesture(lone, ab, ui::Configure::All, ui::HideColumn{"a"}).changed);
     CHECK(ui::applyLayoutGesture(lone, ab, ui::Configure::All, ui::HideColumn{"b"}).refusal ==
           "At least one column stays visible");
@@ -110,7 +112,10 @@ TEST_CASE("layout gesture: unpinning moves the column after the pinned ones; dra
           "[ui][table][config]") {
     table::ColumnLayout layout{{"a", "b", "c", "d"}};
     std::vector<ui::LayoutColumn> const columns{
-        {"a", "A"}, {"b", "B"}, {"c", "C"}, {"d", "D", false, table::ColumnKind::Integer}};
+        {.id = "a", .label = "A"},
+        {.id = "b", .label = "B"},
+        {.id = "c", .label = "C"},
+        {.id = "d", .label = "D", .locked = false, .kind = table::ColumnKind::Integer}};
     CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::PinColumn{"c"}).changed);
     CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::PinColumn{"d"}).changed);
     CHECK(layout.visible() == std::vector<std::string>{"c", "d", "a", "b"});
@@ -130,8 +135,8 @@ TEST_CASE("layout gesture: unpinning moves the column after the pinned ones; dra
           "A group's columns hold one kind of value");
     CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::Hide, ui::FormGroup{"P", {"a"}}).refusal ==
           "A group has 2 to 16 columns");
-    ui::LayoutResult const ghost =
-        ui::applyLayoutGesture(layout, columns, ui::Configure::Hide, ui::FormGroup{"P", {"a", "ghost"}});
+    ui::LayoutResult const ghost = ui::applyLayoutGesture(layout, columns, ui::Configure::Hide,
+                                                          ui::FormGroup{.label = "P", .columns = {"a", "ghost"}});
     CHECK_FALSE(ghost.changed);
     CHECK_FALSE(ghost.refusal);
     CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::Hide, ui::FormGroup{"P", {"a", "b"}}).changed);
@@ -146,7 +151,8 @@ TEST_CASE("layout gesture: unpinning moves the column after the pinned ones; dra
 // Mutation: HideColumn leaving the pinned count as it was (the next column becomes pinned).
 TEST_CASE("layout gesture: hiding a pinned column unpins no other and pins none", "[ui][table][config]") {
     table::ColumnLayout layout{{"a", "b", "c", "d"}};
-    std::vector<ui::LayoutColumn> const columns{{"a", "A"}, {"b", "B"}, {"c", "C"}, {"d", "D"}};
+    std::vector<ui::LayoutColumn> const columns{
+        {.id = "a", .label = "A"}, {.id = "b", .label = "B"}, {.id = "c", .label = "C"}, {.id = "d", .label = "D"}};
     REQUIRE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::PinColumn{"a"}).changed);
     // Mutation: a column placed beside itself (pinning the first column with none pinned moves it last).
     CHECK(layout.visible() == std::vector<std::string>{"a", "b", "c", "d"});
@@ -161,7 +167,8 @@ TEST_CASE("layout gesture: hiding a pinned column unpins no other and pins none"
 // Mutation: ShowColumn leaving the pinned count as it was (the last pinned column is pushed out).
 TEST_CASE("layout gesture: a column shown among the pinned columns joins them", "[ui][table][config]") {
     table::ColumnLayout layout{{"a", "b", "c", "d"}};
-    std::vector<ui::LayoutColumn> const columns{{"a", "A"}, {"b", "B"}, {"c", "C"}, {"d", "D"}};
+    std::vector<ui::LayoutColumn> const columns{
+        {.id = "a", .label = "A"}, {.id = "b", .label = "B"}, {.id = "c", .label = "C"}, {.id = "d", .label = "D"}};
     REQUIRE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::PinColumn{"a"}).changed);
     REQUIRE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::PinColumn{"b"}).changed);
     REQUIRE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::PinColumn{"c"}).changed);
@@ -177,7 +184,11 @@ TEST_CASE("layout gesture: a column shown among the pinned columns joins them", 
 // Mutation: MoveColumn clamping only to the visible ends (Move left on the first unpinned column pins it).
 TEST_CASE("layout gesture: a move stays on its side of the pin boundary", "[ui][table][config]") {
     table::ColumnLayout layout{{"a", "b", "c", "d", "e"}};
-    std::vector<ui::LayoutColumn> const columns{{"a", "A"}, {"b", "B"}, {"c", "C"}, {"d", "D"}, {"e", "E"}};
+    std::vector<ui::LayoutColumn> const columns{{.id = "a", .label = "A"},
+                                                {.id = "b", .label = "B"},
+                                                {.id = "c", .label = "C"},
+                                                {.id = "d", .label = "D"},
+                                                {.id = "e", .label = "E"}};
     layout.setPinned(2);
     CHECK_FALSE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumn{"c", -1}).changed);
     CHECK_FALSE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumn{"b", 1}).changed);
@@ -192,7 +203,8 @@ TEST_CASE("layout gesture: a move stays on its side of the pin boundary", "[ui][
 TEST_CASE("layout gesture: a drag pins a column dropped among the pinned ones and unpins one dropped past them",
           "[ui][table][config]") {
     table::ColumnLayout layout{{"a", "b", "c", "d"}};
-    std::vector<ui::LayoutColumn> const columns{{"a", "A"}, {"b", "B"}, {"c", "C"}, {"d", "D"}};
+    std::vector<ui::LayoutColumn> const columns{
+        {.id = "a", .label = "A"}, {.id = "b", .label = "B"}, {.id = "c", .label = "C"}, {.id = "d", .label = "D"}};
     layout.setPinned(2);
     CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumnTo{"d", 0}).changed);
     CHECK(layout.visible() == std::vector<std::string>{"d", "a", "b", "c"});
@@ -364,7 +376,7 @@ TEST_CASE("conditions follow the column's kind", "[ui][table][config]") {
 
 // Mutation: headerMenu leaving "Add to sort" enabled for a column already in the chain.
 TEST_CASE("header menu: entries, order and enablement", "[ui][table][config]") {
-    ui::HeaderMenuInput const input{.column = {"name", "Name"},
+    ui::HeaderMenuInput const input{.column = {.id = "name", .label = "Name"},
                                     .sortable = true,
                                     .filterable = true,
                                     .sortPlace = 0,
@@ -374,7 +386,7 @@ TEST_CASE("header menu: entries, order and enablement", "[ui][table][config]") {
                                     .visibleCount = 3,
                                     .pinned = 0,
                                     .dimensions = {},
-                                    .groups = {{"company", "Company", 3}},
+                                    .groups = {{.id = "company", .label = "Company", .columns = 3}},
                                     .allowed = ui::Configure::All};
     std::vector<ui::MenuEntry> const entries = ui::menuEntries(ui::headerMenu(input));
     std::vector<std::string> labels;
@@ -419,7 +431,7 @@ TEST_CASE("header menu: entries, order and enablement", "[ui][table][config]") {
     CHECK_FALSE(endEntries.at(11).enabled);  // the only visible column
     // Mutation: the Display unit submenu drawn with no check on the chosen unit.
     ui::HeaderMenuInput measure = input;
-    measure.column = {"weight", "Weight", false, table::ColumnKind::Measure};
+    measure.column = {.id = "weight", .label = "Weight", .locked = false, .kind = table::ColumnKind::Measure};
     measure.dimensions = {{.dimension = "mass", .units = {"g", "kg"}, .chosen = "g"}};
     std::vector<ui::TableMenuEntry> const measureMenu = ui::headerMenu(measure);
     REQUIRE(measureMenu.back().entry.label == "Display unit");
@@ -444,8 +456,10 @@ TEST_CASE("header menu: entries, order and enablement", "[ui][table][config]") {
                                                   "Copy", "Copy with headers"});
     CHECK_FALSE(table.at(2).enabled);
     CHECK(table.at(5).keys == "Ctrl+C");
-    std::vector<ui::MenuEntry> const fixed = ui::menuEntries(
-        ui::tableMenu({.anyFilter = true, .groups = {{"company", "Company", 3}}, .allowed = ui::Configure::None}));
+    std::vector<ui::MenuEntry> const fixed =
+        ui::menuEntries(ui::tableMenu({.anyFilter = true,
+                                       .groups = {{.id = "company", .label = "Company", .columns = 3}},
+                                       .allowed = ui::Configure::None}));
     std::vector<std::string> fixedLabels;
     for (ui::MenuEntry const& entry : fixed) {
         fixedLabels.push_back(entry.separator ? "-" : entry.label);

@@ -284,7 +284,7 @@ TEST_CASE("status line: counts for exact, lower-bound and undecided totals", "[u
 TEST_CASE("engine rows: every row is present, visible does nothing, keysOf completes at once", "[ui][table]") {
     RowsFixture h;
     auto const source = std::make_shared<TestRowsSource>(500);
-    EngineRows rows{source, source->recordOf(), table::EngineOptions{.owner = &h.owner}};
+    EngineRows rows{source, morph::ui::testing::TestRowsSource::recordOf(), table::EngineOptions{.owner = &h.owner}};
     CHECK(rows.total().rows == 500);
     CHECK(rows.total().known);
     CHECK(rows.total().kind == table::TotalKind::Exact);
@@ -305,7 +305,7 @@ TEST_CASE("engine rows: every row is present, visible does nothing, keysOf compl
 TEST_CASE("engine rows: a row's record is built once until the row changes", "[ui][table]") {
     RowsFixture h;
     auto const source = std::make_shared<TestRowsSource>(10);
-    EngineRows rows{source, source->recordOf(), table::EngineOptions{.owner = &h.owner}};
+    EngineRows rows{source, morph::ui::testing::TestRowsSource::recordOf(), table::EngineOptions{.owner = &h.owner}};
     static_cast<void>(rows.row(0));
     static_cast<void>(rows.row(0));
     CHECK(rows.recordsBuilt() == 1);
@@ -631,7 +631,7 @@ bool askedForPage(TableHarness const& h, std::size_t first, std::int64_t offset)
 // Mutation: a lowering that needs the node's `columns` (no header: `headerLabels` is empty).
 TEST_CASE("model table: a client given only the catalog draws its columns, sorts and pages it", "[ui][table]") {
     TableHarness h;
-    auto screen = h.mount(kModelTable);
+    auto const screen = h.mount(kModelTable);
     CHECK(h.dispatcher.count("Table.samples.describe") == 1);
     CHECK(h.dispatcher.count("Table.samples") == 0);  // no page before its description
     replyDescribe(h);
@@ -655,7 +655,7 @@ TEST_CASE("model table: a client given only the catalog draws its columns, sorts
 // Mutation: a literal `filters` read as an expression (it evaluates to null and the query carries no filter).
 TEST_CASE("model table: a literal filter and the element values reach the query and the document", "[ui][table]") {
     TableHarness h;
-    auto screen =
+    auto const screen =
         h.mount(withTableKey(kModelTable, R"("filters":{"columns":{"name":{"include":[{"contains":"a"}]}}})"));
     replyDescribe(h);
     REQUIRE(h.dispatcher.count("Table.samples") == 1);
@@ -673,9 +673,9 @@ TEST_CASE("model table: a literal filter and the element values reach the query 
 
 // Mutation: a table that ignores its store sends the default query (the count is 1 before `release`).  Gate T3.
 TEST_CASE("model table: persisted state before the first query", "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
+    auto const store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
     TableHarness h{store};
-    auto screen = h.mount(kModelTable);
+    auto const screen = h.mount(kModelTable);
     replyDescribe(h);
     CHECK(h.dispatcher.count("Table.samples") == 0);
     CHECK(store->lastLoadKey() == table::TableStateKey{.application = "lims",
@@ -693,7 +693,7 @@ TEST_CASE("model table: persisted state before the first query", "[ui][table][st
 // Mutations: no debounce (fifty saves); unmount not flushing (the count stays 3); a change during a save dropped
 // (the third save never goes).
 TEST_CASE("model table: saves are coalesced, and unmounting saves at once", "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
+    auto const store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
     TableHarness h{store};
     auto screen = h.mount(kModelTable);
     replyDescribe(h);
@@ -728,9 +728,9 @@ TEST_CASE("model table: saves are coalesced, and unmounting saves at once", "[ui
 // Mutations: applying a late state after the user scrolled (a query more in the second section); a failed load
 // reported per table mount or not at all; a failed load that stops saving.
 TEST_CASE("model table: a slow or failed load", "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
+    auto const store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
     TableHarness h{store};
-    auto screen = h.mount(kModelTable);
+    auto const screen = h.mount(kModelTable);
     replyDescribe(h);
     h.advance(299ms);
     CHECK(h.dispatcher.count("Table.samples") == 0);
@@ -768,7 +768,7 @@ TEST_CASE("model table: a slow or failed load", "[ui][table][state]") {
 // Mutations: applying a stored sort over a bound one (the query sorts by name); saving a bound sort (the saved
 // document has a `sort`); `persist: false` still loading.
 TEST_CASE("model table: bound values win", "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
+    auto const store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
     TableHarness h{store};
     SECTION("a bound sort") {
         auto screen = h.mount(kBoundSort);
@@ -800,9 +800,9 @@ TEST_CASE("model table: bound values win", "[ui][table][state]") {
 
 // Review Focus 3, the table's half. Mutations: no report (the count is 0); the stored text saved back unchanged.
 TEST_CASE("model table: a stored state that does not read starts from the defaults", "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":2,"junk":true})");
+    auto const store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":2,"junk":true})");
     TableHarness h{store};
-    auto screen = h.mount(kModelTable);
+    auto const screen = h.mount(kModelTable);
     replyDescribe(h);
     store->release();
     h.settle();
@@ -820,9 +820,9 @@ TEST_CASE("model table: a stored state that does not read starts from the defaul
 
 // Invariant 31. Mutation: `onSaveFailed` not wired to `tableMessage` (the message stays empty).
 TEST_CASE("model table: a refused save is said in the status line and keeps the arrangement", "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
+    auto const store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
     TableHarness h{store};
-    auto screen = h.mount(kModelTable);
+    auto const screen = h.mount(kModelTable);
     replyDescribe(h);
     store->release();
     h.settle();
@@ -850,7 +850,7 @@ std::string withTablePoints() {
 // Mutations: the stored state's layout and view not shown at the points (`cols.pinned` reads null); a point's choice
 // not written into the table's state (no save goes).
 TEST_CASE("model table: the columns and saved points read and write the table's state", "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(
+    auto const store = std::make_shared<GatedTableStateStore>(
         storeExecutor(),
         R"({"version":1,"layout":{"order":["id","name","c3"],"hidden":["c3"],"pinned":1},"view":"Mine"})");
     TableHarness h{store};
@@ -892,9 +892,9 @@ TEST_CASE("model table: scrolling 10,000 rows keeps one row scope per realized r
 
 // Mutation: a new revision clearing the element's selection (`selectedCount` is 0 after it).
 TEST_CASE("model table: a new revision keeps the selection and the message", "[ui][table]") {
-    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
+    auto const store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
     TableHarness h{store};
-    auto screen = h.mount(withTableKey(kModelTable, R"("selectionMode":"multiple")"));
+    auto const screen = h.mount(withTableKey(kModelTable, R"("selectionMode":"multiple")"));
     replyDescribe(h);
     store->release();
     h.settle();
@@ -916,7 +916,7 @@ TEST_CASE("model table: a new revision keeps the selection and the message", "[u
 // Mutation: the body's `query` members replaced without a report (no diagnostic names `filters`).
 TEST_CASE("model table: a body's query member the table owns is reported", "[ui][table]") {
     TableHarness h;
-    auto screen =
+    auto const screen =
         mountShown(h, withTableKey(kModelTable, R"("body":{"lit":{"query":{"filters":{"columns":{}},"limit":3}}})"));
     CHECK(diagnosticsMentioning(h, "`filters` is the table's own; the body's is not used") == 1);
     CHECK(diagnosticsMentioning(h, "limit") == 0);
@@ -988,7 +988,7 @@ bool stopped(TableHarness const& h, std::size_t index) {
 // Mutation: `keysOf` fetching the visible columns (a call's body lacks `"columns":[]`).
 TEST_CASE("model table: a range over rows not held resolves through pages that name no columns", "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(h, selectTable(), 100'000);  // rows 0 to 399 held
+    auto const screen = mountShown(h, selectTable(), 100'000);  // rows 0 to 399 held
     std::size_t const sent = h.dispatcher.calls.size();
     h.backend.selectTableRange(tableOf(h), 500, 1'499);
     h.settle();
@@ -1005,7 +1005,7 @@ TEST_CASE("model table: a range over rows not held resolves through pages that n
 // Mutation: no bound (keysOf is called and the calls go out).
 TEST_CASE("model table: a range over maxRangeRows is refused and selects nothing", "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(h, selectTable(), 100'000);
+    auto const screen = mountShown(h, selectTable(), 100'000);
     std::size_t const sent = h.dispatcher.calls.size();
     h.backend.selectTableRange(tableOf(h), 0, 10'000);  // 10,001 rows
     h.settle();
@@ -1021,7 +1021,7 @@ TEST_CASE("model table: a range over maxRangeRows is refused and selects nothing
 // selection; no stop of the earlier key's fetch.
 TEST_CASE("model table: highlightKey scrolls to the row and marks it", "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(h, kHighlight, 9'093);
+    auto const screen = mountShown(h, kHighlight, 9'093);
     int const table = tableOf(h);
     click(h, "to5012");
     REQUIRE(lastQuery(h).keys.has_value());
@@ -1087,7 +1087,7 @@ void replyFirstPage(TableHarness& h, std::vector<std::int64_t> const& keys) {
 // The keys 0 to 199 with @p a and @p b swapped: the first page in another order.
 std::vector<std::int64_t> swappedPage(std::int64_t a, std::int64_t b) {
     std::vector<std::int64_t> keys(200);
-    std::iota(keys.begin(), keys.end(), std::int64_t{0});
+    std::ranges::iota(keys, std::int64_t{0});
     std::swap(keys.at(static_cast<std::size_t>(a)), keys.at(static_cast<std::size_t>(b)));
     return keys;
 }
@@ -1097,7 +1097,7 @@ std::vector<std::int64_t> swappedPage(std::int64_t a, std::int64_t b) {
 // Mutation: focus not looked for by key after a reset (it stays on view row 7, which another row now holds).
 TEST_CASE("model table: after a new sort, focus is found again by key once its page arrives", "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(h, kModelTable, 9'093);
+    auto const screen = mountShown(h, kModelTable, 9'093);
     int const table = tableOf(h);
     h.backend.scrollTable(table, 0, 30);
     h.settle();
@@ -1138,7 +1138,7 @@ int focusSevenThenSort(TableHarness& h) {
 // The keys 0 to 199 with key 9,093 at view row 7: the first page of an order that lacks key 7 there.
 std::vector<std::int64_t> pageWithoutSeven() {
     std::vector<std::int64_t> keys(200);
-    std::iota(keys.begin(), keys.end(), std::int64_t{0});
+    std::ranges::iota(keys, std::int64_t{0});
     keys.at(7) = 9'093;
     return keys;
 }
@@ -1149,7 +1149,7 @@ std::vector<std::int64_t> pageWithoutSeven() {
 // holds); the located row not scrolled to when the rows do not hold it (its page is never asked for).
 TEST_CASE("model table: a new sort that moves the focused key off-screen keeps focus on it", "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(h, kModelTable, 9'093);
+    auto const screen = mountShown(h, kModelTable, 9'093);
     int const table = focusSevenThenSort(h);
     // The first page of the new order lacks key 7, and every row in view is fetched: still no answer, no move.
     replyFirstPage(h, pageWithoutSeven());
@@ -1168,7 +1168,7 @@ TEST_CASE("model table: a new sort that moves the focused key off-screen keeps f
 TEST_CASE("model table: an answer that the focused key is gone, before the first page, keeps focus at its place",
           "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(h, kModelTable, 9'093);
+    auto const screen = mountShown(h, kModelTable, 9'093);
     int const table = focusSevenThenSort(h);
     replyKeyed(h, {});  // key 7 is gone; no page of the new order has arrived, so the count is not known
     replyFirstPage(h, pageWithoutSeven());
@@ -1180,7 +1180,7 @@ TEST_CASE("model table: an answer that the focused key is gone, before the first
 // rows yet).
 TEST_CASE("model table: a located row answered before the first page is told once the count is known", "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(h, kModelTable, 9'093);
+    auto const screen = mountShown(h, kModelTable, 9'093);
     int const table = focusSevenThenSort(h);
     replyKeyed(h, {{7, 5'000}});
     CHECK(h.backend.focusCell(table).first == 7);  // no rows yet: nothing told
@@ -1198,7 +1198,7 @@ TEST_CASE("model table: a located row answered before the first page is told onc
 // followed through the next sort: focus stays on view row 7).
 TEST_CASE("model table: a focused key a new sort deleted hands focus to the row at its place", "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(h, kModelTable, 9'093);
+    auto const screen = mountShown(h, kModelTable, 9'093);
     int const table = tableOf(h);
     h.backend.scrollTable(table, 0, 30);
     h.settle();
@@ -1214,7 +1214,7 @@ TEST_CASE("model table: a focused key a new sort deleted hands focus to the row 
     h.backend.clickHeader(table, 1);
     h.settle();
     std::vector<std::int64_t> keys(200);
-    std::iota(keys.begin(), keys.end(), std::int64_t{0});
+    std::ranges::iota(keys, std::int64_t{0});
     keys.at(7) = 9'093;
     replyFirstPage(h, keys);
     replyKeyed(h, {});
@@ -1233,7 +1233,7 @@ TEST_CASE("model table: a focused key a new sort deleted hands focus to the row 
 // row 9,123, past the end).
 TEST_CASE("model table: a highlight located before the first page of a new sort keeps its row", "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(h, kHighlight, 9'093);
+    auto const screen = mountShown(h, kHighlight, 9'093);
     int const table = tableOf(h);
     click(h, "to77");
     replyKeyed(h, {{77, 77}});
@@ -1250,7 +1250,7 @@ TEST_CASE("model table: a highlight located before the first page of a new sort 
 // Mutation: a cell's row scope keyed by the row it was built for (the focus lands on no cell, or on another row's).
 TEST_CASE("model table: a reused cell's elements are focused by the row it shows", "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(h, kPick, 9'093);
+    auto const screen = mountShown(h, kPick, 9'093);
     h.backend.scrollTable(tableOf(h), 0, 30);  // rows 0 to 39
     h.settle();
     answerPages(h, 9'093);
@@ -1268,7 +1268,7 @@ TEST_CASE("model table: a reused cell's elements are focused by the row it shows
 // text is not shown).  Gate K5.
 TEST_CASE("model table: a refetch that changed 20 of 200 rows evaluates 20 rows again", "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(h);
+    auto const screen = mountShown(h);
     h.backend.scrollTable(tableOf(h), 0, 30);
     h.settle();  // rows 0 to 39 realized (overscan 10)
     MountStats const before = statsOf(*screen);
@@ -1282,11 +1282,11 @@ TEST_CASE("model table: a refetch that changed 20 of 200 rows evaluates 20 rows 
 
 // Review Focus 1. Mutation: the fitting of a new revision not reporting the dropped filter (the count is 0).
 TEST_CASE("table rows: a new description revision drops what names a removed column", "[ui][table]") {
-    auto store = std::make_shared<GatedTableStateStore>(
+    auto const store = std::make_shared<GatedTableStateStore>(
         storeExecutor(),
         R"({"version":1,"sort":[{"column":"c3","direction":"asc"}],"filters":{"columns":{"c3":{"include":[{"gt":"1"}]}}}})");
     TableHarness h{store};
-    auto screen = h.mount(kModelTable);
+    auto const screen = h.mount(kModelTable);
     replyDescribe(h);
     store->release();
     h.settle();  // revision A: id, name, c3
@@ -1309,7 +1309,7 @@ TEST_CASE("table rows: a new description revision drops what names a removed col
 // Review Focus 2. Mutation: the load completion run with no liveness check (a query is sent, or the test crashes
 // under the sanitizer build).
 TEST_CASE("model table: unmounted while its state load is held", "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
+    auto const store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
     TableHarness h{store};
     auto screen = h.mount(kModelTable);
     replyDescribe(h);
@@ -1329,7 +1329,7 @@ TEST_CASE("model table: unmounted while its state load is held", "[ui][table][st
 // Review Focus 4. Mutation: `empty` shown while `total().known` is false, or while rows are undecided.
 TEST_CASE("model table: empty waits for the first reply and for undecided rows", "[ui][table]") {
     TableHarness h;
-    auto screen = h.mount(kModelTable);
+    auto const screen = h.mount(kModelTable);
     CHECK_FALSE(shownText(h, "No samples"));  // before the description
     replyDescribe(h);
     CHECK_FALSE(shownText(h, "No samples"));  // before any page
@@ -1348,7 +1348,7 @@ TEST_CASE("model table: empty waits for the first reply and for undecided rows",
 // Mutations: a status line built without `failed` (no state, no retry); Retry sending the query without `retry`.
 TEST_CASE("model table: a failed level offers Retry, which sends `retry`", "[ui][table]") {
     TableHarness h;
-    auto screen = h.mount(kModelTable);
+    auto const screen = h.mount(kModelTable);
     replyDescribe(h, withLevel(samplesDescription(3), "c3", "recipe"));
     replyPage(h, pageJsonUnloaded(revisionOf(h), 0, 200, 9093, h.columns,
                                   {{.index = 1, .levels = {"recipe"}, .failed = {"recipe"}}}, /*failed*/ {"recipe"}));
@@ -1365,7 +1365,7 @@ TEST_CASE("model table: a failed level offers Retry, which sends `retry`", "[ui]
 // keeps its empty state).
 TEST_CASE("model table: a failed page fetch is said in the status line", "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(h);
+    auto const screen = mountShown(h);
     CHECK(statusOf(h).state.empty());
     change(h, std::vector<std::int64_t>{});  // the pages again
     h.fail(oldestOpen(h, "Table.samples"));
@@ -1376,7 +1376,7 @@ TEST_CASE("model table: a failed page fetch is said in the status line", "[ui][t
 // Mutation: a page refetch per event (the call names no `keys`, or twenty calls go out).  Gate E3 on a screen.
 TEST_CASE("model table: an arrival is one keyed request", "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(h);
+    auto const screen = mountShown(h);
     std::size_t const sent = h.dispatcher.count("Table.samples");
     std::vector<std::int64_t> keys(20);
     std::ranges::iota(keys, std::int64_t{0});
@@ -1389,7 +1389,7 @@ TEST_CASE("model table: an arrival is one keyed request", "[ui][table]") {
 // Mutation: the mount ignoring unloadedLevels (every cell Loaded).  Cross-part decision 29.
 TEST_CASE("model table: a cell of an unloaded level is a placeholder, of a failed one an error mark", "[ui][table]") {
     TableHarness h;
-    auto screen = h.mount(kModelTable);
+    auto const screen = h.mount(kModelTable);
     replyDescribe(h, withLevel(samplesDescription(3), "c3", "recipe"));  // column 2 has the level
     replyPage(h, pageJsonUnloaded(revisionOf(h), 0, 200, 9093, h.columns,
                                   {{.index = 0, .levels = {"recipe"}, .failed = {}},
@@ -1418,7 +1418,7 @@ TEST_CASE("model table: a row field the window lacks is fetched once, after the 
                                   R"({"kind":"text","text":{"get":{"row":""},"path":"c7"}},)"
                                   R"({"kind":"text","text":{"get":{"row":""},"path":"nosuch"}}]}])");
     TableHarness h;
-    auto screen = h.mount(readsAcross);
+    auto const screen = h.mount(readsAcross);
     replyDescribe(h, samplesDescription(8));
     std::vector<std::string> const laidOut{"id", "name"};
     h.dispatcher.reply(oldestOpen(h, "Table.samples"),
@@ -1478,7 +1478,7 @@ TEST_CASE("model table: a message lasts six seconds or until the next gesture", 
 // `cellBinds` grows by 0).  Gate F6, on the recording backend.
 TEST_CASE("model table: an arrival for 50 rows re-evaluates their cells and no other", "[ui][table]") {
     TableHarness h;
-    auto screen = mountShown(h);
+    auto const screen = mountShown(h);
     h.backend.scrollTable(tableOf(h), 10, 30);
     h.settle();  // rows 0 to 49 realized
     std::vector<std::int64_t> keys(50);
@@ -1621,7 +1621,7 @@ std::string companionPage(TableHarness const& h, std::vector<CompanionRow> const
 TEST_CASE("table display: a model-backed table draws its description's display", "[ui][table][display]") {
     using namespace morph::ui::testing;
     TableHarness h;
-    auto screen = h.mount(doc(kTable));
+    auto const screen = h.mount(doc(kTable));
     replyDescribe(h, describeJson(companionDescription()));
     replyPage(h, companionPage(h));
     CHECK(cellText(h, 1, "mass") == "0.13");
@@ -1635,7 +1635,7 @@ TEST_CASE("table display: a model-backed table draws its description's display",
 TEST_CASE("table display: an invalid cell draws its mark and no text", "[ui][table][display]") {
     using namespace morph::ui::testing;
     TableHarness h;
-    auto screen = h.mount(doc(kTable));
+    auto const screen = h.mount(doc(kTable));
     replyDescribe(h, describeJson(companionDescription()));
     replyPage(h, companionPage(h));
     CHECK(cellText(h, 1, "count").empty());
@@ -1649,14 +1649,14 @@ TEST_CASE("table display: companions are fetched with their column only", "[ui][
     using namespace morph::ui::testing;
     {
         TableHarness h;
-        auto screen = h.mount(doc(
+        auto const screen = h.mount(doc(
             R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples","columns":[{"id":"name"}]})"));
         replyDescribe(h, describeJson(companionDescription()));
         CHECK(lastQuery(h).columns == std::vector<std::string>{"id", "name", "lockedBy"});
     }
     {
         TableHarness h;
-        auto screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
+        auto const screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
                                       "columns":[{"id":"mass","tone":{"lit":"ok"}}]})"));
         replyDescribe(h, describeJson(companionDescription()));
         CHECK(lastQuery(h).columns == std::vector<std::string>{"id", "mass", "massTip", "lockedBy"});
@@ -1676,7 +1676,7 @@ TEST_CASE("table display: companion columns are not arranged", "[ui][table][disp
             column.shown = true;
         }
         TableHarness h;
-        auto screen = h.mount(doc(kTable));
+        auto const screen = h.mount(doc(kTable));
         replyDescribe(h, describeJson(table::describe(shownCompanions)));
         std::vector<std::string> ids;
         for (morph::ui::TableColumn const& column : h.backend.tableColumns(h.byTestId("Table", "t"))) {
@@ -1688,7 +1688,7 @@ TEST_CASE("table display: companion columns are not arranged", "[ui][table][disp
         // Mutation: the layout built from every column of the description (hiddenCount 3, and the menus offer to
         // show the companions).
         TableHarness h;
-        auto screen = h.mount(doc(kTable));
+        auto const screen = h.mount(doc(kTable));
         replyDescribe(h, describeJson(companionDescription()));
         CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["id","mass","name","count"])");
         CHECK(elementValue(*screen, "t", "hiddenCount") == "0");
@@ -1715,7 +1715,7 @@ TEST_CASE("table display: companion columns are not arranged", "[ui][table][disp
         }
     }
     TableHarness h;  // a companion the document names is reported and not shown
-    auto screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
+    auto const screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
                                   "columns":[{"id":"name"},{"id":"massTip"}]})"));
     replyDescribe(h, describeJson(companionDescription()));
     CHECK(headerLabels(h, "t") == std::vector<std::string>{"Name"});
@@ -1726,7 +1726,7 @@ TEST_CASE("table display: companion columns are not arranged", "[ui][table][disp
 TEST_CASE("table display: a document's parts override the description", "[ui][table][display]") {
     using namespace morph::ui::testing;
     TableHarness h;
-    auto screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
+    auto const screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
                                   "columns":[{"id":"mass","decimals":1,"rounding":"halfEven","empty":"n/a"}]})"));
     replyDescribe(h, describeJson(companionDescription()));
     replyPage(h, companionPage(h));
@@ -1738,7 +1738,7 @@ TEST_CASE("table display: a document's parts override the description", "[ui][ta
 TEST_CASE("table display: an unknown tone is reported once for its column", "[ui][table][display]") {
     using namespace morph::ui::testing;
     TableHarness h;
-    auto screen = h.mount(doc(kTable));
+    auto const screen = h.mount(doc(kTable));
     replyDescribe(h, describeJson(companionDescription()));
     CompanionRow first = companionRow(1);
     CompanionRow second = companionRow(2);
@@ -1767,7 +1767,7 @@ TEST_CASE("table display: text never orders", "[ui][table][display]") {
     };
     {
         TableHarness h;
-        auto screen = h.mount(R"({"vocab":"ui/1","id":"plain",
+        auto const screen = h.mount(R"({"vocab":"ui/1","id":"plain",
             "state":{"items":{"init":{"lit":[{"id":1,"v":10},{"id":2,"v":9}]}},
                      "order":{"init":{"lit":[{"column":"v","direction":"asc"}]}}},
             "view":{"kind":"table","id":"t","rows":{"ref":"items"},"sort":{"ref":"order"},
@@ -1776,7 +1776,7 @@ TEST_CASE("table display: text never orders", "[ui][table][display]") {
     }
     // Labels change the text and not the order: 1 shows "zeta" and 3 "alpha", and 1 still comes first.
     TableHarness h;
-    auto screen = h.mount(R"({"vocab":"ui/1","id":"plain",
+    auto const screen = h.mount(R"({"vocab":"ui/1","id":"plain",
         "state":{"items":{"init":{"lit":[{"id":1,"code":3},{"id":2,"code":1}]}},
                  "order":{"init":{"lit":[{"column":"code","direction":"asc"}]}}},
         "view":{"kind":"table","id":"t","rows":{"ref":"items"},"sort":{"ref":"order"},
@@ -1828,7 +1828,7 @@ std::string numberPage(TableHarness const& h, std::vector<double> const& values)
 TEST_CASE("table display: a Number beyond an exact decimal still shows", "[ui][table][display]") {
     using namespace morph::ui::testing;
     TableHarness h;
-    auto screen = h.mount(doc(kTable));
+    auto const screen = h.mount(doc(kTable));
     replyDescribe(h, describeJson(numberDescription()));
     replyPage(h, numberPage(h, {1e21, 1e-20, 9.3e18}));
     CHECK(cellText(h, 1, "v") == "1000000000000000000000");
@@ -1843,7 +1843,7 @@ TEST_CASE("table display: a Number beyond an exact decimal still shows", "[ui][t
 TEST_CASE("table display: a Number beyond an exact decimal follows the column's places", "[ui][table][display]") {
     using namespace morph::ui::testing;
     TableHarness h;
-    auto screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
+    auto const screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
                                   "columns":[{"id":"id"},{"id":"v","decimals":2,"grouping":true}]})"));
     replyDescribe(h, describeJson(numberDescription()));
     replyPage(h, numberPage(h, {1e21, 1e-20}));
@@ -1854,7 +1854,7 @@ TEST_CASE("table display: a Number beyond an exact decimal follows the column's 
 // Mutation: a rows table's column built without its `unit`, which gives the header none.
 TEST_CASE("table display: a rows table's header shows its column's unit", "[ui][table][display]") {
     TableHarness h;
-    auto screen = h.mount(R"({"vocab":"ui/1","id":"plain",
+    auto const screen = h.mount(R"({"vocab":"ui/1","id":"plain",
         "state":{"items":{"init":{"lit":[{"id":1,"m":3}]}}},
         "view":{"kind":"table","id":"t","testId":"t","rows":{"ref":"items"},
                 "columns":[{"id":"id","label":"Id"},{"id":"m","label":"Mass","unit":"kg","decimals":2}]}})");
@@ -1887,7 +1887,7 @@ TEST_CASE("ui document: a column's display parts are checked when the document l
 // Mutation: the unit appended whatever the text, which shows "three kg" for the labelled value.
 TEST_CASE("table display: a rows table's quantity keeps its unit unless a label names it", "[ui][table][display]") {
     TableHarness h;
-    auto screen = h.mount(R"({"vocab":"ui/1","id":"plain",
+    auto const screen = h.mount(R"({"vocab":"ui/1","id":"plain",
         "state":{"items":{"init":{"lit":[{"id":1,"m":{"num":3,"den":1,"dp":0,"unit":"kg"}},
                                          {"id":2,"m":{"num":5,"den":2,"dp":1,"unit":"kg"}}]}}},
         "view":{"kind":"table","id":"t","rows":{"ref":"items"},
@@ -2283,9 +2283,9 @@ TEST_CASE("value rows source: a group's runs are the interpreter's runs", "[ui][
     std::string const rows = R"([ { "id": 1, "g": 1 }, { "id": 2, "g": { "num": 1, "den": 1, "dp": 1 } },
         { "id": 3, "g": { "num": 1, "den": 1, "dp": 2 } }, { "id": 4, "g": 2 } ])";
     morph::ui::testing::Harness interpreter;
-    auto screen = interpreter.mount(R"({ "vocab": "ui/1", "id": "runs",
+    auto const screen = interpreter.mount(R"({ "vocab": "ui/1", "id": "runs",
       "state": { "items": { "init": { "lit": )" +
-                                    rows + R"( } } },
+                                          rows + R"( } } },
       "view": { "kind": "table", "rows": { "ref": "items" },
                 "group": { "by": { "row": "g" }, "heading": { "kind": "text", "text": { "fn": "format",
                            "args": [ "{0}", { "row": "count" } ] } } },
@@ -2319,7 +2319,7 @@ TEST_CASE("value rows source: a field no column reads is redrawn in place", "[ui
     src->use("name");
     src->assign(sampleRows(10));
     h.settle();
-    EngineRows rows{src, src->recordOf(), table::EngineOptions{.owner = &h.owner}};
+    EngineRows rows{src, morph::ui::ValueRowsSource::recordOf(), table::EngineOptions{.owner = &h.owner}};
     REQUIRE(rows.setSort({{.column = "name"}}));
     h.settle();
     RecordingListener listener{*src};
@@ -2470,17 +2470,17 @@ TEST_CASE("one order on every surface: a rows table, a model table and a collect
                                                    std::vector<std::size_t>{1, 1},  // by name, descending
                                                    std::vector<std::size_t>{2}}) {  // by weight
         TableHarness asRows;
-        auto rowsScreen = asRows.mount(rowsDoc(rows));
+        auto const rowsScreen = asRows.mount(rowsDoc(rows));
         TableHarness asModel;
-        auto modelScreen = asModel.mount(kRowsSamples);
+        auto const modelScreen = asModel.mount(kRowsSamples);
         TableHarness asCollection;
         asCollection.extraViews.insert_or_assign("Lims_ListSamples", std::string{kMixedSamplesView});
-        auto collectionScreen = asCollection.mount(kSamplesCollection);
+        auto const collectionScreen = asCollection.mount(kSamplesCollection);
         asCollection.reply(asCollection.dispatcher.last("Lims_ListSamples"), R"({"rows":)" + rows + "}");
         int const collection = asCollection.byTestId("Table", "collection_rows");
         replyDescribe(asModel, describedFrom(rows));
         replyPage(asModel, pagesOf(rows, lastQuery(asModel)));
-        for (std::size_t column : clicks) {
+        for (std::size_t const column : clicks) {
             asRows.backend.clickHeader(tableOf(asRows), column);
             asRows.settle();
             asModel.backend.clickHeader(tableOf(asModel), column);
@@ -2516,7 +2516,7 @@ TEST_CASE("rows table: one changed row is one repair", "[ui][table]") {
 // list (two, for the list that grows to 20,002 rows: the screen drops only a repeat of the same words).
 TEST_CASE("rows table: a list over 20,000 rows is reported once", "[ui][table]") {
     TableHarness h;
-    auto screen = h.mount(rowsDoc(idRows(20'001)));
+    auto const screen = h.mount(rowsDoc(idRows(20'001)));
     std::string const warning =
         "table list holds 20,001 rows; a table over rows is ordered on the client up to "
         "20,000 rows or 1,000,000 cells — serve it as a model's table";
@@ -2532,21 +2532,21 @@ TEST_CASE("rows table: a list over 20,000 rows is reported once", "[ui][table]")
         return text;
     }();
     TableHarness grows;
-    auto grown = grows.mount(growing);
+    auto const grown = grows.mount(growing);
     grows.backend.click(grows.byTestId("Button", "rename"));
     grows.settle();
     CHECK(diagnosticsMentioning(grows, "serve it as a model's table") == 1);
     TableHarness under;
-    auto small = under.mount(rowsDoc(idRows(20'000)));
+    auto const small = under.mount(rowsDoc(idRows(20'000)));
     CHECK(diagnosticsMentioning(under, "serve it as a model's table") == 0);  // at the bound: nothing
 }
 
 // Mutation: drawing the rows before the load settles (the first CHECK reads "a b c").
 TEST_CASE("rows table: persisted state before the first rows", "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(
+    auto const store = std::make_shared<GatedTableStateStore>(
         storeExecutor(), R"({"version":1,"sort":[{"column":"name","direction":"desc"}]})");
     TableHarness h{store};
-    auto screen = h.mount(rowsDoc(kThree));
+    auto const screen = h.mount(rowsDoc(kThree));
     CHECK(rowOrder(h).empty());  // placeholders only while restoring
     CHECK(h.backend.children(tableOf(h)).size() == 3);
     CHECK(store->lastLoadKey() ==
@@ -2562,9 +2562,9 @@ TEST_CASE("rows table: persisted state before the first rows", "[ui][table][stat
 
 // Mutation: a rows table without `id` given a key (a load goes out with table "").
 TEST_CASE("rows table: a table without an id persists nothing", "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
+    auto const store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
     TableHarness h{store};
-    auto screen = h.mount(rowsDocNoId(kThree));
+    auto const screen = h.mount(rowsDocNoId(kThree));
     CHECK(rowOrder(h) == "a b c");  // no restoring state
     h.backend.clickHeader(h.backend.all("Table").front(), 1);
     h.advance(500ms);
@@ -2585,7 +2585,7 @@ TEST_CASE("rows table: the status line takes space only while it has something t
     h.advance(6'000ms);
     CHECK_FALSE(statusOf(h).shown);
     TableHarness always;
-    auto shown = always.mount(rowsDoc(kThree, R"(,"status":true)"));
+    auto const shown = always.mount(rowsDoc(kThree, R"(,"status":true)"));
     CHECK(statusOf(always).shown);
     CHECK(statusOf(always).counts == "3 rows");
     TableHarness never;
@@ -2600,7 +2600,8 @@ TEST_CASE("rows table: the status line takes space only while it has something t
 // invalid cell words the report apart).
 TEST_CASE("rows table: a cell not of its column's kind is reported once at the sort path", "[ui][table]") {
     TableHarness h;
-    auto screen = h.mount(rowsDoc(R"([{"id":"a","weight":1},{"id":"b","weight":"heavy"},{"id":"c","weight":2}])"));
+    auto const screen =
+        h.mount(rowsDoc(R"([{"id":"a","weight":1},{"id":"b","weight":"heavy"},{"id":"c","weight":2}])"));
     auto const sortReports = [&h] {
         return std::ranges::count_if(h.diagnostics, [](Refusal const& r) { return r.path.ends_with("/sort"); });
     };
@@ -2613,8 +2614,8 @@ TEST_CASE("rows table: a cell not of its column's kind is reported once at the s
     CHECK(rowOrder(h) == "c a b");
     CHECK(sortReports() == 1);  // last in either direction, once
     TableHarness two;
-    auto both = two.mount(rowsDoc(R"([{"id":"a","name":"x","weight":1},{"id":"b","name":2,"weight":"heavy"},)"
-                                  R"({"id":"c","name":"y","weight":2}])"));
+    auto const both = two.mount(rowsDoc(R"([{"id":"a","name":"x","weight":1},{"id":"b","name":2,"weight":"heavy"},)"
+                                        R"({"id":"c","name":"y","weight":2}])"));
     two.backend.clickHeader(tableOf(two), 2);
     two.settle();
     two.backend.clickHeader(tableOf(two), 1);
@@ -2659,7 +2660,7 @@ std::vector<std::string> headingTexts(TableHarness const& h) {
 // Mutation: `EngineRows` keeping its record of an `Updated` row (the note stays "one").
 TEST_CASE("rows table: a field no sort reads redraws its row, and a heading's count follows its run", "[ui][table]") {
     TableHarness h;
-    auto screen = h.mount(kGroupedRows);
+    auto const screen = h.mount(kGroupedRows);
     h.backend.clickHeader(tableOf(h), 0);
     h.settle();
     REQUIRE(headingTexts(h) == std::vector<std::string>{"2", "1"});
@@ -2690,7 +2691,7 @@ TEST_CASE("rows table: a row's cells share its scope, and a row given another's 
         {"kind":"button","testId":"swap","label":"Swap","onClick":[{"set":"items","value":{"lit":[
           {"id":"b","name":"b","label":"B"},{"id":"c","name":"c","label":"C"}]}}]}]}})";
     TableHarness h;
-    auto screen = h.mount(kDrafts);
+    auto const screen = h.mount(kDrafts);
     REQUIRE(shownText(h, "a"));
     h.backend.edit(h.byTestId("TextInput", "edit"), "edited");
     h.settle();                     // the first row's input: a's
@@ -2711,7 +2712,7 @@ TEST_CASE("rows table: a row's cells share its scope, and a row given another's 
 // moves one row).
 TEST_CASE("rows table: before the backend reports a range, a page of focus is the overscan's rows", "[ui][table]") {
     TableHarness h;
-    auto screen = h.mount(rowsDoc(idRows(50)));
+    auto const screen = h.mount(rowsDoc(idRows(50)));
     int const table = tableOf(h);
     h.backend.focusMove(table, morph::ui::FocusMove::PageDown);
     h.settle();
@@ -2752,9 +2753,9 @@ TEST_CASE("ui document: a rows table's column kind and its persist need what the
 // order and reported at the sort path).
 TEST_CASE("rows table: a quantity in a unit the screen does not list sorts by its value", "[ui][table]") {
     TableHarness h;
-    auto screen = h.mount(rowsDoc(R"([{"id":"a","weight":{"num":3,"den":1,"dp":0,"unit":"m"}},)"
-                                  R"({"id":"b","weight":{"num":1,"den":1,"dp":0,"unit":"m"}},)"
-                                  R"({"id":"c","weight":{"num":2,"den":1,"dp":0,"unit":"m"}}])"));
+    auto const screen = h.mount(rowsDoc(R"([{"id":"a","weight":{"num":3,"den":1,"dp":0,"unit":"m"}},)"
+                                        R"({"id":"b","weight":{"num":1,"den":1,"dp":0,"unit":"m"}},)"
+                                        R"({"id":"c","weight":{"num":2,"den":1,"dp":0,"unit":"m"}}])"));
     h.backend.clickHeader(tableOf(h), 2);
     h.settle();
     CHECK(rowOrder(h) == "b c a");
@@ -2770,7 +2771,7 @@ TEST_CASE("rows table: a group's quantities are compared through the screen's un
     format.units.insert_or_assign(
         "kg", morph::ui::UnitInfo{.canonical = "g", .toCanonical = *table::parseDecimal("1000"), .display = {}});
     h.session.setFormatting(format);
-    auto screen = h.mount(R"({"vocab":"ui/1","id":"samples",
+    auto const screen = h.mount(R"({"vocab":"ui/1","id":"samples",
       "state":{"items":{"init":{"lit":[{"id":1,"w":{"num":1,"den":1,"dp":0,"unit":"kg"}},
                                        {"id":2,"w":{"num":1000,"den":1,"dp":0,"unit":"g"}},
                                        {"id":3,"w":{"num":2,"den":1,"dp":0,"unit":"kg"}}]}}},
@@ -2783,7 +2784,7 @@ TEST_CASE("rows table: a group's quantities are compared through the screen's un
 // Mutation: the page always sending the mount a reset (one reset, and no change of the row alone).
 TEST_CASE("rows table: one changed row reaches the mount as its own change, not a reset", "[ui][table]") {
     TableHarness h;
-    auto screen = h.mount(rowsDoc(kThree));
+    auto const screen = h.mount(rowsDoc(kThree));
     h.backend.clickHeader(tableOf(h), 1);
     h.settle();
     REQUIRE(rowOrder(h) == "a b c");
@@ -2903,7 +2904,7 @@ TEST_CASE("model table over an action: an action the table cannot page is refuse
 TEST_CASE("model table over an action: a reconnect fetches the rows again with no record watched", "[ui][table]") {
     TableHarness h;
     addPageSamples(h);
-    auto screen = h.mount(kActionTable);
+    auto const screen = h.mount(kActionTable);
     h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":1,"name":"a"}],"total":1})");
     REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);
     h.session.reconnected();
@@ -2919,7 +2920,7 @@ TEST_CASE("model table over an action: every record the action holds is watched"
               ActionInfo{.modelType = "Lims_SampleModel",
                          .records = {morph::ui::ActionRecordInfo{.record = "Lims_SampleModel.samples"},
                                      morph::ui::ActionRecordInfo{.record = "Lims_Result"}}});
-    auto screen = h.mount(kActionTable);
+    auto const screen = h.mount(kActionTable);
     REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);  // both watches answered
     h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":1,"name":"a"}],"total":1})");
     morph::wire::ChangesBody body;
@@ -2933,7 +2934,7 @@ TEST_CASE("model table over an action: every record the action holds is watched"
 // dropped without a report (no diagnostic for `name`).
 TEST_CASE("model table over an action: a stored filter on an inferred column waits for its kind",
           "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(
+    auto const store = std::make_shared<GatedTableStateStore>(
         storeExecutor(),
         R"({"version":1,"filters":{"columns":{"ratio":{"include":[{"gt":"1"}]},"name":{"include":[{"gt":"b"}]}}}})");
     TableHarness h{store};
@@ -3039,7 +3040,7 @@ TEST_CASE("model table over an action: highlightKey locates its row through the 
         R"("highlightKey":{"ref":"hk"},"columns":[{"id":"id"},{"id":"name"}]}]}})";
     TableHarness h;
     addPageSamples(h);
-    auto screen = h.mount(kTypedHighlight);
+    auto const screen = h.mount(kTypedHighlight);
     h.reply(h.dispatcher.last("Lims_PageSamples"),
             R"({"rows":[{"id":1,"name":"a"},{"id":2,"name":"b"}],"total":300})");
     std::size_t const sent = h.dispatcher.count("Lims_PageSamples");
@@ -3078,7 +3079,7 @@ TEST_CASE("model table over an action: a literal or bound filter on an inferred 
     SECTION("literal") {
         TableHarness h;
         addPageSamples(h);
-        auto screen = h.mount(literalRatioFilter());
+        auto const screen = h.mount(literalRatioFilter());
         REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);
         CHECK_FALSE(lastBodyHas(h, "Lims_PageSamples", R"("gt")"));
         h.reply(h.dispatcher.last("Lims_PageSamples"), std::string{kRatioRows});
@@ -3092,7 +3093,7 @@ TEST_CASE("model table over an action: a literal or bound filter on an inferred 
         std::string text = withTableKey(kActionTable, R"("filters":{"ref":"f"})");
         text.replace(text.find(R"("view":)"), 7,
                      R"("state":{"f":{"init":{"lit":{"columns":{"ratio":{"include":[{"gt":"1"}]}}}}}},"view":)");
-        auto screen = h.mount(text);
+        auto const screen = h.mount(text);
         REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);
         CHECK_FALSE(lastBodyHas(h, "Lims_PageSamples", R"("gt")"));
         h.reply(h.dispatcher.last("Lims_PageSamples"), std::string{kRatioRows});
@@ -3156,11 +3157,11 @@ TEST_CASE("model table over an action: columns that share a unit share its dimen
 // query).
 TEST_CASE("model table over an action: a sort and a scroll before the first reply keep the stored filter",
           "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(
+    auto const store = std::make_shared<GatedTableStateStore>(
         storeExecutor(), R"({"version":1,"filters":{"columns":{"ratio":{"include":[{"gt":"1"}]}}}})");
     TableHarness h{store};
     addPageSamples(h);
-    auto screen = h.mount(kActionTable);
+    auto const screen = h.mount(kActionTable);
     store->release();
     h.settle();
     REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);
@@ -3193,7 +3194,7 @@ TEST_CASE("model table over an action: a first reply that does not read fixes no
 TEST_CASE("model table over an action: a key that is not one row field is reported", "[ui][table]") {
     TableHarness h;
     addPageSamples(h);
-    auto screen = h.mount(withTableKey(kActionTable, R"("key":{"lit":"id"})"));
+    auto const screen = h.mount(withTableKey(kActionTable, R"("key":{"lit":"id"})"));
     CHECK(diagnosticsMentioning(h, "the key of a table over an action is one row field") == 1);
 }
 
@@ -3291,7 +3292,7 @@ std::string sortableRows(int count, std::string_view extra) {
         row += ",\"c" + std::to_string(at) + "\":" + std::to_string(at);
         columns += std::string{at == 1 ? "" : ","} + R"({"id":"c)" + std::to_string(at) + R"(","sortable":true})";
     }
-    row += "}";
+    row += '}';
     return R"({"vocab":"ui/1","id":"many","state":{"items":{"init":{"lit":[)" + row +
            R"(]}}},"view":{"kind":"table","id":"t","rows":{"ref":"items"},"columns":[)" + columns + "]," +
            std::string{extra} + "}}";
@@ -3313,7 +3314,7 @@ std::string countingNine(std::string_view event, std::string_view text = kNine) 
 TEST_CASE("sort chains: a plain click replaces, Shift adds and flips, a key past the bound is refused",
           "[ui][table][config]") {
     morph::ui::testing::TableHarness h;
-    auto screen = h.mount(kNine);
+    auto const screen = h.mount(kNine);
     int const table = h.backend.all("Table").front();
     h.backend.clickHeader(table, 0, HeaderClick::Plain);
     h.backend.clickHeader(table, 1, HeaderClick::Shift);
@@ -3375,7 +3376,7 @@ TEST_CASE("sort chains: a table whose limits set 32 accepts 32 keys from the hea
 // Mutation: "Add to sort" mapped to SortGesture::Click.
 TEST_CASE("sort chains: the header menu builds a chain without a modifier", "[ui][table][config]") {
     morph::ui::testing::TableHarness h;
-    auto screen = h.mount(countingNine("onSortChange"));
+    auto const screen = h.mount(countingNine("onSortChange"));
     int const table = h.backend.all("Table").front();
     chooseMenu(h, table, 0, {"Sort descending"});
     chooseMenu(h, table, 2, {"Add to sort"});
@@ -3393,7 +3394,7 @@ TEST_CASE(
     "column layout: hiding, moving, pinning and resetting from the menus change the layout and the visible columns",
     "[ui][table][config]") {
     morph::ui::testing::TableHarness h;
-    auto screen = h.mount(countingNine("onLayoutChange"));
+    auto const screen = h.mount(countingNine("onLayoutChange"));
     int const table = h.backend.all("Table").front();
     chooseMenu(h, table, 2, {"Hide column"});
     chooseMenu(h, table, 1, {"Move left"});
@@ -3421,7 +3422,7 @@ TEST_CASE("column layout: configurable and locked limit what the user can do, an
           "[ui][table][config]") {
     SECTION("hide only, the first column locked") {
         morph::ui::testing::TableHarness h;
-        auto screen =
+        auto const screen =
             h.mount(withFirstColumnKey(withTableKey(kNine, R"("configurable":{"lit":["hide"]})"), R"("locked":true)"));
         int const table = h.backend.all("Table").front();
         std::vector<std::string> const labels = labelsOf(menuOf(h, table, 1));
@@ -3438,7 +3439,7 @@ TEST_CASE("column layout: configurable and locked limit what the user can do, an
     }
     SECTION("nothing, and no menu") {
         morph::ui::testing::TableHarness h;
-        auto screen = h.mount(withTableKey(kNine, R"("configurable":false)"));
+        auto const screen = h.mount(withTableKey(kNine, R"("configurable":false)"));
         int const table = h.backend.all("Table").front();
         CHECK(menuOf(h, table, 1).empty());
         CHECK(menuOf(h, table, std::nullopt).empty());
@@ -3455,7 +3456,7 @@ TEST_CASE("status line: a refusal is shown once, until the next gesture or six s
     };
     SECTION("in the status line") {
         morph::ui::testing::TableHarness h;
-        auto screen = h.mount(kNine);
+        auto const screen = h.mount(kNine);
         int const table = h.backend.all("Table").front();
         refuse(h, table);
         CHECK(statusOf(h, table).message == "A table sorts by at most 8 columns");
@@ -3474,7 +3475,7 @@ TEST_CASE("status line: a refusal is shown once, until the next gesture or six s
     }
     SECTION("with `status: false`, as a notification") {
         morph::ui::testing::TableHarness h;
-        auto screen = h.mount(withTableKey(kNine, R"("status":false)"));
+        auto const screen = h.mount(withTableKey(kNine, R"("status":false)"));
         int const table = h.backend.all("Table").front();
         refuse(h, table);
         REQUIRE(h.host.notified.size() == 1);
@@ -3490,10 +3491,10 @@ TEST_CASE("persisted layout: a stored layout applies before the first query, a c
     constexpr std::string_view kLayout =
         R"({"version":1,"layout":{"order":["c2","c1"],"hidden":["c3"],"pinned":0,"widths":{"c2":20}},)"
         R"("sort":[{"column":"c4","direction":"desc"}]})";
-    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kLayout});
+    auto const store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kLayout});
     morph::ui::testing::TableHarness h{store};
     SECTION("the table's own layout") {
-        auto screen = h.mount(kNine);
+        auto const screen = h.mount(kNine);
         int const table = h.backend.all("Table").front();
         CHECK(morph::ui::testing::rowOrder(h).empty());  // the rows wait for the stored state
         store->release();
@@ -3518,11 +3519,11 @@ TEST_CASE("persisted layout: a stored layout applies before the first query, a c
         CHECK(hiddenColumns == std::vector<std::string>{"c1", "c3", "c4", "c5"});
     }
     SECTION("a model's table: the first query names only the columns the stored layout shows") {
-        auto modelStore = std::make_shared<GatedTableStateStore>(
+        auto const modelStore = std::make_shared<GatedTableStateStore>(
             storeExecutor(),
             R"({"version":1,"layout":{"order":["name","id","c3","c4","c5"],"hidden":["c3"],"pinned":0,"widths":{}}})");
         morph::ui::testing::TableHarness m{modelStore};
-        auto screen = m.mount(kConfigModelTable);
+        auto const screen = m.mount(kConfigModelTable);
         replyDescribe(m, samplesDescription(5));
         REQUIRE(m.dispatcher.count("Table.samples") == 0);  // the first query waits for the state
         modelStore->release();
@@ -3538,7 +3539,7 @@ TEST_CASE("persisted layout: a stored layout applies before the first query, a c
         CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["name","id","c4","c5"])");
     }
     SECTION("a bound layout") {
-        auto screen = h.mount(withTableKey(withState(kNine, "lay", "null"), R"("layout":{"ref":"lay"})"));
+        auto const screen = h.mount(withTableKey(withState(kNine, "lay", "null"), R"("layout":{"ref":"lay"})"));
         int const table = h.backend.all("Table").front();
         store->release();
         h.settle();
@@ -3564,7 +3565,7 @@ TEST_CASE("persisted layout: a stored layout applies before the first query, a c
 // Review Focus 1. Mutation: hiding a column removing it from the query's sort.
 TEST_CASE("hiding a sorted and filtered column changes no row", "[ui][table][config]") {
     morph::ui::testing::TableHarness h;
-    auto screen = h.mount(withTableKey(
+    auto const screen = h.mount(withTableKey(
         kConfigModelTable,
         R"("sort":{"lit":[{"column":"name","direction":"asc"}]},"filters":{"columns":{"name":{"include":[{"contains":"a"}]}}})"));
     replyDescribe(h, samplesDescription(5));
@@ -3651,7 +3652,7 @@ constexpr std::string_view kKinds = R"({
 // Mutation: the chooser listing only the visible columns.
 TEST_CASE("column chooser: every column in order, with show, move and reset", "[ui][table][config]") {
     morph::ui::testing::TableHarness h;
-    auto screen = h.mount(kNine);
+    auto const screen = h.mount(kNine);
     int const table = h.backend.all("Table").front();
     chooseMenu(h, table, 2, {"Hide column"});
     REQUIRE(elementValue(*screen, "t", "hiddenCount") == "1");
@@ -3678,7 +3679,7 @@ TEST_CASE("column chooser: every column in order, with show, move and reset", "[
 // button closing the line without applying RemoveGroup (the layout keeps g1).
 TEST_CASE("column chooser: Group columns forms a group of one kind, which the layout keeps", "[ui][table][config]") {
     morph::ui::testing::TableHarness h;
-    auto screen = h.mount(countingNine("onLayoutChange", kKinds));
+    auto const screen = h.mount(countingNine("onLayoutChange", kKinds));
     int const table = h.backend.all("Table").front();
     chooseMenu(h, table, std::nullopt, {"Columns…"});
     press(h, "table_columns_group");
@@ -3760,7 +3761,7 @@ TEST_CASE("column chooser and sort dialog: locks, the pin boundary, a key's colu
           "[ui][table][config]") {
     {
         morph::ui::testing::TableHarness h;
-        auto screen = h.mount(withFirstColumnKey(kNine, R"("locked":true)"));
+        auto const screen = h.mount(withFirstColumnKey(kNine, R"("locked":true)"));
         int const table = h.backend.all("Table").front();
         chooseMenu(h, table, 1, {"Pin column"});
         moveColumn(h, table, 2, 1);
@@ -3777,7 +3778,7 @@ TEST_CASE("column chooser and sort dialog: locks, the pin boundary, a key's colu
         CHECK(h.backend.prop(h.byTestId("Dialog", "table_columns"), "open") == "false");
     }
     morph::ui::testing::TableHarness h;
-    auto screen = h.mount(kNine);
+    auto const screen = h.mount(kNine);
     int const table = h.backend.all("Table").front();
     chooseMenu(h, table, std::nullopt, {"Columns…"});
     for (std::string_view const column : {"c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9"}) {
@@ -3829,7 +3830,7 @@ std::string nineInRow(std::string_view member) {
 TEST_CASE("table dialogs: a configurable table with a share of its row mounts, its column taking the share",
           "[ui][table][config]") {
     morph::ui::testing::TableHarness h;
-    auto screen = h.mount(nineInRow(R"("sizing":{"lit":{"percent":40}})"));
+    auto const screen = h.mount(nineInRow(R"("sizing":{"lit":{"percent":40}})"));
     int const table = h.byTestId("Table", "t");
     CHECK(h.backend.prop(table, "layout") == "stretch(1)/stretch(1)");
     CHECK(h.backend.dump().contains("Column#2 gap=0 layout=percent(40)/content"));
@@ -3840,7 +3841,7 @@ TEST_CASE("table dialogs: a configurable table with a share of its row mounts, i
 // only the column, and the table stops at its own).
 TEST_CASE("table dialogs: a content-height table in a row fills the column the row stretches", "[ui][table][config]") {
     morph::ui::testing::TableHarness h;
-    auto screen = h.mount(nineInRow(R"("maxWidth":50)"));
+    auto const screen = h.mount(nineInRow(R"("maxWidth":50)"));
     int const table = h.byTestId("Table", "t");
     CHECK(h.backend.prop(table, "layout") == "content max=50/stretch(1)");
     CHECK(h.backend.dump().contains("Column#2 gap=0 layout=content max=50/content"));
@@ -4024,7 +4025,7 @@ std::string dayValues(std::string_view month, int days) {
 TEST_CASE("filter menu: values are counted over what the other filters leave, and ticks build the smaller side",
           "[ui][table][config]") {
     TableHarness h;
-    auto screen = h.mount(kStatusRows);
+    auto const screen = h.mount(kStatusRows);
     int const table = h.backend.all("Table").front();
     clickFilter(h, table, 1);
     chooseOption(h, "table_filter_op_1", "equals");
@@ -4070,7 +4071,7 @@ TEST_CASE("filter menu: values and conditions are exclusive, and reopening shows
           "[ui][table][config]") {
     SECTION("a text column") {
         TableHarness h;
-        auto screen = h.mount(kStatusRows);
+        auto const screen = h.mount(kStatusRows);
         int const table = h.backend.all("Table").front();
         clickFilter(h, table, 0);
         selectAll(h, false);
@@ -4099,9 +4100,10 @@ TEST_CASE("filter menu: values and conditions are exclusive, and reopening shows
     }
     SECTION("a custom column has conditions alone") {
         TableHarness h;
-        auto screen = mountDescribed(h, kindsDescription(),
-                                     withTableKey(morph::ui::testing::kConfigModelTable,
-                                                  R"("filters":{"columns":{"code":{"include":[{"isEmpty":true}]}}})"));
+        auto const screen =
+            mountDescribed(h, kindsDescription(),
+                           withTableKey(morph::ui::testing::kConfigModelTable,
+                                        R"("filters":{"columns":{"code":{"include":[{"isEmpty":true}]}}})"));
         int const table = h.backend.all("Table").front();
         std::size_t const calls = h.dispatcher.count("Table.samples");
         clickFilter(h, table, 3);
@@ -4115,7 +4117,7 @@ TEST_CASE("filter menu: values and conditions are exclusive, and reopening shows
 // Mutation: the search sent on every keystroke (no debounce).
 TEST_CASE("filter menu: a search typed quickly is one distinct request after the pause", "[ui][table][config]") {
     TableHarness h;
-    auto screen = mountDescribed(h, samplesDescription(5));
+    auto const screen = mountDescribed(h, samplesDescription(5));
     int const table = h.backend.all("Table").front();
     std::size_t const before = h.dispatcher.count("Table.samples");
     clickFilter(h, table, 1);
@@ -4140,7 +4142,7 @@ TEST_CASE("filter menu: a search typed quickly is one distinct request after the
 TEST_CASE("filter menu: a condition applies once after typing pauses, and an incomplete between is not sent",
           "[ui][table][config]") {
     TableHarness h;
-    auto screen = mountDescribed(h, samplesDescription(5));
+    auto const screen = mountDescribed(h, samplesDescription(5));
     int const table = h.backend.all("Table").front();
     clickFilter(h, table, 1);
     chooseOption(h, "table_filter_op_1", "contains");
@@ -4181,7 +4183,7 @@ TEST_CASE("filter menu: a condition applies once after typing pauses, and an inc
 TEST_CASE("filter menu: a partial list says it may grow and invalid cells are counted under it",
           "[ui][table][config]") {
     TableHarness h;
-    auto screen = mountDescribed(h, samplesDescription(5));
+    auto const screen = mountDescribed(h, samplesDescription(5));
     int const table = h.backend.all("Table").front();
     clickFilter(h, table, 1);
     h.reply(lastDistinct(h),
@@ -4204,7 +4206,7 @@ TEST_CASE("filter menu: Select all under a search covers every match, and both s
                              R"(]}}},"view":{"kind":"table","id":"t","rows":{"ref":"items"},)"
                              R"("columns":[{"id":"code","label":"Code"}]}})";
     TableHarness h;
-    auto screen = h.mount(text);
+    auto const screen = h.mount(text);
     int const table = h.backend.all("Table").front();
     auto const search = [&h](std::string_view typed) {
         typeInto(h, "table_filter_search", typed);
@@ -4258,10 +4260,11 @@ TEST_CASE("filter menu: Select all under a search covers every match, and both s
 TEST_CASE("filter menu: conditions follow the column's kind, and typed operands are canonical",
           "[ui][table][config]") {
     TableHarness h;
-    auto screen = mountDescribed(h, kindsDescription(),
-                                 R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
-                                 R"("view":{"kind":"localeScope","locale":"de","children":[)"
-                                 R"({"kind":"table","id":"t","model":"sample","table":"samples"}]}})");
+    auto const screen =
+        mountDescribed(h, kindsDescription(),
+                       R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
+                       R"("view":{"kind":"localeScope","locale":"de","children":[)"
+                       R"({"kind":"table","id":"t","model":"sample","table":"samples"}]}})");
     int const table = h.backend.all("Table").front();
     clickFilter(h, table, 1);
     CHECK(propOf(h, "Select", "table_filter_op_1", "options") == optionsOf({"=", "≠", "<", "≤", ">", "≥", "between"}));
@@ -4302,7 +4305,7 @@ TEST_CASE("filter menu: conditions follow the column's kind, and typed operands 
 // Mutation: the Measure list drawn without dimension headings.
 TEST_CASE("filter menu: a Measure column's values are grouped under a heading per dimension", "[ui][table][config]") {
     TableHarness h;
-    auto screen = mountDescribed(h, kindsDescription());
+    auto const screen = mountDescribed(h, kindsDescription());
     int const table = h.backend.all("Table").front();
     clickFilter(h, table, 6);
     h.reply(lastDistinct(h),
@@ -4337,7 +4340,7 @@ TEST_CASE("filter menu: a group's values are pooled and the match line builds th
                 "columns": [ { "id": "companyA" }, { "id": "companyB" }, { "id": "companyC" } ],
                 "groups": [ { "id": "company", "label": "Company", "columns": { "lit": ["companyA", "companyB", "companyC"] } } ] } })";
     TableHarness h;
-    auto screen = h.mount(kCompanies);
+    auto const screen = h.mount(kCompanies);
     int const table = h.backend.all("Table").front();
     CHECK(h.backend.prop(table, "columnGroups") == "[Company:0+3]");
     clickGroupFilter(h, table, 0);
@@ -4377,7 +4380,7 @@ TEST_CASE("filter menu: a group's values are pooled and the match line builds th
 TEST_CASE("filter menu: a user-formed group offers conditions and the match line, no values list",
           "[ui][table][config]") {
     TableHarness h;
-    auto screen = h.mount(kKinds);
+    auto const screen = h.mount(kKinds);
     int const table = h.backend.all("Table").front();
     chooseMenu(h, table, std::nullopt, {"Columns…"});
     press(h, "table_columns_group");
@@ -4425,7 +4428,7 @@ TEST_CASE("filter menu: a date column lists years, then a year's months, then a 
                                R"({"text":"2026-04","operand":"2026-04-01..2026-04-30","count":1},)"
                                R"({"text":"2026-05","operand":"2026-05-01..2026-05-31","count":1}],"distinct":4})";
     TableHarness h;
-    auto screen = mountDescribed(h, described);
+    auto const screen = mountDescribed(h, described);
     int const table = h.backend.all("Table").front();
     auto const answer = [&h](std::string const& values) {
         h.reply(lastDistinct(h), distinctReply(h.described.revision, values));
@@ -4524,7 +4527,7 @@ TEST_CASE("filter menu: a date column lists years, then a year's months, then a 
 // Mutation: choosing an unchecked unit clearing it, as choosing the checked one does.
 TEST_CASE("display unit: the header menu writes the layout's units", "[ui][table][config]") {
     TableHarness h;
-    auto screen = mountDescribed(h, kindsDescription());
+    auto const screen = mountDescribed(h, kindsDescription());
     int const table = h.backend.all("Table").front();
     std::size_t const pages = pageCalls(h);
     chooseMenu(h, table, 6, {"Display unit", "mass: g"});
@@ -4537,7 +4540,7 @@ TEST_CASE("display unit: the header menu writes the layout's units", "[ui][table
 // Mutation: the entry labelled with the reply's `text`.
 TEST_CASE("filter menu: the values list labels by the column's display", "[ui][table][config]") {
     TableHarness h;
-    auto screen = mountDescribed(h, companionDescription(), doc(kTable));
+    auto const screen = mountDescribed(h, companionDescription(), doc(kTable));
     int const table = h.backend.all("Table").front();
     clickFilter(h, table, 1);
     h.reply(lastDistinct(h), distinctReply(companionDescription().revision,
@@ -4552,7 +4555,7 @@ TEST_CASE("filter menu: the values list labels by the column's display", "[ui][t
 // Mutation: filter buttons offered only by a table that has menus (`configurable: false` returning before them).
 TEST_CASE("filter menu: a table with configurable false keeps its filter buttons", "[ui][table][config]") {
     TableHarness h;
-    auto screen = h.mount(withTableKey(kStatusRows, R"("configurable":false)"));
+    auto const screen = h.mount(withTableKey(kStatusRows, R"("configurable":false)"));
     int const table = h.backend.all("Table").front();
     CHECK(menuOf(h, table, 0).empty());
     CHECK(h.backend.prop(table, "columns").contains("filterable=true"));
@@ -4566,10 +4569,11 @@ TEST_CASE("filter menu: a table with configurable false keeps its filter buttons
 // Mutation: the counts grouped with "," whatever the session's locale.
 TEST_CASE("filter menu: counts are grouped with the session's separator", "[ui][table][config]") {
     TableHarness h;
-    auto screen = mountDescribed(h, samplesDescription(5),
-                                 R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
-                                 R"("view":{"kind":"localeScope","locale":"de","children":[)"
-                                 R"({"kind":"table","id":"t","model":"sample","table":"samples"}]}})");
+    auto const screen =
+        mountDescribed(h, samplesDescription(5),
+                       R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
+                       R"("view":{"kind":"localeScope","locale":"de","children":[)"
+                       R"({"kind":"table","id":"t","model":"sample","table":"samples"}]}})");
     int const table = h.backend.all("Table").front();
     clickFilter(h, table, 1);
     h.reply(lastDistinct(h),
@@ -4582,7 +4586,7 @@ TEST_CASE("filter menu: counts are grouped with the session's separator", "[ui][
 // Mutation: a reply asked for before the record changed kept as fresh (the reopened menu sends nothing).
 TEST_CASE("filter menu: a values list asked for before a change is not kept", "[ui][table][config]") {
     TableHarness h;
-    auto screen = mountDescribed(h, samplesDescription(5));
+    auto const screen = mountDescribed(h, samplesDescription(5));
     int const table = h.backend.all("Table").front();
     std::string const values = R"({"values":[{"text":"a","operand":"a","count":1}],"distinct":1})";
     clickFilter(h, table, 1);
@@ -4616,7 +4620,7 @@ TEST_CASE(
     pair = table::describe(std::move(pair));
     REQUIRE(pair.capabilities.distinct);
     TableHarness h;
-    auto screen = mountDescribed(h, pair);
+    auto const screen = mountDescribed(h, pair);
     int const table = h.backend.all("Table").front();
     chooseMenu(h, table, std::nullopt, {"Columns…"});
     press(h, "table_columns_group");
@@ -4707,7 +4711,7 @@ TEST_CASE("window rows: a filter on a measure reads its operand with the descrip
 TEST_CASE("filter menu: a table whose menu set a filter tears down cleanly", "[ui][table][config]") {
     {
         TableHarness h;
-        auto screen = h.mount(kStatusRows);
+        auto const screen = h.mount(kStatusRows);
         int const table = h.backend.all("Table").front();
         clickFilter(h, table, 0);
         toggleBox(h, "table_filter_value_2");
@@ -4721,7 +4725,7 @@ TEST_CASE("filter menu: a table whose menu set a filter tears down cleanly", "[u
 // Mutation: the values lists kept without a bound (the first list, past 64 others, is still served from the cache).
 TEST_CASE("filter menu: a table keeps at most 64 values lists, the oldest going first", "[ui][table][config]") {
     TableHarness h;
-    auto screen = mountDescribed(h, samplesDescription(5));
+    auto const screen = mountDescribed(h, samplesDescription(5));
     int const table = h.backend.all("Table").front();
     std::string const values = R"({"values":[{"text":"a","operand":"a","count":1}],"distinct":1})";
     clickFilter(h, table, 1);
@@ -4746,7 +4750,7 @@ TEST_CASE("filter menu: a table keeps at most 64 values lists, the oldest going 
 TEST_CASE("engine rows: fetchRows reads the rows of keys at once, a key the view lacks left out", "[ui][table]") {
     RowsFixture h;
     auto const source = std::make_shared<TestRowsSource>(10);
-    EngineRows rows{source, source->recordOf(), table::EngineOptions{.owner = &h.owner}};
+    EngineRows rows{source, morph::ui::testing::TestRowsSource::recordOf(), table::EngineOptions{.owner = &h.owner}};
     REQUIRE(rows.setSort({{.column = "id", .dir = table::SortDirection::Descending}}).has_value());
     h.settle();
     std::optional<std::expected<std::vector<morph::ui::FetchedRow>, table::TableError>> got;
@@ -4830,7 +4834,7 @@ TEST_CASE("copy: selected rows as tab-separated display text in layout order, ro
     std::string const text = withTableKey(kConfigModelTable, kArranged);
     SECTION("the selected rows") {
         TableHarness h;
-        auto screen = h.mount(text);
+        auto const screen = h.mount(text);
         replyDescribe(h, samplesDescription(5));
         replyConfigPages(h, 1000);  // rows 0 to 399 held
         int const table = h.backend.all("Table").front();
@@ -4860,7 +4864,7 @@ TEST_CASE("copy: selected rows as tab-separated display text in layout order, ro
     }
     SECTION("no row selected: the focused cell") {
         TableHarness h;
-        auto screen = h.mount(text);
+        auto const screen = h.mount(text);
         replyDescribe(h, samplesDescription(5));
         replyConfigPages(h, 1000);
         int const table = h.backend.all("Table").front();
@@ -4873,7 +4877,7 @@ TEST_CASE("copy: selected rows as tab-separated display text in layout order, ro
     }
     SECTION("a rows table's column with its own cell copies its value's text") {
         TableHarness h;
-        auto screen =
+        auto const screen =
             h.mount(R"({"vocab":"ui/1","id":"samples","state":{"items":{"init":{"lit":)"
                     R"([{"id":"a","name":"Ann"},{"id":"b","name":"Bob"},{"id":"c","name":"Cy"}]}}},)"
                     R"("view":{"kind":"table","id":"list","testId":"list","rows":{"ref":"items"},"key":{"row":"id"},)"
@@ -4891,7 +4895,7 @@ TEST_CASE("copy: selected rows as tab-separated display text in layout order, ro
 // Mutation: unloaded cells copied as their placeholder text.
 TEST_CASE("copy: unloaded cells copy as empty and are counted", "[ui][table][config]") {
     TableHarness h;
-    auto screen = h.mount(withTableKey(kConfigModelTable, R"("selectionMode":"multiple")"));
+    auto const screen = h.mount(withTableKey(kConfigModelTable, R"("selectionMode":"multiple")"));
     replyDescribe(h, withLevel(samplesDescription(5), "c4", "recipe"));
     table::TableQuery const first = lastQuery(h);
     REQUIRE(first.columns.has_value());
@@ -4918,7 +4922,7 @@ TEST_CASE("copy: unloaded cells copy as empty and are counted", "[ui][table][con
 // Review Focus 3. Mutations: the bounds compared with `>=`; `fetchRows` sending every key in one request.
 TEST_CASE("range and copy at their bounds: 10,000 pass, 10,001 are refused", "[ui][table][config]") {
     TableHarness h;
-    auto screen = h.mount(withTableKey(kConfigModelTable, R"("selectionMode":"multiple")"));
+    auto const screen = h.mount(withTableKey(kConfigModelTable, R"("selectionMode":"multiple")"));
     replyDescribe(h, samplesDescription(5));
     replyConfigPages(h, 100'000);  // rows 0 to 399 held
     int const table = h.backend.all("Table").front();
@@ -4976,8 +4980,9 @@ TEST_CASE("range and copy at their bounds: 10,000 pass, 10,001 are refused", "[u
 // Mutation: copy writing `table::displayText`, which writes `0.125`.
 TEST_CASE("copy: writes the shown text and the header with its unit", "[ui][table][config]") {
     TableHarness h;
-    auto screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",)"
-                              R"("selectionMode":"multiple","columns":[{"id":"id"},{"id":"mass"},{"id":"name"}]})"));
+    auto const screen =
+        h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",)"
+                    R"("selectionMode":"multiple","columns":[{"id":"id"},{"id":"mass"},{"id":"name"}]})"));
     replyDescribe(h, describeJson(companionDescription()));
     replyPage(h, companionPage(h));
     int const table = h.byTestId("Table", "t");
@@ -5065,7 +5070,7 @@ std::unique_ptr<morph::ui::Screen> mountSelected(TableHarness& h) {
 TEST_CASE("copy: fetched rows in view order, an unloaded level, a failed fetch, a later copy and no clipboard",
           "[ui][table][config]") {
     TableHarness h;
-    auto screen = mountSelected(h);
+    auto const screen = mountSelected(h);
     int const table = h.backend.all("Table").front();
     pressCopy(h, table);
     std::vector<std::size_t> keyed = openKeyed(h);
@@ -5163,7 +5168,7 @@ constexpr std::string_view kFourSamples =
 TEST_CASE("collection: a collection and a rows table over the same rows show the same order and selection",
           "[ui][table]") {
     TableHarness h;
-    auto screen = h.mount(kCollectionBesideTable);
+    auto const screen = h.mount(kCollectionBesideTable);
     h.reply(h.dispatcher.last("Lims_ListSamples"), std::string{kFourSamples});
     int const collection = h.byTestId("Table", "collection_rows");
     int const table = h.find("Table", "testId", "t");
@@ -5182,7 +5187,7 @@ TEST_CASE("collection: a collection and a rows table over the same rows show the
 TEST_CASE("collection: a master-detail selection and its open row hold through a sort", "[ui][table]") {
     TableHarness h;
     h.extraViews.insert_or_assign("Lims_ListSamples", std::string{kMasterDetailSamples});
-    auto screen = h.mount(kSamplesCollection);
+    auto const screen = h.mount(kSamplesCollection);
     h.reply(h.dispatcher.last("Lims_ListSamples"), std::string{kFourSamples});
     int const collection = h.byTestId("Table", "collection_rows");
     h.backend.selectRows(collection, {Key{std::int64_t{3}}});
@@ -5201,11 +5206,11 @@ TEST_CASE("collection: a master-detail selection and its open row hold through a
 // Mutation: the collection's state saved under the screen's rows key.
 TEST_CASE("collection: header and table menus are present and its arrangement persists under its action",
           "[ui][table]") {
-    auto store = std::make_shared<table::MemoryTableStateStore>(morph::ui::testing::storeExecutor());
+    auto const store = std::make_shared<table::MemoryTableStateStore>(morph::ui::testing::storeExecutor());
     TableHarness h{store};
     // Every column shown, so hiding Name leaves one.
     h.extraViews.insert_or_assign("Lims_ListSamples", std::string{kMixedSamplesView});
-    auto screen = h.mount(kSamplesCollection);
+    auto const screen = h.mount(kSamplesCollection);
     h.reply(h.dispatcher.last("Lims_ListSamples"), std::string{kFourSamples});
     int const collection = h.byTestId("Table", "collection_rows");
     CHECK_FALSE(menuOf(h, collection, std::nullopt).empty());
@@ -5238,7 +5243,7 @@ using morph::ui::testing::RecordingTableStateStore;
 // Mutations: a `columns` point on a table over `rows` left a plain preference (no save goes, the columns keep their
 // order); the stored layout not shown at the point (`cols.pinned` reads null).
 TEST_CASE("rows table: a columns point naming it reads and arranges its layout", "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(
+    auto const store = std::make_shared<GatedTableStateStore>(
         storeExecutor(), R"({"version":1,"layout":{"order":["id","name","weight"],"hidden":[],"pinned":1}})");
     TableHarness h{store};
     std::string text = rowsDoc(kThree);
@@ -5276,7 +5281,7 @@ TEST_CASE("rows table: a columns point naming one that keeps no state is a prefe
 // Mutation: a point matched to any listed table by id (an empty `of` names the id-less collection, whose
 // model-backed state is null: the run aborts).
 TEST_CASE("collection: a saved point without of beside an id-less collection is a preference", "[ui][table]") {
-    auto store = std::make_shared<table::MemoryTableStateStore>(morph::ui::testing::storeExecutor());
+    auto const store = std::make_shared<table::MemoryTableStateStore>(morph::ui::testing::storeExecutor());
     TableHarness h{store};
     std::string text{kSamplesCollection};
     text.insert(text.find(R"("models":)"), R"("customize":{"v":{"kind":"saved"}},)");
@@ -5289,7 +5294,7 @@ TEST_CASE("collection: a saved point without of beside an id-less collection is 
 // Mutations: an empty `of` matching an id-less model table in `tablePoint` (its view is rewritten and saved);
 // in `tablePoints` (a gesture writes the table's view, `null`, over the preference).
 TEST_CASE("model table: a saved point without of leaves an id-less model table's state alone", "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
+    auto const store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
     TableHarness h{store};
     std::string text{kModelTable};
     text.erase(text.find(R"("id":"list",)"), std::string_view{R"("id":"list",)"}.size());
@@ -5309,9 +5314,9 @@ TEST_CASE("model table: a saved point without of leaves an id-less model table's
 
 // Mutation: a collection's table building no `TableViews` (no `views` load goes out).
 TEST_CASE("collection: its saved views load beside its state", "[ui][table][state]") {
-    auto store = std::make_shared<RecordingTableStateStore>(morph::ui::testing::storeExecutor());
+    auto const store = std::make_shared<RecordingTableStateStore>(morph::ui::testing::storeExecutor());
     TableHarness h{store};
-    auto screen = h.mount(kSamplesCollection);
+    auto const screen = h.mount(kSamplesCollection);
     std::vector<std::string> parts;
     for (auto const& call : store->calls) {
         if (call.op == "load") {
@@ -5414,7 +5419,7 @@ std::string menuDoc(std::string_view tableKeys) {
     if (!tableKeys.empty()) {
         table += "," + std::string{tableKeys};
     }
-    table += "}";
+    table += '}';
     return R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
            R"("state":{"picked":{"init":{"lit":null}},"opened":{"init":{"lit":null}},"idle":{"init":{"lit":false}}},)"
            R"("view":{"kind":"column","children":[)" +
@@ -5450,7 +5455,7 @@ morph::ui::Key menuKey(std::int64_t key) { return morph::ui::Key{key}; }
 TEST_CASE("table menus: the application's entries read the row, the column and the value", "[ui][table][menu]") {
     using namespace morph::ui::testing;
     TableHarness h;
-    auto screen = h.mount(menuDoc(
+    auto const screen = h.mount(menuDoc(
         R"("cellMenu":[{"label":{"fn":"format","args":["{0} = {1} of {2}",{"ref":"column"},{"ref":"value"},{"ref":"row.id"}]},)"
         R"("onClick":[{"set":"picked","value":{"ref":"row.id"}}]}],)"
         R"("headerMenu":[{"label":"Units…","visible":{"fn":"eq","args":[{"ref":"column"},"mass"]}}])"));
@@ -5486,7 +5491,7 @@ TEST_CASE("table menus: filter by this value", "[ui][table][menu]") {
     using namespace morph::ui::testing;
     {
         TableHarness h;
-        auto screen = h.mount(menuDoc(""));
+        auto const screen = h.mount(menuDoc(""));
         replyDescribe(h, describeJson(menuDescription()));
         replyPage(h, menuPage(h));
         int const table = h.byTestId("Table", "t");
@@ -5524,7 +5529,7 @@ TEST_CASE("table menus: filter by this value", "[ui][table][menu]") {
         // On a cell whose level has not loaded, both entries are disabled.
         TableHarness h;
         table::TableDescription const described = withLevel(menuDescription(), "mass", "assay");
-        auto screen = h.mount(menuDoc(""));
+        auto const screen = h.mount(menuDoc(""));
         replyDescribe(h, describeJson(described));
         replyPage(h, menuPage(h, described, {table::UnloadedRow{.index = 2, .levels = {"assay"}, .failed = {}}}));
         int const table = h.byTestId("Table", "t");
@@ -5541,7 +5546,7 @@ TEST_CASE("table menus: filter by this value", "[ui][table][menu]") {
 TEST_CASE("table menus: an entry's keys work while the table has focus", "[ui][table][menu]") {
     using namespace morph::ui::testing;
     TableHarness h;
-    auto screen =
+    auto const screen =
         h.mount(menuDoc(R"("columns":[{"id":"id"},{"id":"mass"}],)"
                         R"("cellMenu":[{"label":"Open","keys":"Ctrl+O","description":{"ref":"row.companyB"},)"
                         R"("onClick":[{"set":"opened","value":{"ref":"row.id"}}]}])"));
@@ -5572,7 +5577,7 @@ TEST_CASE("table menus: an entry's keys work while the table has focus", "[ui][t
 TEST_CASE("table menus: a disabled header", "[ui][table][header]") {
     using namespace morph::ui::testing;
     TableHarness h;
-    auto screen =
+    auto const screen =
         h.mount(menuDoc(R"("headerEnabled":{"ref":"idle"},)"
                         R"("cellMenu":[{"label":"Pick","onClick":[{"set":"picked","value":{"ref":"row.id"}}]}])"));
     replyDescribe(h, describeJson(menuDescription()));
@@ -5636,7 +5641,7 @@ TEST_CASE("table menus: a table over rows takes the cell and header menus and a 
     morph::ui::Key const b{std::string{"b"}};
     {
         TableHarness h;
-        auto screen = h.mount(rowsDoc(
+        auto const screen = h.mount(rowsDoc(
             kThree,
             R"(,"selectionMode":"multiple",)"
             R"("cellMenu":[{"label":{"fn":"format","args":["{0} of {1}",{"ref":"column"},{"ref":"row.id"}]}}],)"
@@ -5655,7 +5660,7 @@ TEST_CASE("table menus: a table over rows takes the cell and header menus and a 
     }
     {
         TableHarness h;
-        auto screen = h.mount(rowsDoc(kThree, R"(,"headerEnabled":false)"));
+        auto const screen = h.mount(rowsDoc(kThree, R"(,"headerEnabled":false)"));
         int const table = tableOf(h);
         h.backend.clickHeader(table, name);
         h.settle();
@@ -5692,7 +5697,7 @@ morph::table::TableDescription selectionDescription() {
 struct SelRow {
     std::int64_t key;
     std::string status = "open";
-    std::string lockedBy{};
+    std::string lockedBy;
 };
 
 // A page reply of selectionDescription(), against the revision @p description has; a keyed reply carries `indices`,
@@ -5799,7 +5804,7 @@ std::string queryText(table::TableQuery const& query) { return glz::write_json(q
 
 TEST_CASE("view selection: Ctrl+A selects the view and fetches no row", "[ui][table][selection]") {
     TableHarness h;
-    auto screen = mountSelection(h);
+    auto const screen = mountSelection(h);
     int const table = h.byTestId("Table", "t");
     auto const before = lastQuery(h);
     std::size_t const sent = h.dispatcher.count("Table.samples");
@@ -5825,7 +5830,7 @@ TEST_CASE("view selection: Ctrl+A selects the view and fetches no row", "[ui][ta
 TEST_CASE("view selection: a key of except that leaves the view is dropped from it",
           "[ui][table][selection][review]") {
     TableHarness h;
-    auto screen = mountSelection(h);
+    auto const screen = mountSelection(h);
     int const table = h.byTestId("Table", "t");
     h.backend.selectAll(table);
     h.settle();
@@ -5836,7 +5841,7 @@ TEST_CASE("view selection: a key of except that leaves the view is dropped from 
     REQUIRE(lastQuery(h).keys.has_value());
     SECTION("the keyed reply leaves 3 out of the view") {
         // Row 3 became "closed": the reply holds 0, 1, 2, 4 and 5, and a page refetch, if any, answers the same.
-        std::vector<SelRow> const left{{0}, {1}, {2}, {4}, {5}};
+        std::vector<SelRow> const left{{.key = 0}, {.key = 1}, {.key = 2}, {.key = 4}, {.key = 5}};
         replyPage(h, selectionKeyed(left, 5, "v2"));
         if (openCalls(h, "Table.samples") > 0) {
             replyPage(h, selectionPage(left, 5, "v2"));
@@ -5855,7 +5860,7 @@ TEST_CASE("view selection: a key of except that leaves the view is dropped from 
 TEST_CASE("view selection: its life", "[ui][table][selection]") {
     TableHarness h;
     addAction(h, "Lims_TagRows", std::string{kSelectionSchema}, samplesAction());
-    auto screen = h.mount(
+    auto const screen = h.mount(
         R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
         R"("state":{"f":{"init":{"lit":{"columns":{"status":{"include":[{"eq":"open"}]}}}}}},)"
         R"("view":{"kind":"column","children":[{"kind":"table","id":"t","testId":"t","model":"sample",)"
@@ -5878,7 +5883,7 @@ TEST_CASE("view selection: its life", "[ui][table][selection]") {
 TEST_CASE("view selection: select-all before the new filter's reply is refused", "[ui][table][selection]") {
     TableHarness h;
     addAction(h, "Lims_TagRows", std::string{kSelectionSchema}, samplesAction());
-    auto screen = h.mount(
+    auto const screen = h.mount(
         R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
         R"("state":{"f":{"init":{"lit":{"columns":{"status":{"include":[{"eq":"open"}]}}}}}},)"
         R"("view":{"kind":"column","children":[{"kind":"table","id":"t","testId":"t","model":"sample",)"
@@ -5893,7 +5898,11 @@ TEST_CASE("view selection: select-all before the new filter's reply is refused",
     h.settle();
     CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[]})"));
     CHECK(statusOf(h, table).message == "Select all is available once the rows have loaded");
-    replyPage(h, selectionPage({{0}, {1}, {2}, {3}, {4}, {5}, {6, "closed"}}, 7, "v2"));
+    replyPage(
+        h,
+        selectionPage(
+            {{.key = 0}, {.key = 1}, {.key = 2}, {.key = 3}, {.key = 4}, {.key = 5}, {.key = 6, .status = "closed"}},
+            7, "v2"));
     h.backend.selectAll(table);
     h.settle();
     CHECK(*elementValue(h, "t", "selectionSet").field("view")->field("revision") == Value{std::string{"v2"}});
@@ -5906,7 +5915,7 @@ TEST_CASE("view selection: only the table whose view was refused offers it again
     std::string const other =
         R"({"kind":"table","id":"u","testId":"u","model":"sample","table":"samples","selectionMode":"multiple",)"
         R"("filters":{"columns":{"status":{"include":[{"eq":"closed"}]}}}})";
-    auto screen = h.mount(selectionDoc(std::string{kSelectionTable} + "," + other, kSelectionMutations, h));
+    auto const screen = h.mount(selectionDoc(std::string{kSelectionTable} + "," + other, kSelectionMutations, h));
     while (openCalls(h, "Table.samples.describe") > 0) {
         replyDescribe(h, describeJson(selectionDescription()));
     }
@@ -5915,7 +5924,11 @@ TEST_CASE("view selection: only the table whose view was refused offers it again
         bool const closed = queryOf(h, call).filters.columns.at("status").include.front().eq == "closed";
         std::string page;
         if (closed) {
-            page = selectionPage({{6, "closed"}, {7, "closed"}, {8, "closed"}, {9, "closed"}}, 4, "c1");
+            page = selectionPage({{.key = 6, .status = "closed"},
+                                  {.key = 7, .status = "closed"},
+                                  {.key = 8, .status = "closed"},
+                                  {.key = 9, .status = "closed"}},
+                                 4, "c1");
         } else {
             page = selectionPage(openRows(), 6, "v1");
         }
@@ -5938,7 +5951,7 @@ TEST_CASE("view selection: only the table whose view was refused offers it again
 TEST_CASE("view selection: not while membership is open", "[ui][table][selection]") {
     TableHarness h;
     SECTION("rows are undecided") {
-        auto screen = mountSelection(h);
+        auto const screen = mountSelection(h);
         int const table = h.byTestId("Table", "t");
         fireEvent(h, "Lims_SampleModel.samples", {});
         replyPage(h, selectionReply(openRows(), 6, "v1", {}, false, R"("undecided":40,"totalKind":"atLeast")"));
@@ -5950,7 +5963,7 @@ TEST_CASE("view selection: not while membership is open", "[ui][table][selection
     SECTION("the filtered column's level is awaited") {
         addAction(h, "Lims_TagRows", std::string{kSelectionSchema}, samplesAction());
         auto const described = withLevel(selectionDescription(), "status", "recipe");
-        auto screen = h.mount(selectionDoc(kSelectionTable, kSelectionMutations, h));
+        auto const screen = h.mount(selectionDoc(kSelectionTable, kSelectionMutations, h));
         replyDescribe(h, describeJson(described));
         replyPage(h, selectionReply(openRows(), 6, "v1", {}, false, R"("awaiting":["recipe"])", described));
         int const table = h.byTestId("Table", "t");
@@ -5962,7 +5975,7 @@ TEST_CASE("view selection: not while membership is open", "[ui][table][selection
     SECTION("only a column the filter does not read has the level") {
         addAction(h, "Lims_TagRows", std::string{kSelectionSchema}, samplesAction());
         auto const described = withLevel(selectionDescription(), "lockedBy", "recipe");
-        auto screen = h.mount(selectionDoc(kSelectionTable, kSelectionMutations, h));
+        auto const screen = h.mount(selectionDoc(kSelectionTable, kSelectionMutations, h));
         replyDescribe(h, describeJson(described));
         replyPage(h, selectionReply(openRows(), 6, "v1", {}, false, R"("awaiting":["recipe"])", described));
         int const table = h.byTestId("Table", "t");
@@ -5975,7 +5988,7 @@ TEST_CASE("view selection: not while membership is open", "[ui][table][selection
 
 TEST_CASE("view selection: the rows changed since the user selected them", "[ui][table][selection]") {
     TableHarness h;
-    auto screen = mountSelection(h);
+    auto const screen = mountSelection(h);
     int const table = h.byTestId("Table", "t");
     h.backend.selectAll(table);
     h.settle();
@@ -5985,7 +5998,8 @@ TEST_CASE("view selection: the rows changed since the user selected them", "[ui]
     REQUIRE(h.dispatcher.count("Lims_TagRows") == 1);
     // Seven rows now: a change of the record refetches the page.
     fireEvent(h, "Lims_SampleModel.samples", {});
-    replyPage(h, selectionPage({{0}, {1}, {2}, {3}, {4}, {5}, {6}}, 7, "v2"));
+    replyPage(h, selectionPage({{.key = 0}, {.key = 1}, {.key = 2}, {.key = 3}, {.key = 4}, {.key = 5}, {.key = 6}}, 7,
+                               "v2"));
     refuseMutation(h, "tag", "morph.table.viewChanged");
     TableStatus const status = statusOf(h, table);
     CHECK(status.message == "The rows changed since you selected them: 6 rows now. Run on these?");
@@ -6003,7 +6017,7 @@ TEST_CASE("view selection: the rows changed since the user selected them", "[ui]
 
 TEST_CASE("view selection: a Shift range toggles a range of except", "[ui][table][selection]") {
     TableHarness h;
-    auto screen = mountSelection(h);
+    auto const screen = mountSelection(h);
     int const table = h.byTestId("Table", "t");
     auto const except = [&h] { return *elementValue(h, "t", "selectionSet").field("except"); };
     h.backend.selectAll(table);
@@ -6033,7 +6047,7 @@ TEST_CASE("view selection: a Shift range toggles a range of except", "[ui][table
 
 TEST_CASE("view selection: copying it fetches the view's rows in order", "[ui][table][selection]") {
     TableHarness h;
-    auto screen = mountSelection(h);
+    auto const screen = mountSelection(h);
     int const table = h.byTestId("Table", "t");
     h.backend.selectAll(table);
     h.settle();
@@ -6049,9 +6063,13 @@ TEST_CASE("view selection: copying it fetches the view's rows in order", "[ui][t
     REQUIRE(query.columns.has_value());
     CHECK(*query.columns == std::vector<std::string>{"id", "status"});  // the visible columns
     // The fetched rows say "copied" where the held rows say "open": the copy writes what the page queries brought.
-    replyPage(
-        h, selectionPage({{0, "copied"}, {1, "copied"}, {2, "copied"}, {3, "copied"}, {4, "copied"}, {5, "copied"}}, 6,
-                         "v1"));
+    replyPage(h, selectionPage({{.key = 0, .status = "copied"},
+                                {.key = 1, .status = "copied"},
+                                {.key = 2, .status = "copied"},
+                                {.key = 3, .status = "copied"},
+                                {.key = 4, .status = "copied"},
+                                {.key = 5, .status = "copied"}},
+                               6, "v1"));
     CHECK(clipboardText(h) == "0\tcopied\n2\tcopied\n3\tcopied\n5\tcopied");
     SECTION("over maxCopyRows it is refused") {
         std::string const kept = clipboardText(h);
@@ -6080,7 +6098,7 @@ TEST_CASE("table rows: a new description revision drops a view selection that na
             R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples","selectionMode":"multiple",)"
             R"("filters":)" +
             std::string{filters} + "}";
-        auto screen = h.mount(selectionDoc(tableNode, kSelectionMutations, h));
+        auto const screen = h.mount(selectionDoc(tableNode, kSelectionMutations, h));
         replyDescribe(h, describeJson(withC));
         replyPage(h, selectionReply(openRows(), 6, "v1", {}, false, {}, withC));
         int const table = h.byTestId("Table", "t");
@@ -6175,7 +6193,11 @@ TEST_CASE("retained rows: the rows an action changed stay in view", "[ui][table]
     REQUIRE(openCalls(h, "Table.samples") == 1);
     CHECK(lastQuery(h).retain == idsOf({1, 2, 3}));
     // The keyed refetch of 1, 2 and 3 (and the probe of the first held row): they no longer match, and stay.
-    replyPage(h, selectionReply({{0}, {1, "closed"}, {2, "closed"}, {3, "closed"}}, 6, "v2", {1, 2, 3}, true));
+    replyPage(h, selectionReply({{.key = 0},
+                                 {.key = 1, .status = "closed"},
+                                 {.key = 2, .status = "closed"},
+                                 {.key = 3, .status = "closed"}},
+                                6, "v2", {1, 2, 3}, true));
     RowMarks const unmatched{.unmatched = true, .tooltip = "This row no longer matches the filter"};
     CHECK(rowMarks(h, std::int64_t{1}) == unmatched);
     CHECK(rowMarks(h, std::int64_t{3}) == unmatched);
@@ -6212,7 +6234,7 @@ TEST_CASE("retained rows: the rows an action changed stay in view", "[ui][table]
         h.settle();
         CHECK(lastQuery(h).retain.empty());
         CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[]})"));
-        replyPage(h, selectionPage({{0}, {4}, {5}}, 3, "v3"));
+        replyPage(h, selectionPage({{.key = 0}, {.key = 4}, {.key = 5}}, 3, "v3"));
         CHECK(statusOf(h, table).standing.empty());
         CHECK(rowMarks(h, std::int64_t{4}) == RowMarks{});
     }
@@ -6255,7 +6277,7 @@ TEST_CASE("retained rows: an action over the bound retains none", "[ui][table][r
 TEST_CASE("retained rows: an event before its action's reply is held", "[ui][table][retain]") {
     TableHarness h;
     SECTION("with retainChanged") {
-        auto screen = mountRetaining(h);
+        auto const screen = mountRetaining(h);
         runMutation(h, "close");
         std::size_t const sent = h.dispatcher.count("Table.samples");
         fireEvent(h, "Lims_SampleModel.samples", {1});
@@ -6266,7 +6288,7 @@ TEST_CASE("retained rows: an event before its action's reply is held", "[ui][tab
         CHECK(refetch.retain == idsOf({1}));
         REQUIRE(refetch.keys.has_value());
         CHECK(std::ranges::contains(*refetch.keys, table::RowId{std::int64_t{1}}));
-        replyPage(h, selectionReply({{0}, {1, "closed"}}, 6, "v2", {1}, true));
+        replyPage(h, selectionReply({{.key = 0}, {.key = 1, .status = "closed"}}, 6, "v2", {1}, true));
 
         // A run whose reply is slower than the hold: the event's query goes when the hold runs out.
         runMutation(h, "close");
@@ -6283,7 +6305,7 @@ TEST_CASE("retained rows: an event before its action's reply is held", "[ui][tab
         CHECK(lastQuery(h).retain == idsOf({1, 2}));
     }
     SECTION("without retainChanged the event's query goes at once") {
-        auto screen = mountRetaining(h, kSelectionTable);
+        auto const screen = mountRetaining(h, kSelectionTable);
         runMutation(h, "close");
         std::size_t const sent = h.dispatcher.count("Table.samples");
         fireEvent(h, "Lims_SampleModel.samples", {1});
@@ -6316,7 +6338,7 @@ TEST_CASE("retained rows: a reply to a query of the old retained set names no re
     CHECK(elementValue(h, "t", "selectionSet").field("view") == nullptr);
     // The reply to the query that carried row 1 names the view it is in.
     while (openCalls(h, "Table.samples") > 0) {
-        replyPage(h, selectionReply({{0}, {1, "closed"}}, 6, "new", {1}, true));
+        replyPage(h, selectionReply({{.key = 0}, {.key = 1, .status = "closed"}}, 6, "new", {1}, true));
     }
     CHECK(rowMarks(h, std::int64_t{1}) ==
           RowMarks{.unmatched = true, .tooltip = "This row no longer matches the filter"});
@@ -6333,7 +6355,7 @@ TEST_CASE("retained rows: a reply to a query of the old retained set names no re
 TEST_CASE("retained rows: rows over the engine retain too", "[ui][table][retain]") {
     RowsFixture h;
     auto const source = std::make_shared<TestRowsSource>(10);
-    EngineRows rows{source, source->recordOf(), table::EngineOptions{.owner = &h.owner}};
+    EngineRows rows{source, morph::ui::testing::TestRowsSource::recordOf(), table::EngineOptions{.owner = &h.owner}};
     table::FilterSpec only1;
     only1.columns["name"].include.push_back(table::FilterEntry{.eq = "row-1"});
     REQUIRE(rows.setFilter(only1));
@@ -6604,7 +6626,7 @@ TEST_CASE("key change: the action's event before its reply", "[ui][table][keys]"
 
 TEST_CASE("key change: onto a key already held", "[ui][table][keys][review]") {
     TableHarness h;
-    auto screen = mountActing(h);
+    auto const screen = mountActing(h);
     int const table = h.byTestId("Table", "t");
     // Rows 3 and 7 held; 7 and 3 selected.
     h.backend.clickRow(table, std::int64_t{7});
@@ -6666,7 +6688,7 @@ TEST_CASE("busy rows: a run's rows are busy until it settles", "[ui][table][busy
     SECTION("a selection of keys, then a row") {
         auto screen = mountActing(h);
         int const table = h.byTestId("Table", "t");
-        morph::ui::TableRows& rows = *elementOf(*screen, "t").tableRows;
+        morph::ui::TableRows const& rows = *elementOf(*screen, "t").tableRows;
         table::TableDescription const& description = *elementOf(*screen, "t").tableWindow->description();
         h.backend.clickRow(table, std::int64_t{1});
         h.backend.ctrlClickRow(table, std::int64_t{2});
@@ -6694,7 +6716,7 @@ TEST_CASE("busy rows: a run's rows are busy until it settles", "[ui][table][busy
     }
     SECTION("a selection of the view") {
         // A view selection of 6 rows less 3 held as except.
-        auto screen = mountActing(h, kSelectionTable, kActingMutations, openRows());
+        auto const screen = mountActing(h, kSelectionTable, kActingMutations, openRows());
         int const table = h.byTestId("Table", "t");
         h.backend.selectAll(table);
         h.settle();
@@ -6824,7 +6846,7 @@ TEST_CASE("locked rows: a locked row draws locked and refuses an edit", "[ui][ta
     TableHarness h;
     auto screen = mountActing(h);
     int const table = h.byTestId("Table", "t");
-    morph::ui::TableRows& rows = *elementOf(*screen, "t").tableRows;
+    morph::ui::TableRows const& rows = *elementOf(*screen, "t").tableRows;
     table::TableDescription const& description = *elementOf(*screen, "t").tableWindow->description();
     // Row 6's lockedBy is "Being edited by another user".
     CHECK(rowMarks(h, std::int64_t{6}) == morph::ui::RowMarks{.locked = true, .tooltip = std::string{kLockText}});
@@ -7125,9 +7147,12 @@ TEST_CASE("model table: the mount and the drafts share the rows' one change slot
                                    .at(column);
         return morph::ui::text(morph::ui::Text{.text = morph::ui::Prop<std::string>{[&record, id] {
                                                    Value const* const value = record.get().field(id);
-                                                   if (value == nullptr) return std::string{};
-                                                   if (std::int64_t const* const number = value->asInt())
+                                                   if (value == nullptr) {
+                                                       return std::string{};
+                                                   }
+                                                   if (std::int64_t const* const number = value->asInt()) {
                                                        return std::to_string(*number);
+                                                   }
                                                    return value->asString() != nullptr ? *value->asString()
                                                                                        : std::string{};
                                                }}});
@@ -7188,7 +7213,7 @@ TEST_CASE("model table: cells of a model's table", "[ui][table][edit]") {
         REQUIRE(f.commits.sent.size() == 1);
         morph::table::EditCell const& cell = f.commits.sent.at(0).cells.at(0);
         CHECK((cell.column == "count" && cell.json == "9" && cell.member == "value"));
-        f.commits.done.at(0)(refusedWith({{"value", "Row 2 is closed"}}));
+        f.commits.done.at(0)(refusedWith({{.column = "value", .message = "Row 2 is closed"}}));
         CHECK(f.source->error(key(2), "count") == "Row 2 is closed");
         CHECK(f.source->draft(key(2), "count") == "9");
         CHECK(f.source->marks(key(2), "count").error);
@@ -7233,7 +7258,7 @@ TEST_CASE("model table: cells of a model's table", "[ui][table][edit]") {
         morph::table::EditCell const& remark = f.commits.sent.at(0).cells.at(1);
         CHECK((label.column == "label" && label.json == R"("a")" && label.member == "label"));
         CHECK((remark.column == "remark" && remark.json == R"("b")" && remark.member == "remarkText"));
-        f.commits.done.at(0)(refusedWith({{"remarkText", "too long"}}));
+        f.commits.done.at(0)(refusedWith({{.column = "remarkText", .message = "too long"}}));
         CHECK(f.source->error(key(1), "remark") == "too long");
         CHECK_FALSE(f.source->error(key(1), "label").has_value());
         CHECK(f.grid->focus() == at(1, "remark"));  // focus back on the refused cell

@@ -18,6 +18,7 @@
 //    case fails with `UnknownColumn`.
 //  The oneOf and group cases name their own mutations above them.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
@@ -413,24 +414,25 @@ TEST_CASE("table: an unloaded cell is unknown to every operator", "[table][filte
         ColumnKind kind;
         FilterEntry entry;
     };
-    std::vector<Case> const cases{{ColumnKind::Integer, {.eq = "1"}},
-                                  {ColumnKind::Integer, {.ne = "1"}},
-                                  {ColumnKind::Integer, {.lt = "1"}},
-                                  {ColumnKind::Integer, {.le = "1"}},
-                                  {ColumnKind::Integer, {.gt = "1"}},
-                                  {ColumnKind::Integer, {.ge = "1"}},
-                                  {ColumnKind::Decimal, {.between = std::array<std::string, 2>{"1", "2"}}},
-                                  {ColumnKind::Text, {.contains = "a"}},
-                                  {ColumnKind::Text, {.startsWith = "a"}},
-                                  {ColumnKind::Text, {.endsWith = "a"}},
-                                  {ColumnKind::Date, {.eq = "2026-01-01"}},
-                                  {ColumnKind::Bool, {.eq = "true"}},
-                                  {ColumnKind::Text, {.isEmpty = true}},
-                                  {ColumnKind::Text, {.notEmpty = true}}};
+    std::vector<Case> const cases{
+        {.kind = ColumnKind::Integer, .entry = {.eq = "1"}},
+        {.kind = ColumnKind::Integer, .entry = {.ne = "1"}},
+        {.kind = ColumnKind::Integer, .entry = {.lt = "1"}},
+        {.kind = ColumnKind::Integer, .entry = {.le = "1"}},
+        {.kind = ColumnKind::Integer, .entry = {.gt = "1"}},
+        {.kind = ColumnKind::Integer, .entry = {.ge = "1"}},
+        {.kind = ColumnKind::Decimal, .entry = {.between = std::array<std::string, 2>{"1", "2"}}},
+        {.kind = ColumnKind::Text, .entry = {.contains = "a"}},
+        {.kind = ColumnKind::Text, .entry = {.startsWith = "a"}},
+        {.kind = ColumnKind::Text, .entry = {.endsWith = "a"}},
+        {.kind = ColumnKind::Date, .entry = {.eq = "2026-01-01"}},
+        {.kind = ColumnKind::Bool, .entry = {.eq = "true"}},
+        {.kind = ColumnKind::Text, .entry = {.isEmpty = true}},
+        {.kind = ColumnKind::Text, .entry = {.notEmpty = true}}};
     for (auto const& [kind, entry] : cases) {
         for (bool const exclude : {false, true}) {
             for (auto const combine : {Combine::Any, Combine::All}) {
-                auto source = tabletest::slowColumn(kind, {Cell{Unloaded{}}});
+                auto const source = tabletest::slowColumn(kind, {Cell{Unloaded{}}});
                 ColumnFilter filter{.combine = combine};
                 (exclude ? filter.exclude : filter.include).push_back(entry);
                 auto page = apply(*source, TableQuery{.filters = FilterSpec{.columns = {{"c", filter}}}});
@@ -546,7 +548,7 @@ TEST_CASE("table: the filter is sound under every completion", "[table][filter][
         Engine engine{tabletest::makeSource(columns, std::move(rows))};
         REQUIRE(engine.setFilter(spec));
         Rows view(engine.view().begin(), engine.view().end());
-        Rows undecided(engine.undecidedRows().begin(), engine.undecidedRows().end());
+        Rows const undecided(engine.undecidedRows().begin(), engine.undecidedRows().end());
         std::ranges::sort(view);
         return std::pair{view, undecided};
     };
@@ -683,23 +685,24 @@ TEST_CASE("table: oneOf is the OR of its eq entries over random tables", "[table
         std::vector<std::string> operands;  // the same values as filter text
     };
     std::vector<Kind> const kinds{
-        {ColumnKind::Text,
-         {std::string{"a"}, std::string{"B"}, std::string{"b"}, std::string{"c"}, std::string{"D"}, std::string{"e"},
-          std::string{"F"}, std::string{"g"}},
-         {"a", "B", "b", "c", "D", "e", "F", "g"}},
-        {ColumnKind::Integer,
-         {std::int64_t{1}, std::int64_t{2}, std::int64_t{3}, std::int64_t{4}, std::int64_t{5}, std::int64_t{6},
-          std::int64_t{7}, std::int64_t{8}},
-         {"1", "2", "3", "4", "5", "6.0", "7", "8"}},
-        {ColumnKind::Decimal,
-         {dec("0.5"), dec("1"), dec("1.25"), dec("2"), dec("2.5"), dec("3"), dec("3.75"), dec("4")},
-         {"0.5", "1.0", "1.25", "2", "2.50", "3", "3.75", "4"}},
-        {ColumnKind::Date,
-         {std::string{"2026-01-01"}, std::string{"2026-01-02"}, std::string{"2026-01-03"}, std::string{"2026-01-04"},
-          std::string{"2026-01-05"}, std::string{"2026-01-06"}, std::string{"2026-01-07"}, std::string{"2026-01-08"}},
-         {"2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05", "2026-01-06", "2026-01-07",
-          "2026-01-08"}},
-        {ColumnKind::Bool, {true, false}, {"true", "false"}},
+        {.kind = ColumnKind::Text,
+         .cells = {std::string{"a"}, std::string{"B"}, std::string{"b"}, std::string{"c"}, std::string{"D"},
+                   std::string{"e"}, std::string{"F"}, std::string{"g"}},
+         .operands = {"a", "B", "b", "c", "D", "e", "F", "g"}},
+        {.kind = ColumnKind::Integer,
+         .cells = {std::int64_t{1}, std::int64_t{2}, std::int64_t{3}, std::int64_t{4}, std::int64_t{5},
+                   std::int64_t{6}, std::int64_t{7}, std::int64_t{8}},
+         .operands = {"1", "2", "3", "4", "5", "6.0", "7", "8"}},
+        {.kind = ColumnKind::Decimal,
+         .cells = {dec("0.5"), dec("1"), dec("1.25"), dec("2"), dec("2.5"), dec("3"), dec("3.75"), dec("4")},
+         .operands = {"0.5", "1.0", "1.25", "2", "2.50", "3", "3.75", "4"}},
+        {.kind = ColumnKind::Date,
+         .cells = {std::string{"2026-01-01"}, std::string{"2026-01-02"}, std::string{"2026-01-03"},
+                   std::string{"2026-01-04"}, std::string{"2026-01-05"}, std::string{"2026-01-06"},
+                   std::string{"2026-01-07"}, std::string{"2026-01-08"}},
+         .operands = {"2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05", "2026-01-06", "2026-01-07",
+                      "2026-01-08"}},
+        {.kind = ColumnKind::Bool, .cells = {true, false}, .operands = {"true", "false"}},
     };
     std::mt19937 rng{23};
     for (int table = 0; table < 200; ++table) {
@@ -860,17 +863,27 @@ TEST_CASE("groups: three-valued over unloaded cells", "[table][filter][groups]")
     GroupFilter const noneX{.group = "company", .include = {}, .exclude = {eq("X")}};
     GroupFilter const anyEmpty{.group = "company", .include = {isEmpty()}};
     std::vector<Case> const cases{
-        {atLeast2F, {"F", "F", "U"}, Match::Yes},      {atLeast2F, {"X", "X", "U"}, Match::No},
-        {atLeast2F, {"F", "X", "U"}, Match::Unknown},  {anyF, {"F", "U", "U"}, Match::Yes},
-        {anyF, {"X", "X", "U"}, Match::Unknown},       {anyF, {"X", "X", "X"}, Match::No},
-        {allF, {"F", "F", "U"}, Match::Unknown},       {allF, {"F", "X", "U"}, Match::No},
-        {exactly1F, {"F", "F", "U"}, Match::No},       {exactly1F, {"F", "X", "U"}, Match::Unknown},
-        {exactly1F, {"X", "X", "U"}, Match::Unknown},  {exactly1F, {"F", "X", "X"}, Match::Yes},
-        {exactly1F, {"X", "X", "X"}, Match::No},       {togetherFS, {"F", "S", "U"}, Match::Yes},
-        {togetherFS, {"F", "F", "U"}, Match::Unknown}, {togetherFS, {"U", "U", "X"}, Match::Unknown},
-        {togetherFS, {"X", "X", "U"}, Match::No},      {noneX, {"F", "X", "U"}, Match::No},
-        {noneX, {"F", "S", "U"}, Match::Unknown},      {noneX, {"F", "S", "F"}, Match::Yes},
-        {anyEmpty, {"X", "X", "U"}, Match::Unknown},
+        {.filter = atLeast2F, .cells = {"F", "F", "U"}, .expected = Match::Yes},
+        {.filter = atLeast2F, .cells = {"X", "X", "U"}, .expected = Match::No},
+        {.filter = atLeast2F, .cells = {"F", "X", "U"}, .expected = Match::Unknown},
+        {.filter = anyF, .cells = {"F", "U", "U"}, .expected = Match::Yes},
+        {.filter = anyF, .cells = {"X", "X", "U"}, .expected = Match::Unknown},
+        {.filter = anyF, .cells = {"X", "X", "X"}, .expected = Match::No},
+        {.filter = allF, .cells = {"F", "F", "U"}, .expected = Match::Unknown},
+        {.filter = allF, .cells = {"F", "X", "U"}, .expected = Match::No},
+        {.filter = exactly1F, .cells = {"F", "F", "U"}, .expected = Match::No},
+        {.filter = exactly1F, .cells = {"F", "X", "U"}, .expected = Match::Unknown},
+        {.filter = exactly1F, .cells = {"X", "X", "U"}, .expected = Match::Unknown},
+        {.filter = exactly1F, .cells = {"F", "X", "X"}, .expected = Match::Yes},
+        {.filter = exactly1F, .cells = {"X", "X", "X"}, .expected = Match::No},
+        {.filter = togetherFS, .cells = {"F", "S", "U"}, .expected = Match::Yes},
+        {.filter = togetherFS, .cells = {"F", "F", "U"}, .expected = Match::Unknown},
+        {.filter = togetherFS, .cells = {"U", "U", "X"}, .expected = Match::Unknown},
+        {.filter = togetherFS, .cells = {"X", "X", "U"}, .expected = Match::No},
+        {.filter = noneX, .cells = {"F", "X", "U"}, .expected = Match::No},
+        {.filter = noneX, .cells = {"F", "S", "U"}, .expected = Match::Unknown},
+        {.filter = noneX, .cells = {"F", "S", "F"}, .expected = Match::Yes},
+        {.filter = anyEmpty, .cells = {"X", "X", "U"}, .expected = Match::Unknown},
     };
     for (std::size_t at = 0; at < cases.size(); ++at) {
         auto const& c = cases[at];
@@ -947,7 +960,7 @@ TEST_CASE("groups: a declared group is checked where the columns are read", "[ta
         columns.push_back(tabletest::col("t" + std::to_string(i), ColumnKind::Text));
     }
     columns.push_back(tabletest::col("n", ColumnKind::Integer));
-    std::vector<Cell> row(columns.size(), Cell{std::string{"1"}});
+    std::vector<Cell> const row(columns.size(), Cell{std::string{"1"}});
     auto const source = tabletest::makeSource(columns, {row});
     auto const group = [](std::string id, std::vector<std::string> members) {
         return ColumnGroupInfo{.id = std::move(id), .label = {}, .columns = std::move(members)};
@@ -976,7 +989,7 @@ TEST_CASE("groups: a declared group is checked where the columns are read", "[ta
 // Mutations: ColumnCount's reader taking `{"atLeast": n}` as `exactly` (the shape does not read back); the malformed
 // check made in Columns mode only (a Together group with a malformed match compiles).
 TEST_CASE("groups: the JSON shape reads and writes", "[table][filter][groups]") {
-    auto const json =
+    const auto* const json =
         R"({"group":"company","mode":"together","match":{"atLeast":2},"combine":"all","include":[{"eq":"F"},{"eq":"S"}],"exclude":[{"eq":"X"}]})";
     GroupFilter g;
     REQUIRE_FALSE(glz::read_json(g, std::string{json}));
@@ -1175,7 +1188,7 @@ bool oracle(Oracle const& definition, std::vector<Cell> const& row) {
     if (filter.mode == GroupMode::Together) {
         // Try every injective assignment of entries to columns.
         std::vector<std::size_t> columns(row.size());
-        std::iota(columns.begin(), columns.end(), std::size_t{0});
+        std::ranges::iota(columns, std::size_t{0});
         do {
             bool all = true;
             for (std::size_t e = 0; e < filter.include.size() && all; ++e) {
@@ -1184,7 +1197,7 @@ bool oracle(Oracle const& definition, std::vector<Cell> const& row) {
             if (all) {
                 return true;
             }
-        } while (std::next_permutation(columns.begin(), columns.end()));
+        } while (std::ranges::next_permutation(columns).found);
         return false;
     }
     std::int64_t satisfied = 0;
@@ -1350,7 +1363,7 @@ TEST_CASE("groups: a row costs k lookups and at most one augmentation an entry",
         // Every 50th row holds v0..v15 in a shuffled order: the together filter below covers it, so its matching
         // runs to the bound. Random rows almost never hold all sixteen values.
         std::vector<int> values(16);
-        std::iota(values.begin(), values.end(), 0);
+        std::ranges::iota(values, 0);
         if (r % 50 == 0) {
             std::ranges::shuffle(values, rng);
         } else {

@@ -115,12 +115,16 @@ inline std::vector<ui::GridColumn> kindPerRowColumns() {
     return columns;
 }
 
-inline ui::CellRef at(std::int64_t key, std::string column) { return ui::CellRef{ui::Key{key}, std::move(column)}; }
+inline ui::CellRef at(std::int64_t key, std::string column) {
+    return ui::CellRef{.key = ui::Key{key}, .column = std::move(column)};
+}
 // Every fetched key of the source's view, in view order.
 inline std::vector<ui::Key> keysOf(ui::GridSource const& source) {
     std::vector<ui::Key> keys;
     for (std::size_t i = 0; i < source.rowCount(); ++i) {
-        if (auto key = source.keyAt(i)) keys.push_back(*key);
+        if (auto key = source.keyAt(i)) {
+            keys.push_back(*key);
+        }
     }
     return keys;
 }
@@ -304,7 +308,9 @@ public:
         for (std::size_t to = 0; to < keys.size(); ++to) {
             auto const at = std::ranges::find(view, keys.at(to), &Row::key);
             auto const from = static_cast<std::size_t>(at - view.begin());
-            if (from == to) continue;
+            if (from == to) {
+                continue;
+            }
             Row row = std::move(*at);
             view.erase(at);
             view.insert(view.begin() + static_cast<std::ptrdiff_t>(to), std::move(row));
@@ -372,13 +378,19 @@ public:
     }
     [[nodiscard]] std::optional<ui::TableRowRef> row(std::int64_t index) const override {
         ++rowReads;
-        if (index < 0 || static_cast<std::size_t>(index) >= view.size()) return std::nullopt;
+        if (index < 0 || static_cast<std::size_t>(index) >= view.size()) {
+            return std::nullopt;
+        }
         Row const& held = view.at(static_cast<std::size_t>(index));
-        if (!held.fetched) return std::nullopt;
+        if (!held.fetched) {
+            return std::nullopt;
+        }
         return ui::TableRowRef{.key = held.key, .row = held.record};
     }
     [[nodiscard]] table::UnloadedLevels unloadedLevels(std::int64_t index) const override {
-        if (index < 0 || static_cast<std::size_t>(index) >= view.size()) return {};
+        if (index < 0 || static_cast<std::size_t>(index) >= view.size()) {
+            return {};
+        }
         _levels.assign(view.at(static_cast<std::size_t>(index)).unloaded.begin(),
                        view.at(static_cast<std::size_t>(index)).unloaded.end());
         return table::UnloadedLevels{.levels = _levels, .failed = {}};
@@ -417,7 +429,9 @@ public:
 
 private:
     void announce(std::vector<table::ViewOp> ops) {
-        if (_handler && !ops.empty()) _handler(table::ViewChange{.ops = std::move(ops)});
+        if (_handler && !ops.empty()) {
+            _handler(table::ViewChange{.ops = std::move(ops)});
+        }
     }
     std::function<void(table::ViewChange const&)> _handler;
     std::size_t _handlerSets = 0;

@@ -1819,7 +1819,7 @@ TEST_CASE("table window: a pass reads no width outside the column window", "[ui]
     for (int x = 10'000; x < 12'000; x += 100) {
         f.scrollColumns(x);  // twenty passes, one column each
     }
-    std::size_t const window = 2 + 20 + 2 * 4;
+    std::size_t const window = 2 + 20 + (2 * 4);
     CHECK(f.extents().columnReads() - before <= 20 * window);  // the window's columns, per pass
 }
 
@@ -1979,7 +1979,7 @@ TEST_CASE("table focus: a new order follows the focused key off-screen and only 
 // scrolled past).  Gate F2.
 TEST_CASE("table window: cells of their own columns scrolled across stay bounded", "[ui][mount]") {
     std::vector<std::size_t> every(300);
-    std::iota(every.begin(), every.end(), std::size_t{0});
+    std::ranges::iota(every, std::size_t{0});
     WindowFixture f{1'999, 300, {.pinned = 0, .custom = every}};
     for (int x = 0; x <= 20'000; x += 1'000) {
         f.scrollColumns(x);
@@ -1990,7 +1990,7 @@ TEST_CASE("table window: cells of their own columns scrolled across stay bounded
 // Mutation: a pass that realized nothing posts the next anyway (the owner never goes idle).
 TEST_CASE("table window: cells whose build throws on every pass stop being retried", "[ui][mount]") {
     std::vector<std::size_t> every(300);
-    std::iota(every.begin(), every.end(), std::size_t{0});
+    std::ranges::iota(every, std::size_t{0});
     WindowFixture f{1'999, 300, {.pinned = 0, .custom = every}};
     Probe const probe{f.owner.coreExecutor()};  // each failed pass is reported, not asserted
     f.throwing = true;
@@ -2007,7 +2007,7 @@ TEST_CASE("table window: widths are in the backend's measure", "[ui][mount]") {
     Runtime runtime{owner};
     RecordingBackend backend;
     backend.setTableMeasure(ui::TableMeasure{.unit = 7.8, .monoUnit = 10.12, .contentEstimate = 64, .padding = 6});
-    auto rows = std::make_shared<FakeRows>(50, 4, runtime.owner());
+    auto const rows = std::make_shared<FakeRows>(50, 4, runtime.owner());
     std::vector<ui::TableColumn> columns{
         {.id = "c0", .label = "A", .width = ui::Sizing::fixed(10)},
         {.id = "c1", .label = "B", .width = ui::Sizing::fixed(10), .role = ui::TextRole::Mono},
@@ -2036,7 +2036,7 @@ TEST_CASE("mount: a cell selection is shown by its corners' positions now", "[ui
     Owner owner;
     Runtime runtime{owner};
     RecordingBackend backend;
-    auto rows = std::make_shared<FakeRows>(3, 3, runtime.owner());
+    auto const rows = std::make_shared<FakeRows>(3, 3, runtime.owner());
     std::vector<std::int64_t> order{1, 2, 3};
     rows->reorder([&order](std::int64_t index) { return order.at(static_cast<std::size_t>(index)); });
     std::vector<ui::TableColumn> columns{
@@ -2046,8 +2046,11 @@ TEST_CASE("mount: a cell selection is shown by its corners' positions now", "[ui
     source.cellView = [](std::size_t column, Signal<Value> const& row) {
         return ui::text({.text = [&row, column] { return fieldText(row.get(), "c" + std::to_string(column)); }});
     };
-    auto const cell = [](std::int64_t key, std::string column) { return CellRef{Key{key}, std::move(column)}; };
-    Signal<std::optional<ui::CellRange>> selection{runtime, ui::CellRange{cell(1, "a"), cell(2, "b")}};
+    auto const cell = [](std::int64_t key, std::string column) {
+        return CellRef{.key = Key{key}, .column = std::move(column)};
+    };
+    Signal<std::optional<ui::CellRange>> selection{runtime,
+                                                   ui::CellRange{.anchor = cell(1, "a"), .focus = cell(2, "b")}};
     Signal<TableArrangement> arrangement{runtime, TableArrangement{}};
     std::vector<std::optional<ui::CellRange>> reported;
     ui::TableOptions options;
@@ -2135,7 +2138,9 @@ TEST_CASE("bands: a band follows the layout", "[ui][mount][bands]") {
 TEST_CASE("bands: a stored layout hides then shows a band's column", "[ui][mount][bands]") {
     table::ColumnLayout layout{kIds};
     table::ColumnLayout stored{kIds};
-    for (auto const* id : {"m8", "m4", "m2"}) stored.setVisible(id, false);
+    for (auto const* id : {"m8", "m4", "m2"}) {
+        stored.setVisible(id, false);
+    }
     layout.apply(stored.value());
     CHECK(ui::bandRuns(kMassBand, layout.visible(), layout.pinned()).empty());
     layout.setVisible("m4", true);
@@ -2153,7 +2158,7 @@ TEST_CASE("bands: the mount draws the runs of the arrangement and drops a band's
     Owner owner;
     Runtime runtime{owner};
     RecordingBackend backend;
-    auto rows = std::make_shared<FakeRows>(3, 5, runtime.owner());
+    auto const rows = std::make_shared<FakeRows>(3, 5, runtime.owner());
     std::vector<ui::TableColumn> columns;
     for (std::string const& id : kIds) {
         columns.push_back(
@@ -2202,7 +2207,7 @@ TEST_CASE("spans: a span across columns reaches the backend", "[ui][mount][spans
     Owner owner;
     Runtime runtime{owner};
     RecordingBackend backend;
-    auto rows = std::make_shared<FakeRows>(4, 4, runtime.owner());
+    auto const rows = std::make_shared<FakeRows>(4, 4, runtime.owner());
     rows->reorder([](std::int64_t index) { return index + 1; });
     std::vector<ui::TableColumn> columns{
         {.id = "a", .label = "A"}, {.id = "b", .label = "B"}, {.id = "c", .label = "C"}, {.id = "d", .label = "D"}};
@@ -2236,7 +2241,7 @@ TEST_CASE("summary: a summary row is drawn as one, outside the rows", "[ui][moun
     Owner owner;
     Runtime runtime{owner};
     RecordingBackend backend;
-    auto source = std::make_shared<ui::ValueRowsSource>(
+    auto const source = std::make_shared<ui::ValueRowsSource>(
         runtime, std::vector<ui::ValueColumn>{ui::ValueColumn{.id = "name"}},
         [](Value const& row) { return Key{*row.field("id")->asInt()}; }, nullptr);
     ui::ValueList records;
@@ -2247,8 +2252,8 @@ TEST_CASE("summary: a summary row is drawn as one, outside the rows", "[ui][moun
         records.emplace_back(std::move(record));
     }
     source->assign(records);
-    auto const data =
-        std::make_shared<ui::EngineRows>(source, source->recordOf(), table::EngineOptions{.owner = &owner});
+    auto const data = std::make_shared<ui::EngineRows>(source, morph::ui::ValueRowsSource::recordOf(),
+                                                       table::EngineOptions{.owner = &owner});
     while (owner.runAll() > 0) {
     }
     auto const decorator = std::make_shared<ui::SummaryRows>(
@@ -2277,8 +2282,8 @@ TEST_CASE("summary: a summary row is drawn as one, outside the rows", "[ui][moun
         CHECK(backend.prop(row, "summary") == "true");
         // set right after the row's key
         std::vector<std::string> const& log = backend.log();
-        auto const keyed = std::ranges::find_if(
-            log, [&](std::string const& line) { return line.find("rowKey=" + key) != std::string::npos; });
+        auto const keyed =
+            std::ranges::find_if(log, [&](std::string const& line) { return line.contains("rowKey=" + key); });
         REQUIRE(keyed != log.end());
         // The row's next property after its key, whatever the table logs between.
         std::string const label = keyed->substr(0, keyed->find(" rowKey="));

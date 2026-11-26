@@ -247,7 +247,7 @@ TEST_CASE("tui forms: an inline form draws each label on its control's row", "[t
 // Mutation: the terminal table ignoring its select-all handler (Ctrl+A selects the page's two rows).
 TEST_CASE("tui forms: Ctrl+A on a paged table selects every row of the view", "[tui][forms][table]") {
     TuiClient client;
-    auto screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+    auto const screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
       "vocab": "ui/1", "id": "paged", "state": { "rows": { "init": { "lit": [
         { "id": 1, "n": "one" }, { "id": 2, "n": "two" }, { "id": 3, "n": "three" }, { "id": 4, "n": "four" },
         { "id": 5, "n": "five" } ] } } },
@@ -255,8 +255,8 @@ TEST_CASE("tui forms: Ctrl+A on a paged table selects every row of the view", "[
         { "kind": "table", "id": "t", "testId": "list", "rows": { "ref": "rows" }, "key": { "row": "id" },
           "selectionMode": "multiple", "pageSize": 2, "columns": [ { "id": "n", "label": "Name" } ] },
         { "kind": "text", "text": { "fn": "format", "args": [ "{0} picked", { "ref": "t.selectedCount" } ] } } ] } })",
-                                                                   ui::testing::corpusCatalog()),
-                                           {}, client.backend);
+                                                                         ui::testing::corpusCatalog()),
+                                                 {}, client.backend);
     REQUIRE(screen.has_value());
     client.settle();
     client.backend.focusFirst();
@@ -271,7 +271,7 @@ TEST_CASE("tui forms: Ctrl+A on a paged table selects every row of the view", "[
 // unused (the page's range selects none of the other page's rows).
 TEST_CASE("tui forms: the header box of a paged table selects every row of the view", "[tui][forms][table]") {
     TuiClient client;
-    auto screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+    auto const screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
       "vocab": "ui/1", "id": "paged", "state": { "rows": { "init": { "lit": [
         { "id": 1, "n": "one" }, { "id": 2, "n": "two" }, { "id": 3, "n": "three" }, { "id": 4, "n": "four" },
         { "id": 5, "n": "five" } ] } } },
@@ -280,8 +280,8 @@ TEST_CASE("tui forms: the header box of a paged table selects every row of the v
           "selectionMode": "multiple", "selectColumn": true, "pageSize": 2,
           "columns": [ { "id": "n", "label": "Name" } ] },
         { "kind": "text", "text": { "fn": "format", "args": [ "{0} picked", { "ref": "t.selectedCount" } ] } } ] } })",
-                                                                   ui::testing::corpusCatalog()),
-                                           {}, client.backend);
+                                                                         ui::testing::corpusCatalog()),
+                                                 {}, client.backend);
     REQUIRE(screen.has_value());
     client.settle();
     INFO(client.drawn());
@@ -301,15 +301,15 @@ TEST_CASE("tui forms: the header box of a paged table selects every row of the v
 // and the text takes the line its rows would have had).
 TEST_CASE("tui forms: a rows table below its threshold draws its rows before any focus", "[tui][forms][table]") {
     TuiClient client;
-    auto screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+    auto const screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
       "vocab": "ui/1", "id": "few", "state": { "rows": { "init": { "lit": [
         { "id": 1, "n": "one" }, { "id": 2, "n": "two" }, { "id": 3, "n": "three" } ] } } },
       "view": { "kind": "column", "children": [
         { "kind": "table", "id": "t", "rows": { "ref": "rows" }, "key": { "row": "id" },
           "columns": [ { "id": "n", "label": "Name" } ] },
         { "kind": "text", "text": "after" } ] } })",
-                                                                   ui::testing::corpusCatalog()),
-                                           {}, client.backend);
+                                                                         ui::testing::corpusCatalog()),
+                                                 {}, client.backend);
     REQUIRE(screen.has_value());
     client.settle();
     INFO(client.drawn());

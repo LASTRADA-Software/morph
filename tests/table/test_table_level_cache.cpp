@@ -166,7 +166,9 @@ struct Rig {
 };
 
 // The bytes an accepted set of `n` integer keys owns in the bound.
-std::size_t setKeyBytes(std::size_t n) { return sizeof(std::vector<RowId>) + n * rowIdBytes(RowId{std::int64_t{0}}); }
+std::size_t setKeyBytes(std::size_t n) {
+    return sizeof(std::vector<RowId>) + (n * rowIdBytes(RowId{std::int64_t{0}}));
+}
 
 // Each key's value as the rig's loader returns it, for a store that bypasses the loader.
 Values valuesOf(std::vector<RowId> const& stored) {
@@ -269,16 +271,19 @@ TEST_CASE("level cache: the observer invalidates by record", "[table][levels]") 
         REQUIRE(rig.cache.want(keys(10), LevelUse::Display));
         rig.drain();
         auto const loads = rig.announced.size();
-        rig.cache.changed(morph::effects::Changes{.records = {{"T.rows", rawKeys({"3"})}}, .instances = {}});
+        rig.cache.changed(
+            morph::effects::Changes{.records = {{.record = "T.rows", .keys = rawKeys({"3"})}}, .instances = {}});
         auto snapshot = rig.cache.snapshot();
         CHECK(stateOf(*snapshot, RowId{std::int64_t{3}}) == LevelRead::Unloaded);
         CHECK(stateOf(*snapshot, RowId{std::int64_t{4}}) == LevelRead::Loaded);
         CHECK(rig.announced.size() == loads);  // the action's own event is the notification
 
-        rig.cache.changed(morph::effects::Changes{.records = {{"Other", std::nullopt}}, .instances = {}});
+        rig.cache.changed(
+            morph::effects::Changes{.records = {{.record = "Other", .keys = std::nullopt}}, .instances = {}});
         CHECK(stateOf(*rig.cache.snapshot(), RowId{std::int64_t{4}}) == LevelRead::Loaded);  // in neither list
 
-        rig.cache.changed(morph::effects::Changes{.records = {{"T.rows", std::nullopt}}, .instances = {}});
+        rig.cache.changed(
+            morph::effects::Changes{.records = {{.record = "T.rows", .keys = std::nullopt}}, .instances = {}});
         snapshot = rig.cache.snapshot();
         for (auto const& key : keys(10)) {
             CHECK(stateOf(*snapshot, key) == LevelRead::Unloaded);
@@ -290,10 +295,12 @@ TEST_CASE("level cache: the observer invalidates by record", "[table][levels]") 
         REQUIRE(rig.cache.want(keys(10), LevelUse::Display));
         rig.drain();
         auto const loads = rig.announced.size();
-        rig.cache.changed(morph::effects::Changes{.records = {{"Other", std::nullopt}}, .instances = {}});
+        rig.cache.changed(
+            morph::effects::Changes{.records = {{.record = "Other", .keys = std::nullopt}}, .instances = {}});
         CHECK(stateOf(*rig.cache.snapshot(), RowId{std::int64_t{4}}) == LevelRead::Loaded);
         CHECK(rig.announced.size() == loads);
-        rig.cache.changed(morph::effects::Changes{.records = {{"Recipe", rawKeys({"77"})}}, .instances = {}});
+        rig.cache.changed(
+            morph::effects::Changes{.records = {{.record = "Recipe", .keys = rawKeys({"77"})}}, .instances = {}});
         auto const snapshot = rig.cache.snapshot();
         for (auto const& key : keys(10)) {
             CHECK(stateOf(*snapshot, key) == LevelRead::Unloaded);
@@ -350,7 +357,8 @@ TEST_CASE("level cache: values are stored before they are announced", "[table][l
     CHECK(std::ranges::all_of(rig.readsAtAnnounce, [](LevelRead read) { return read == LevelRead::Loaded; }));
     rig.readsAtAnnounce.clear();
     rig.readOnWhole = keys(100);
-    rig.cache.changed(morph::effects::Changes{.records = {{"Recipe", std::nullopt}}, .instances = {}});
+    rig.cache.changed(
+        morph::effects::Changes{.records = {{.record = "Recipe", .keys = std::nullopt}}, .instances = {}});
     REQUIRE(rig.readsAtAnnounce.size() == 100);
     CHECK(std::ranges::all_of(rig.readsAtAnnounce, [](LevelRead read) { return read == LevelRead::Unloaded; }));
 }
@@ -445,8 +453,8 @@ TEST_CASE("level cache: a held snapshot blocks no store", "[table][levels][threa
     // snapshot, so a store that waited for the reader fails the check instead of hanging the case.
     std::vector<std::thread> calls;
     auto const finishes = [&calls](std::function<void()> work) {
-        auto done = std::make_shared<std::promise<void>>();
-        auto finished = done->get_future();
+        auto const done = std::make_shared<std::promise<void>>();
+        auto const finished = done->get_future();
         calls.emplace_back([work = std::move(work), done] {
             work();
             done->set_value();
@@ -558,7 +566,7 @@ TEST_CASE("level cache: a failed load is remembered", "[table][levels]") {
         [&failedCalls](std::span<RowId const> failed) { failedCalls.emplace_back(failed.begin(), failed.end()); });
     REQUIRE(rig.cache.want(keys(20), LevelUse::Display));
     rig.drain();
-    auto snapshot = rig.cache.snapshot();
+    auto const snapshot = rig.cache.snapshot();
     for (auto const& key : keys(10)) {
         CHECK(stateOf(*snapshot, key) == LevelRead::Failed);
     }
@@ -860,7 +868,7 @@ TEST_CASE("level cache: a repeated order want keeps its lease when another holde
           "[table][levels]") {
     auto const value = smallValueBytes();
     Rig rig{[value](LevelCacheOptions& options) {
-        options.maxBytes = 150 * value + setKeyBytes(100);  // the set's keys count in the bound
+        options.maxBytes = (150 * value) + setKeyBytes(100);  // the set's keys count in the bound
         options.expectedBytes = value;
     }};
     auto const set = std::make_shared<std::vector<RowId> const>(keys(100));
@@ -881,7 +889,7 @@ TEST_CASE("level cache: a repeated order want keeps its lease when another holde
 TEST_CASE("level cache: concurrent repeats of an order set are fitted once", "[table][levels][threads]") {
     auto const value = smallValueBytes();
     Rig rig{[value](LevelCacheOptions& options) {
-        options.maxBytes = 150 * value + setKeyBytes(100);  // the set's keys count in the bound
+        options.maxBytes = (150 * value) + setKeyBytes(100);  // the set's keys count in the bound
         options.expectedBytes = value;
     }};
     auto const set = std::make_shared<std::vector<RowId> const>(keys(100));
@@ -1121,7 +1129,7 @@ TEST_CASE("level cache: a set superseded by the level's generation is released a
     CHECK(detail::LevelCacheAccess::acceptedSets(rig.cache) == 1);
     CHECK_FALSE(detail::LevelCacheAccess::kept(rig.cache, RowId{std::int64_t{0}}));
     // Eleven values (SX's ten and the one stored) and SY's keys; SX's keys have left the count.
-    auto const setYBytes = sizeof(std::vector<RowId>) + 10 * rowIdBytes(RowId{std::int64_t{10}});
+    auto const setYBytes = sizeof(std::vector<RowId>) + (10 * rowIdBytes(RowId{std::int64_t{10}}));
     CHECK(rig.cache.stats().bytes == 11 * smallValueBytes() + setYBytes);
 }
 
@@ -1129,8 +1137,8 @@ TEST_CASE("level cache: a set superseded by the level's generation is released a
 // bound once the values load).
 TEST_CASE("level cache: a set that fits on its values but not with its keys is refused", "[table][levels]") {
     auto const set = std::make_shared<std::vector<RowId> const>(keys(100));
-    auto const keyBytes = sizeof(std::vector<RowId>) + 100 * rowIdBytes(RowId{std::int64_t{0}});
-    auto const maxBytes = 100 * smallValueBytes() + keyBytes - 1;
+    auto const keyBytes = sizeof(std::vector<RowId>) + (100 * rowIdBytes(RowId{std::int64_t{0}}));
+    auto const maxBytes = (100 * smallValueBytes()) + keyBytes - 1;
     Rig rig{[&](LevelCacheOptions& options) {
         options.maxBytes = maxBytes;
         options.expectedBytes = smallValueBytes();

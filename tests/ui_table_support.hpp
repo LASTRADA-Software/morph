@@ -68,7 +68,7 @@ struct WindowRowsProbe {
 /// @return The catalog.
 inline Catalog tableCatalog() {
     Catalog catalog = corpusCatalog();
-    auto base = catalog.action;
+    auto const base = catalog.action;
     catalog.action = [base](std::string_view action) -> std::optional<ActionInfo> {
         if (action.starts_with("Table.") && action != "Table.samples" && action != "Table.samples.describe") {
             return std::nullopt;
@@ -1533,7 +1533,7 @@ inline CellAccent cellAccent(TableHarness& h, std::int64_t key, std::string_view
 /// @return How many.
 inline std::size_t diagnosticsMentioning(TableHarness const& h, std::string_view text) {
     return static_cast<std::size_t>(std::ranges::count_if(
-        h.diagnostics, [text](Refusal const& refusal) { return refusal.reason.find(text) != std::string::npos; }));
+        h.diagnostics, [text](Refusal const& refusal) { return refusal.reason.contains(text); }));
 }
 
 /// @brief Delivers a change of `Lims_SampleModel.samples` with @p keys, as a `changes` event does, then settles.
@@ -1681,7 +1681,7 @@ inline std::string renamedB(std::string_view itemsLiteral) {
     auto& items = std::get<Json::array_t>(json->data);
     auto const isB = [](Json const& item) {
         auto const* const fields = std::get_if<Json::object_t>(&item.data);
-        auto const id = fields == nullptr ? Json::object_t::const_iterator{} : fields->find("id");
+        const auto* const id = fields == nullptr ? Json::object_t::const_iterator{} : fields->find("id");
         return fields != nullptr && id != fields->end() && std::get_if<std::string>(&id->second.data) != nullptr &&
                std::get<std::string>(id->second.data) == "b";
     };

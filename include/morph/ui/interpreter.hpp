@@ -465,7 +465,8 @@ namespace detail {
 /// @param runtime The session's runtime, whose owner the states answer on.
 /// @param options The session's options.
 /// @return They; `nullptr` without a `tableState`.
-[[nodiscard]] MORPH_API std::shared_ptr<TableStates> makeTableStates(Session& session, reactive::Runtime& runtime,
+[[nodiscard]] MORPH_API std::shared_ptr<TableStates> makeTableStates(Session& session,
+                                                                     reactive::Runtime const& runtime,
                                                                      SessionOptions const& options);
 
 /// @brief The text of a failure.
@@ -2450,7 +2451,7 @@ private:
     /// and lets the rows through once the stored order is in place.
     void rowsTableChanged(RowsTable& table);
     /// Shows @p text in the status line of a table over `rows`, as `tableMessage` does for a table's element.
-    void rowsTableMessage(RowsTable& table, std::string text);
+    void rowsTableMessage(RowsTable& table, std::string text) const;
     /// Applies a table over `rows`' stored state once its load completed, or reports why it could not.
     void storedRowsState(RowsTable& table, std::optional<std::string> const& json, std::string const& failure);
     void collect(DocNode const& node, RtScope& scope, std::vector<Commands const*>& commands);
@@ -2549,7 +2550,7 @@ private:
     Node configureTable(TableConfig& config, LowerCtx const& ctx, TableOptions& options,
                         std::shared_ptr<void const> keep);
     /// Takes the columns a model-backed table's layout arranges from the description its rows hold now.
-    void modelLayoutColumns(ElementState& element);
+    void modelLayoutColumns(ElementState& element) const;
     /// A grouped table's heading row: its `group`'s `heading`, lowered as one cell in a row scope of its own whose
     /// row is the group's run record and whose key is `key`, the row's canonical key, as a data row's scope has.
     TableRowLook headingRow(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,

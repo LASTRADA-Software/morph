@@ -205,7 +205,7 @@ TEST_CASE("interpreter baseline: U1 U2 a rows table of 100,000", "[.benchmark][b
     std::int64_t shownFirst = 0;
     {
         Harness probe;
-        auto screen = probe.mount(sortedDocument(items, 0));
+        auto const screen = probe.mount(sortedDocument(items, 0));
         probe.backend.click(probe.byTestId("Button", "sort"));
         probe.settle();
         auto const texts = firstRowTexts(probe);
@@ -220,7 +220,7 @@ TEST_CASE("interpreter baseline: U1 U2 a rows table of 100,000", "[.benchmark][b
     std::vector<double> renames;
     for (int run = 0; run < 7; ++run) {
         Harness h;
-        auto screen = h.mount(document);
+        auto const screen = h.mount(document);
         REQUIRE(realizedWindow(h).ends_with("/100000"));
         auto const before = firstRowTexts(h);
         auto began = Clock::now();
@@ -288,7 +288,7 @@ private:
     }
 
     // A shared_ptr's control block: two counts and a vtable pointer.
-    static constexpr std::size_t kControlBlock = 2 * sizeof(long) + sizeof(void*);
+    static constexpr std::size_t kControlBlock = (2 * sizeof(long)) + sizeof(void*);
     // A map node: its key and value, three links and its colour, padded.
     static constexpr std::size_t kMapNode = sizeof(std::pair<std::string const, ui::Value>) + (4 * sizeof(void*));
     std::unordered_set<void const*> _seen;
@@ -440,7 +440,7 @@ TEST_CASE("interpreter bench: a collection of 20,000 rows: mount, sort, one row 
     std::vector<double> edits;
     for (int run = 0; run < 7; ++run) {
         Harness h;
-        auto screen = h.mount(kDocument);
+        auto const screen = h.mount(kDocument);
         auto began = Clock::now();
         h.reply(h.dispatcher.last("Lims_ListSamples"), original);
         mounts.push_back(millisSince(began));
@@ -474,7 +474,7 @@ namespace {
 // `T_Page` holds `T_Row` keyed by `code` at `rows`; `T_TablePage` holds it opaquely, as `Table.<id>` does.
 ui::Catalog k4Catalog() {
     ui::Catalog catalog = ui::testing::corpusCatalog();
-    auto base = catalog.action;
+    auto const base = catalog.action;
     catalog.action = [base](std::string_view action) -> std::optional<ui::ActionInfo> {
         auto info = base(action);
         if (info && action == "T_Page") {
@@ -514,7 +514,7 @@ TEST_CASE("interpreter bench: K4 the query cache under an event and a wide page"
     std::vector<double> events;
     for (int run = 0; run < 15; ++run) {
         Harness h{k4Catalog()};
-        auto screen = h.mount(k4Document("T_Page"));
+        auto const screen = h.mount(k4Document("T_Page"));
         h.reply(0, std::format(R"({{"rows":[{}]}})", rows));
         auto const began = std::chrono::steady_clock::now();
         h.session.applyChanges(event);
@@ -536,13 +536,13 @@ TEST_CASE("interpreter bench: K4 the query cache under an event and a wide page"
         for (int column = 0; column < 300; ++column) {
             page += std::format("{}{}.5", column == 0 ? "" : ",", row + column);
         }
-        page += "]";
+        page += ']';
     }
     page += R"(],"total":200,"totalKind":"exact","offset":0})";
     std::vector<double> stores;
     for (int run = 0; run < 7; ++run) {
         Harness h{k4Catalog()};
-        auto screen = h.mount(k4Document("T_TablePage"));
+        auto const screen = h.mount(k4Document("T_TablePage"));
         auto const began = std::chrono::steady_clock::now();
         h.reply(0, page);
         stores.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count());
@@ -694,7 +694,7 @@ TEST_CASE("interpreter bench: B1 a rows table's sort and filter in owner steps",
         for (int run = 0; run < 7; ++run) {
             morph::testing::StepExecutor owner;
             morph::reactive::Runtime runtime{owner};
-            auto source = std::make_shared<ui::ValueRowsSource>(
+            auto const source = std::make_shared<ui::ValueRowsSource>(
                 runtime, plainColumns({"id", "name", "qty"}),
                 [](ui::Value const& row) { return ui::Key{*row.field("id")->asInt()}; });
             morph::table::EngineOptions options;
@@ -788,7 +788,7 @@ TEST_CASE("interpreter bench: a third sort key on 100,000 rows", "[.benchmark][i
                           {{ "id": "c", "label": "C", "sortable": true }} ] }} }})",
                                              items);
     Harness h;
-    auto screen = h.mount(document);
+    auto const screen = h.mount(document);
     int const table = h.backend.all("Table").front();
     h.backend.clickHeader(table, 0, ui::HeaderClick::Plain);
     h.backend.clickHeader(table, 1, ui::HeaderClick::Shift);

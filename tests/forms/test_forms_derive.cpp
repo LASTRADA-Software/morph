@@ -39,7 +39,9 @@ struct RecordBoxes {
     static constexpr auto computedFields = morph::forms::computeList(
         morph::forms::computed<&RecordBoxes::sum, &RecordBoxes::boxes>([](auto const& record) {
             std::int64_t s = 0;
-            for (auto const& b : record.boxes) s += b.total;
+            for (auto const& b : record.boxes) {
+                s += b.total;
+            }
             return s;
         }));
 };
@@ -168,7 +170,7 @@ TEST_CASE("derive: a derive action's input and reply read and write as specified
     DeriveRecordBoxes input;
     REQUIRE_FALSE(glz::read_json(input, std::string_view{R"({"body":{"boxes":[{"count":4}],"sum":0}})"}));
     CHECK(input.body.boxes.at(0).count == 4);
-    morph::forms::Derived reply{.values = {{"boxes[0].limit", glz::raw_json{"7"}}}};
+    morph::forms::Derived reply{.values = {{.path = "boxes[0].limit", .value = glz::raw_json{"7"}}}};
     CHECK(glz::write_json(reply).value() == R"({"values":[{"path":"boxes[0].limit","value":7}]})");
     RecordBoxes record{.boxes = {DeriveBox{.count = 1, .perBox = 1, .total = 1, .limit = 9}}, .sum = 1};
     morph::forms::clearDerived(record);
@@ -189,7 +191,7 @@ TEST_CASE("derive: the in-process paths clear a derived member as the server doe
     LocalDeriveRig rig;
     morph::bridge::BridgeHandler<DeriveBoxModel> boxes{rig.bridge, &rig.owner};
     DeriveBoxModel::last = {};
-    RecordBoxes forged{.boxes = {DeriveBox{.count = 2, .perBox = 3, .total = 999, .limit = 555}}, .sum = 999};
+    RecordBoxes const forged{.boxes = {DeriveBox{.count = 2, .perBox = 3, .total = 999, .limit = 555}}, .sum = 999};
     static_cast<void>(morph::testing::awaitValueOn(rig.owner, boxes.execute(forged)));
     CHECK(DeriveBoxModel::last.boxes.at(0).total == 6);
     CHECK(DeriveBoxModel::last.boxes.at(0).limit == 0);

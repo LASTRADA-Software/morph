@@ -3736,7 +3736,7 @@ private:
         if (!row.partList("rows").empty()) {
             refuse(pointerAppend(row.path, "rows"), "a row's `rows` repeat for each row of a `forEach`; give it one");
         }
-        if (key.find('/') != std::string::npos) {
+        if (key.contains('/')) {
             refuse(pointerAppend(row.path, "key"),
                    "the row key `" + key + "` holds a `/`, which joins a block row's keys; give it another");
         }
@@ -4126,7 +4126,8 @@ private:
         if (node.name("model").empty() || node.name("table").empty()) {
             refuse(pointerAppend(node.path, "editMode"),
                    "`editMode` chooses how a model's table commits its cells; this table is not a model's table");
-        } else if (mode != "cell" && mode != "row") {
+        }
+        if (mode != "cell" && mode != "row") {
             refuse(pointerAppend(node.path, "editMode"),
                    "`editMode` is `cell` or `row`, not `" + std::string{mode} + "`");
         }
@@ -6069,7 +6070,7 @@ std::vector<std::string> tableQueryMembers(std::string_view schemaJson) {
     std::vector<std::string> members;
     auto const json = parseJson(schemaJson);
     auto const* const schema = json ? std::get_if<Json::object_t>(&json->data) : nullptr;
-    auto const properties = schema != nullptr ? schema->find("properties") : Json::object_t::const_iterator{};
+    const auto* const properties = schema != nullptr ? schema->find("properties") : Json::object_t::const_iterator{};
     if (schema == nullptr || properties == schema->end()) {
         return members;
     }
@@ -6082,7 +6083,7 @@ std::vector<std::string> tableQueryMembers(std::string_view schemaJson) {
         if (fields == nullptr) {
             continue;
         }
-        auto const marker = fields->find(table::TableQuery::schemaMarker());
+        const auto* const marker = fields->find(table::TableQuery::schemaMarker());
         if (marker == fields->end()) {
             continue;
         }

@@ -418,7 +418,7 @@ constexpr std::string_view kRecipePage =
 
 TEST_CASE("announce: a derived record is included, many keys are whole, an unregistered record is refused",
           "[net][push][levels]") {
-    Server server{smallOptions(1.0)};
+    Server const server{smallOptions(1.0)};
     Client client{server.url, "alice"};
     REQUIRE(client.watch({"WideTableModel.small", "UrSummary"}).empty());
 
@@ -447,7 +447,7 @@ TEST_CASE("announce: a derived record is included, many keys are whole, an unreg
 }
 
 TEST_CASE("table over the bridge: the first page arrives before the level", "[net][push][levels]") {
-    Server server{smallOptions(0.0)};
+    Server const server{smallOptions(0.0)};
     bench::WideTableModel::recipeGate().hold();
     Client client{server.url, "alice"};
     auto const instance = client.create(std::string{kWide});
@@ -466,7 +466,7 @@ TEST_CASE("table over the bridge: the first page arrives before the level", "[ne
 
 TEST_CASE("table over the bridge: a level loads only for what a query needs", "[net][push][levels]") {
     {
-        Server server{smallOptions(0.0)};
+        Server const server{smallOptions(0.0)};
         Client client{server.url, "alice"};
         auto const instance = client.create(std::string{kWide});
         static_cast<void>(pageOf(client.execute(instance, kWide, "Table.small",
@@ -475,7 +475,7 @@ TEST_CASE("table over the bridge: a level loads only for what a query needs", "[
         CHECK(bench::WideTableModel::loaderCalls().empty());
     }
     {
-        Server server{smallOptions(0.0)};
+        Server const server{smallOptions(0.0)};
         Client client{server.url, "alice"};
         auto const instance = client.create(std::string{kWide});
         static_cast<void>(pageOf(client.execute(instance, kWide, "Table.small", std::string{kRecipePage})));
@@ -483,7 +483,7 @@ TEST_CASE("table over the bridge: a level loads only for what a query needs", "[
         CHECK(loggedKeys() == keyRange(1, 201));
     }
     {
-        Server server{smallOptions(0.0)};
+        Server const server{smallOptions(0.0)};
         Client client{server.url, "alice"};
         auto const instance = client.create(std::string{kWide});
         static_cast<void>(pageOf(client.execute(
@@ -496,7 +496,7 @@ TEST_CASE("table over the bridge: a level loads only for what a query needs", "[
 }
 
 TEST_CASE("table over the bridge: two clients load a value once", "[net][push][levels]") {
-    Server server{smallOptions(0.0)};
+    Server const server{smallOptions(0.0)};
     bench::WideTableModel::recipeGate().hold();
     Client first{server.url, "alice"};
     Client second{server.url, "carol"};
@@ -513,7 +513,7 @@ TEST_CASE("table over the bridge: two clients load a value once", "[net][push][l
 }
 
 TEST_CASE("table over the bridge: an updates effect invalidates without a call", "[net][push][levels]") {
-    Server server{smallOptions(1.0)};
+    Server const server{smallOptions(1.0)};
     Client client{server.url, "alice"};
     REQUIRE(client.watch({"WideTableModel.small"}).empty());
     auto const instance = client.create(std::string{kWide});
@@ -533,7 +533,7 @@ TEST_CASE("table over the bridge: an updates effect invalidates without a call",
 }
 
 TEST_CASE("table over the bridge: no value crosses a scope", "[net][push][levels]") {
-    Server server{smallOptions(1.0)};
+    Server const server{smallOptions(1.0)};
     unloaded_rows::urState().cache->invalidateAll();
     {
         std::scoped_lock const lock{unloaded_rows::urState().mutex};
@@ -563,7 +563,7 @@ TEST_CASE("table over the bridge: no value crosses a scope", "[net][push][levels
 }
 
 TEST_CASE("table over the bridge: a row-scoped table announces without keys", "[net][push][levels]") {
-    Server server{smallOptions(1.0)};
+    Server const server{smallOptions(1.0)};
     unloaded_rows::urState().cache->invalidateAll();
     Client p1{server.url, "p1"};
     REQUIRE(p1.watch({"UrModel.urRows"}).empty());
@@ -584,7 +584,7 @@ TEST_CASE("table over the bridge: a row-scoped table announces without keys", "[
 }
 
 TEST_CASE("table over the bridge: failed keys are not loaded again inside the delay", "[net][push][levels]") {
-    Server server{smallOptions(0.0, true)};
+    Server const server{smallOptions(0.0, true)};
     Client client{server.url, "alice"};
     REQUIRE(client.watch({"WideTableModel.small"}).empty());
     auto const instance = client.create(std::string{kWide});
@@ -754,7 +754,7 @@ std::string keyedBody(morph::table::RowsFetch const& fetch) {
 // window does not hold (the plan misses the loaded keys of rows past the held ones). Unbuilt on the host that wrote
 // it, and neither mutation has been run.
 TEST_CASE("table over the bridge: exactly the arrived rows update, without polling", "[net][push][levels]") {
-    Server server{gatedOptions()};
+    Server const server{gatedOptions()};
     bench::WideTableModel::recipeGate().hold();
     SessionClient client{server.url};
 
@@ -878,7 +878,7 @@ private:
 // Mutation: the cache looking for a key member in an opaque entry (the arrival's keys match no row, and nothing
 // refetches). Unbuilt on the host that wrote it, and the mutation has not been run.
 TEST_CASE("table over the bridge: the same arrival through the query cache", "[net][push][levels]") {
-    Server server{gatedOptions()};
+    Server const server{gatedOptions()};
     bench::WideTableModel::recipeGate().hold();
     ui::author::CatalogFacts facts;
     facts.action<bench::WideTableModel, morph::table::QueryTable<&bench::WideTableModel::small>>();
@@ -898,7 +898,7 @@ TEST_CASE("table over the bridge: the same arrival through the query cache", "[n
         FAIL(loaded.error().message());
     }
     ui::testing::RecordingBackend view;
-    auto mounted = interpreter.mount(std::make_shared<ui::Document const>(std::move(*loaded)), {}, view, {});
+    auto const mounted = interpreter.mount(std::make_shared<ui::Document const>(std::move(*loaded)), {}, view, {});
     REQUIRE(mounted.has_value());
     REQUIRE(client.pumpUntil([&] { return counting.pageRequests() == 1; }));
     client.pumpFor(200ms);
@@ -918,13 +918,13 @@ TEST_CASE("table over the bridge: the same arrival through the query cache", "[n
 // to accepted page; and from a loader's return to patched rows, for 20 rows. Unbuilt and not run on the host that
 // wrote it.
 TEST_CASE("table benchmark: E1 E2 a window over the bridge", "[.benchmark][net]") {
-    Server server{gatedOptions(), bench::WideTableOptions{.rows = 100'000,
-                                                          .columns = 300,
-                                                          .seed = 7,
-                                                          .loadDelay = {},
-                                                          .recipePreloaded = 0.0,
-                                                          .recipeBatch = 20,
-                                                          .recipeFails = false}};
+    Server const server{gatedOptions(), bench::WideTableOptions{.rows = 100'000,
+                                                                .columns = 300,
+                                                                .seed = 7,
+                                                                .loadDelay = {},
+                                                                .recipePreloaded = 0.0,
+                                                                .recipeBatch = 20,
+                                                                .recipeFails = false}};
     bench::WideTableModel::recipeGate().hold();
     SessionClient client{server.url};
     morph::table::TableDescription description;

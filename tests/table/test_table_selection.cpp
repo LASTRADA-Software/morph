@@ -401,8 +401,8 @@ TEST_CASE("view selection: the view revision is membership", "[table][selection]
     CHECK(before.size() == 48);
     model.source->patchRow(RowId{std::int64_t{2}}, {Cell{std::string{"open"}}, Cell{tabletest::dec("9.5")}});
     CHECK(revisionOf(model, open()) == before);  // a cell changed, membership did not
-    TableQuery ascending{.sort = {{.column = "mass", .dir = SortDirection::Ascending}}, .filters = open()};
-    TableQuery descending{.sort = {{.column = "mass", .dir = SortDirection::Descending}}, .filters = open()};
+    TableQuery const ascending{.sort = {{.column = "mass", .dir = SortDirection::Ascending}}, .filters = open()};
+    TableQuery const descending{.sort = {{.column = "mass", .dir = SortDirection::Descending}}, .filters = open()};
     CHECK(apply(*model.source, ascending).value().viewRevision == before);
     CHECK(apply(*model.source, descending).value().viewRevision == before);  // the sort is not membership
     model.source->patchRow(RowId{std::int64_t{7}}, {Cell{std::string{"open"}}, Cell{tabletest::dec("0.7")}});
@@ -435,7 +435,7 @@ TEST_CASE("view selection: the digest of a set of keys", "[table][selection][rev
 
 TEST_CASE("view selection: a row-scoped table with no scope is refused", "[table][selection][resolve]") {
     seltest::UnscopedModel model;
-    RowSelection<&seltest::UnscopedModel::rows> selection{.keys = keysOf({1}), .view = {}, .except = {}};
+    RowSelection<&seltest::UnscopedModel::rows> const selection{.keys = keysOf({1}), .view = {}, .except = {}};
     auto resolved = resolve(model, selection, caller(), SelectionPolicy::Current);
     CHECK(errorOf(resolved) == TableErrorCode::SourceContract);
 }
@@ -444,7 +444,7 @@ TEST_CASE("view selection: a row-scoped table with no scope is refused", "[table
 TEST_CASE("view selection: resolve under Exact is the view less except, in source order",
           "[table][selection][resolve]") {
     SelectionModel model;
-    RowSelection<&SelectionModel::rows> selection{
+    RowSelection<&SelectionModel::rows> const selection{
         .keys = {},
         .view = {{.filters = open(), .retained = {}, .revision = revisionOf(model, open())}},
         .except = {RowId{std::int64_t{3}}}};
@@ -468,7 +468,7 @@ TEST_CASE("view selection: a key selection resolves to the keys the caller sees"
     SelectionModel model;
     // The caller's source is rows 0..4 only, through table::scoped.
     model.scope = keysOf({0, 1, 2, 3, 4});
-    RowSelection<&SelectionModel::rows> selection{.keys = keysOf({3, 1, 8}), .view = {}, .except = {}};
+    RowSelection<&SelectionModel::rows> const selection{.keys = keysOf({3, 1, 8}), .view = {}, .except = {}};
     auto resolved = resolve(model, selection, caller(), SelectionPolicy::Exact);
     auto const rows = settledNow(resolved).value();
     CHECK(rows.keys == keysOf({1, 3}));  // source order
@@ -480,7 +480,7 @@ TEST_CASE("view selection: a view over maxSelectedRows is LimitExceeded", "[tabl
     CHECK(QueryLimits{}.maxSelectedRows == 1'000'000);
     SelectionModel model;
     model.limits.maxSelectedRows = 5;  // the open view has 6 rows
-    RowSelection<&SelectionModel::rows> selection{
+    RowSelection<&SelectionModel::rows> const selection{
         .keys = {}, .view = {{.filters = open(), .retained = {}, .revision = {}}}, .except = keysOf({3})};
     auto over = resolve(model, selection, caller(), SelectionPolicy::Current);
     // The bound is on the view, 6 rows, not on what is left of it, 5.
@@ -493,7 +493,7 @@ TEST_CASE("view selection: a view over maxSelectedRows is LimitExceeded", "[tabl
 
 TEST_CASE("view selection: retained rows are in the membership", "[table][selection][resolve]") {
     SelectionModel model;
-    RowSelection<&SelectionModel::rows> selection{
+    RowSelection<&SelectionModel::rows> const selection{
         .keys = {},
         .view = {{.filters = open(), .retained = keysOf({8}), .revision = revisionOf(model, open(), keysOf({8}))}},
         .except = {}};
@@ -502,7 +502,7 @@ TEST_CASE("view selection: retained rows are in the membership", "[table][select
 
     // Retained {42}, a key the source lacks, adds nothing.
     CHECK(revisionOf(model, open(), keysOf({42})) == revisionOf(model, open()));
-    RowSelection<&SelectionModel::rows> absent{
+    RowSelection<&SelectionModel::rows> const absent{
         .keys = {},
         .view = {{.filters = open(), .retained = keysOf({42}), .revision = revisionOf(model, open(), keysOf({42}))}},
         .except = {}};
@@ -557,9 +557,9 @@ ServedTable describedRows(SelectionModel& model) {
 
 TEST_CASE("retained rows: they stay in the view, listed in unmatched", "[table][retain]") {
     SelectionModel model;
-    TableQuery query{.sort = {{.column = "mass", .dir = SortDirection::Descending}},
-                     .filters = open(),
-                     .retain = {RowId{std::int64_t{1}}, RowId{std::int64_t{7}}, RowId{std::int64_t{8}}}};
+    TableQuery const query{.sort = {{.column = "mass", .dir = SortDirection::Descending}},
+                           .filters = open(),
+                           .retain = {RowId{std::int64_t{1}}, RowId{std::int64_t{7}}, RowId{std::int64_t{8}}}};
     for (std::int64_t key : {1, 7, 8}) {  // the action closed row 1; rows 7 and 8 were closed already
         model.source->patchRow(RowId{key},
                                {Cell{std::string{"closed"}}, Cell{tabletest::dec(std::to_string(key) + ".0")}});
@@ -738,7 +738,7 @@ TEST_CASE("retained rows: a selection of a view with retained rows resolves unde
     TableQuery const query{
         .sort = {{.column = "mass", .dir = SortDirection::Descending}}, .filters = open(), .retain = keysOf({1, 8})};
     auto const page = apply(*model.source, query).value();
-    RowSelection<&SelectionModel::rows> selection{
+    RowSelection<&SelectionModel::rows> const selection{
         .keys = {},
         .view = {{.filters = open(), .retained = keysOf({1, 8}), .revision = page.viewRevision}},
         .except = keysOf({3})};

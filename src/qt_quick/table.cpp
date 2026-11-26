@@ -620,16 +620,16 @@ void TableImpl::setOnFocusOut(std::function<void()> onFocusOut) {
 // inside the table. An editor that holds the focus when it closes gives it back to the table, so the next key reaches
 // the table.
 void TableImpl::setCellEditor(ui::Widget& row, std::size_t column, ui::Widget* editor) {
-    auto* const tableRow = dynamic_cast<TableRowImpl*>(&row);
+    auto const* const tableRow = dynamic_cast<TableRowImpl*>(&row);
     if (tableRow == nullptr || tableRow->container() != this) {
         throw std::logic_error{"morph::qt_quick: setCellEditor of a widget that is not this table's row"};
     }
     ItemBase* const shown = editor != nullptr ? baseOf(*editor) : nullptr;
     if (shown == nullptr) {
         QPointer<QQuickItem> const closing = _editors.take(tableRow);
-        QQuickWindow* const window = item() != nullptr ? item()->window() : nullptr;
+        QQuickWindow const* const window = item() != nullptr ? item()->window() : nullptr;
         bool held = false;
-        for (QQuickItem* at = window != nullptr ? window->activeFocusItem() : nullptr;
+        for (QQuickItem const* at = window != nullptr ? window->activeFocusItem() : nullptr;
              at != nullptr && closing != nullptr; at = at->parentItem()) {
             held = held || at == closing.data();
         }
@@ -667,7 +667,7 @@ void TableImpl::setCellMarks(ui::Widget& row, std::size_t column, ui::CellMarks 
 }
 
 void TableImpl::setRowModified(ui::Widget& row, bool modified) {
-    auto* const tableRow = dynamic_cast<TableRowImpl*>(&row);
+    auto const* const tableRow = dynamic_cast<TableRowImpl*>(&row);
     if (tableRow == nullptr || tableRow->container() != this) {
         throw std::logic_error{"morph::qt_quick: setRowModified of a widget that is not this table's row"};
     }

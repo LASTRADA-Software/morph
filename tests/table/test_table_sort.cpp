@@ -428,7 +428,7 @@ TEST_CASE("table: a merge sort is done only once a run returned true", "[table][
 // Mutation: compareKeys tying unloaded with empty (rank Empty, Invalid and Unloaded alike).
 TEST_CASE("table: unloaded cells are the tail after the empties in both directions", "[table][sort][unloaded]") {
     using morph::table::Unloaded;
-    auto source =
+    auto const source =
         tabletest::slowColumn(ColumnKind::Integer, {Cell{std::int64_t{3}}, Cell{Unloaded{}}, Cell{},
                                                     Cell{std::int64_t{1}}, Cell{Unloaded{}}, Cell{std::string{"x"}}});
     for (auto const dir : {SortDirection::Ascending, SortDirection::Descending}) {

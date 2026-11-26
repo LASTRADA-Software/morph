@@ -558,21 +558,22 @@ TEST_CASE("table: levelsNeeded names the levels a query sorts, filters and shows
         levelCol("p1", ColumnKind::Integer, "price")};
     auto const needed = [&](TableQuery const& query) { return levelsNeeded(query, columns); };
     using V = std::vector<std::string>;
-    TableQuery named{.columns = V{"id", "r2"}};
+    TableQuery const named{.columns = V{"id", "r2"}};
     CHECK(needed(named).order.empty());
     CHECK(needed(named).display == V{"recipe"});
-    TableQuery sorted{.sort = {SortKey{.column = "s1"}}, .filters = FilterSpec{}, .columns = V{"id"}};
+    TableQuery const sorted{.sort = {SortKey{.column = "s1"}}, .filters = FilterSpec{}, .columns = V{"id"}};
     CHECK(needed(sorted).order == V{"stock"});
     CHECK(needed(sorted).display.empty());
-    TableQuery filtered{.filters = FilterSpec{.columns = {{"p1", ColumnFilter{.include = {{.gt = "1"}}}}}},
-                        .columns = V{"p1"}};
+    TableQuery const filtered{.filters = FilterSpec{.columns = {{"p1", ColumnFilter{.include = {{.gt = "1"}}}}}},
+                              .columns = V{"p1"}};
     CHECK(needed(filtered).order == V{"price"});
     CHECK(needed(filtered).display == V{"price"});
-    TableQuery grouped{
+    TableQuery const grouped{
         .filters = FilterSpec{.groups = {GroupFilter{.columns = {"r2", "s1"}, .include = {{.contains = "a"}}}}},
         .columns = V{}};
     CHECK(needed(grouped).order == V{"recipe", "stock"});
-    TableQuery emptyGroup{.filters = FilterSpec{.groups = {GroupFilter{.columns = {"r1", "s1"}}}}, .columns = V{}};
+    TableQuery const emptyGroup{.filters = FilterSpec{.groups = {GroupFilter{.columns = {"r1", "s1"}}}},
+                                .columns = V{}};
     CHECK(needed(emptyGroup).order.empty());  // a group with no entry reads no column
     CHECK(needed(TableQuery{.columns = V{"id"}}).display.empty());
     CHECK(needed(TableQuery{}).display == V{"price", "recipe", "stock"});  // columns absent: every column
@@ -628,7 +629,7 @@ TEST_CASE("table: validate refuses a keyed query out of bounds", "[table][query]
 // Mutation: indices filled with positions in the reply instead of view rows.
 TEST_CASE("table: a keyed reply carries the view's totals and each row's view row", "[table][query][keyed]") {
     using morph::table::Unloaded;
-    auto source =
+    auto const source =
         tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")}, {{Cell{std::int64_t{40}}},
                                                                                         {Cell{std::int64_t{10}}},
                                                                                         {Cell{Unloaded{}}},
@@ -686,7 +687,7 @@ private:
 // Mutation: pageRows ignoring sourceRowOf.
 TEST_CASE("table: a keyed page uses the lookup it is given", "[table][query][keyed]") {
     using morph::table::Unloaded;
-    auto source =
+    auto const source =
         tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")}, {{Cell{std::int64_t{40}}},
                                                                                         {Cell{std::int64_t{10}}},
                                                                                         {Cell{Unloaded{}}},
@@ -774,7 +775,7 @@ std::vector<std::string> texts(std::size_t n, std::size_t bytes) {
     std::vector<std::string> out;
     out.reserve(n);
     for (std::size_t i = 0; i < n; ++i) {
-        auto text = std::to_string(i);
+        auto const text = std::to_string(i);
         out.push_back(std::string(bytes - text.size(), '0') + text);
     }
     return out;
