@@ -549,8 +549,8 @@ struct TableStateShared {
     std::size_t cursor = 0;
     while (cursor < text.size()) {
         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): cursor < text.size() by the loop
-        std::size_t const length =
-            std::min(sequenceBytes(static_cast<unsigned char>(text[cursor])), text.size() - cursor);
+        auto const lead = static_cast<unsigned char>(text[cursor]);
+        std::size_t const length = std::min(sequenceBytes(lead), text.size() - cursor);
         std::size_t cost = 0;
         for (std::size_t each = cursor; each < cursor + length; ++each) {
             // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): each < cursor + length <= text.size()
