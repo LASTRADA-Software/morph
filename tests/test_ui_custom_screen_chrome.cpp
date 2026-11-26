@@ -284,7 +284,8 @@ TEST_CASE("custom screen chrome: a reply to a check made for a view that was reo
     rig.open("notes.edit", note(1));
     rig.click("source_button_notes.edit");
     rig.type("source_text", screens_test::replaced(rig.field("source_text"), "\"Edit note\"", "\"Stale\""));
-    rig.click("source_preview");
+    // Pressed without running the owner, so the check's reply cannot arrive before the source view is reopened.
+    rig.harness.backend.click(*rig.find("Button", "source_preview"));
     REQUIRE(rig.find("Dialog", "source_dialog").has_value());
     rig.chrome->showSource(rig.tabAt(0));
     REQUIRE(rig.pump([&rig] { return rig.field("source_text") == morph::ui::prettyJson(kEdit); }));
