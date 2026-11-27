@@ -5,10 +5,12 @@
 // Save as… and Discard, and the store's refusal shown to the person.
 
 #include <algorithm>
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
 #include <expected>
+#include <latch>
 #include <memory>
 #include <morph/core/executor.hpp>
 #include <morph/ui/custom_screen_chrome.hpp>
@@ -28,6 +30,42 @@ using custom_client::note;
 using custom_client::Offer;
 using morph::ui::DocumentScreenHost;
 using morph::ui::ParamMap;
+
+namespace {
+
+/// Occupies every thread of the rig's server pool until it is released or destroyed, so a call sent meanwhile is
+/// answered only after the release, however fast the server would otherwise be.
+class ServerHold {
+public:
+    explicit ServerHold(ChromeRig& rig) {
+        REQUIRE(rig.server.has_value());
+        std::latch started{kThreads};
+        for (std::ptrdiff_t thread = 0; thread < kThreads; ++thread) {
+            rig.server->pool.post([this, &started] {
+                started.count_down();
+                _released.wait(false);
+            });
+        }
+        started.wait();
+    }
+    ~ServerHold() { release(); }
+    ServerHold(ServerHold const&) = delete;
+    ServerHold& operator=(ServerHold const&) = delete;
+    ServerHold(ServerHold&&) = delete;
+    ServerHold& operator=(ServerHold&&) = delete;
+
+    void release() {
+        _released.store(true);
+        _released.notify_all();
+    }
+
+private:
+    // The size of the test server's pool.
+    static constexpr std::ptrdiff_t kThreads = 2;
+    std::atomic<bool> _released{false};
+};
+
+}  // namespace
 
 // Mutation: skip mountDraft after the server's check (the heading stays "Edit note").
 TEST_CASE(
@@ -265,6 +303,7 @@ TEST_CASE("custom screen chrome: while a check runs the editor is read only, and
     rig.click("source_button_notes.edit");
     int const editor = *rig.find("TextInput", "source_text");
     CHECK(rig.harness.backend.prop(editor, "readonly") != "true");
+    ServerHold hold{rig};
     rig.click("source_preview");
     REQUIRE(rig.find("TextInput", "source_text").has_value());
     CHECK(rig.harness.backend.prop(*rig.find("TextInput", "source_text"), "readonly") == "true");
@@ -273,6 +312,7 @@ TEST_CASE("custom screen chrome: while a check runs the editor is read only, and
     rig.chrome->preview([&again](bool drafted) { again = drafted; });
     REQUIRE(again.has_value());
     CHECK_FALSE(*again);
+    hold.release();
     REQUIRE(rig.pump([&rig] { return rig.shown("Row", "draft_bar_notes.edit"); }));
 }
 
@@ -284,10 +324,12 @@ TEST_CASE("custom screen chrome: a reply to a check made for a view that was reo
     rig.open("notes.edit", note(1));
     rig.click("source_button_notes.edit");
     rig.type("source_text", screens_test::replaced(rig.field("source_text"), "\"Edit note\"", "\"Stale\""));
+    ServerHold hold{rig};
     rig.click("source_preview");
     REQUIRE(rig.find("Dialog", "source_dialog").has_value());
     rig.chrome->showSource(rig.tabAt(0));
     REQUIRE(rig.pump([&rig] { return rig.field("source_text") == morph::ui::prettyJson(kEdit); }));
+    hold.release();
     static_cast<void>(
         rig.pump([&rig] { return rig.shown("Row", "draft_bar_notes.edit"); }, std::chrono::milliseconds{300}));
     CHECK(rig.text("heading") == "Edit note");

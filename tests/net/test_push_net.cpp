@@ -622,9 +622,11 @@ TEST_CASE("net_channel_conformance", "[push][channel]") {
         auto const cid = nextConnectionId(*server);
         ::morph::net::SocketBackend backend{wsUrl(wsServer.port())};
         REQUIRE(backend.waitForConnected());
+        // Every wait here is for something that must happen, so a generous budget costs nothing on a green run;
+        // it is sized for a socket round trip per event under TSan on a runner that runs other tests beside it.
         ::morph::testing::push::ChannelFixture fixture{
             .server = server.get(), .cid = cid, .backend = &backend, .waitFor = [](const std::function<bool()>& done) {
-                return ::morph::testing::waitUntil(done);
+                return ::morph::testing::waitUntil(done, ::morph::testing::WaitBudget{std::chrono::seconds{20}});
             }};
         body(fixture);
     });
