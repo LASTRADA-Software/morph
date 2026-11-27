@@ -11,6 +11,7 @@ threading, and serialisation semantics differ per implementation.
 - [Type overview](#type-overview)
 - [`IExecutor` — the abstract interface](#iexecutor--the-abstract-interface)
 - [`ThreadPoolExecutor`](#threadpoolexecutor)
+  - [Spin before sleep](#spin-before-sleep)
 - [`MainThreadExecutor`](#mainthreadexecutor)
 - [`QtExecutor`](#qtexecutor)
 - [Strands: `ModelStrands` and `ModelId`](#strands-modelstrands-and-modelid)
@@ -37,7 +38,7 @@ across `morph::exec` and `morph::exec::detail` (in `executor.hpp`, `strand.hpp`,
 | Type | Namespace | Purpose |
 |---|---|---|
 | `IExecutor` | `morph::exec` | Abstract base: a single pure-virtual `post(task)`, and `coreExecutor()`, the executor's stable core-cpp identity. |
-| `ThreadPoolExecutor` | `morph::exec` | Fixed-size thread pool, FIFO queue, task exceptions logged (never propagate). |
+| `ThreadPoolExecutor` | `morph::exec` | Fixed-size thread pool, FIFO queue, idle workers spin briefly before sleeping (`PoolOptions`), task exceptions logged (never propagate). |
 | `MainThreadExecutor` | `morph::exec` | Collects tasks from any thread, drains on `runFor()` from the owning thread. |
 | `QtExecutor` | `morph::qt` | Posts tasks to a Qt event loop; they run on the configured context object's thread (the `QCoreApplication`/GUI thread by default). |
 | `InlineExecutor` | `morph::exec::detail` (in `executor.hpp`) | Runs each task at once on the posting thread; reached through `detail::inlineExecutor()`. Not serial, so never a `Completion`'s owner. |
@@ -88,8 +89,9 @@ must be serial: a `Completion` refuses any other (see
 ## `ThreadPoolExecutor`
 
 A fixed-size thread pool. The constructor spawns `n` worker threads; each worker
-loops, waiting for tasks on a shared condition variable. Tasks are dispatched in
-FIFO order from a single mutex-protected queue.
+loops, taking tasks from one mutex-protected FIFO queue. A worker that finds the
+queue empty spins briefly before it sleeps on a shared condition variable (see
+[Spin before sleep](#spin-before-sleep)).
 
 `n` is **clamped to a minimum of 1**. A pool with zero workers would accept
 posted tasks that no thread could ever run, so every `post()` would hang forever
@@ -108,6 +110,103 @@ exit and may be silently lost. Exceptions from tasks are caught in the worker
 `morph::log::logError` (see [Failure modes](#failure-modes)); they never
 propagate out of a worker, so one failing task neither kills its thread nor
 aborts sibling tasks.
+
+### Spin before sleep
+
+Waking a sleeping worker costs a system call on the poster's side (a futex wake
+on Linux) and a scheduler round trip on the worker's. For a task that is cheap
+to run, that is most of its cost, and an owner thread that posts to a pool of
+sleeping workers spends a large share of its time in the wake call.
+
+`PoolOptions` (the constructor's second argument) lets idle workers wait without
+sleeping:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `spinBeforeSleep` | 25 us | How long one worker spins on an atomic queue counter after the queue empties, before it takes the lock and sleeps. `0` disables spinning: a worker sleeps the moment it finds nothing to do. |
+| `maxSpinners` | 1 | How many workers may spin at once; the rest sleep at once. `0` also disables spinning. |
+| `afterSpin` | empty | Test seam, called on a worker after its spin ends and before it takes the lock. |
+
+The rules that keep the pool correct:
+
+- **Counts change under the lock.** `_sleeping` (workers waiting on the condition
+  variable) and `_spinning` (workers between their decision to spin and the
+  moment they retake the lock) are read and written only with `_m` held. The
+  spin loop itself reads two atomics only: `_queued`, a mirror of the queue size
+  written under `_m`, and `_stop`.
+- **`post()` notifies when `_sleeping > 0` and more tasks are queued than workers
+  are spinning** (`queue size > _spinning`). A single spinner is expected to
+  take one queued task by itself; a second queued task, or a task queued while
+  nobody spins, wakes a sleeper. Posting a burst of blocking tasks therefore
+  still runs them side by side.
+- **A worker that takes a task applies the same rule** to what remains in the
+  queue: if it was the spinner, the tasks left behind have no spinner to take
+  them.
+- **No lost wakeup.** A worker leaving its spin retakes `_m` and tests the queue
+  before it waits. A task posted after the spin ended but before the lock was
+  retaken saw the worker as spinning and did not notify; the re-test under the
+  lock is what finds it. `afterSpin` exists so a test can hold a worker exactly
+  in that window.
+- **`_sleeping` is decremented by the woken worker**, after it wakes, so a
+  spurious wakeup neither skews the count nor lets two notifies go to the same
+  worker unaccounted.
+- **Stop.** The destructor sets `_stop` under `_m` and notifies all. A spinner
+  sees the flag within one check, so the join waits at most one spin period past
+  the drain.
+
+A worker therefore burns at most `spinBeforeSleep` of CPU after each task that
+leaves the queue empty, and none while the pool is idle for longer than that.
+At most `maxSpinners` workers do it at the same time, so a pool of 64 workers
+costs one spinning core.
+
+The spin is bounded by elapsed time (`steady_clock`), never by a count of
+iterations, because a CPU relax hint costs about 10 cycles on some CPUs and 140
+on others. The hint is `detail::cpuRelax()`: `_mm_pause` on x86 and x64,
+`__yield` on ARM64 under MSVC and clang-cl, `yield` on ARM64 under GCC and clang,
+nothing elsewhere. It is deliberately not `std::this_thread::yield()`, which is
+a system call.
+
+#### Choosing the default
+
+The default of 25 us comes from a sweep of `spinBeforeSleep` over {0, 10, 25, 50,
+100} us with a pool of 8 workers on a 12-core x86-64 Linux machine (GCC 16,
+`-O2`), driving `LocalBackend` with a tiny model from a sleeping owner thread.
+The machine was loaded by other builds (load average about 19) and the runs are
+2 s each, so wall-clock figures carry large noise; the instruction and CPU-time
+columns are stable. "Instructions" counts every user-space instruction of the
+process, spin loops included, so it rises with the spin while CPU time falls.
+The no-spin baseline is the pool before `PoolOptions` existed.
+
+| `spinBeforeSleep` | 1 in flight: calls/s | 1 in flight: CPU (user+sys) per call | 64 in flight: calls/s | 64 in flight: instructions per call | 64 in flight: CPU per call | 64 in flight, 16 workers: calls/s | two processes, 8 workers each: calls/s |
+|---|---|---|---|---|---|---|---|
+| before | 22.4k | 21.4 us | 62.5k | 7.45k | 16.5 us | not run | not run |
+| 0 | 20.2k | 22.1 us | 50.4k | 7.60k | 16.9 us | 44.2k | 53.0k and 48.5k |
+| 10 us | 53k to 73k | 13.2 us | 215k | 7.94k | 4.4 us | 202k | 228k and 233k |
+| 25 us | 59k to 69k | 12.1 us | 203k to 211k | 8.02k | 4.4 us | 216k | 237k and 229k |
+| 50 us | 60k to 76k | 10.9 us | 225k | 8.04k | 4.2 us | 202k | 226k and 206k |
+| 100 us | 59k to 69k | 10.9 us | 224k | 8.20k | 4.3 us | 208k | 248k and 233k |
+
+Reading it: the whole gain arrives by 10 us and the differences between 10 and
+100 us are inside the noise, so the choice is the cheapest value with margin
+for a scheduler hiccup on the worker, and for the owner's turnaround between a
+reply and its next call, which is a few microseconds to tens of microseconds.
+That is 25 us. The oversubscribed rows (16 workers, and two processes on 12
+cores) stay on the same plateau because at most one worker per pool spins, so
+two pools cost two spinning cores and not one per worker.
+
+Owner-thread view from `perf record` (64 in flight, 8 workers): the share of
+the owner thread's own samples spent in the kernel falls from 69% (30.2 of 43.7
+points of all samples) to 29% (12.4 of 42.2). What remains is the owner sleeping
+until a reply arrives, which belongs to the owner's executor, not to this pool.
+
+What a spin costs when nothing arrives soon: one worker burns up to
+`spinBeforeSleep` of CPU after each task that leaves the queue empty. A caller
+that posts rarely and cares about power sets `spinBeforeSleep` to zero.
+
+Windows has not been measured. A condition-variable wake there costs at least
+as much as a futex wake on Linux, so the spin is expected to help, but the
+default is chosen from the Linux numbers.
+
 
 ## `MainThreadExecutor`
 
@@ -349,10 +448,12 @@ ever seen. Retired strands kept for reuse are bounded at 32.
 
 Every executor's `post()` is safe to call from any thread concurrently.
 
-- `ThreadPoolExecutor` guards its queue and `_stop` flag with a single mutex
-  `_m` and coordinates workers on `_cv`. Multiple workers pop under the lock, so
-  the FIFO order is a total order across producers; task *execution* is
-  concurrent across the `n` workers.
+- `ThreadPoolExecutor` guards its queue, `_stop` flag and its sleeping and
+  spinning counts with a single mutex `_m` and coordinates sleeping workers on
+  `_cv`. A spinning worker reads only two atomics (`_queued`, `_stop`), both
+  written under `_m`. Multiple workers pop under the lock, so the FIFO order is a
+  total order across producers; task *execution* is concurrent across the `n`
+  workers. See [Spin before sleep](#spin-before-sleep).
 - `MainThreadExecutor` guards its queue with `_m`. `post()` may be called from
   any thread, but `runFor()` must be called only from the single owning
   ("main") thread; concurrent `runFor()` calls are not supported.
@@ -653,10 +754,11 @@ and `IoLoop::post` catch `(...)` and so contain every exception type.
 
 | Member | Signature | Notes |
 |---|---|---|
-| ctor | `explicit ThreadPoolExecutor(std::size_t n)` | Spawns `max(n, 1)` worker threads. `n == 0` is clamped to 1 (a zero-worker pool would hang every task). |
+| ctor | `explicit ThreadPoolExecutor(std::size_t n, PoolOptions options = {})` | Spawns `max(n, 1)` worker threads. `n == 0` is clamped to 1 (a zero-worker pool would hang every task). `options` sets how idle workers wait (see [Spin before sleep](#spin-before-sleep)). |
 | dtor | `~ThreadPoolExecutor() override` | Signals stop, then joins all workers, which drain the queue (run every already-queued task) before exiting. Tasks posted concurrently with or after destruction may be lost. |
-| `post` | `void post(std::function<void()> task) override` | Enqueues to FIFO; notifies one worker. Thread-safe. Each task runs inside a scope naming this pool; exceptions are caught and logged in the worker loop. |
+| `post` | `void post(std::function<void()> task) override` | Enqueues to FIFO; notifies one worker only when one is asleep and more tasks are queued than workers are spinning. Thread-safe. Each task runs inside a scope naming this pool; exceptions are caught and logged in the worker loop. |
 | `isSerial` | `bool isSerial() const noexcept override` | `false`: the workers run tasks at once. |
+| `sleepingWorkers` | `std::size_t sleepingWorkers() const` | Workers asleep on the condition variable, a notified one included until it runs. For tests. |
 
 ### `MainThreadExecutor : IExecutor`
 

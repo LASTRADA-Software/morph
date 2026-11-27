@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <core/async/ExecutorContext.hpp>
 #include <core/async/IExecutor.hpp>
 #include <core/async/ParkedWork.hpp>
 #include <coroutine>
+#include <cstddef>
 #include <exception>
 #include <functional>
 #include <morph/export.hpp>
@@ -15,6 +17,12 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#if defined(_M_X64) || defined(_M_IX86) || defined(__x86_64__) || defined(__i386__)
+#include <immintrin.h>
+#elif defined(_M_ARM64)
+#include <intrin.h>
+#endif
 
 #include "../attributes.hpp"
 #include "logger.hpp"
@@ -25,6 +33,25 @@ namespace morph::exec {
 struct IExecutor;
 
 namespace detail {
+
+/// @brief Tells the CPU the calling thread is in a spin-wait loop.
+///
+/// A relax hint, not `std::this_thread::yield()`: the hint stays in user space,
+/// and avoiding the system call is the reason to spin at all. It lowers the
+/// loop's power draw and, on a core shared by two hardware threads, hands the
+/// sibling the pipeline. Architectures without a known hint make this a no-op;
+/// the loops that call it are bounded by elapsed time, not by a count of calls,
+/// so the hint's cost (about 10 cycles on some CPUs, 140 on others) changes how
+/// often the clock is read and not how long the loop runs.
+inline void cpuRelax() noexcept {
+#if defined(_M_X64) || defined(_M_IX86) || defined(__x86_64__) || defined(__i386__)
+    _mm_pause();
+#elif defined(_M_ARM64)
+    __yield();
+#elif defined(__aarch64__)
+    asm volatile("yield" ::: "memory");
+#endif
+}
 
 /// @brief A `core::async::IExecutor` over a morph executor: how a core-cpp
 ///        strand's pump, and an `ExecutorScope`, reach a thread pool, a
@@ -150,12 +177,41 @@ inline void detail::CoreExecutorOver::submit(::core::async::ParkedWork work) {
         [&executor](::core::async::ExecutorScope const& scope) { return &scope.executor() == &executor; });
 }
 
+/// @brief How a `ThreadPoolExecutor`'s idle workers wait for work.
+///
+/// A worker whose queue is empty may spin on an atomic for a short time before
+/// it sleeps on the condition variable. A task posted during the spin is taken
+/// with no system call on either side: the poster does not notify, and the
+/// worker never slept.
+struct PoolOptions {
+    /// How long one worker spins after the queue empties, before it sleeps.
+    /// Zero disables spinning: a worker sleeps the moment it finds nothing to
+    /// do, which is the right choice for a battery-sensitive application. A
+    /// worker burns at most this much CPU after each task that leaves the queue
+    /// empty, and none while the pool is idle.
+    std::chrono::microseconds spinBeforeSleep{25};
+
+    /// How many workers may spin at once. The others sleep at once, so a pool
+    /// of many workers costs one spinning core, not all of them. Zero also
+    /// disables spinning.
+    std::size_t maxSpinners = 1;
+
+    /// Test seam: called on a worker after its spin ends and before it takes
+    /// the pool's lock, the window in which a `post()` sees that worker as
+    /// spinning and does not notify. Leave empty outside tests.
+    std::function<void()> afterSpin;
+};
+
 /// @brief Multi-threaded executor backed by a fixed-size thread pool.
 ///
 /// Tasks are placed in a FIFO queue and consumed by worker threads.
 /// Exceptions thrown by tasks are caught and logged via `morph::log` (they do
 /// not propagate out of the worker or abort sibling tasks).
 /// The destructor blocks until all worker threads have exited.
+///
+/// An idle worker spins briefly before it sleeps (see `PoolOptions`), and
+/// `post()` wakes a sleeping worker only when no spinning worker will take the
+/// task.
 // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class ThreadPoolExecutor : public IExecutor {
 public:
@@ -166,7 +222,8 @@ public:
     /// `ThreadPoolExecutor(0)` yields a usable single-worker pool rather than a
     /// silently dead one.
     /// @param n Number of threads to spawn. Values below 1 are clamped to 1.
-    explicit ThreadPoolExecutor(std::size_t n) {
+    /// @param options How idle workers wait; see `PoolOptions`.
+    explicit ThreadPoolExecutor(std::size_t n, PoolOptions options = {}) : _options{std::move(options)} {
         std::size_t const workers = n == 0 ? 1 : n;
         for (std::size_t i = 0; i < workers; ++i) {
             _workers.emplace_back([this] { loop(); });
@@ -178,8 +235,10 @@ public:
     /// Workers drain the queue before exiting: after `_stop` is set they keep
     /// popping and running already-queued tasks and only return once the queue is
     /// empty, so the join blocks until every task queued before destruction has
-    /// run. Tasks `post()`ed concurrently with or after destruction race this and
-    /// may be silently lost.
+    /// run. A spinning worker sees the stop flag within one spin check, so the
+    /// join waits at most one spin period beyond the drain. Tasks `post()`ed
+    /// concurrently with or after destruction race this and may be silently
+    /// lost.
     ~ThreadPoolExecutor() override {
         {
             // notify_all() while still holding _m, not after releasing it: a
@@ -190,7 +249,7 @@ public:
             // internal state (this pattern is what post()'s own notify_one(),
             // below, must avoid too, for the same reason).
             std::scoped_lock const lock{_m};
-            _stop = true;
+            _stop.store(true, std::memory_order_release);
             _cv.notify_all();
         }
         for (auto& worker : _workers) {
@@ -199,30 +258,95 @@ public:
     }
 
     /// @brief Enqueues @p task for execution on one of the pool threads.
+    ///
+    /// Notifies a worker only when one is asleep and more tasks are queued than
+    /// there are spinning workers to take them.
     /// @param task Callable to execute. Thread-safe.
     void post(std::function<void()> task) override {
         std::scoped_lock const lock{_m};
         _q.push(std::move(task));
-        _cv.notify_one();
+        _queued.store(_q.size(), std::memory_order_release);
+        wakeIfUncovered();
     }
 
     /// @brief Not serial: the workers run tasks at once.
     /// @return `false`.
     [[nodiscard]] bool isSerial() const noexcept override { return false; }
 
+    /// @brief How many workers are asleep on the condition variable.
+    ///
+    /// A worker counts from just before it waits until it has woken, so a worker
+    /// that was notified and has not yet run still counts. Meant for tests.
+    /// @return The number of sleeping workers at the moment of the call.
+    [[nodiscard]] std::size_t sleepingWorkers() const {
+        std::scoped_lock const lock{_m};
+        return _sleeping;
+    }
+
 private:
+    // Wakes one sleeper when more tasks are queued than spinning workers will
+    // take. Called with `_m` held, as the notify must be (see the destructor).
+    void wakeIfUncovered() {
+        if (_sleeping > 0 && _q.size() > _spinning) {
+            _cv.notify_one();
+        }
+    }
+
+    // Spins until work or stop appears, or `spinBeforeSleep` has elapsed. Reads
+    // atomics only: the lock is not held and is not taken.
+    void spin() const {
+        auto const deadline = std::chrono::steady_clock::now() + _options.spinBeforeSleep;
+        do {
+            for (int i = 0; i < 16; ++i) {
+                if (_queued.load(std::memory_order_acquire) != 0 || _stop.load(std::memory_order_acquire)) {
+                    return;
+                }
+                detail::cpuRelax();
+            }
+        } while (std::chrono::steady_clock::now() < deadline);
+    }
+
+    // Blocks until a task can be taken or the pool is stopping and drained.
+    // Returns false when the worker should exit. Called with `lock` held on
+    // `_m`; returns with it held.
+    bool awaitTask(std::unique_lock<std::mutex>& lock) {
+        if (_q.empty() && !_stop.load(std::memory_order_relaxed) && _spinning < _options.maxSpinners &&
+            _options.spinBeforeSleep.count() > 0) {
+            ++_spinning;
+            lock.unlock();
+            spin();
+            if (_options.afterSpin) {
+                _options.afterSpin();
+            }
+            lock.lock();
+            --_spinning;
+        }
+        // The queue is read again under the lock: a task posted after the spin
+        // ended saw this worker as spinning and did not notify, so only this
+        // check keeps it from sleeping past that task.
+        if (_q.empty() && !_stop.load(std::memory_order_relaxed)) {
+            ++_sleeping;
+            _cv.wait(lock, [this] { return _stop.load(std::memory_order_relaxed) || !_q.empty(); });
+            --_sleeping;
+        }
+        return !_q.empty();
+    }
+
     void loop() {
         MORPH_THREAD_NAME("morph.pool");
         for (;;) {
             std::function<void()> task;
             {
                 std::unique_lock lock{_m};
-                _cv.wait(lock, [this] { return _stop || !_q.empty(); });
-                if (_stop && _q.empty()) {
+                if (!awaitTask(lock)) {
                     return;
                 }
                 task = std::move(_q.front());
                 _q.pop();
+                _queued.store(_q.size(), std::memory_order_release);
+                // Tasks left behind a worker that was itself the spinner have
+                // nobody spinning to take them.
+                wakeIfUncovered();
             }
             try {
                 // Stated per task, not once per worker: the scope ends with the
@@ -239,11 +363,19 @@ private:
             }
         }
     }
-    std::mutex _m;
+
+    PoolOptions _options;
+    mutable std::mutex _m;
     std::condition_variable _cv;
     std::queue<std::function<void()>> _q;
     std::vector<std::thread> _workers;
-    bool _stop = false;
+    // Written only under `_m`; read without it by a spinning worker, which is
+    // why they are atomic. `_queued` mirrors `_q.size()`.
+    std::atomic<bool> _stop{false};
+    std::atomic<std::size_t> _queued{0};
+    // Under `_m` only.
+    std::size_t _sleeping = 0;
+    std::size_t _spinning = 0;
 };
 
 /// @brief Single-thread executor intended for use on the calling (main) thread.
