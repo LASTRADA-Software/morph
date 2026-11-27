@@ -136,3 +136,76 @@ if(NOT MORPH_ALLOC_BUDGET_PER_CALL EQUAL 0)
                      "--id-length-budget=0.5")
     set_tests_properties(bench.alloc_budget PROPERTIES TIMEOUT 120 LABELS "bench")
 endif()
+
+# ── Instructions per local call ──────────────────────────────────────────────
+#
+# User-space retired instructions per local `execute` round trip, from Linux
+# `perf_event_open`. The allocation gate above cannot see a cost that
+# allocates nothing and a wall-clock gate cannot be tight on a shared runner;
+# an instruction count moves with the code and not with the machine's load.
+# A binary of its own because the counter has to be opened before the pool's
+# threads exist, so that they inherit it.
+add_executable(morph_bench_instr bench_dispatch_instructions.cpp)
+target_link_libraries(morph_bench_instr PRIVATE morph::morph)
+morph_suppress_test_dialogs(morph_bench_instr)
+apply_warnings(morph_bench_instr)
+
+# Exit code 77 is "the counter could not be opened" (containers,
+# `perf_event_paranoid` above 2, non-Linux). It is registered as ctest's skip
+# return code so such a runner shows `Skipped` instead of a pass that measured
+# nothing.
+#
+# **The ceiling is per toolchain and per build type**, hence a cache variable:
+# an instruction count is a property of the compiler, the optimizer and the
+# standard library. 0 disables the gate. It is not registered at all under a
+# sanitizer, whose instrumentation changes the count by an order of magnitude.
+# Measured on this tree, 12 processes per row, user-space instructions per
+# local round trip (min / median / max); a bare cross-thread round trip with no
+# morph in it costs 0.8k (Release) to 1.1k (Debug) of that:
+#
+#   gcc 16.2.1   / libstdc++ 16.2.1, Release : 6345 / 7019 / 7587 (12 runs while
+#                                               the machine was compiling); 7443 / 7445 /
+#                                               7445 (10 runs, idle)
+#   gcc 16.2.1   / libstdc++ 16.2.1, Debug   : 54863 / 57978 / 59229
+#   clang 22.1.8 / libstdc++ 16.2.1, Debug   : 54155 / 57005 / 57474
+#
+# **The figure is not exact, unlike the allocation count**, and the spread is
+# the reason for the headroom: it moves by about +-10% between processes,
+# because whether a reply beats its `.then` to being attached, and how often a
+# thread goes to sleep on a futex, differ from run to run. The defaults are
+# therefore the worst figure seen plus a margin a regression has to exceed:
+# Debug (what CI builds: Linux `clang-debug` and `gcc-debug`) 65000, 10% over
+# the maximum; Release and the other optimized types 9000, 19% over it. A
+# regression has to cost more than that margin -- about 6000 instructions in
+# Debug, 1400 in Release -- to turn this red, which is a lock, a growing scan
+# or a payload copy, not a stray branch. The allocation gate above is the
+# fine-grained one.
+#
+# **Shown firing, not assumed to**: a loop of volatile operations inside the
+# model's action, the sole change, turns `bench.instr_budget` red:
+#
+#   Debug,   gcc:    FAIL: 67238 instructions per call exceeds --budget=65000
+#   Release, gcc:    FAIL: 10449 instructions per call exceeds --budget=9000
+#
+# (1000 iterations of a volatile counter in the action: +8000 and +3000
+# instructions per call.)
+#
+# and the unmodified tree passes again. Where the counter cannot be opened the
+# case reports `Skipped` instead; see the SKIP_RETURN_CODE note above.
+if(MSVC OR DEFINED AF_SANITIZER)
+    set(_morph_instr_budget_default 0)
+elseif(CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo|MinSizeRel)$")
+    set(_morph_instr_budget_default 9000)
+else()
+    # Debug, and a multi-config generator, which has no single build type to
+    # read: the Debug figure is the one CI measured.
+    set(_morph_instr_budget_default 65000)
+endif()
+set(MORPH_INSTR_BUDGET_PER_CALL "${_morph_instr_budget_default}" CACHE STRING
+    "Ceiling, in user-space retired instructions per local execute round trip, that morph_bench_instr enforces as a ctest case. 0 disables the gate. See tests/bench/CMakeLists.txt for how the default was measured.")
+
+if(NOT MORPH_INSTR_BUDGET_PER_CALL EQUAL 0)
+    add_test(NAME bench.instr_budget
+             COMMAND morph_bench_instr "--budget=${MORPH_INSTR_BUDGET_PER_CALL}")
+    set_tests_properties(bench.instr_budget PROPERTIES TIMEOUT 120 LABELS "bench" SKIP_RETURN_CODE 77)
+endif()

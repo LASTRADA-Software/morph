@@ -420,6 +420,45 @@ build costs **14.06** and 0.00 per lookup — exactly 3.00 removed, in every one
 of 40 processes, idle and loaded, on clang Release, clang Debug and gcc Debug
 alike. A figure from an ungated benchmark is not comparable with either.
 
+### Instructions per local call (`bench_dispatch_instructions.cpp`, target `morph_bench_instr`)
+
+User-space retired instructions per local `execute` round trip: `Bridge` over
+`LocalBackend` over a four-thread `ThreadPoolExecutor`, a model holding one
+`double`, a trivial action, 200 warm-up calls excluded and 2000 counted. The
+counter is Linux `perf_event_open` (`PERF_COUNT_HW_INSTRUCTIONS`,
+`exclude_kernel`, `inherit`), opened before the pool exists so that the pool's
+workers, where the action runs, inherit it. `--baseline` also prints a bare
+cross-thread condition-variable round trip with no morph in it, the floor a
+local call cannot go under (about 0.8k in Release).
+
+It covers what the allocation census cannot: a cost that allocates nothing — a
+lock taken twice, a copy of a large capture, a scan that grew. Wall-clock time
+sees those too but is too noisy to gate on a shared runner; an instruction count
+does not move with machine load or clock speed.
+
+The owning thread sleeps on a condition variable while it waits. A polling
+owner spends about ten times the instructions spinning, and the figure would
+then measure the spin. The owner is a serial executor of the benchmark's own,
+because a one-thread pool is not serial and is refused as an owner.
+
+**It is a gate.** `bench.instr_budget` passes `--budget=<n>`, taken from the
+cache variable `MORPH_INSTR_BUDGET_PER_CALL`: 65000 for Debug (the build type CI
+runs this target in) and 9000 for the optimized types; 0 disables it; it is not
+registered under a sanitizer. The count is not exact — it moves by about ±10%
+between processes — so each default is the worst figure measured plus a margin,
+and `tests/bench/CMakeLists.txt` carries the measurements. Typical figures on
+x86-64 Linux: about 7.4k per call in Release and 55k–59k in Debug, with clang and gcc
+within 5% of each other. It was checked against an injected regression: a loop of
+volatile operations in the action turns the case red in both configurations.
+
+**Where there is no counter the case is skipped, not passed.** Containers,
+`perf_event_paranoid` above 2 and every non-Linux platform refuse the counter.
+The binary then prints the reason (`SKIP: no instruction counter, nothing was
+measured: ...`) and exits with 77, which the test registers as
+`SKIP_RETURN_CODE`, so ctest reports `Skipped`. Windows and macOS skip it
+always: there the counter is not read at all, and the Linux-specific headers
+and system call are compiled out, so the target still builds.
+
 ## Concurrent-user benchmark (`scripts/scenario/bench_bookmarks.py`)
 
 `morph_bench` measures one dispatch inside one process. This benchmark measures
