@@ -325,3 +325,45 @@ TEST_CASE("pointerOffset refuses a pointer deeper than the depth the source view
     CHECK_FALSE(morph::ui::pointerOffset(text, pointer).has_value());
     CHECK(morph::ui::pointerOffset(text, "/0/0").has_value());
 }
+
+// Mutations: a container cut short while it is skipped taking the member after it as found; a trailing comma inside a
+// skipped container accepted.
+TEST_CASE("pointerOffset skips containers that are empty, cut short or malformed on the way to a member",
+          "[ui][json-source][r3]") {
+    for (PointerCase const& item : {
+             PointerCase{"{\"b\":{},\"a\":2}", "/a", "\"a\""},
+             PointerCase{"{\"b\":[],\"a\":2}", "/a", "\"a\""},
+             PointerCase{"{\"b\":[1,2],\"a\":3}", "/a", "\"a\""},
+             PointerCase{"{\"b\":{\"x\":[1,{\"y\":2}]},\"a\":3}", "/a", "\"a\""},
+             PointerCase{"{\"b\":{ \"x\" : 1 , \"y\" : 2 } , \"a\":3}", "/a", "\"a\""},
+             PointerCase{"{\"a\":1,\"b\":{", "/a", "\"a\""},
+             PointerCase{"{\"a\":{\"x\":1,\"y\"", "/a", "\"a\""},
+             PointerCase{"{\"a\":[1,2", "/a", "\"a\""},
+             PointerCase{"{\"a\":[", "/a", "\"a\""},
+             PointerCase{"{\"b\":{\"x\"", "/a", ""},
+             PointerCase{"{\"b\":[1,2", "/a", ""},
+             PointerCase{"{\"b\":[", "/a", ""},
+             PointerCase{"{\"b\":{", "/a", ""},
+             PointerCase{"{\"b\":{\"x\":1 ", "/a", ""},
+             PointerCase{"{\"b\":{\"x\" 1},\"a\":2}", "/a", ""},
+             PointerCase{"{\"b\":{\"x\":1,},\"a\":2}", "/a", ""},
+             PointerCase{"{\"b\":{1:2},\"a\":2}", "/a", ""},
+             PointerCase{"{\"b\":[1 2],\"a\":2}", "/a", ""},
+             PointerCase{"{\"b\":[,],\"a\":2}", "/a", ""},
+             PointerCase{"{\"\\ud83d\\ude0\":1}", "/a", ""},
+             PointerCase{"{\"\\ud83d\\\\\":1,\"a\":2}", "/a", "\"a\""},
+             PointerCase{"{\"\\ud800\":1}", "/\xED\xA0\x80", "\"\\ud800\""},
+             PointerCase{"{\"\\udc00\\ud800\":1}", "/\xED\xB0\x80\xED\xA0\x80", "\"\\udc00"},
+             PointerCase{"{\"b\":\"\\ud83d\\ude00\\ud83d\",\"a\":2}", "/a", "\"a\""},
+         }) {
+        INFO(item.text << " at " << item.pointer);
+        std::optional<std::size_t> const found = morph::ui::pointerOffset(item.text, item.pointer);
+        if (item.marker.empty()) {
+            CHECK_FALSE(found.has_value());
+            continue;
+        }
+        std::size_t const expected = item.last ? item.text.rfind(item.marker) : item.text.find(item.marker);
+        REQUIRE(expected != std::string_view::npos);
+        CHECK(found == std::optional<std::size_t>{expected});
+    }
+}
