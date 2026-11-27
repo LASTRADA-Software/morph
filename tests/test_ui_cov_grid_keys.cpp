@@ -3,11 +3,15 @@
 // The grid's keys that take a rectangle, a toggle or a whole column of the grid: Space on a flag, Ctrl+A, Shift and
 // the arrows, fill down, and the commands a grid with no cells to act on refuses.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <morph/ui/grid.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include "grid_test_support.hpp"
 
@@ -86,4 +90,120 @@ TEST_CASE("cov grid keys: a key the grid does not know is ignored", "[ui][grid][
     GridFixture f{1};
     f.grid->focusCell(at(1, "note"));
     CHECK(f.grid->press("Ctrl+Q") == ui::KeyOutcome::Ignored);
+}
+
+TEST_CASE("cov grid keys: the chords a grid claims follow whether an editor is open", "[ui][grid][cov]") {
+    GridFixture f{2};
+    std::vector<std::string> const idle = f.grid->keyChords();
+    CHECK(std::ranges::contains(idle, std::string{"Ctrl+A"}));
+    CHECK(std::ranges::contains(idle, std::string{"Shift+Right"}));
+    CHECK(std::ranges::contains(idle, std::string{"F2"}));
+    f.grid->focusCell(at(1, "note"));
+    f.grid->type("x");
+    CHECK(f.grid->keyChords() == std::vector<std::string>{"Enter", "Tab", "Shift+Tab", "Escape", "Ctrl+Enter"});
+}
+
+TEST_CASE("cov grid keys: activating a read-only cell reports it and opens no editor", "[ui][grid][cov]") {
+    std::optional<ui::Key> activated;
+    GridFixture f{2, ui::GridOptions{.onActivate = [&activated](ui::Key key) { activated = std::move(key); }}};
+    f.grid->activate(at(2, "density"));  // computed, so read-only
+    CHECK(activated == ui::Key{std::int64_t{2}});
+    CHECK_FALSE(f.grid->editing().has_value());
+    f.grid->activate(at(1, "note"));
+    CHECK(f.grid->editing() == at(1, "note"));
+    CHECK(activated == ui::Key{std::int64_t{2}});  // an editable cell reports nothing
+}
+
+TEST_CASE("cov grid keys: a flag opens no editor, and one click on it flips it", "[ui][grid][cov]") {
+    GridFixture f{1, ui::GridOptions{}, specimensWithChoices()};
+    f.grid->activate(at(1, "checked"));
+    CHECK_FALSE(f.grid->editing().has_value());
+    CHECK(f.json("specimens[0].checked").empty());
+    f.grid->type("x");  // typing into a flag does nothing
+    CHECK_FALSE(f.grid->editing().has_value());
+    f.grid->click(at(1, "checked"));
+    CHECK(f.json("specimens[0].checked") == "true");
+    f.grid->click(at(1, "note"));  // a click elsewhere only moves focus
+    CHECK(f.json("specimens[0].checked") == "true");
+    CHECK(f.grid->focus() == at(1, "note"));
+}
+
+TEST_CASE("cov grid keys: a read-only cell refuses typing with a notice", "[ui][grid][cov]") {
+    GridFixture f{1};
+    f.grid->focusCell(at(1, "limit"));
+    f.grid->type("5");
+    CHECK_FALSE(f.grid->editing().has_value());
+    CHECK(f.grid->message() == "This cell is read-only");
+}
+
+TEST_CASE("cov grid keys: a cell's menu reverts the cell and the row and names the row commands", "[ui][grid][cov]") {
+    GridFixture f{3};
+    ui::Key const first{std::int64_t{1}};
+    std::vector<ui::MenuItem> entries = f.grid->cellEntries(first, "note");
+    REQUIRE(entries.size() == 6);
+    CHECK(entries.at(0).label.constant() == "Revert cell");
+    CHECK(entries.at(1).label.constant() == "Revert row");
+    CHECK(entries.at(2).separator);
+    CHECK(entries.at(3).label.constant() == "Insert row above");
+    CHECK(entries.at(4).label.constant() == "Insert row below");
+    CHECK(entries.at(5).label.constant() == "Delete row");
+    CHECK_FALSE(entries.at(0).enabled.evaluate());  // nothing modified yet
+    CHECK_FALSE(entries.at(1).enabled.evaluate());
+    f.grid->focusCell(at(1, "note"));
+    f.grid->type("changed");
+    f.grid->press("Enter");
+    entries = f.grid->cellEntries(first, "note");
+    CHECK(entries.at(0).enabled.evaluate());
+    CHECK(entries.at(1).enabled.evaluate());
+    entries.at(0).onSelect();
+    CHECK(f.form->field("specimens[0].note").draft().empty());
+    f.grid->focusCell(at(1, "note"));
+    f.grid->type("again");
+    f.grid->press("Enter");
+    f.grid->cellEntries(first, "note").at(1).onSelect();
+    CHECK(f.form->field("specimens[0].note").draft().empty());
+    f.grid->cellEntries(first, "note").at(3).onSelect();  // above the first row
+    CHECK(f.form->field("specimens").rows().size() == 4);
+}
+
+TEST_CASE("cov grid keys: the row menu deletes the selected rows when the row is among them", "[ui][grid][cov]") {
+    GridFixture f{4};
+    f.grid->select(ui::CellRange{.anchor = at(2, "note"), .focus = at(3, "note")});
+    std::vector<ui::MenuItem> inside = f.grid->rowEntries(ui::Key{std::int64_t{2}});
+    REQUIRE(inside.size() == 3);
+    CHECK(inside.at(2).label.constant() == "Delete rows");
+    std::vector<ui::MenuItem> outside = f.grid->rowEntries(ui::Key{std::int64_t{4}});
+    CHECK(outside.at(2).label.constant() == "Delete row");  // a row outside the selection is the only one
+    outside.at(2).onSelect();
+    CHECK(f.form->field("specimens").rows().size() == 3);
+    inside.at(2).onSelect();
+    CHECK(f.form->field("specimens").rows().size() == 1);
+}
+
+TEST_CASE("cov grid keys: the row menu of fixed rows is empty and a full grid disables insertion", "[ui][grid][cov]") {
+    GridFixture fixed{2, ui::GridOptions{.rowsFixed = true}};
+    CHECK(fixed.grid->rowEntries(ui::Key{std::int64_t{1}}).empty());
+    std::string schema{morph::test::grid::kSpecimens};
+    schema.replace(schema.find(R"("maxItems":5)"), std::string_view{R"("maxItems":5)"}.size(), R"("maxItems":2)");
+    GridFixture full{2, ui::GridOptions{}, schema};
+    std::vector<ui::MenuItem> const entries = full.grid->rowEntries(ui::Key{std::int64_t{1}});
+    REQUIRE(entries.size() == 3);
+    CHECK_FALSE(entries.at(0).enabled.evaluate());
+    CHECK(entries.at(0).description.evaluate() == "A grid holds at most 2 rows");
+    CHECK(entries.at(2).enabled.evaluate());
+}
+
+TEST_CASE("cov grid keys: the status line's entries undo a deletion and ignore a name they do not know",
+          "[ui][grid][cov]") {
+    GridFixture f{2};
+    f.grid->focusCell(at(2, "note"));
+    f.grid->type("kept");
+    f.grid->press("Enter");
+    f.grid->focusCell(at(2, "note"));
+    f.grid->deleteRows();
+    REQUIRE(f.form->field("specimens").rows().size() == 1);
+    f.grid->chooseEntry("nothing");
+    CHECK(f.form->field("specimens").rows().size() == 1);
+    f.grid->chooseEntry("undo");
+    CHECK(f.form->field("specimens").rows().size() == 2);
 }

@@ -60,3 +60,27 @@ TEST_CASE("cov collections: a stored sort and hidden column shape the collection
     CHECK(keys.front() == "3");  // the accented name sorts last, so first when descending
     CHECK(morph::ui::testing::diagnosticsMentioning(h, "stored state") == 0);
 }
+
+TEST_CASE("cov collections: a stored filter narrows the collection before its rows are shown", "[ui][table][cov]") {
+    auto const states = std::make_shared<table::MemoryTableStateStore>(morph::ui::testing::storeExecutor());
+    store(states, R"({"version":1,"filters":{"columns":{"name":{"include":[{"contains":"mm"}]}}}})");
+    TableHarness h{states};
+    h.extraViews.insert_or_assign("Lims_ListSamples", std::string{kMixedSamplesView});
+    auto const screen = h.mount(kSamplesCollection);
+    h.settle();
+    h.reply(h.dispatcher.last("Lims_ListSamples"), std::string{kFourSamples});
+    int const collection = h.byTestId("Table", "collection_rows");
+    CHECK(morph::ui::testing::rowKeys(h, collection) == std::vector<std::string>{"4"});
+}
+
+TEST_CASE("cov collections: with nothing stored the collection shows every row in the order they arrive",
+          "[ui][table][cov]") {
+    auto const states = std::make_shared<table::MemoryTableStateStore>(morph::ui::testing::storeExecutor());
+    TableHarness h{states};
+    h.extraViews.insert_or_assign("Lims_ListSamples", std::string{kMixedSamplesView});
+    auto const screen = h.mount(kSamplesCollection);
+    h.settle();
+    h.reply(h.dispatcher.last("Lims_ListSamples"), std::string{kFourSamples});
+    int const collection = h.byTestId("Table", "collection_rows");
+    CHECK(morph::ui::testing::rowKeys(h, collection) == std::vector<std::string>{"1", "2", "3", "4"});
+}
