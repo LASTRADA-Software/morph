@@ -160,6 +160,17 @@ option(MORPH_CLIENT_ONLY
     OFF
 )
 
+# Observability (`morph::observe`: metric and trace sinks) is on by default. OFF
+# compiles the emit sites out of the dispatch path -- the clock reads and the
+# in-flight counter `LocalBackend` keeps for its metrics included -- and makes
+# installing a sink a compile error naming this option. PUBLIC on the morph
+# target, not per-consumer: the macro changes what inline functions in the
+# public headers are, so two translation units disagreeing about it would
+# violate ODR. See docs/spec/core/observability.md.
+option(MORPH_ENABLE_OBSERVABILITY
+    "Build the metric and trace seams (morph::observe). OFF compiles them out of the dispatch path and makes installing a sink a compile error."
+    ON
+)
 
 # Both Qt consumers (the WebSocket backend and the Qt Quick frontend) need
 # Qt6 auto-detected on Windows before their find_package(Qt6 ...) calls run.
@@ -527,6 +538,9 @@ if(MORPH_REQUIRE_VETTED_HMAC)
 endif()
 if(MORPH_CLIENT_ONLY)
     target_compile_definitions(morph PUBLIC MORPH_CLIENT_ONLY)
+endif()
+if(NOT MORPH_ENABLE_OBSERVABILITY)
+    target_compile_definitions(morph PUBLIC MORPH_OBSERVABILITY_DISABLED)
 endif()
 if(MORPH_ENABLE_TRACY)
     target_compile_definitions(morph PUBLIC MORPH_TRACY_ENABLED)

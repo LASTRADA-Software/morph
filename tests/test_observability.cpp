@@ -13,6 +13,10 @@
 #include <utility>
 #include <vector>
 
+// Every case here installs a sink or reads the process-wide state, which a build
+// with MORPH_ENABLE_OBSERVABILITY=OFF does not have.
+#if !defined(MORPH_OBSERVABILITY_DISABLED)
+
 using ObserveGuard = morph::observe::ScopedObserveOverride;
 
 // ── morph::observe::setMetricSink / metricsEnabled ────────────────────────────
@@ -328,3 +332,5 @@ TEST_CASE("morph::observe: a sink that reinstalls itself does not self-deadlock"
     REQUIRE(calls.load() == 1);
     REQUIRE_FALSE(morph::observe::metricsEnabled());
 }
+
+#endif  // MORPH_OBSERVABILITY_DISABLED

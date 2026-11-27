@@ -64,7 +64,7 @@ need `VCPKG_ROOT` set.
 | `MORPH_BUILD_CLANG_TIDY` | `OFF` | clang-tidy during the build, warnings as errors |
 | `MORPH_INSTALL` | top-level project | Install and export rules |
 
-Two options change what the library itself compiles, for deployments that need
+Three options change what the library itself compiles, for deployments that need
 them:
 
 - **`MORPH_CLIENT_ONLY`** (`OFF`) suppresses the registrars that construct and
@@ -75,6 +75,12 @@ them:
 - **`MORPH_REQUIRE_VETTED_HMAC`** (`OFF`) removes the default reference HMAC from
   the token signer and verifier, so every call site must pass a vetted MAC
   function. See [`spec/security.md`](spec/security.md).
+- **`MORPH_ENABLE_OBSERVABILITY`** (`ON`) builds the metric and trace seams.
+  `OFF` compiles them out of the dispatch path (the clock reads and in-flight
+  counter a local call keeps for its metrics included) and makes installing a
+  sink (`setMetricSink`, `setTraceSink`, `ScopedObserveOverride`) a compile
+  error. See [`spec/core/observability.md`](spec/core/observability.md),
+  "Compile-time switch".
 
 ## Using morph in your own project
 

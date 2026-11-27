@@ -274,6 +274,7 @@ TEST_CASE("ReconnectCoordinator: concurrent calls are serialised", "[reconnect][
     REQUIRE(f.replayCalls == 2 * kPerThread);
 }
 
+#if !defined(MORPH_OBSERVABILITY_DISABLED)
 TEST_CASE("ReconnectCoordinator: onOnline emits reconnectAttempts per attempt and a tagged reconnectOutcome once",
           "[reconnect][observability]") {
     morph::observe::ScopedObserveOverride guard;
@@ -303,7 +304,9 @@ TEST_CASE("ReconnectCoordinator: onOnline emits reconnectAttempts per attempt an
     REQUIRE(attemptEvents.load() == 3);
     REQUIRE(outcomeTags == std::vector<std::string>{"Reconnected"});
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
+#if !defined(MORPH_OBSERVABILITY_DISABLED)
 TEST_CASE("ReconnectCoordinator: giving up tags reconnectOutcome as GaveUp", "[reconnect][observability]") {
     morph::observe::ScopedObserveOverride guard;
     Fakes f;
@@ -330,6 +333,7 @@ TEST_CASE("ReconnectCoordinator: giving up tags reconnectOutcome as GaveUp", "[r
     REQUIRE(outcome == ReconnectOutcome::GaveUp);
     REQUIRE(outcomeTags == std::vector<std::string>{"GaveUp"});
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
 // ── The owner rule: onOnline()/onOffline() run on the offline strand ─────────
 

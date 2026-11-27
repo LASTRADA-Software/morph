@@ -355,6 +355,7 @@ TEST_CASE(
     REQUIRE(queue.drain().size() == 1);
 }
 
+#if !defined(MORPH_OBSERVABILITY_DISABLED)
 TEST_CASE("morph::offline::SyncWorker: run() emits queueDepth with the pending count at drain",
           "[sync][observability]") {
     morph::observe::ScopedObserveOverride guard;
@@ -376,6 +377,7 @@ TEST_CASE("morph::offline::SyncWorker: run() emits queueDepth with the pending c
     REQUIRE(samples.size() == 1);
     REQUIRE(samples[0] == 3.0);
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
 TEST_CASE("morph::offline::SyncWorker: run() over a queue at maxDepth still drains and replays normally",
           "[sync][overflow]") {

@@ -668,6 +668,83 @@ endif()
 set(CMAKE_TRY_COMPILE_TARGET_TYPE "${_morph_guard_try_target_type}")
 unset(_morph_guard_try_target_type)
 
+# ── MORPH_ENABLE_OBSERVABILITY=OFF checks ────────────────────────────────────
+# Proof that a build with observability compiled out refuses to install a
+# sink, and says why. The probes name the macro themselves (what the option
+# defines on the morph target), so this holds whichever way the option is set.
+#   - disabled_set_sink with the macro, for each of the three ways to install
+#     a sink: must NOT compile, and the compiler output must carry the
+#     refusal's message (any other error would also "fail to compile", which
+#     proves nothing about the refusal).
+#   - the same file and probe without the macro: must compile (control: the
+#     file is valid and its includes resolve).
+#   - disabled_no_sink with and without the macro: must compile (control: the
+#     header still offers everything but the setters when compiled out).
+set(_morph_obs_try_target_type "${CMAKE_TRY_COMPILE_TARGET_TYPE}")
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
+foreach(_morph_obs_probe IN ITEMS PROBE_METRIC_SINK PROBE_TRACE_SINK PROBE_SCOPED_OVERRIDE)
+    unset(MORPH_OBSERVABILITY_OFF_ACCEPTS_SINK CACHE)
+    try_compile(MORPH_OBSERVABILITY_OFF_ACCEPTS_SINK
+        SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/observability_disabled_set_sink.cpp"
+        CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+        CXX_STANDARD 23
+        COMPILE_DEFINITIONS "-DMORPH_OBSERVABILITY_DISABLED" "-D${_morph_obs_probe}"
+        OUTPUT_VARIABLE MORPH_OBSERVABILITY_OFF_SINK_OUTPUT
+    )
+    if(MORPH_OBSERVABILITY_OFF_ACCEPTS_SINK)
+        message(FATAL_ERROR
+            "observability check failed: compile_checks/observability_disabled_set_sink.cpp compiled with "
+            "MORPH_OBSERVABILITY_DISABLED and ${_morph_obs_probe} defined (expected the sink to be refused).")
+    endif()
+    string(FIND "${MORPH_OBSERVABILITY_OFF_SINK_OUTPUT}"
+        "observability is compiled out (MORPH_ENABLE_OBSERVABILITY=OFF)" _morph_obs_message_at)
+    if(_morph_obs_message_at EQUAL -1)
+        message(FATAL_ERROR
+            "observability check failed: compile_checks/observability_disabled_set_sink.cpp failed to compile with "
+            "MORPH_OBSERVABILITY_DISABLED and ${_morph_obs_probe} defined, but not with the refusal's message. "
+            "Compiler output:\n${MORPH_OBSERVABILITY_OFF_SINK_OUTPUT}")
+    endif()
+    unset(_morph_obs_message_at)
+
+    unset(MORPH_OBSERVABILITY_ON_ACCEPTS_SINK CACHE)
+    try_compile(MORPH_OBSERVABILITY_ON_ACCEPTS_SINK
+        SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/observability_disabled_set_sink.cpp"
+        CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+        CXX_STANDARD 23
+        COMPILE_DEFINITIONS "-D${_morph_obs_probe}"
+        OUTPUT_VARIABLE MORPH_OBSERVABILITY_ON_SINK_OUTPUT
+    )
+    if(NOT MORPH_OBSERVABILITY_ON_ACCEPTS_SINK)
+        message(FATAL_ERROR
+            "observability check failed: compile_checks/observability_disabled_set_sink.cpp failed to compile with "
+            "${_morph_obs_probe} defined and MORPH_OBSERVABILITY_DISABLED not (the refusal check above would pass "
+            "for any broken include). Compiler output:\n${MORPH_OBSERVABILITY_ON_SINK_OUTPUT}")
+    endif()
+endforeach()
+unset(_morph_obs_probe)
+
+# The second value names an unrelated macro, so both runs have the same shape.
+foreach(_morph_obs_define IN ITEMS "-DMORPH_OBSERVABILITY_DISABLED" "-DMORPH_OBSERVABILITY_UNDEFINED_CONTROL")
+    unset(MORPH_OBSERVABILITY_NO_SINK_COMPILES CACHE)
+    try_compile(MORPH_OBSERVABILITY_NO_SINK_COMPILES
+        SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/observability_disabled_no_sink.cpp"
+        CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+        CXX_STANDARD 23
+        COMPILE_DEFINITIONS "${_morph_obs_define}"
+        OUTPUT_VARIABLE MORPH_OBSERVABILITY_NO_SINK_OUTPUT
+    )
+    if(NOT MORPH_OBSERVABILITY_NO_SINK_COMPILES)
+        message(FATAL_ERROR
+            "observability check failed: compile_checks/observability_disabled_no_sink.cpp failed to compile with "
+            "${_morph_obs_define}. Compiler output:\n${MORPH_OBSERVABILITY_NO_SINK_OUTPUT}")
+    endif()
+endforeach()
+unset(_morph_obs_define)
+
+set(CMAKE_TRY_COMPILE_TARGET_TYPE "${_morph_obs_try_target_type}")
+unset(_morph_obs_try_target_type)
+
 # ── MORPH_CLIENT_ONLY guard check ────────────────────────────────────────────
 # Proof that MORPH_CLIENT_ONLY actually suppresses the two model-owning
 # registrars (registerModelOnce, registerActionOnce) -- see
