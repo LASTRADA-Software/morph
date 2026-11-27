@@ -137,6 +137,12 @@ in-flight gauge's paired decrement, by contrast, is centralized so it fires
 exactly once regardless of which path (timeout or dispatch) resolves the call
 first.
 
+`LocalBackend` reads the clock for `executeLatencyMs` only when a metric sink is
+installed at the moment the call starts (`admitLocal`). A call that starts with
+no sink emits no latency sample, even if a sink is installed before it finishes:
+the start reading it would need was never taken. With no sink installed, a
+dispatch costs no clock read. Tracing is decided separately, at `beginSpan`.
+
 ## Thread safety
 
 Metrics and tracing each have their own mutex (`metricMtx`, `traceMtx`) guarding

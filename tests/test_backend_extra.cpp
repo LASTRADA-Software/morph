@@ -494,6 +494,36 @@ TEST_CASE("morph::backend::LocalBackend: executeLatencyMs covers the time the ha
     CHECK(latencies.front() >= 20.0);
 }
 
+TEST_CASE("morph::backend::LocalBackend: a call that started with no metric sink emits no latency sample",
+          "[backend][local][observability]") {
+    morph::observe::ScopedObserveOverride const guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::backend::LocalBackend backend{pool};
+    auto mid = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
+
+    std::atomic<int> latencies{0};
+    auto const sink = [&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::executeLatencyMs) {
+            latencies.fetch_add(1);
+        }
+    };
+
+    // The sink appears while the handler runs, after the call was admitted
+    // with none installed: there is no start reading to measure from.
+    std::atomic<bool> first{false};
+    backend.execute(mid, pendingCall([&] { morph::observe::setMetricSink(sink); }), &cbExec)
+        .then([&](const std::shared_ptr<void>&) { first = true; });
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return first.load(); }));
+    CHECK(latencies.load() == 0);
+
+    // The same sink is installed when the next call starts, so that one is timed.
+    std::atomic<bool> second{false};
+    backend.execute(mid, pendingCall([] {}), &cbExec).then([&](const std::shared_ptr<void>&) { second = true; });
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return second.load(); }));
+    CHECK(latencies.load() == 1);
+}
+
 namespace {
 
 /// What a hand-built Task handler kept when it started: the token it was given
