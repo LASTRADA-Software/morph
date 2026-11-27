@@ -505,6 +505,8 @@ add_library(morph ${_morph_library_type}
     src/ui/interpreter_table_model.cpp
     src/ui/interpreter_charts.cpp
     src/ui/interpreter_mount.cpp
+    src/forms/field_control.cpp
+    src/forms/form_session.cpp
     src/table/description.cpp
     src/table/edits.cpp
     src/table/level_cache.cpp
