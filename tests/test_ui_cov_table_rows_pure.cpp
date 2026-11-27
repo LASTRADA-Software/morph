@@ -416,3 +416,125 @@ TEST_CASE("cov rows pure: unlistedUnits lists each unit the rows bring that the 
     CHECK(detail::unlistedUnits(*list, d, nullptr, 8).size() == 3);  // with no registry kg is unlisted too
     CHECK(detail::unlistedUnits(*list, d, nullptr, 0).empty());
 }
+
+namespace {
+
+table::RowId id(std::int64_t key) { return table::RowId{key}; }
+
+ui::ActionInfo rowsAction(std::vector<std::string> paths, std::string recordName = "R") {
+    ui::ActionInfo info;
+    info.records.push_back(ui::ActionRecordInfo{
+        .record = std::move(recordName), .keyField = std::nullopt, .paths = std::move(paths), .open = {}});
+    return info;
+}
+}  // namespace
+
+TEST_CASE("cov rows pure: the rows a reply changed and failed are read along the catalog's paths",
+          "[ui][table][cov]") {
+    Value const reply = record({
+        {"rows", Value{ui::ValueList{record({{"key", Value{std::int64_t{1}}}}),
+                                     record({{"key", Value{std::string{"b"}}}, {"from", Value{std::int64_t{9}}}}),
+                                     record({{"key", Value{true}}}), record({{"nokey", Value{std::int64_t{1}}}})}}},
+        {"failed",
+         Value{ui::ValueList{record({{"key", Value{std::int64_t{2}}}, {"message", Value{std::string{"no"}}}}),
+                             record({{"key", Value{std::int64_t{3}}}}),
+                             record({{"key", Value{std::int64_t{4}}}, {"message", Value{std::int64_t{5}}}}),
+                             record({{"message", Value{std::string{"orphan"}}}})}}},
+        {"inner", record({{"rows", Value{ui::ValueList{record({{"key", Value{std::int64_t{7}}}})}}}})},
+    });
+    auto const top = ui::changedRowsOf(reply, rowsAction({"rows"}), "R");
+    REQUIRE(top.rows.size() == 2);
+    CHECK(top.rows.at(0).key == id(1));
+    CHECK_FALSE(top.rows.at(0).from.has_value());
+    CHECK(top.rows.at(1).key == table::RowId{std::string{"b"}});
+    CHECK(top.rows.at(1).from == id(9));
+    REQUIRE(top.failed.size() == 3);
+    CHECK(top.failed.at(0).message == "no");
+    CHECK(top.failed.at(1).message.empty());
+    CHECK(top.failed.at(2).message.empty());  // a message that is no text is none
+    // A path under a member, a path that is not a rows path, a record the reply is not about, a path that is absent.
+    auto const nested = ui::changedRowsOf(reply, rowsAction({"inner.rows"}), "R");
+    REQUIRE(nested.rows.size() == 1);
+    CHECK(nested.rows.front().key == id(7));
+    CHECK(ui::changedRowsOf(reply, rowsAction({"other"}), "R").rows.empty());
+    CHECK(ui::changedRowsOf(reply, rowsAction({"rows"}), "S").rows.empty());
+    CHECK(ui::changedRowsOf(reply, rowsAction({"missing.rows"}), "R").rows.empty());
+    CHECK(ui::changedRowsOf(Value{std::int64_t{1}}, rowsAction({"rows"}), "R").rows.empty());
+    CHECK(ui::changedRowsOf(record({{"rows", Value{std::int64_t{3}}}}), rowsAction({"rows"}), "R").rows.empty());
+}
+
+TEST_CASE("cov rows pure: a run's rows are busy until it settles and a moved key keeps its state",
+          "[ui][table][cov]") {
+    ui::RowStates states;
+    states.busyKeys(1, {id(1), id(2), id(1)});
+    CHECK(states.isBusy(id(1)));
+    CHECK_FALSE(states.isBusy(id(3)));
+    CHECK(states.busyCount() == 2);
+    // A key moved to a key the run holds already leaves one; a free new key takes the old one's place.
+    states.move(id(1), id(1));
+    states.move(id(1), id(2));
+    CHECK(states.busyCount() == 1);
+    CHECK(states.isBusy(id(2)));
+    states.move(id(2), id(5));
+    CHECK(states.isBusy(id(5)));
+    CHECK_FALSE(states.isBusy(id(2)));
+    states.settle(1);
+    CHECK_FALSE(states.isBusy(id(5)));
+
+    // A view run holds every row but those it excepts; its count and the key runs' keys that it does not leave out.
+    states.busyView(2, {id(3)}, 10);
+    CHECK(states.isBusy(id(4)));
+    CHECK_FALSE(states.isBusy(id(3)));
+    states.busyKeys(3, {id(3), id(4)});
+    CHECK(states.isBusy(id(3)));
+    CHECK(states.busyCount() == 10 + 1);  // id 4 is in the view run already
+    states.busyView(4, {}, -5);
+    CHECK(states.busyCount() >= 10);
+    // A moved key: the view run holds it when it held the old one, and excepts the old key.
+    states.move(id(4), id(40));
+    CHECK(states.isBusy(id(40)));
+    states.settle(2);
+    states.settle(3);
+    states.settle(4);
+    CHECK(states.busyCount() == 0);
+
+    std::vector<table::FailedRow> const failed{{.key = id(1), .message = "a"}, {.key = id(2), .message = "b"}};
+    states.fail(failed);
+    states.fail(std::vector<table::FailedRow>{{.key = id(1), .message = "again"}});
+    CHECK(states.failure(id(1)) == "again");
+    CHECK_FALSE(states.failure(id(9)).has_value());
+    CHECK(states.failedKeys() == std::vector<table::RowId>{id(1), id(2)});
+    states.move(id(1), id(2));  // the new key is failed already: the old one goes
+    CHECK(states.failedKeys() == std::vector<table::RowId>{id(2)});
+    states.move(id(2), id(6));
+    CHECK(states.failedKeys() == std::vector<table::RowId>{id(6)});
+    states.move(id(77), id(78));  // nothing held under it
+    CHECK(states.failedKeys() == std::vector<table::RowId>{id(6)});
+}
+
+TEST_CASE("cov rows pure: the select-all refusal and the row count say what is still loading", "[ui][table][cov]") {
+    auto const en = ui::FormatContext{};
+    CHECK(ui::selectAllRefusalText({.undecided = 1, .levels = {}}, en) ==
+          "Select all is available once 1 row is decided");
+    CHECK(ui::selectAllRefusalText({.undecided = 3, .levels = {}}, en) ==
+          "Select all is available once 3 rows are decided");
+    CHECK(ui::selectAllRefusalText({.undecided = 0, .levels = {}}, en) ==
+          "Select all is available once the rows have loaded");
+    CHECK(ui::selectAllRefusalText({.undecided = 0, .levels = {"a", "b"}}, en) ==
+          "Select all is available once a and b data has loaded");
+
+    ui::TableCountsView counts;
+    CHECK(ui::countsText(counts, 0, en).empty());
+    counts.view = ui::TableTotal{.rows = 5, .kind = table::TotalKind::Exact, .known = true};
+    CHECK(ui::countsText(counts, 0, en) == "5 rows");
+    counts.view.rows = 1;
+    CHECK(ui::countsText(counts, 0, en) == "1 row");
+    CHECK(ui::countsText(counts, 1, en) == "1 of 1 selected");
+    counts.view.rows = 5;
+    CHECK(ui::countsText(counts, 2, en) == "2 of 5 selected");
+    counts.view.kind = table::TotalKind::AtLeast;
+    CHECK(ui::countsText(counts, 0, en) == "5 or more");
+    CHECK(ui::countsText(counts, 2, en) == "2 of 5 or more selected");
+    counts.undecided = 4;
+    CHECK(ui::countsText(counts, 2, en) == "5 so far, 4 loading");
+}
