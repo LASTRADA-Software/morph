@@ -84,7 +84,7 @@ TEST_CASE("a description whose units cannot be registered refuses a measure page
     CHECK(read.error().code == TableErrorCode::InvalidSpec);
     auto const registry = registryOf(description);
     REQUIRE_FALSE(registry);
-    CHECK(registry.error().message.find("begins like a number") != std::string::npos);
+    CHECK(registry.error().message.contains("begins like a number"));
 }
 
 TEST_CASE("a registry skips a unit with no id and a page of a text column needs none", "[covc][table][pages]") {
@@ -138,14 +138,12 @@ TEST_CASE("a band names the columns it spans, or the description is refused", "[
     };
     CHECK(checkBands({}, columns));
     CHECK(checkBands(std::vector<BandInfo>{band("All", {"a", "b"}, {band("One", {"a"})})}, columns));
-    CHECK(refusal({band("Empty", {})}).find("names no column") != std::string::npos);
-    CHECK(refusal({band("Ghost", {"a", "nope"})}).find("which is not a column of the table") != std::string::npos);
-    CHECK(refusal({band("Twice", {"a"}), band("Again", {"a"})}).find("another band of its level covers") !=
-          std::string::npos);
-    CHECK(refusal({band("Outer", {"a"}, {band("Inner", {"b"})})}).find("which its parent band does not") !=
-          std::string::npos);
+    CHECK(refusal({band("Empty", {})}).contains("names no column"));
+    CHECK(refusal({band("Ghost", {"a", "nope"})}).contains("which is not a column of the table"));
+    CHECK(refusal({band("Twice", {"a"}), band("Again", {"a"})}).contains("another band of its level covers"));
+    CHECK(refusal({band("Outer", {"a"}, {band("Inner", {"b"})})}).contains("which its parent band does not"));
     auto const deep = band("L1", {"a"}, {band("L2", {"a"}, {band("L3", {"a"}, {band("L4", {"a"})})})});
-    CHECK(refusal({deep}).find("nests past 3 levels") != std::string::npos);
+    CHECK(refusal({deep}).contains("nests past 3 levels"));
     CHECK(bandRefusal(std::vector<BandInfo>{band("Free", {"anything"})}, {}) == std::nullopt);
 }
 

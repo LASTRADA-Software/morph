@@ -73,7 +73,7 @@ TEST_CASE("a views operation that does not read is refused with its reason", "[c
         auto const read = readViewOperation(bad.json);
         REQUIRE_FALSE(read);
         CHECK(read.error().code == TableErrorCode::InvalidSpec);
-        CHECK(read.error().message.find(bad.message) != std::string::npos);
+        CHECK(read.error().message.contains(bad.message));
     }
 }
 
@@ -92,10 +92,10 @@ TEST_CASE("a views document reads once per name and refuses another version", "[
 
     auto const newer = readViews(R"({"version":2})");
     REQUIRE_FALSE(newer);
-    CHECK(newer.error().message.find("is version 2; this reads version 1") != std::string::npos);
+    CHECK(newer.error().message.contains("is version 2; this reads version 1"));
     auto const garbled = readViews("{");
     REQUIRE_FALSE(garbled);
-    CHECK(garbled.error().message.find("a views document does not read") != std::string::npos);
+    CHECK(garbled.error().message.contains("a views document does not read"));
     auto const wrongShape = readViews(R"({"version":1,"views":5})");
     REQUIRE_FALSE(wrongShape);
 }

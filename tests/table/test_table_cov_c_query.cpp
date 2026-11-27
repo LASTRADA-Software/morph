@@ -268,7 +268,7 @@ TEST_CASE("validate refuses a query over each bound with its typed error", "[cov
         REQUIRE_FALSE(result);
         CHECK(result.error().code == refusal.code);
         CHECK(result.error().column == refusal.column);
-        CHECK(result.error().message.find(refusal.message) != std::string::npos);
+        CHECK(result.error().message.contains(refusal.message));
     }
 }
 

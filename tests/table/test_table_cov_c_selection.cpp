@@ -20,8 +20,8 @@ using morph::table::detail::PlainSelection;
 TEST_CASE("a filter's compact text leaves out what is empty and what is the default", "[covc][table][selection]") {
     FilterSpec empty;
     auto const none = detail::compactFilterJson(empty);
-    CHECK(none.find("columns") != std::string::npos);
-    CHECK(none.find("groups") == std::string::npos);
+    CHECK(none.contains("columns"));
+    CHECK_FALSE(none.contains("groups"));
 
     FilterSpec filters;
     filters.columns["a"] = ColumnFilter{
@@ -30,13 +30,13 @@ TEST_CASE("a filter's compact text leaves out what is empty and what is the defa
         ColumnFilter{.combine = Combine::All, .include = {FilterEntry{.contains = "y"}}, .exclude = {}};
     filters.groups = {GroupFilter{.columns = {"a", "b"}, .include = {FilterEntry{.eq = ""}}}};
     auto const text = detail::compactFilterJson(filters);
-    CHECK(text.find("\"eq\":\"x\"") != std::string::npos);
-    CHECK(text.find("\"contains\":\"y\"") != std::string::npos);
-    CHECK(text.find("\"combine\":\"all\"") != std::string::npos);
-    CHECK(text.find("\"combine\":\"any\"") == std::string::npos);
-    CHECK(text.find("\"exclude\"") == std::string::npos);
-    CHECK(text.find("\"group\"") == std::string::npos);
-    CHECK(text.find("\"eq\":\"\"") == std::string::npos);
+    CHECK(text.contains("\"eq\":\"x\""));
+    CHECK(text.contains("\"contains\":\"y\""));
+    CHECK(text.contains("\"combine\":\"all\""));
+    CHECK_FALSE(text.contains("\"combine\":\"any\""));
+    CHECK_FALSE(text.contains("\"exclude\""));
+    CHECK_FALSE(text.contains("\"group\""));
+    CHECK_FALSE(text.contains("\"eq\":\"\""));
 }
 
 namespace {

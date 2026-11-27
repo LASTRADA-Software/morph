@@ -57,8 +57,8 @@ TEST_CASE("a user group takes two to sixteen distinct columns that no group hold
         CHECK(result.error().code == TableErrorCode::InvalidSpec);
         return result.error().message;
     };
-    CHECK(refused({"c0"}).find("2 to 16 columns, not 1") != std::string::npos);
-    CHECK(refused(ids).find("not 20") != std::string::npos);
+    CHECK(refused({"c0"}).contains("2 to 16 columns, not 1"));
+    CHECK(refused(ids).contains("not 20"));
     CHECK(refused({"c0", "nope"}) == "unknown column: nope");
     CHECK(refused({"c0", "c1", "c0"}) == "column c0 is named twice");
 

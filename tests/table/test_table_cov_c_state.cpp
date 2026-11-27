@@ -109,16 +109,16 @@ TEST_CASE("a state with only carried parts still writes the parts it carried", "
 TEST_CASE("a state of another version is refused with the versions it knows", "[covc][table][state]") {
     auto const older = readState(R"({"version":0})");
     REQUIRE_FALSE(older);
-    CHECK(older.error().find("version 0 has no migration to version 1") != std::string::npos);
+    CHECK(older.error().contains("version 0 has no migration to version 1"));
     auto const newer = readState(R"({"version":7})");
     REQUIRE_FALSE(newer);
-    CHECK(newer.error().find("version 7; this reads up to 1") != std::string::npos);
+    CHECK(newer.error().contains("version 7; this reads up to 1"));
     auto const wrongShape = readState(R"({"version":1,"layout":5})");
     REQUIRE_FALSE(wrongShape);
-    CHECK(wrongShape.error().find("does not read") != std::string::npos);
+    CHECK(wrongShape.error().contains("does not read"));
     auto const notJson = readState("[");
     REQUIRE_FALSE(notJson);
-    CHECK(notJson.error().find("not JSON") != std::string::npos);
+    CHECK(notJson.error().contains("not JSON"));
 }
 
 TEST_CASE("fitting a state reports what it carries and what it drops, key by key", "[covc][table][state]") {
@@ -218,7 +218,7 @@ TEST_CASE("a views document is published only to the shared part, over a documen
     REQUIRE(create.outcome == SaveOutcome::Saved);
     auto const garbled = settled([&] { return store.publish(shared, add, create.revision); });
     CHECK(garbled.outcome == SaveOutcome::Refused);
-    CHECK(garbled.reason.find("a views document does not read") != std::string::npos);
+    CHECK(garbled.reason.contains("a views document does not read"));
     CHECK(garbled.revision == create.revision);
     CHECK(settled([&] { return store.save(shared, "{}", std::string{kNoDocument}); }).outcome ==
           SaveOutcome::Conflict);

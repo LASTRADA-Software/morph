@@ -53,13 +53,13 @@ TEST_CASE("a unit is refused for each way its id, factor or dimension is unusabl
         auto const added = builder.add(refusal.unit);
         REQUIRE_FALSE(added);
         CHECK(added.error().code == TableErrorCode::InvalidSpec);
-        CHECK(added.error().message.find(refusal.message) != std::string::npos);
+        CHECK(added.error().message.contains(refusal.message));
     }
     UnitRegistryBuilder builder;
     REQUIRE(builder.add(unit("kg", "mass")));
     auto const twice = builder.add(unit("kg", "mass"));
     REQUIRE_FALSE(twice);
-    CHECK(twice.error().message.find("is registered already") != std::string::npos);
+    CHECK(twice.error().message.contains("is registered already"));
 }
 
 TEST_CASE("removing a unit frees its id and drops it from its dimension", "[covc][table][units]") {
@@ -174,7 +174,7 @@ TEST_CASE("a unit enum's relations are walked in both directions to the dimensio
     REQUIRE_FALSE(added);
     CHECK(added.error().code == TableErrorCode::InvalidSpec);
     CHECK(added.error().column == "lb");
-    CHECK(added.error().message.find("has no relation to the base of mass") != std::string::npos);
+    CHECK(added.error().message.contains("has no relation to the base of mass"));
     auto const registry = std::move(builder).build();
     auto const factorOf = [&](std::string_view id) { return registry->info(*registry->find(id)).toBase; };
     CHECK(factorOf("kg") == Rational{1, DecimalPlaces{0}});
@@ -195,7 +195,7 @@ TEST_CASE("a dimension the builder holds with no unit of factor one refuses ever
     std::vector<Unit> const mass{Unit::kg, Unit::g};
     auto const added = addUnitsOf<Unit>(builder, mass, &covunits::dimensionOf);
     REQUIRE_FALSE(added);
-    CHECK(added.error().message.find("has no relation to the base of mass") != std::string::npos);
+    CHECK(added.error().message.contains("has no relation to the base of mass"));
 
     UnitRegistryBuilder held;
     REQUIRE(held.add(UnitInfo{

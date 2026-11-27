@@ -62,6 +62,7 @@ set(MORPH_TABLE_TEST_SOURCES
     table/test_table_cov_c_levels.cpp
     table/test_table_cov_c_answer.cpp
     table/test_table_cov_c_view_cache.cpp
+    table/test_table_cov_c_fit.cpp
     table/test_table_cov_c_pages.cpp
     table/test_table_state.cpp
     table/test_table_measure.cpp

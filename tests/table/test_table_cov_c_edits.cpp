@@ -100,16 +100,13 @@ TEST_CASE("an edit is checked against the action's input schema, one refusal for
     constexpr std::string_view kValues =
         R"({"type":"object","properties":{"values":{"type":"object","properties":{"count":{"type":"integer"}}}}})";
 
-    CHECK(refusal({.action = "Nope"}, kValue).find("is not an action here") != std::string::npos);
-    CHECK(refusal({.action = "Edit"}, "{").find("input schema that does not read") != std::string::npos);
-    CHECK(refusal({.action = "Edit"}, R"({"type":"object","properties":{}})").find("has no member `value`") !=
-          std::string::npos);
-    CHECK(refusal({.action = "Edit", .member = "count"}, kValue).find("has no member `count` in its `values`") !=
-          std::string::npos);
-    CHECK(refusal({.action = "Edit", .member = "other"}, kValues).find("has no member `other` in its `values`") !=
-          std::string::npos);
+    CHECK(refusal({.action = "Nope"}, kValue).contains("is not an action here"));
+    CHECK(refusal({.action = "Edit"}, "{").contains("input schema that does not read"));
+    CHECK(refusal({.action = "Edit"}, R"({"type":"object","properties":{}})").contains("has no member `value`"));
+    CHECK(refusal({.action = "Edit", .member = "count"}, kValue).contains("has no member `count` in its `values`"));
+    CHECK(refusal({.action = "Edit", .member = "other"}, kValues).contains("has no member `other` in its `values`"));
     CHECK(refusal({.action = "Edit"}, R"({"type":"object","properties":{"value":{"type":"string"}}})")
-              .find("cannot be edited") != std::string::npos);
+              .contains("cannot be edited"));
     CHECK(morph::table::checkEdits(editedTable({.action = "Edit"}), schemas(kValue)));
     CHECK(morph::table::checkEdits(editedTable({.action = "Edit", .member = "count"}), schemas(kValues)));
     CHECK(morph::table::checkEdits(editedTable({.action = "Edit"}), {}).has_value() == false);
