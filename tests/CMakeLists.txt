@@ -285,6 +285,9 @@ add_executable(morph_tests
     test_ui_foreach.cpp
     test_ui_table.cpp
     test_ui_cell_format.cpp
+    test_ui_cov_table_cell_format.cpp
+    test_ui_cov_table_config.cpp
+    test_ui_cov_table_filter_menu.cpp
     test_ui_table_config.cpp
     bench_interpreter.cpp
     bench_mount.cpp
