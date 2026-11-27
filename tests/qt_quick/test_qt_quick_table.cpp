@@ -389,7 +389,7 @@ TEST_CASE("qt_quick table: Enter on a focused row activates it", "[qt_quick]") {
 // Mutation: never update the cache in `reportCellWidth` (growing a cell's text then shows the same `rowScans`
 // delta as a no-op, and the column's reported width stays at its pre-growth value).
 TEST_CASE("qt_quick table: growing one row's cell does not rescan every row, and the column still widens",
-          "[qt_quick]") {
+          "[qt_quick][heavy]") {
     Scene scene;
     auto table = scene.backend().createTable(nullptr);
     table->setColumns({{.label = "A"}, {.label = "B"}, {.label = "C"}});
@@ -435,7 +435,7 @@ TEST_CASE("qt_quick table: growing one row's cell does not rescan every row, and
 // Mutation: skip the invalidateColumn/reportCellWidth wiring from TableRowImpl::adopted entirely (a cell's width
 // changing then never reaches the table, so this never observes the rescan it measures).
 // Mutation: never update the cache in `reportCellWidth`, forcing every grow through the shrink/full-rescan path.
-TEST_CASE("qt_quick table: a single-row grow's scan cost does not scale with row count", "[qt_quick][scan_cost]") {
+TEST_CASE("qt_quick table: a single-row grow's scan cost does not scale with row count", "[qt_quick][heavy]") {
     // What this measures: the number of rows `widestCell` visits for a single-row grow, not wall-clock time. A
     // grown column's cells still all need their x/width updated once the column widens (MorphTableRow.qml's
     // onWidthsChanged: place(), one call per row) -- that O(rows) placement cost is real, necessary, and not what
@@ -2483,7 +2483,7 @@ struct QuickWindowFixture {
 }  // namespace
 
 // Mutation: MorphTable instantiating a cell per column of a realized row (cellItems is 50 × 300).  Gate F2.
-TEST_CASE("qt_quick table window: cells and header cells alive are the windows'", "[qt_quick]") {
+TEST_CASE("qt_quick table window: cells and header cells alive are the windows'", "[qt_quick][heavy]") {
     QuickWindowFixture f{100'000, 300, {.pinned = 2}};
     f.scrollRows(500);
     f.scrollColumns(100 * f.column);  // columns 100 to 119 in view
@@ -2495,7 +2495,7 @@ TEST_CASE("qt_quick table window: cells and header cells alive are the windows'"
 }
 
 // Mutation: a pool keyed by column for default cells (a column scrolling in creates 50 cells).  Gate F8.
-TEST_CASE("qt_quick table window: flings create no cell once the pools are warm", "[qt_quick]") {
+TEST_CASE("qt_quick table window: flings create no cell once the pools are warm", "[qt_quick][heavy]") {
     QuickWindowFixture f{100'000, 300, {.pinned = 2}};
     // Two flings warm the rows: the first measures the rows it passes, and the mean height they settle at can put one
     // more row in the window than the estimate did, which only the second fling's pool has to hold.
@@ -2514,7 +2514,7 @@ TEST_CASE("qt_quick table window: flings create no cell once the pools are warm"
 }
 
 // Mutation: MorphTable keeping focus on the delegate item, which a recycled row loses.  Gate F10.
-TEST_CASE("qt_quick table window: focus and counts after scrolling far away", "[qt_quick]") {
+TEST_CASE("qt_quick table window: focus and counts after scrolling far away", "[qt_quick][heavy]") {
     QuickWindowFixture f{100'000, 300, {.pinned = 2}};
     f.focus.set(CellRef{.key = Key{std::int64_t{7}}, .column = "c5"});
     f.settle();
@@ -2528,7 +2528,7 @@ TEST_CASE("qt_quick table window: focus and counts after scrolling far away", "[
 }
 
 // Mutation: MorphTable rebuilding its row delegates when the column window changes.  Gate D8, Qt Quick half.
-TEST_CASE("qt_quick table window: hiding and moving a column create no cell items", "[qt_quick]") {
+TEST_CASE("qt_quick table window: hiding and moving a column create no cell items", "[qt_quick][heavy]") {
     QuickWindowFixture f{100'000, 300, {.pinned = 2}};
     auto const created = f.stats().cellsCreated;
     int const items = f.cellItems();
@@ -2632,7 +2632,7 @@ TEST_CASE(
 
 // Mutations: a row's height recomputed from its realized cells each pass (it shrinks when the tall cell leaves);
 // measuring a table whose columns are all wrap:false (rowMeasures grows).
-TEST_CASE("qt_quick table: a row's height only grows while it is realized", "[qt_quick]") {
+TEST_CASE("qt_quick table: a row's height only grows while it is realized", "[qt_quick][heavy]") {
     QuickWindowFixture f{2'000, 300, {.pinned = 0, .wrapped = {{.row = 3, .column = 60, .lines = 2}}}};
     // Before the first viewport report every column is realized, the wrapped one too; a row that left the row window
     // and came back has measured only the columns in view.
@@ -2654,7 +2654,7 @@ TEST_CASE("qt_quick table: a row's height only grows while it is realized", "[qt
 
 // Mutation: MorphTable keeping the view's offset when a row above the first visible row grows (the first visible
 // row moves down by the growth).
-TEST_CASE("qt_quick table: a row growing above the view keeps the rows in view where they are", "[qt_quick]") {
+TEST_CASE("qt_quick table: a row growing above the view keeps the rows in view where they are", "[qt_quick][heavy]") {
     QuickWindowFixture f{2'000, 300, {.pinned = 0, .wrapped = {{.row = 95, .column = 60, .lines = 3}}}};
     f.scrollRows(100);
     QQuickItem const* const flick = f.item()->findChild<QQuickItem*>(QStringLiteral("flick"));
@@ -2666,7 +2666,7 @@ TEST_CASE("qt_quick table: a row growing above the view keeps the rows in view w
 }
 
 // Mutation: the Qt Quick table answering the default measure (a windowed column of 8 units is 8 px plus nothing).
-TEST_CASE("qt_quick table: a windowed fixed column is as wide as an unwindowed one", "[qt_quick]") {
+TEST_CASE("qt_quick table: a windowed fixed column is as wide as an unwindowed one", "[qt_quick][heavy]") {
     QuickWindowFixture windowed{100'000, 300};
     REQUIRE(windowed.prop("arranged").toBool());
     Scene scene;

@@ -66,7 +66,7 @@ cmake_path(GET _morph_qq_core_dll PARENT_PATH _morph_qq_bin_dir)
 foreach(_morph_qq_tests IN ITEMS morph_qt_quick_tests morph_qt_quick_frontend_tests)
     catch_discover_tests(${_morph_qq_tests}
         DISCOVERY_MODE PRE_TEST
-        TEST_SPEC "~[scan_cost]"
+        TEST_SPEC "~[heavy]"
         DL_PATHS "${_morph_qq_bin_dir}"
         PROPERTIES TIMEOUT 120 LABELS "qt_quick" ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
@@ -75,14 +75,14 @@ unset(_morph_qq_tests)
 unset(_morph_qq_core_dll)
 unset(_morph_qq_bin_dir)
 
-# The scan-cost case mounts 460 rows of three cells in the QML table. That is seconds of CPU alone, and far longer in a
-# debug build under a parallel run, where it overran the timeout. It is discovered out of the set above (`~[scan_cost]`)
-# and registered here under its own name, so ctest still shows it once, and RUN_SERIAL runs it with the machine to
-# itself: the case asserts a count of rows scanned, never a time, so the wait is the only thing the load changes.
-add_test(NAME "qt_quick table: a single-row grow's scan cost does not scale with row count"
-         COMMAND morph_qt_quick_tests "[scan_cost]")
-set_tests_properties("qt_quick table: a single-row grow's scan cost does not scale with row count" PROPERTIES
-                     LABELS "qt_quick" TIMEOUT 300 RUN_SERIAL TRUE ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+# The [heavy] cases mount tables of hundreds of rows, or 100,000 rows by 300 columns, in the QML table. Each is seconds
+# of CPU alone and far longer in a debug build sharing the machine with a parallel run, where they overran the
+# timeout. They are discovered out of the set above (`~[heavy]`) and run here as one test, so RUN_SERIAL gives them the
+# machine to themselves: they assert counts of rows scanned and cells created, never a time, so the wait is the only
+# thing the load changes.
+add_test(NAME "qt_quick table: the cases that mount large tables" COMMAND morph_qt_quick_tests "[heavy]")
+set_tests_properties("qt_quick table: the cases that mount large tables" PROPERTIES
+                     LABELS "qt_quick" TIMEOUT 900 RUN_SERIAL TRUE ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # The chart's Canvas paints at the device pixel ratio: its cases run again at a ratio of 2, where a 1 px line must
 # still be one solid line of device pixels in its colour.
