@@ -17,6 +17,16 @@ std::string documentOf(std::string_view node) {
     return R"({"vocab":"ui/1","id":"d","view":{"kind":"column","children":[)" + std::string{node} + "]}}";
 }
 
+// A document with a plain view and `extra` members beside it.
+std::string rootWith(std::string_view extra) {
+    return R"({"vocab":"ui/1","id":"d",)" + std::string{extra} + R"(,"view":{"kind":"text","text":"x"}})";
+}
+
+std::string columnWith(std::string_view extra) {
+    return R"({"kind":"table","id":"t","rows":{"lit":[]},"columns":[{"id":"a","label":"A","value":{"lit":1},)" +
+           std::string{extra} + "}]}";
+}
+
 std::string table(std::string_view extra) {
     return R"({"kind":"table","id":"t","rows":{"lit":[]},)"
            R"("columns":[{"id":"a","label":"A","value":{"lit":1}},{"id":"b","label":"B","value":{"lit":2}}])" +
@@ -148,11 +158,62 @@ TEST_CASE("a table over its own rows that breaks a rule of its parts is refused 
          "micrometres"},
         {"a page whose width is negative", R"({"kind":"page","width":-5,"height":297000,"children":[]})", "",
          "micrometres"},
+        {"spans that are no list", rootWith(R"("titleSpans":{"lit":5})"), "", "`spans` is a list of runs"},
+        {"a run that is a number", rootWith(R"("titleSpans":{"lit":[5]})"), "", "a run is a string or a record"},
+        {"a run with no text", rootWith(R"("titleSpans":{"lit":[{"strong":true}]})"), "", "gives its `text`"},
+        {"a run with an unknown flag", rootWith(R"("titleSpans":{"lit":[{"text":"a","bold":true}]})"), "",
+         "a run takes `text`"},
+        {"a run with a flag that is no boolean", rootWith(R"("titleSpans":{"lit":[{"text":"a","strong":"yes"}]})"), "",
+         "is true or false"},
+        {"a run with an unknown tone", rootWith(R"("titleSpans":{"lit":[{"text":"a","tone":"loud"}]})"), "",
+         "neutral, info, ok, warn or err"},
+        {"a run that takes the action outside a banner",
+         rootWith(R"("titleSpans":{"lit":[{"text":"a","action":true}]})"), "", "link of a banner"},
+        {"a listed run with no text", rootWith(R"("subtitleSpans":{"list":[{"obj":{"strong":{"lit":true}}}]})"), "",
+         "gives its `text`"},
+        {"a listed run with an unknown key", rootWith(R"("subtitleSpans":{"list":[{"obj":{"text":"a","zz":1}}]})"), "",
+         "a run takes `text`"},
+        {"a listed run with a flag that is no boolean",
+         rootWith(R"("eyebrowSpans":{"list":[{"obj":{"text":"a","strong":1}}]})"), "", "is true or false"},
+        {"a listed run with an unknown tone",
+         rootWith(R"("eyebrowSpans":{"list":[{"obj":{"text":"a","tone":"loud"}}]})"), "",
+         "neutral, info, ok, warn or err"},
+        {"a listed run that takes the action outside a banner",
+         rootWith(R"("eyebrowSpans":{"list":[{"obj":{"text":"a","action":true}}]})"), "", "link of a banner"},
+        {"a column with a readonly overlay", columnWith(R"("readonly":true)"), "", "is a grid column's"},
+        {"a column with a field as an expression", columnWith(R"("field":{"lit":"x"})"), "", "as an expression"},
+        {"a column with decimals beyond 18", columnWith(R"("decimals":40)"), "", "0 to 18"},
+        {"a column with unknown rounding", columnWith(R"("rounding":"floor")"), "", "halfEven or halfUp"},
+        {"a column with a date pattern that is none", columnWith(R"("date":"qq")"), "", ""},
+        {"a column with labels that are no list", columnWith(R"("labels":5)"), "", "literal list"},
+        {"a column with a label missing its text", columnWith(R"("labels":{"lit":[{"operand":"a"}]})"), "",
+         "literal list"},
+        {"a column placed at stretch", columnWith(R"("align":"stretch")"), "", ""},
+        {"a column valigned at stretch", columnWith(R"("valign":"stretch")"), "", ""},
+        {"a multiline input with a unit", R"({"kind":"textInput","testId":"i","mode":"multiline","unit":"kg"})", "",
+         "shows no unit"},
+        {"a single-line input that wraps", R"({"kind":"textInput","testId":"i","wrap":true})", "",
+         "has no lines to wrap"},
+        {"a table that persists under a bad name", table(R"("persist":5)"), "/view/children/0/persist",
+         "literal: true, false or a name"},
+        {"a table filter that is no filter", table(R"("filters":{"columns":5})"), "/view/children/0/filters",
+         "is not a filter"},
+        {"a node with a negative bound", R"({"kind":"text","text":"x","minWidth":-1})", "", "0 or more"},
+        {"a node with a computed bound", R"({"kind":"text","text":"x","maxHeight":{"fn":"coalesce","args":[1]}})", "",
+         "literal integer of 0 or more"},
+        {"a node whose minimum passes its maximum", R"({"kind":"text","text":"x","minWidth":5,"maxWidth":3})", "",
+         "is more than"},
+        {"an overlay with a bound", R"({"kind":"dialog","title":"x","minWidth":3,"children":[]})", "",
+         "sized by the frontend"},
+        {"an overlay that stretches", R"({"kind":"dialog","title":"x","sizing":{"lit":{"stretch":1}},"children":[]})",
+         "", "sized by the frontend"},
+        {"a separator that carries more", R"({"kind":"menuItem","separator":true,"label":"x"})", "", ""},
         {"a margin that is no record", R"({"kind":"page","margins":{"lit":5},"children":[]})", "", ""},
     };
     for (auto const& entry : cases) {
         CAPTURE(entry.name);
-        auto const loaded = loadDocumentText(documentOf(entry.node));
+        auto const loaded =
+            loadDocumentText(entry.node.starts_with(R"({"vocab")") ? entry.node : documentOf(entry.node));
         if (loaded.has_value()) {
             FAIL_CHECK("loaded");
             continue;
