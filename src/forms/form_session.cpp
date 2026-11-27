@@ -825,6 +825,7 @@ void FormSession::assign(std::string_view path, std::string_view jsonValue) {
         if (path.starts_with(name) &&
             (path.size() == name.size() || path.at(name.size()) == '.' || path.at(name.size()) == '[')) {
             _loaded.at(index) = _fields.at(index)->snapshot();
+            reloaded(*_fields.at(index));
         }
     }
 }
