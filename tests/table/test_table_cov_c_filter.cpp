@@ -3,10 +3,14 @@
 // morph::table filters and sorts over every column kind: a set of values (`oneOf`) on a column and on a group, a
 // group's include and exclude entries, and the order each kind sorts in.
 
+#include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <functional>
 #include <limits>
+#include <map>
+#include <set>
 #include <memory>
 #include <morph/table/data_source.hpp>
 #include <morph/table/filter.hpp>
@@ -162,4 +166,88 @@ TEST_CASE("a group's operator that its column kind does not define applies to no
     TableQuery custom;
     custom.filters.columns["x"].include = {FilterEntry{.isEmpty = true}};
     CHECK(rowsOf(*source, custom).empty());
+}
+
+TEST_CASE("every comparison selects its rows in every kind, on a column and on a group", "[covc][table][filter]") {
+    using Entry = std::pair<std::string, std::function<FilterEntry(KindCase const&)>>;
+    std::vector<std::pair<Entry, Rows>> const comparisons{
+        {{"lt", [](KindCase const& k) { return FilterEntry{.lt = k.operands.at(1)}; }}, Rows{0, 3}},
+        {{"le", [](KindCase const& k) { return FilterEntry{.le = k.operands.at(1)}; }}, Rows{0, 1, 3}},
+        {{"gt", [](KindCase const& k) { return FilterEntry{.gt = k.operands.at(1)}; }}, Rows{2}},
+        {{"ge", [](KindCase const& k) { return FilterEntry{.ge = k.operands.at(1)}; }}, Rows{1, 2}},
+        {{"ne", [](KindCase const& k) { return FilterEntry{.ne = k.operands.at(1)}; }}, Rows{0, 2, 3}},
+        {{"between",
+          [](KindCase const& k) {
+              return FilterEntry{.between = std::array<std::string, 2>{k.operands.at(0), k.operands.at(1)}};
+          }},
+         Rows{0, 1, 3}},
+        {{"isEmpty", [](KindCase const&) { return FilterEntry{.isEmpty = true}; }}, Rows{}},
+        {{"notEmpty", [](KindCase const&) { return FilterEntry{.notEmpty = true}; }}, Rows{0, 1, 2, 3}},
+    };
+    for (auto const& kind : kindCases()) {
+        auto const source = twoColumns(kind);
+        for (auto const& [entry, expected] : comparisons) {
+            CAPTURE(static_cast<int>(kind.kind), entry.first);
+            bool const ordering = std::set<std::string>{"lt", "le", "gt", "ge", "between"}.contains(entry.first);
+            if (kind.kind == ColumnKind::Text && ordering) {
+                continue;
+            }
+            TableQuery column;
+            column.filters.columns["x"].include = {entry.second(kind)};
+            CHECK(rowsOf(*source, column) == expected);
+            TableQuery excluded;
+            excluded.filters.columns["x"].exclude = {entry.second(kind)};
+            Rows complement;
+            for (std::size_t row = 0; row < 4; ++row) {
+                if (!std::ranges::contains(expected, row)) {
+                    complement.push_back(row);
+                }
+            }
+            CHECK(rowsOf(*source, excluded) == complement);
+            TableQuery group;
+            group.filters.groups = {GroupFilter{.columns = {"x"}, .include = {entry.second(kind)}}};
+            CHECK(rowsOf(*source, group) == expected);
+        }
+    }
+}
+
+TEST_CASE("a text column answers contains, startsWith and endsWith", "[covc][table][filter]") {
+    auto const source = tabletest::column(ColumnKind::Text, {std::string{"Alpha"}, std::string{"beta"}, std::string{"ALPS"}, Cell{}});
+    auto const rowsFor = [&](FilterEntry entry) {
+        TableQuery query;
+        query.filters.columns["c"].include = {std::move(entry)};
+        return rowsOf(*source, query);
+    };
+    CHECK(rowsFor(FilterEntry{.contains = "al"}) == Rows{0, 2});
+    CHECK(rowsFor(FilterEntry{.startsWith = "al"}) == Rows{0, 2});
+    CHECK(rowsFor(FilterEntry{.endsWith = "ta"}) == Rows{1});
+    CHECK(rowsFor(FilterEntry{.isEmpty = true}) == Rows{3});
+    CHECK(rowsFor(FilterEntry{.notEmpty = true}) == Rows{0, 1, 2});
+}
+
+TEST_CASE("a column count reads and writes its quantifier", "[covc][table][filter]") {
+    auto const read = [](ColumnCount::Wire const& wire) {
+        ColumnCount count;
+        count.setWire(wire);
+        return count;
+    };
+    CHECK(read(std::string{"any"}).kind == ColumnCount::Kind::Any);
+    CHECK(read(std::string{"all"}).kind == ColumnCount::Kind::All);
+    CHECK(read(std::string{"most"}).n == -1);
+    auto const atLeast = read(std::map<std::string, std::int64_t>{{"atLeast", 3}});
+    CHECK(atLeast.kind == ColumnCount::Kind::AtLeast);
+    CHECK(atLeast.n == 3);
+    auto const exactly = read(std::map<std::string, std::int64_t>{{"exactly", 2}});
+    CHECK(exactly.kind == ColumnCount::Kind::Exactly);
+    CHECK(read(std::map<std::string, std::int64_t>{{"between", 2}}).n == -1);
+    CHECK(read(std::map<std::string, std::int64_t>{}).n == -1);
+    CHECK(read(std::map<std::string, std::int64_t>{{"atLeast", 1}, {"exactly", 1}}).n == -1);
+    for (auto const kind : {ColumnCount::Kind::Any, ColumnCount::Kind::All, ColumnCount::Kind::AtLeast,
+                            ColumnCount::Kind::Exactly}) {
+        ColumnCount const count{.kind = kind, .n = 4};
+        ColumnCount again;
+        again.setWire(count.getWire());
+        CHECK(again.kind == kind);
+    }
+    CHECK(std::get<std::string>(ColumnCount{.kind = static_cast<ColumnCount::Kind>(99)}.getWire()) == "any");
 }
