@@ -97,9 +97,8 @@ TEST_CASE("covd fixed grid: a copy with no cell range copies the focused row's c
 
 TEST_CASE("covd fixed grid: a grid's bands reach the backend over its columns", "[ui][grid][fixed][covd]") {
     ui::testing::TableHarness h;
-    auto const screen = h.mount(
-        textGrid(R"("bands":[{"label":"AB","unit":"u","columns":{"lit":["a","b"]},)"
-                 R"("bands":[{"label":"Only A","columns":{"lit":["a"]}}]}])"));
+    auto const screen = h.mount(textGrid(R"("bands":[{"label":"AB","unit":"u","columns":{"lit":["a","b"]},)"
+                                         R"("bands":[{"label":"Only A","columns":{"lit":["a"]}}]}])"));
     std::string const bands = h.backend.prop(h.byTestId("Table", "grid"), "bands");
     CAPTURE(bands);
     CHECK(bands.contains("AB|u@0+2"));

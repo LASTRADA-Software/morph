@@ -101,11 +101,10 @@ TEST_CASE("covd form grid: a readonly overlay freezes a cell only when it reads 
         std::string_view readonly;
         bool frozen;
     };
-    auto const [readonly, frozen] =
-        GENERATE(Case{R"({"fn":"eq","args":[1,1]})", true}, Case{R"({"fn":"eq","args":[1,2]})", false},
-                 Case{R"({"fn":"coalesce","args":[{"ref":"row.note"},"yes"]})", false},
-                 Case{R"({"fn":"coalesce","args":[{"ref":"row.note"},1]})", false},
-                 Case{R"({"ref":"row.note"})", false});
+    auto const [readonly, frozen] = GENERATE(
+        Case{R"({"fn":"eq","args":[1,1]})", true}, Case{R"({"fn":"eq","args":[1,2]})", false},
+        Case{R"({"fn":"coalesce","args":[{"ref":"row.note"},"yes"]})", false},
+        Case{R"({"fn":"coalesce","args":[{"ref":"row.note"},1]})", false}, Case{R"({"ref":"row.note"})", false});
     CAPTURE(readonly);
     Mounted m{R"("columns":[{"id":"note","field":"note","readonly":)" + std::string{readonly} + "}]"};
     int const table = m.h.byTestId("Table", "t");
@@ -118,16 +117,18 @@ TEST_CASE("covd form grid: a readonly overlay freezes a cell only when it reads 
 }
 
 TEST_CASE("covd form grid: a placeholder overlay is read per row", "[ui][grid][interpreter][covd]") {
-    Mounted m{R"("columns":[{"id":"note","field":"note","placeholder":{"fn":"coalesce","args":[{"ref":"row.note"},"none"]}}])",
-                    R"({"rows":[{"note":"kept"},{}]})"};
+    Mounted m{
+        R"("columns":[{"id":"note","field":"note","placeholder":{"fn":"coalesce","args":[{"ref":"row.note"},"none"]}}])",
+        R"({"rows":[{"note":"kept"},{}]})"};
     CHECK(m.form->field("rows[0].note").placeholder() == "kept");
     CHECK(m.form->field("rows[1].note").placeholder() == "none");
 }
 
 TEST_CASE("covd form grid: a column that names a member by expression reports a name that is none",
           "[ui][grid][interpreter][covd]") {
-    Mounted m{R"("columns":[{"id":"any","field":{"if":[{"fn":"eq","args":[{"fn":"coalesce","args":[{"ref":"row.note"},""]},"x"]},"nosuch","note"]}}])",
-              R"({"rows":[{"note":"x"},{"note":"y"}]})"};
+    Mounted m{
+        R"("columns":[{"id":"any","field":{"if":[{"fn":"eq","args":[{"fn":"coalesce","args":[{"ref":"row.note"},""]},"x"]},"nosuch","note"]}}])",
+        R"({"rows":[{"note":"x"},{"note":"y"}]})"};
     bool reported = false;
     for (ui::Refusal const& refusal : m.h.diagnostics) {
         reported = reported || refusal.message().contains("`nosuch` names no member of the row");
@@ -147,8 +148,9 @@ TEST_CASE("covd form grid: a grid that lists no columns shows every member of th
 
 TEST_CASE("covd form grid: a display column shows its value read with the row's record",
           "[ui][grid][interpreter][covd]") {
-    Mounted m{R"("columns":[{"id":"note","field":"note"},{"id":"shown","value":{"fn":"coalesce","args":[{"ref":"row.note"},"-"]}}])",
-                    R"({"rows":[{"note":"kept"},{}]})"};
+    Mounted m{
+        R"("columns":[{"id":"note","field":"note"},{"id":"shown","value":{"fn":"coalesce","args":[{"ref":"row.note"},"-"]}}])",
+        R"({"rows":[{"note":"kept"},{}]})"};
     CHECK(ui::testing::cellText(m.h, 1, "shown") == "kept");
     CHECK(ui::testing::cellText(m.h, 2, "shown") == "-");
 }

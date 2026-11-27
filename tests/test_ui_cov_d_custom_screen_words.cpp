@@ -16,8 +16,8 @@ using morph::ui::CustomScreenOutcome;
 using morph::ui::CustomScreenSaveKind;
 
 std::string described(CustomScreenEvent event, CustomScreenSaveKind save, std::string_view detail) {
-    return CustomScreenChrome::describe(CustomScreenOutcome{
-        .event = event, .save = save, .title = "Mine", .detail = std::string{detail}});
+    return CustomScreenChrome::describe(
+        CustomScreenOutcome{.event = event, .save = save, .title = "Mine", .detail = std::string{detail}});
 }
 
 }  // namespace
@@ -44,7 +44,8 @@ TEST_CASE("covd custom screen words: every outcome is worded by its event, save 
         Case{E::SavedNotReread, K::Save, "", "Saved Mine, but the stored screen could not be read again"},
         Case{E::SavedStaysDraft, K::SaveAs, "busy",
              "Saved as Mine, but it stays a draft here until this screen can close: busy"},
-        Case{E::SavedStaysDraft, K::SaveAs, "", "Saved as Mine, but it stays a draft here until this screen can close"},
+        Case{E::SavedStaysDraft, K::SaveAs, "",
+             "Saved as Mine, but it stays a draft here until this screen can close"},
         Case{E::SaveRefused, K::None, "too long", "Not saved: too long"},
         Case{E::SaveRefused, K::None, "", "Not saved"}, Case{E::Removed, K::None, "", "Removed Mine"},
         Case{E::RemovedStaysOpen, K::None, "dirty",

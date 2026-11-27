@@ -27,8 +27,8 @@ void build(std::string name) {
 
 TEST_CASE("covd chat tools: a name of letters, digits, underscores and hyphens is accepted",
           "[chat][service][extra][covd]") {
-    auto const name = GENERATE(as<std::string>{}, "a", "z", "A", "Z", "0", "9", "tool_1", "tool-1", "_", "-",
-                               std::string(64, 'x'));
+    auto const name =
+        GENERATE(as<std::string>{}, "a", "z", "A", "Z", "0", "9", "tool_1", "tool-1", "_", "-", std::string(64, 'x'));
     CAPTURE(name);
     CHECK_NOTHROW(build(name));
 }

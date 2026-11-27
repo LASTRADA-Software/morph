@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <chrono>
 #include <cstddef>
 #include <glaze/glaze.hpp>
@@ -20,9 +21,8 @@
 #include <morph/ui/shell_parts.hpp>
 #include <morph/ui/shell_parts_binding.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
-#include <string>
-#include <catch2/generators/catch_generators.hpp>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -221,13 +221,11 @@ TEST_CASE("covd shell parts: an option's label is the translation, then its fall
         std::string_view label;
         std::string_view shown;
     };
-    auto const [label, shown] = GENERATE(
-        Case{R"({"t":"scope.k","fallback":"Cologne"})", "Cologne"},
-        Case{R"({"t":"scope.k"})", "scope.k"},
-        Case{R"({"t":"scope.hit","fallback":"unused"})", "Hit"},
-        Case{R"({"t":"scope.args","args":{"n":3,"name":"lab"}})", "3 of lab"},
-        Case{R"({"t":"scope.args","args":7})", "{$n} of {$name}"},
-        Case{R"("plain")", "plain"});
+    auto const [label, shown] =
+        GENERATE(Case{R"({"t":"scope.k","fallback":"Cologne"})", "Cologne"}, Case{R"({"t":"scope.k"})", "scope.k"},
+                 Case{R"({"t":"scope.hit","fallback":"unused"})", "Hit"},
+                 Case{R"({"t":"scope.args","args":{"n":3,"name":"lab"}})", "3 of lab"},
+                 Case{R"({"t":"scope.args","args":7})", "{$n} of {$name}"}, Case{R"("plain")", "plain"});
     CAPTURE(label);
     Rig r{fullParts()};
     r.h.session.setTranslations([](std::string_view key, std::string_view) -> std::optional<std::string> {
@@ -386,8 +384,9 @@ TEST_CASE("covd shell parts: Escape in an empty field returns focus to the conte
     CHECK_FALSE(r.prop("TextInput", "shell_search", "text").contains("x"));
 }
 
-TEST_CASE("covd shell parts: a scope request names an option or is refused, and asking for the chosen one changes nothing",
-          "[ui][shell][parts][covd]") {
+TEST_CASE(
+    "covd shell parts: a scope request names an option or is refused, and asking for the chosen one changes nothing",
+    "[ui][shell][parts][covd]") {
     Rig r{fullParts()};
     auto const screen = r.h.mount(kScopeScreen);
     r.reply("Lims_ClientScopes", kScopes);
@@ -421,8 +420,10 @@ TEST_CASE("covd shell parts: a hit that is not there, and a model with no help, 
     CHECK(model.currentLocale() == "de");
 }
 
-TEST_CASE("covd shell parts: a search that reads a hit with no title or screen, and a reply that is no list, keep only the hits",
-          "[ui][shell][parts][covd]") {
+TEST_CASE(
+    "covd shell parts: a search that reads a hit with no title or screen, and a reply that is no list, keep only the "
+    "hits",
+    "[ui][shell][parts][covd]") {
     Rig r{fullParts()};
     r.reply("Lims_ClientScopes", kScopes);
     int const search = r.id("TextInput", "shell_search");
@@ -473,8 +474,7 @@ TEST_CASE("covd shell parts: the person's menu reads the name, the roles of ever
              R"({"label":{"t":"role.k","fallback":"Keyed"}},7]})",
              "Ann Lee", "AL", Roles{"Admin", "Plain", "Keyed", "7"}},
         Case{R"({"name":"Bo","roles":"admin"})", "Bo", "B", Roles{}},
-        Case{R"({"name":"Cy","roles":[]})", "Cy", "C", Roles{}},
-        Case{R"({"name":"Di"})", "Di", "D", Roles{}});
+        Case{R"({"name":"Cy","roles":[]})", "Cy", "C", Roles{}}, Case{R"({"name":"Di"})", "Di", "D", Roles{}});
     CAPTURE(reply);
     Rig r{fullParts()};
     r.reply("Lims_ClientPerson", std::string{reply});
@@ -514,8 +514,9 @@ TEST_CASE("covd shell parts: a person's reply with no name, and one that fails, 
     CHECK(failed);
 }
 
-TEST_CASE("covd shell parts: the languages come from the catalogue when the app names none, and are worded by translation",
-          "[ui][shell][parts][covd]") {
+TEST_CASE(
+    "covd shell parts: the languages come from the catalogue when the app names none, and are worded by translation",
+    "[ui][shell][parts][covd]") {
     ui::ShellParts parts = fullParts();
     parts.principal->locales = {};
     ui::ShellModelOptions facts;

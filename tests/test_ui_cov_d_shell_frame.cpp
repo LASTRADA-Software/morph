@@ -96,7 +96,9 @@ struct Rig {
         frame->setParts(fullView());
     }
 
-    int id(std::string_view kind, std::string_view testId) const { return backend.find(kind, "testId", testId).value(); }
+    int id(std::string_view kind, std::string_view testId) const {
+        return backend.find(kind, "testId", testId).value();
+    }
 };
 
 }  // namespace
@@ -134,8 +136,9 @@ TEST_CASE("covd shell frame: a search chord and a submit with handlers open the 
     r.backend.submit(search, "x");
     r.backend.edit(search, "y");
     r.backend.press(search, "Shift+Enter");
-    CHECK(r.seen.log == (handlers ? std::vector<std::string>{"text x", "open 0.1", "text ", "text y", "openAll", "text "}
-                                  : std::vector<std::string>{}));
+    CHECK(r.seen.log == (handlers
+                             ? std::vector<std::string>{"text x", "open 0.1", "text ", "text y", "openAll", "text "}
+                             : std::vector<std::string>{}));
 }
 
 TEST_CASE("covd shell frame: the person's menu chooses a language, a format or sign out, as far as it has handlers",
@@ -169,13 +172,12 @@ TEST_CASE("covd shell frame: the compact navigation menu carries the scope, help
     int const menu = r.id("Menu", "shell_nav_menu");
     // The scope's options (a heading, two options, a heading, one) then the help entry, the person's menu and its
     // entries: a heading, a rule, the languages, a rule, the formats, a rule and sign out.
-    for (std::vector<std::size_t> const& path :
-         std::vector<std::vector<std::size_t>>{{0, 1}, {0, 4}, {0, 0}, {0, 99}, {4}, {6, 3}, {6, 4}, {6, 7}, {6, 8},
-                                               {6, 10}, {1}, {2, 0}, {99}, {}}) {
+    for (std::vector<std::size_t> const& path : std::vector<std::vector<std::size_t>>{
+             {0, 1}, {0, 4}, {0, 0}, {0, 99}, {4}, {6, 3}, {6, 4}, {6, 7}, {6, 8}, {6, 10}, {1}, {2, 0}, {99}, {}}) {
         r.backend.chooseMenuEntry(menu, path);
     }
-    std::vector<std::string> const expected{"context 0", "context 2", "help", "locale 0", "locale 1", "format 0",
-                                            "format 1"};
+    std::vector<std::string> const expected{"context 0", "context 2", "help",    "locale 0",
+                                            "locale 1",  "format 0",  "format 1"};
     CHECK(r.seen.log == (handlers ? expected : std::vector<std::string>{}));
     CHECK(r.signOuts == 1);
 }

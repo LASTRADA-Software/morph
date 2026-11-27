@@ -88,9 +88,9 @@ TEST_CASE("covd custom screen checks: the allowance describes a base's params, a
     CHECK(none->contains("Params: none; a custom screen declares exactly its base's."));
 }
 
-TEST_CASE("covd custom screen checks: the allowance of text that is no JSON is refused", "[ui][custom-screens][checks][covd]") {
-    auto const described =
-        morph::ui::describeAllowance(screens_test::load(baseScreen("lims.base")), "{not json");
+TEST_CASE("covd custom screen checks: the allowance of text that is no JSON is refused",
+          "[ui][custom-screens][checks][covd]") {
+    auto const described = morph::ui::describeAllowance(screens_test::load(baseScreen("lims.base")), "{not json");
     REQUIRE_FALSE(described.has_value());
     CHECK(described.error().reason.contains("JSON text"));
 }

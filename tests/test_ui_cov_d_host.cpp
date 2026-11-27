@@ -59,7 +59,8 @@ public:
 
     // A host over one document of its own.
     Host(Harness& harness, std::shared_ptr<Document const> document, DocumentScreenHostOptions options = {})
-        : DocumentScreenHost{harness.session, harness.dispatcher, forDocument(harness, std::move(document), std::move(options))} {}
+        : DocumentScreenHost{harness.session, harness.dispatcher,
+                             forDocument(harness, std::move(document), std::move(options))} {}
 
     using DocumentScreenHost::onNavigate;
     void onNavigate(std::string_view screenId, morph::ui::ParamMap const& params) override {
@@ -123,10 +124,12 @@ TEST_CASE("covd host: a handle some other host made holds no draft and names no 
 TEST_CASE("covd host: a registry names the screens it can make and no others", "[ui][host][covd]") {
     ScreenHostRegistry registry;
     CHECK(registry.find("scanner") == nullptr);
-    registry.add("scanner", [](morph::ui::ParamMap const&, morph::ui::ContainerWidget&)
-                                -> std::expected<std::unique_ptr<ScreenHandle>, morph::ui::MountError> {
-        return std::unexpected(morph::ui::MountError{.screenId = "scanner", .reason = "no device"});
-    });
+    registry.add(
+        "scanner",
+        [](morph::ui::ParamMap const&,
+           morph::ui::ContainerWidget&) -> std::expected<std::unique_ptr<ScreenHandle>, morph::ui::MountError> {
+            return std::unexpected(morph::ui::MountError{.screenId = "scanner", .reason = "no device"});
+        });
     CHECK(registry.find("scanner") != nullptr);
     CHECK(registry.find("printer") == nullptr);
 }
@@ -147,8 +150,7 @@ constexpr std::string_view kKeyed = R"({
 
 }  // namespace
 
-TEST_CASE("covd host: a prefetch whose key or body reads a param the route lacks is not sent",
-          "[ui][host][covd]") {
+TEST_CASE("covd host: a prefetch whose key or body reads a param the route lacks is not sent", "[ui][host][covd]") {
     Harness h;
     Host host{h, loadOrFail(kKeyed, morph::ui::testing::corpusCatalog())};
     host.prefetch("keyed", {});
