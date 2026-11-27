@@ -623,7 +623,8 @@ TEST_CASE("covd shell parts: the inbox sums the sources that answered and marks 
 TEST_CASE("covd shell parts: a shell that declares only some parts draws only those, and the others answer nothing",
           "[ui][shell][parts][covd]") {
     enum class Keep : unsigned char { Nothing, Modules, Search, Inbox, Principal, Context };
-    auto const keep = GENERATE(Keep::Nothing, Keep::Modules, Keep::Search, Keep::Inbox, Keep::Principal, Keep::Context);
+    auto const keep =
+        GENERATE(Keep::Nothing, Keep::Modules, Keep::Search, Keep::Inbox, Keep::Principal, Keep::Context);
     ui::ShellParts all = fullParts();
     ui::ShellParts parts;
     parts.searchHint = "";

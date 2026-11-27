@@ -162,3 +162,53 @@ TEST_CASE("covd host: a prefetch whose key or body reads a param the route lacks
     CHECK(h.dispatcher.count("Lims_ListResults") == 1U);
     CHECK(h.dispatcher.count("Lims_ClientList") == 1U);
 }
+
+TEST_CASE("covd host: a screen the host closed cannot be mounted over again or drafted", "[ui][host][covd]") {
+    Harness h;
+    Host host{h, loadOrFail(kNote)};
+    auto mounted = host.mount("note", {});
+    REQUIRE(mounted.has_value());
+    ScreenHandle& handle = **mounted;
+    auto const note = loadOrFail(kNote);
+    CHECK(DocumentScreenHost::screenIdOf(handle) == std::optional<std::string>{"note"});
+    CHECK(DocumentScreenHost::paramsOf(handle).has_value());
+    CHECK_FALSE(DocumentScreenHost::drafted(handle));
+    CHECK_FALSE(DocumentScreenHost::draftedNow(handle));
+    // A screen that has no draft has none to discard, whatever its screen is.
+    auto const none = host.discardDraft(handle);
+    REQUIRE_FALSE(none.has_value());
+    CHECK(none.error().reason == "no draft is mounted");
+    CHECK(none.error().screenId == "note");
+
+    handle.forceClose();
+    h.settle();
+    auto const remounted = host.remount(handle, note);
+    REQUIRE_FALSE(remounted.has_value());
+    CHECK(remounted.error().reason == "the screen is closed");
+    auto const drafted = host.mountDraft(handle, note);
+    REQUIRE_FALSE(drafted.has_value());
+    CHECK(drafted.error().reason == "not an open document screen of this host");
+    CHECK_FALSE(DocumentScreenHost::screenIdOf(handle).has_value());
+    DocumentScreenHost::resumeDraft(handle);
+    DocumentScreenHost::endDraft(handle);
+}
+
+TEST_CASE("covd host: a draft keeps its screen's id, and a draft of a screen can be dropped", "[ui][host][covd]") {
+    Harness h;
+    Host host{h, loadOrFail(kNote)};
+    auto mounted = host.mount("note", {});
+    REQUIRE(mounted.has_value());
+    ScreenHandle& handle = **mounted;
+    auto const other = loadOrFail(R"({"vocab":"ui/1","id":"other","view":{"kind":"text","text":"x"}})");
+    auto const refused = host.mountDraft(handle, other);
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().pointer == "/id");
+    CHECK(refused.error().reason.contains("a draft keeps the screen's id, `note`"));
+    auto const drafted = host.mountDraft(handle, loadOrFail(kNote));
+    REQUIRE(drafted.has_value());
+    CHECK(DocumentScreenHost::drafted(handle));
+    CHECK(DocumentScreenHost::draftedNow(handle));
+    auto const discarded = host.discardDraft(handle);
+    REQUIRE(discarded.has_value());
+    CHECK_FALSE(DocumentScreenHost::draftedNow(handle));
+}
