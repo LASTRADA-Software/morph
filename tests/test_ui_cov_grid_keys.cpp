@@ -207,3 +207,70 @@ TEST_CASE("cov grid keys: the status line's entries undo a deletion and ignore a
     f.grid->chooseEntry("undo");
     CHECK(f.form->field("specimens").rows().size() == 2);
 }
+
+TEST_CASE("cov grid walk: tab walks down a column in a column walk and skips cells it may not edit",
+          "[ui][grid][cov]") {
+    GridFixture f{2, ui::GridOptions{.walk = ui::Walk::Columns}};
+    CHECK(f.grid->press("Tab") == ui::KeyOutcome::Handled);  // no focus: the first editable cell
+    CHECK(f.grid->focus() == at(1, "label"));
+    f.grid->press("Tab");
+    CHECK(f.grid->focus() == at(2, "label"));
+    f.grid->press("Tab");
+    CHECK(f.grid->focus() == at(1, "mass"));
+    f.grid->press("Shift+Tab");
+    CHECK(f.grid->focus() == at(2, "label"));
+    f.grid->focusCell(at(2, "volume"));
+    f.grid->press("Tab");
+    CHECK(f.grid->focus() == at(1, "note"));  // density and limit are read-only
+    f.grid->press("Tab");
+    CHECK(f.grid->focus() == at(2, "note"));
+    CHECK(f.grid->press("Tab") == ui::KeyOutcome::FocusNext);  // past the last cell
+    f.grid->focusCell(at(1, "label"));
+    CHECK(f.grid->press("Shift+Tab") == ui::KeyOutcome::FocusPrevious);  // before the first
+}
+
+TEST_CASE("cov grid walk: shift tab with no focus starts at the last editable cell", "[ui][grid][cov]") {
+    GridFixture f{2};
+    CHECK(f.grid->press("Shift+Tab") == ui::KeyOutcome::Handled);
+    CHECK(f.grid->focus() == at(2, "note"));
+}
+
+TEST_CASE("cov grid walk: a grid with no rows walks nowhere", "[ui][grid][cov]") {
+    GridFixture f{0};
+    CHECK(f.grid->press("Tab") == ui::KeyOutcome::FocusNext);
+    CHECK(f.grid->press("Shift+Tab") == ui::KeyOutcome::FocusPrevious);
+}
+
+TEST_CASE("cov grid walk: enter moves right, down or nowhere by the option, over cells it may edit",
+          "[ui][grid][cov]") {
+    {
+        GridFixture f{2, ui::GridOptions{.enterMoves = ui::EnterMoves::Right}};
+        f.grid->focusCell(at(1, "volume"));
+        f.grid->type("1");
+        f.grid->press("Enter");
+        CHECK(f.grid->focus() == at(1, "note"));  // density and limit are read-only
+        f.grid->type("n");
+        f.grid->press("Enter");
+        CHECK(f.grid->focus() == at(1, "note"));  // the last column: nowhere to go
+        CHECK(f.form->field("specimens[0].note").draft() == "n");
+    }
+    {
+        GridFixture f{2, ui::GridOptions{.enterMoves = ui::EnterMoves::None}};
+        f.grid->focusCell(at(1, "mass"));
+        f.grid->type("2");
+        f.grid->press("Enter");
+        CHECK(f.grid->focus() == at(1, "mass"));
+        CHECK_FALSE(f.grid->editing().has_value());
+        CHECK(f.form->field("specimens[0].mass").draft() == "2");
+    }
+    {
+        GridFixture f{2};
+        f.grid->focusCell(at(1, "density"));
+        f.grid->press("Enter");  // read-only: no editor
+        CHECK_FALSE(f.grid->editing().has_value());
+        f.grid->focusCell(at(2, "mass"));
+        f.grid->type("3");
+        f.grid->press("Enter");
+        CHECK(f.grid->focus() == at(2, "mass"));  // the last row, and the grid does not append
+    }
+}

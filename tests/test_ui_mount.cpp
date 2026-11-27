@@ -1426,6 +1426,8 @@ struct WindowOptions {
     std::vector<std::size_t> custom;
     // Changes the columns before the table is built.
     std::function<void(std::vector<ui::TableColumn>&)> columns;
+    // Changes the table's options before the table is built.
+    std::function<void(ui::TableOptions&)> tune;
 };
 
 // The text of a record's field, or nothing.
@@ -1478,6 +1480,9 @@ struct WindowFixture {
                 onFocusCell(std::move(cell));
             }
         };
+        if (options.tune) {
+            options.tune(tableOptions);
+        }
         view = std::make_unique<ui::Mounted>(
             runtime, backend, ui::table(std::move(columns), std::move(source), std::move(tableOptions)));
         table = backend.all("Table").front();
@@ -2447,4 +2452,139 @@ TEST_CASE("table focus: the arrows, pages, home and end move the focused cell an
     CHECK(cell().first == 199);
     f.backend.focusMove(f.table, FocusMove::PageDown);  // stays at the last row
     CHECK(cell().first == 199);
+}
+
+// Mutations: a removal before the row not moving it up; an insertion at or before the row not moving it down; a move
+// across the row moving it the wrong way; a removal of the row leaving the mark.
+TEST_CASE("table highlight: the marked row follows the operations of a view change", "[ui][mount]") {
+    using Kind = table::ViewOp::Kind;
+    struct Case {
+        std::vector<table::ViewOp> ops;
+        std::string highlighted;
+    };
+    auto const op = [](Kind kind, std::size_t first, std::size_t count, std::size_t to = 0) {
+        return table::ViewOp{.kind = kind, .first = first, .count = count, .to = to};
+    };
+    // The marked row is at view index 20.
+    std::vector<Case> const cases{
+        {{op(Kind::Removed, 5, 2)}, "18"},    {{op(Kind::Removed, 25, 2)}, "20"},
+        {{op(Kind::Removed, 19, 3)}, "none"}, {{op(Kind::Inserted, 10, 3)}, "23"},
+        {{op(Kind::Inserted, 20, 1)}, "21"},  {{op(Kind::Inserted, 25, 4)}, "20"},
+        {{op(Kind::Moved, 20, 1, 3)}, "3"},   {{op(Kind::Moved, 2, 1, 30)}, "19"},
+        {{op(Kind::Moved, 40, 1, 10)}, "21"}, {{op(Kind::Moved, 40, 1, 25)}, "20"},
+        {{op(Kind::Changed, 20, 1)}, "20"},   {{op(Kind::Removed, 0, 1), op(Kind::Inserted, 0, 3)}, "22"},
+    };
+    for (Case const& item : cases) {
+        WindowFixture f{50, 4, {.pinned = 0}};
+        f.highlight.set(ui::TableHighlight{.key = Key{std::int64_t{20}}, .row = 20});
+        f.settle();
+        REQUIRE(f.backend.prop(f.table, "highlightedRow") == "20");
+        f.rows->announce(item.ops);
+        f.settle();
+        CHECK(f.backend.prop(f.table, "highlightedRow") == item.highlighted);
+    }
+}
+
+namespace {
+
+ui::MenuItem entryOf(std::string label, std::function<void()> select = {}) {
+    ui::MenuItem item;
+    item.label = std::move(label);
+    item.onSelect = std::move(select);
+    return item;
+}
+
+ui::MenuItem dividerItem() {
+    ui::MenuItem item;
+    item.separator = true;
+    return item;
+}
+
+std::vector<std::string> labelsOfEntries(std::vector<ui::MenuEntry> const& entries) {
+    std::vector<std::string> labels;
+    for (ui::MenuEntry const& entry : entries) {
+        labels.push_back(entry.separator ? std::string{"-"} : entry.label);
+    }
+    return labels;
+}
+
+}  // namespace
+
+// Mutations: a leading, doubled or trailing separator kept; a hidden entry shown; a submenu's entry reported for its
+// parent.
+TEST_CASE("table menus: a cell menu drops leading, doubled and trailing separators and hidden entries",
+          "[ui][mount]") {
+    std::vector<std::string> chosen;
+    WindowFixture f{3, 3, {.tune = [&chosen](ui::TableOptions& options) {
+                        options.cellMenu = [&chosen](Key const&, std::size_t) {
+                            std::vector<ui::MenuItem> items;
+                            items.push_back(dividerItem());
+                            items.push_back(entryOf("Open", [&chosen] { chosen.emplace_back("Open"); }));
+                            items.push_back(dividerItem());
+                            items.push_back(dividerItem());
+                            ui::MenuItem hidden = entryOf("Hidden");
+                            hidden.visible = false;
+                            items.push_back(std::move(hidden));
+                            ui::MenuItem more = entryOf("More", [&chosen] { chosen.emplace_back("More"); });
+                            more.items.push_back(entryOf("Sub", [&chosen] { chosen.emplace_back("Sub"); }));
+                            items.push_back(std::move(more));
+                            ui::MenuItem off = entryOf("Off", [&chosen] { chosen.emplace_back("Off"); });
+                            off.enabled = false;
+                            items.push_back(std::move(off));
+                            items.push_back(dividerItem());
+                            return items;
+                        };
+                    }}};
+    std::vector<ui::MenuEntry> const entries = f.backend.rightClickCell(f.table, Key{std::int64_t{1}}, 1);
+    CHECK(labelsOfEntries(entries) == std::vector<std::string>{"Open", "-", "More", "Off"});
+    REQUIRE(entries.at(2).items.size() == 1);
+    CHECK(entries.at(2).items.front().label == "Sub");
+    CHECK_FALSE(entries.at(3).enabled);
+    f.backend.chooseCellMenu(f.table, Key{std::int64_t{1}}, 1, {"Open"});
+    f.backend.chooseCellMenu(f.table, Key{std::int64_t{1}}, 1, {"More", "Sub"});
+    f.backend.chooseCellMenu(f.table, Key{std::int64_t{1}}, 1, {"Off"});
+    CHECK(chosen == std::vector<std::string>{"Open", "Sub"});
+}
+
+// Mutations: the caller's header entries shown for the table's own menu; no separator between the built-in entries
+// and the caller's; a built-in entry routed to the caller's action; a disabled header leaving a built-in entry on.
+TEST_CASE("table menus: a header's menu adds the caller's entries after the built-in ones", "[ui][mount]") {
+    std::vector<std::string> chosen;
+    std::vector<std::vector<std::size_t>> builtIn;
+    bool headerOn = true;
+    WindowFixture f{3, 3, {.tune = [&](ui::TableOptions& options) {
+                        options.menu = [](std::optional<std::size_t> column) {
+                            return column ? std::vector<ui::MenuEntry>{ui::MenuEntry{.label = "Sort"}}
+                                          : std::vector<ui::MenuEntry>{ui::MenuEntry{.label = "Table"}};
+                        };
+                        options.onMenu = [&builtIn](std::optional<std::size_t>, std::vector<std::size_t> path) {
+                            builtIn.push_back(std::move(path));
+                        };
+                        options.headerEntries = [&chosen](std::size_t column) {
+                            std::vector<ui::MenuItem> items;
+                            if (column == 2) {
+                                return items;  // nothing to add for this column
+                            }
+                            items.push_back(entryOf("Extra", [&chosen] { chosen.emplace_back("Extra"); }));
+                            ui::MenuItem nested = entryOf("Nested");
+                            nested.items.push_back(entryOf("Deep", [&chosen] { chosen.emplace_back("Deep"); }));
+                            items.push_back(std::move(nested));
+                            return items;
+                        };
+                        options.headerEnabled = ui::Prop<bool>{[&headerOn] { return headerOn; }};
+                    }}};
+    CHECK(labelsOfEntries(f.backend.menuOf(f.table, std::nullopt)) == std::vector<std::string>{"Table"});
+    CHECK(labelsOfEntries(f.backend.menuOf(f.table, 0)) == std::vector<std::string>{"Sort", "-", "Extra", "Nested"});
+    CHECK(labelsOfEntries(f.backend.menuOf(f.table, 2)) == std::vector<std::string>{"Sort"});
+    f.backend.chooseMenu(f.table, 0, {"Extra"});
+    f.backend.chooseMenu(f.table, 0, {"Nested", "Deep"});
+    f.backend.chooseMenu(f.table, 0, {"Nested"});  // a submenu's own entry does nothing
+    f.backend.chooseMenu(f.table, 0, {"Sort"});
+    f.backend.chooseMenu(f.table, std::nullopt, {"Table"});
+    CHECK(chosen == std::vector<std::string>{"Extra", "Deep"});
+    CHECK(builtIn == std::vector<std::vector<std::size_t>>{{0}, {0}});
+    headerOn = false;
+    std::vector<ui::MenuEntry> const off = f.backend.menuOf(f.table, 0);
+    CHECK_FALSE(off.front().enabled);  // the built-in entry
+    CHECK(off.back().enabled);         // the caller's own stay as they are
 }

@@ -109,3 +109,35 @@ TEST_CASE("cov model grid: the rows a change brings are found through the operat
     // A reset forgets what came before it.
     CHECK(readAfter({op(Kind::Changed, 1, 2), op(Kind::Reset, 0, 0), op(Kind::Changed, 5, 1)}) == Indices{5});
 }
+
+TEST_CASE("cov model grid: cells held for a row follow it when the row's key changes", "[ui][grid][cov]") {
+    ModelGridFixture f{{1, 2}, morph::ui::EditMode::Row};
+    f.grid->focusCell(at(1, "label"));
+    f.grid->type("a");
+    f.grid->press("Tab");
+    f.grid->type("b");
+    f.grid->press("Tab");
+    f.rows->rekey(row(1), row(9));
+    f.source->moveKey(key(1), key(9));
+    f.grid->focusCell(at(2, "label"));  // focus leaves the row: its held cells are sent
+    REQUIRE(f.commits.sent.size() == 1);
+    CHECK(f.commits.sent.at(0).row == row(9));
+    REQUIRE(f.commits.sent.at(0).cells.size() == 2);
+    CHECK(f.commits.sent.at(0).cells.at(0).json == R"("a")");
+    CHECK(f.commits.sent.at(0).cells.at(1).json == R"("b")");
+}
+
+TEST_CASE("cov model grid: a cell dropped for a busy row is resent under the row's new key", "[ui][grid][cov]") {
+    ModelGridFixture f{{1, 2}, morph::ui::EditMode::Row};
+    f.grid->focusCell(at(1, "label"));
+    f.grid->type("a");
+    f.grid->press("Tab");
+    f.rows->rowStates.busyKeys(7, {row(1)});  // a document mutation's edit of row 1
+    f.source->touch();
+    f.grid->focusCell(at(2, "label"));
+    CHECK(f.source->resends(key(1), "label"));
+    f.rows->rekey(row(1), row(9));
+    f.source->moveKey(key(1), key(9));
+    CHECK(f.source->resends(key(9), "label"));
+    CHECK_FALSE(f.source->resends(key(1), "label"));
+}

@@ -139,6 +139,13 @@ public:
         reset();
     }
 
+    // Announces a change of several operations, as an engine's view change is; the rows themselves stay as they are.
+    void announce(std::vector<table::ViewOp> ops) {
+        if (_handler) {
+            _handler(table::ViewChange{.ops = std::move(ops)});
+        }
+    }
+
     // A new total: a reset.
     void setTotal(std::int64_t rows, table::TotalKind kind) {
         _rows = rows;
