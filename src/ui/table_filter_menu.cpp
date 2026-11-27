@@ -843,7 +843,7 @@ void FilterMenu::load(bool next) {
             }
         });
     });
-}
+}  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the function object owns the callable it heap-allocates for the capture.
 
 void FilterMenu::pageAll(
     std::string search,

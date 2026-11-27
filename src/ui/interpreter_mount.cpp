@@ -33,8 +33,6 @@ Widget& Screen::root() const {
     return _mounted->root();
 }
 
-// NOLINTEND(misc-no-recursion)
-
 std::vector<TextSpan> Screen::headSpans(ExprPtr const& expr) const {
     if (expr == nullptr) {
         return {};

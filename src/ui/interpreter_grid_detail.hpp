@@ -11,9 +11,7 @@
 
 #include "interpreter_table_detail.hpp"
 
-namespace morph::ui {
-
-namespace detail {
+namespace morph::ui::detail {
 
 /// A grid of a form: the grid it shows, and its status line's message, held for 6 s as a table's is.
 struct GridTable {
@@ -67,6 +65,4 @@ std::vector<std::pair<std::int64_t, std::int64_t>> gridRuns(GridTable& held);
 
 RowRecord gridHeading(GridTable& held, std::size_t ordinal);
 
-}  // namespace detail
-
-}  // namespace morph::ui
+}  // namespace morph::ui::detail

@@ -54,6 +54,8 @@
 #include <variant>
 #include <vector>
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- cell, column and row indices are bounded by the page's and the snapshot's own counts, checked before they are used
+
 namespace morph::table {
 
 TableDescription describe(TableDescription description) {
@@ -1261,3 +1263,5 @@ std::expected<GenericPage, TableError> AnswerAwaiter::await_resume() {
 }
 
 }  // namespace morph::table::detail
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)

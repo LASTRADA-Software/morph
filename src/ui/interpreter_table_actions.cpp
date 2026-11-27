@@ -4,9 +4,7 @@
 
 #include "interpreter_grid_detail.hpp"
 
-namespace morph::ui {
-
-namespace detail {
+namespace morph::ui::detail {
 
 namespace {
 
@@ -1628,6 +1626,4 @@ void ScreenCore::tableSaveFailed(table::TableStateKey const& key, table::SaveRes
     return out;
 }
 
-}  // namespace detail
-
-}  // namespace morph::ui
+}  // namespace morph::ui::detail

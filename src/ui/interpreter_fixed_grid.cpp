@@ -4,10 +4,9 @@
 
 #include "interpreter_grid_detail.hpp"
 
-namespace morph::ui {
+namespace morph::ui::detail {
 
-namespace detail {
-
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one test per way a table can be configured, in the order the document lists them.
 [[nodiscard]] std::pair<Configure, bool> configurableOf(DocNode const& node) {
     ExprPtr const expr = node.prop("configurable");
     if (!expr || expr->kind != ExprKind::Literal) {
@@ -74,6 +73,7 @@ namespace {
     return config.held;
 }
 
+// NOLINTNEXTLINE(misc-no-recursion): a band nests bands, and the walk follows them.
 [[nodiscard]] std::vector<table::BandInfo> bandsOf(std::span<DocNodePtr const> parts) {
     std::vector<table::BandInfo> bands;
     for (DocNodePtr const& part : parts) {
@@ -800,6 +800,4 @@ Node ScreenCore::gridTableNode(DocNode const& part, LowerCtx const& ctx, Element
                          [&] { return held->grid.grid->node(std::move(columns), std::move(table), std::move(base)); });
 }
 
-}  // namespace detail
-
-}  // namespace morph::ui
+}  // namespace morph::ui::detail

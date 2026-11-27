@@ -41,6 +41,8 @@
 #include <variant>
 #include <vector>
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- row and column indices are bounded by the snapshot's own counts, and the sort and filter loops index once per comparison, where at() would check every access
+
 namespace morph::table {
 
 void MembershipDigest::add(RowId const& key) noexcept {
@@ -1119,3 +1121,5 @@ void MeasureValue::setWire(Wire const& wire) {
 }
 
 }  // namespace morph::table
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)

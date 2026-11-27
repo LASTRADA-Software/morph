@@ -304,7 +304,7 @@ private:
     // The queue is brought up to date before the patcher is called: patching
     // notifies the source's listeners at once, and their handlers may commit
     // to the same row or destroy this object.
-    void settle(RowId const& row, std::expected<std::vector<Cell>, FieldError>&& outcome);
+    void settle(RowId const& row, std::expected<std::vector<Cell>, FieldError> outcome);
 
     // A row commit: sent once it is at the front of its row's queue, and discarded on settling when its row went
     // absent meanwhile.

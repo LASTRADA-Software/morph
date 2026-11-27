@@ -4,9 +4,7 @@
 
 #include "interpreter_detail.hpp"
 
-namespace morph::ui {
-
-namespace detail {
+namespace morph::ui::detail {
 
 void ScreenCore::fillHolder(std::vector<Node>& children, std::string const& path) {
     for (Node& child : children) {
@@ -1460,6 +1458,6 @@ Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementStat
     return ui::text(Text{.text = std::string{node.kind}, .role = TextRole::Muted});
 }
 
-}  // namespace detail
+// NOLINTEND(misc-no-recursion)
 
-}  // namespace morph::ui
+}  // namespace morph::ui::detail

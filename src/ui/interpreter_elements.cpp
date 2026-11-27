@@ -4,9 +4,7 @@
 
 #include "interpreter_grid_detail.hpp"
 
-namespace morph::ui {
-
-namespace detail {
+namespace morph::ui::detail {
 
 [[nodiscard]] Value filtersValueOf(table::FilterSpec const& filters) {
     auto const json = parseJson(glz::write_json(filters).value_or("null"));
@@ -59,8 +57,6 @@ namespace {
 }
 
 }  // namespace
-
-// NOLINTEND(misc-no-recursion)
 
 // --- Declaring scopes ------------------------------------------------------------------------------------------
 
@@ -1591,6 +1587,4 @@ void ScreenCore::runHostCommand(Command const& command, CommandCtx const& ctx, D
     done(known);
 }
 
-}  // namespace detail
-
-}  // namespace morph::ui
+}  // namespace morph::ui::detail

@@ -2890,6 +2890,7 @@ void MutationRuntime::next(std::string const& serialKey) {
     found->second.pop_front();
     _scope->core.runtime().batch([&] { send(queued); });
 }
+// NOLINTEND(misc-no-recursion)
 
 }  // namespace detail
 

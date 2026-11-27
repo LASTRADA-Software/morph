@@ -4,9 +4,7 @@
 
 #include "interpreter_detail.hpp"
 
-namespace morph::ui {
-
-namespace detail {
+namespace morph::ui::detail {
 
 namespace {
 
@@ -780,6 +778,8 @@ namespace {
     return ui::column(std::move(column));
 }
 
+// NOLINTBEGIN(misc-no-recursion): an expression nests its arguments and fields, and a document nests its nodes; the
+// walks follow them.
 [[nodiscard]] bool readsAny(ExprPtr const& expr, std::set<std::string, std::less<>> const& names) {
     if (!expr) {
         return false;
@@ -790,8 +790,6 @@ namespace {
     return std::ranges::any_of(expr->args, [&](ExprPtr const& arg) { return readsAny(arg, names); }) ||
            std::ranges::any_of(expr->fields, [&](auto const& field) { return readsAny(field.second, names); });
 }
-
-// NOLINTEND(misc-no-recursion)
 
 void collectIds(DocNode const& node, std::set<std::string, std::less<>>& out) {
     if (!node.id.empty()) {
@@ -805,6 +803,7 @@ void collectIds(DocNode const& node, std::set<std::string, std::less<>>& out) {
         }
     }
 }
+// NOLINTEND(misc-no-recursion)
 
 // NOLINTNEXTLINE(misc-no-recursion): lowering a node lowers its children, which come back through here.
 Node ScreenCore::lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx, int gap) {
@@ -834,6 +833,4 @@ Node ScreenCore::lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx
     return ui::column(std::move(holder));
 }
 
-}  // namespace detail
-
-}  // namespace morph::ui
+}  // namespace morph::ui::detail

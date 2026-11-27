@@ -4,9 +4,7 @@
 
 #include "interpreter_grid_detail.hpp"
 
-namespace morph::ui {
-
-namespace detail {
+namespace morph::ui::detail {
 
 [[nodiscard]] Node besideDialogs(Common& placed, Node dialogs, std::function<Node()> const& table) {
     if (dialogs == nullptr) {
@@ -963,6 +961,4 @@ Node ScreenCore::lowerCollectionRows(ElementState& element, LowerCtx const& ctx,
                          [&] { return ui::table(std::move(columns), std::move(source), std::move(options)); });
 }
 
-}  // namespace detail
-
-}  // namespace morph::ui
+}  // namespace morph::ui::detail

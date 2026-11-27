@@ -212,7 +212,7 @@ void PreferencesTableStateStore::readMore(std::shared_ptr<Reading> const& readin
                   readMore(reading);
               })
         .onError(_scope, [reading](std::exception_ptr const& error) { reading->promise.reject(error); });
-}
+}  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the function object owns the callable it heap-allocates for the capture.
 
 void PreferencesTableStateStore::retryLater(std::shared_ptr<Upload> const& upload) {
     auto send = _scope.token().guard([this, upload] { sendPart(upload); });
@@ -261,7 +261,7 @@ void PreferencesTableStateStore::sendPart(std::shared_ptr<Upload> const& upload)
                   sendPart(upload);
               })
         .onError(_scope, [upload](std::exception_ptr const& error) { upload->promise.reject(error); });
-}
+}  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the function object owns the callable it heap-allocates for the capture.
 
 TableStates::TableStates(std::shared_ptr<table::ITableStateStore> store, exec::IExecutor& owner MORPH_LIFETIMEBOUND,
                          reactive::Scheduler* scheduler, std::chrono::milliseconds debounce)
@@ -362,7 +362,7 @@ void TableStates::startLoad(table::TableStateKey const& key, Entry& entry) {
     _store->load(key)
         .then(_scope, [this, key](std::optional<table::StoredTableState> const& stored) { loaded(key, stored); })
         .onError(_scope, [this, key](std::exception_ptr const& error) { loadFailed(key, error); });
-}
+}  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the function object owns the callable it heap-allocates for the capture.
 
 void TableStates::loaded(table::TableStateKey const& key, std::optional<table::StoredTableState> const& stored) {
     Entry& entry = _entries[tie(key)];
@@ -432,7 +432,7 @@ void TableStates::trySave(table::TableStateKey const& key) {
                   table::SaveResult{
                       .outcome = table::SaveOutcome::Refused, .revision = {}, .reason = detail::failureText(error)});
         });
-}
+}  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the function object owns the callable it heap-allocates for the capture.
 
 void TableStates::saved(table::TableStateKey const& key, std::string const& json, table::SaveResult const& result) {
     Entry& entry = _entries[tie(key)];

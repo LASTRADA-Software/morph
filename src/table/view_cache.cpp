@@ -25,6 +25,8 @@
 #include <utility>
 #include <vector>
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- source rows are below the snapshot's row count
+
 namespace morph::table {
 
 std::span<std::uint32_t const> ViewEntry::viewRowOf() const {
@@ -219,3 +221,5 @@ void ViewCache::bound(std::vector<std::shared_ptr<ViewEntry const>>& released) {
 }
 
 }  // namespace morph::table
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)

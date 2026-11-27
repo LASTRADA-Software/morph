@@ -57,9 +57,7 @@
 #include <variant>
 #include <vector>
 
-namespace morph::ui {
-
-namespace detail {
+namespace morph::ui::detail {
 
 /// One row a copy writes: its view index, and its cells' texts by the columns copied, none for an unloaded cell.
 struct CopyRow {
@@ -174,8 +172,6 @@ void headCommandLists(Document const& doc, std::vector<Commands const*>& lists);
 /// @param core  The screen.
 /// @return The channel, or `nullptr` while the alias is unbound.
 [[nodiscard]] std::shared_ptr<ModelChannel> channelOf(ModelAlias& alias, ScreenCore& core);
-
-// NOLINTEND(misc-no-recursion)
 
 // --- Declaring scopes ------------------------------------------------------------------------------------------
 
@@ -445,7 +441,6 @@ struct DetachedLower {
 [[nodiscard]] LowerCtx attached(DetachedLower const& held);
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): a list of rows and a table.
-
 /// The tooltip of a cell whose value cannot be read as its column's kind.
 inline constexpr std::string_view kUnreadable = "The value could not be read";
 
@@ -507,6 +502,4 @@ inline constexpr std::string_view kClearMarks = "failed.clear";
 
 std::string summaryTestId(Value const& record, std::string const& column);
 
-}  // namespace detail
-
-}  // namespace morph::ui
+}  // namespace morph::ui::detail

@@ -745,6 +745,8 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     return Value{std::move(keys)};
 }
 
+// NOLINTBEGIN(misc-no-recursion): an expression, a command list and a document nest, and each walk follows its own
+// nesting.
 void rowReadsOf(Expr const& expr, RowReads& out, bool readFrom) {
     // A cell menu's entries also name their row `row`.
     if (expr.kind == ExprKind::Ref && expr.name == "row") {
@@ -816,6 +818,7 @@ void rowReadsOf(DocNode const& node, RowReads& out) {
         }
     }
 }
+// NOLINTEND(misc-no-recursion)
 
 [[nodiscard]] std::string levelWords(std::string level) {
     if (!level.empty() && level.front() >= 'a' && level.front() <= 'z') {

@@ -4,9 +4,7 @@
 
 #include "interpreter_table_detail.hpp"
 
-namespace morph::ui {
-
-namespace detail {
+namespace morph::ui::detail {
 
 namespace {
 
@@ -1343,6 +1341,4 @@ Node ScreenCore::lowerModelTable(DocNode const& node, LowerCtx const& ctx, Eleme
     return ui::column(std::move(wrapper));
 }
 
-}  // namespace detail
-
-}  // namespace morph::ui
+}  // namespace morph::ui::detail

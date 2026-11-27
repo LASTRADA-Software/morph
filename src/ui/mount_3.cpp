@@ -980,11 +980,12 @@ void Mounter::reconcile(std::size_t depth, ForEachSession& session, std::vector<
 
 void Mounter::applyWindow(std::size_t depth, std::vector<KeyedRow>& rows, ContainerWidget& container,
                           VisibleRange const& window, std::size_t overscan, RowHook const& onRow) {
-    std::size_t const lo = window.first > overscan ? window.first - overscan : 0;
-    std::size_t const hi = window.first + window.count + overscan;  // exclusive; saturates harmlessly past rows.size()
+    std::size_t const low = window.first > overscan ? window.first - overscan : 0;
+    std::size_t const high =
+        window.first + window.count + overscan;  // exclusive; saturates harmlessly past rows.size()
     std::exception_ptr failure;
     for (KeyedRow& row : rows) {
-        bool const shouldBeRealized = row.viewPosition >= lo && row.viewPosition < hi;
+        bool const shouldBeRealized = row.viewPosition >= low && row.viewPosition < high;
         if (shouldBeRealized && row.widgetState != RowWidgetState::Realized &&
             row.widgetState != RowWidgetState::NullView) {
             try {
@@ -1011,6 +1012,7 @@ void Mounter::applyWindow(std::size_t depth, std::vector<KeyedRow>& rows, Contai
         return out;
     }();
     std::vector<std::size_t> order(rows.size());
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from Emscripten's libc++.
     std::iota(order.begin(), order.end(), std::size_t{0});
     std::ranges::sort(order, {}, [&rows](std::size_t index) { return rows.at(index).viewPosition; });
     reorder(rows, container, keys, order, failure);

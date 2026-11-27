@@ -371,7 +371,7 @@ void CellEdits::start(RowId const& row) {
     }));
 }
 
-void CellEdits::settle(RowId const& row, std::expected<std::vector<Cell>, FieldError>&& outcome) {
+void CellEdits::settle(RowId const& row, std::expected<std::vector<Cell>, FieldError> outcome) {
     auto const found = _queues.find(row);
     if (found == _queues.end() || found->second.empty()) {
         return;

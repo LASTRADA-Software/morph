@@ -35,6 +35,8 @@
 #include <variant>
 #include <vector>
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- column and level indices come from the plans built against the same lists
+
 namespace morph::table::detail {
 
 std::size_t cellsBytes(std::vector<Cell> const& cells) noexcept {
@@ -140,3 +142,5 @@ MORPH_PROCESS_UNIQUE LevelRead LeveledSource::Snapshot::state(std::size_t row, s
 }
 
 }  // namespace morph::table
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)

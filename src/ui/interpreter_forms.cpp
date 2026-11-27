@@ -4,9 +4,7 @@
 
 #include "interpreter_grid_detail.hpp"
 
-namespace morph::ui {
-
-namespace detail {
+namespace morph::ui::detail {
 
 namespace {
 
@@ -159,11 +157,12 @@ void ScreenCore::wireForm(ElementState& element) {
 namespace {
 
 // Whether a field, or a member of it at any depth, is computed: what an evaluation round would bring back.
-// NOLINTNEXTLINE(misc-no-recursion): an object's and a row's members are fields.
+// NOLINTBEGIN(misc-no-recursion): an object's and a row's members are fields.
 [[nodiscard]] bool computesAny(std::span<forms::FieldSpec const> fields) {
     return std::ranges::any_of(
         fields, [](forms::FieldSpec const& field) { return field.computed || computesAny(field.children); });
 }
+// NOLINTEND(misc-no-recursion)
 
 }  // namespace
 
@@ -1203,6 +1202,4 @@ std::shared_ptr<RtScope> ScreenCore::rowScope(DocNode const& node, LowerCtx cons
     return table::TableColumn{.info = {.id = {}, .kind = kind}, .display = display};
 }
 
-}  // namespace detail
-
-}  // namespace morph::ui
+}  // namespace morph::ui::detail

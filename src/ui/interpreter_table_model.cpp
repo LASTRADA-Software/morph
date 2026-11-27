@@ -4,9 +4,7 @@
 
 #include "interpreter_grid_detail.hpp"
 
-namespace morph::ui {
-
-namespace detail {
+namespace morph::ui::detail {
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity, readability-function-size): the columns, the cells, the row's parts and the handlers; each stage hands the next the same element, options and config
 Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementState& element) {
@@ -1211,6 +1209,4 @@ std::vector<detail::ChartRawPoint> ScreenCore::chartPoints(DocNode const& series
     return points;
 }
 
-}  // namespace detail
-
-}  // namespace morph::ui
+}  // namespace morph::ui::detail

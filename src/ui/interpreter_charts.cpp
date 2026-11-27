@@ -4,9 +4,7 @@
 
 #include "interpreter_grid_detail.hpp"
 
-namespace morph::ui {
-
-namespace detail {
+namespace morph::ui::detail {
 
 namespace {
 
@@ -557,6 +555,8 @@ TableSource ScreenCore::summarySource(DocNode const& part, LowerCtx const& ctx, 
     return made;
 }
 
+// NOLINTBEGIN(misc-no-recursion): an expression nests its arguments and fields, and a node its children; the walks
+// follow them.
 void ScreenCore::ownQueriesOf(ExprPtr const& expr, RtScope const& scope, BoundaryRuntime& boundary,
                               std::set<std::string, std::less<>>& seen) {
     if (!expr) {
@@ -606,6 +606,7 @@ void ScreenCore::ownQueries(DocNode const& node, RtScope const& scope, BoundaryR
         }
     }
 }
+// NOLINTEND(misc-no-recursion)
 
 Node ScreenCore::lowerBoundary(DocNode const& node, LowerCtx const& ctx) {
     auto const boundary = std::make_shared<BoundaryRuntime>();
@@ -985,6 +986,4 @@ Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx) {
     return ui::text(std::move(placeholder));
 }
 
-}  // namespace detail
-
-}  // namespace morph::ui
+}  // namespace morph::ui::detail
