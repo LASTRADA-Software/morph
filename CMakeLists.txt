@@ -514,6 +514,8 @@ add_library(morph ${_morph_library_type}
     src/table/row_selection.cpp
     src/table/state_store.cpp
     src/table/view_cache.cpp
+    src/ui/cell_format.cpp
+    src/ui/form_rows.cpp
     src/ui/library.cpp
     src/ui/service.cpp
     src/ui/tour_checks.cpp
