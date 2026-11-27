@@ -1047,7 +1047,10 @@ LevelValues recipeLikeValues(std::int64_t first, std::int64_t last) {
     LevelValues out;
     out.reserve(static_cast<std::size_t>(last - first));
     for (auto key = first; key < last; ++key) {
-        out.emplace_back(RowId{key}, recipeLikeValue(key));
+        // Built in place: moving a temporary RowId into the pair makes GCC 15 at -O3 report its string alternative
+        // as maybe-uninitialized.
+        out.emplace_back(std::piecewise_construct, std::forward_as_tuple(std::in_place_type<std::int64_t>, key),
+                         std::forward_as_tuple(recipeLikeValue(key)));
     }
     return out;
 }
