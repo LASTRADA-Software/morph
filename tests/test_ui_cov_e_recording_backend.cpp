@@ -407,3 +407,99 @@ TEST_CASE("cove: a menu runs only an enabled entry without a submenu", "[ui][cov
     backend.chooseMenuEntry(1, {0});
     CHECK(paths.size() == 2);
 }
+
+// Mutation: let Left or Right step a segmented select that marks nothing, marks a key it does not offer, or sits at
+// the end the step leads past.
+TEST_CASE("cove: a segmented select steps only from an offered option and stops at its ends", "[ui][cove]") {
+    RecordingBackend backend;
+    auto select = backend.createSelect(nullptr, ui::SelectStyle::Segmented);
+    select->setOptions({{.key = intKey(1), .label = "one"}, {.key = intKey(2), .label = "two"}});
+    int picked = 0;
+    select->setOnSelect([&picked](ui::Key const&) { ++picked; });
+    CHECK(backend.press(1, "Right"));  // nothing marked: no neighbour
+    CHECK(picked == 0);
+    select->setSelected(intKey(9));  // a key the options do not offer
+    CHECK(backend.press(1, "Right"));
+    CHECK(picked == 0);
+    select->setSelected(intKey(1));
+    CHECK(backend.press(1, "Left"));  // at the start
+    CHECK(picked == 0);
+    CHECK(backend.press(1, "Right"));
+    CHECK(picked == 1);
+    CHECK(backend.prop(1, "selected") == "2");
+    CHECK(backend.press(1, "Right"));  // at the end
+    CHECK(picked == 1);
+}
+
+// Mutation: drop the collapsed-panel or the closed-collapsible check of `shownInStore`, or let a closed section's
+// header count as content.
+TEST_CASE("cove: a widget under a collapsed panel or a closed section takes no input unless it is the section's header",
+          "[ui][cove]") {
+    RecordingBackend backend;
+    int clicks = 0;
+    auto panel = backend.createPanel(nullptr);
+    auto inPanel = backend.createButton(panel.get());
+    inPanel->setOnClick([&clicks] { ++clicks; });
+    panel->setCollapsed(true);
+    backend.click(2);
+    CHECK(clicks == 0);
+    panel->setCollapsed(false);
+    backend.click(2);
+    CHECK(clicks == 1);
+
+    auto section = backend.createCollapsible(nullptr);
+    auto header = backend.createButton(section.get());
+    auto content = backend.createButton(section.get());
+    header->setOnClick([&clicks] { clicks += 10; });
+    content->setOnClick([&clicks] { clicks += 100; });
+    section->setHeader(*header);
+    section->setOpen(false);
+    backend.click(4);
+    backend.click(5);
+    CHECK(clicks == 11);
+    section->setOpen(true);
+    backend.click(5);
+    CHECK(clicks == 111);
+
+    auto bare = backend.createCollapsible(nullptr);
+    auto child = backend.createButton(bare.get());
+    child->setOnClick([&clicks] { clicks += 1000; });
+    bare->setOpen(false);
+    backend.click(7);
+    CHECK(clicks == 111);
+}
+
+// Mutation: tell the table of focus that moves inside it, or not of focus that leaves it.
+TEST_CASE("cove: a table is told when focus leaves it and everything in it, and not when focus moves inside",
+          "[ui][cove]") {
+    RecordingBackend backend;
+    auto stack = backend.createStack(nullptr, ui::Axis::Vertical);
+    auto table = backend.createTable(stack.get());
+    auto row = backend.createStack(table.get(), ui::Axis::Horizontal);
+    auto cellA = backend.createText(row.get());
+    auto cellB = backend.createText(row.get());
+    auto outside = backend.createText(stack.get());
+    int left = 0;
+    table->setOnFocusOut([&left] { ++left; });
+    cellA->focus();
+    cellB->focus();
+    CHECK(left == 0);
+    outside->focus();
+    CHECK(left == 1);
+    outside->focus();
+    CHECK(left == 1);
+}
+
+// Mutation: let a page region be made in a container that is not a page.
+TEST_CASE("cove: a page region belongs to a page, and a cell load outside the enumeration reads as loaded",
+          "[ui][cove]") {
+    RecordingBackend backend;
+    auto stack = backend.createStack(nullptr, ui::Axis::Vertical);
+    CHECK_THROWS_AS(backend.createPageRegion(stack.get(), ui::RegionGeometry{}), std::logic_error);
+
+    auto table = backend.createTable(nullptr);
+    auto row = backend.createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, intKey(1));
+    table->setCellLoad(*row, 0, static_cast<ui::CellLoad>(9));
+    CHECK(backend.prop(3, "load0") == "Loaded");
+}

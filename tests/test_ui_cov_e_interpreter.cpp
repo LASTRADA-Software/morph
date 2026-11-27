@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <memory>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/value.hpp>
@@ -130,4 +131,60 @@ TEST_CASE("cove: the head menu's trigger is named by the document or by default"
     Harness plain;
     CHECK(plain.mount(R"({ "vocab": "ui/1", "id": "plain", "view": { "kind": "text", "text": "x" } })")->menuLabel() ==
           "More actions");
+}
+
+namespace {
+
+constexpr char const* kLive = R"({
+  "vocab": "ui/1", "id": "live",
+  "models": { "clients": { "type": "Lims_ClientModel" } },
+  "state": { "go": { "init": false }, "term": { "init": "a" } },
+  "queries": { "found": { "model": "clients", "action": "Lims_ClientList", "when": { "ref": "go" },
+                          "body": { "obj": { "q": { "ref": "term" } } }, "debounce": 100, "refreshEvery": 1000 } },
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "go", "label": "go", "onClick": { "set": "go", "value": true } },
+    { "kind": "button", "testId": "stop", "label": "stop", "onClick": { "set": "go", "value": false } },
+    { "kind": "button", "testId": "term", "label": "term", "onClick": { "set": "term", "value": "b" } },
+    { "kind": "text", "testId": "n", "text": { "fn": "format", "args": [ "{0}", { "fn": "count", "args": [
+        { "fn": "coalesce", "args": [ { "ref": "found" }, { "list": [] } ] } ] } ] } } ] } })";
+
+}  // namespace
+
+// Mutation: ignore `when`, the debounce or the refresh timer in `QueryRuntime::start`.
+TEST_CASE("cove: a query waits for its condition, debounces a changed key and refreshes on its timer",
+          "[ui][interpreter][cove]") {
+    Harness h;
+    auto const screen = h.mount(kLive);
+    CHECK(h.dispatcher.count("Lims_ClientList") == 0);
+    h.advance(std::chrono::milliseconds{5000});
+    CHECK(h.dispatcher.count("Lims_ClientList") == 0);
+
+    h.backend.click(h.byTestId("Button", "go"));
+    h.settle();
+    CHECK(h.dispatcher.count("Lims_ClientList") == 0);  // the key left idle: the debounce applies
+    h.advance(std::chrono::milliseconds{100});
+    REQUIRE(h.dispatcher.count("Lims_ClientList") == 1);
+    h.advance(std::chrono::milliseconds{1000});  // the first request is still in flight: no refresh
+    CHECK(h.dispatcher.count("Lims_ClientList") == 1);
+    h.reply(h.dispatcher.last("Lims_ClientList"), R"([{"id": 1}])");
+    CHECK(h.text("n") == "1");
+
+    h.backend.click(h.byTestId("Button", "term"));
+    h.settle();
+    CHECK(h.dispatcher.count("Lims_ClientList") == 1);  // waiting out the debounce
+    h.advance(std::chrono::milliseconds{50});
+    CHECK(h.dispatcher.count("Lims_ClientList") == 1);
+    h.advance(std::chrono::milliseconds{60});
+    REQUIRE(h.dispatcher.count("Lims_ClientList") == 2);
+    h.reply(h.dispatcher.last("Lims_ClientList"), R"([{"id": 1}, {"id": 2}])");
+    CHECK(h.text("n") == "2");
+
+    h.advance(std::chrono::milliseconds{1000});  // idle and unchanged: the timer fetches again
+    CHECK(h.dispatcher.count("Lims_ClientList") == 3);
+
+    h.backend.click(h.byTestId("Button", "stop"));  // an idle key switches at once, with no debounce
+    h.settle();
+    h.reply(h.dispatcher.last("Lims_ClientList"), R"([{"id": 1}])");
+    h.advance(std::chrono::milliseconds{5000});
+    CHECK(h.dispatcher.count("Lims_ClientList") == 3);
 }
