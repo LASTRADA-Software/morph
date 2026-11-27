@@ -48,6 +48,16 @@ set(MORPH_TABLE_TEST_SOURCES
     table/test_table_unloaded_cells.cpp
     table/test_table_level_cache.cpp
     table/test_table_view_cache.cpp
+    table/test_table_cov_c_cells.cpp
+    table/test_table_cov_c_query.cpp
+    table/test_table_cov_c_filter.cpp
+    table/test_table_cov_c_views.cpp
+    table/test_table_cov_c_state.cpp
+    table/test_table_cov_c_edits.cpp
+    table/test_table_cov_c_cell_edits.cpp
+    table/test_table_cov_c_layout.cpp
+    table/test_table_cov_c_parse.cpp
+    table/test_table_cov_c_units.cpp
     table/test_table_state.cpp
     table/test_table_measure.cpp
     table/test_wide_table.cpp
@@ -78,6 +88,8 @@ add_executable(morph_tests
     test_example.cpp
     test_push_records.cpp
     test_push_effects.cpp
+    test_cov_c_effects.cpp
+    test_cov_c_forms_values.cpp
     test_push_watch_table.cpp
     test_push_catalog.cpp
     test_push_channel.cpp
