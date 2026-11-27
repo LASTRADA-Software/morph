@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <limits>
 #include <memory>
 #include <morph/table/filter.hpp>
 #include <morph/table/sort.hpp>
@@ -202,4 +203,151 @@ TEST_CASE("cov window state: a selection of the view counts what it excepts and 
     CHECK(outside.kind == ui::CountKind::Approximate);
     whole.except = {id(1), id(2), id(3)};
     CHECK(rows->selectedCount(whole).rows == 497);
+}
+
+TEST_CASE("cov window state: a window with no description keeps what it is asked and asks nothing",
+          "[ui][table][cov][covr4]") {
+    RowsFixture h;
+    auto const rows = std::make_shared<ui::WindowRows>(h.session, h.options("samples"));
+    h.settle();
+    CHECK(rows->setSort({{.column = "anything", .dir = table::SortDirection::Ascending}}).has_value());
+    CHECK(rows->setFilter(filterOn("anything", "x")).has_value());
+    rows->visible(0, 30, h.columns);
+    h.settle();
+    CHECK(h.dispatcher.count("Table.samples") == 0);
+    CHECK_FALSE(rows->selectView().has_value());
+    CHECK(rows->description() == nullptr);
+    std::optional<Distinct> values;
+    rows->distinctValues({}).then([&values](Distinct const& got) { values = got; });
+    h.settle();
+    REQUIRE(values.has_value());
+    CHECK(values->error().code == table::TableErrorCode::Unavailable);
+    std::optional<std::expected<std::vector<ui::FetchedRow>, table::TableError>> range;
+    rows->rowsOf(0, 3, std::vector<std::string>{"id"}).then([&range](auto const& got) { range = got; });
+    h.settle();
+    REQUIRE(range.has_value());
+    CHECK_FALSE(range->has_value());
+    // A description that fits neither the sort nor the filter drops them as it arrives.
+    rows->setDescription(samplesDescription(3));
+    CHECK(rows->filter().columns.empty());
+}
+
+TEST_CASE("cov window state: a page of another revision is reported stale once", "[ui][table][cov][covr4]") {
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
+    int stale = 0;
+    rows->onStaleDescription([&stale] { ++stale; });
+    rows->visible(0, 30, h.columns);
+    h.replyPage(R"({"revision":"0000000000000000","columns":["id"],"keys":[1],"rows":[[1]],"total":1})");
+    CHECK(stale == 1);
+    rows->visible(0, 30, h.columns);
+    h.settle();
+    if (h.pending("Table.samples") > 0) {
+        h.replyPage(R"({"revision":"0000000000000000","columns":["id"],"keys":[1],"rows":[[1]],"total":1})");
+    }
+    CHECK(stale == 1);  // the same revision is not said again
+}
+
+TEST_CASE("cov window state: a description that does not read or whose units do not build",
+          "[ui][table][cov][covr4]") {
+    RowsFixture h;
+    auto const rows = std::make_shared<ui::WindowRows>(h.session, h.options("samples"));
+    h.settle();
+    rows->setDescription(ui::Value{std::int64_t{3}});
+    REQUIRE(rows->error().has_value());
+    CHECK(rows->error()->message.contains("does not read"));
+    rows->setDescription(samplesDescription(3));
+    CHECK_FALSE(rows->error().has_value());  // a description that reads clears it
+
+    table::TableDescription d = samplesDescription(3);
+    d.columns.at(2).info.kind = table::ColumnKind::Measure;
+    d.units = {
+        table::UnitInfo{
+            .id = "kg", .symbol = "kg", .dimension = "mass", .toBase = *table::parseDecimal("1"), .decimals = 3},
+        table::UnitInfo{
+            .id = "kg", .symbol = "kg", .dimension = "mass", .toBase = *table::parseDecimal("1"), .decimals = 3}};
+    auto const bad = std::make_shared<ui::WindowRows>(h.session, h.options("samples"));
+    h.settle();
+    bad->setDescription(table::describe(std::move(d)));
+    bad->release();
+    h.settle();
+    CHECK(bad->description() != nullptr);
+}
+
+TEST_CASE("cov window state: an unsortable column and a range that is no range", "[ui][table][cov][covr4]") {
+    RowsFixture h;
+    table::TableDescription d = samplesDescription(3);
+    d.columns.at(1).sortable = false;
+    auto const rows = h.windowRows("samples", table::describe(std::move(d)));
+    auto const refused = rows->setSort({{.column = "name", .dir = table::SortDirection::Ascending}});
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().message.contains("name"));
+    std::optional<std::expected<std::vector<table::RowId>, table::TableError>> got;
+    rows->keysOf(-1, 5).then([&got](auto const& result) { got = result; });
+    h.settle();
+    REQUIRE(got.has_value());
+    CHECK_FALSE(got->has_value());
+    got.reset();
+    rows->keysOf(std::numeric_limits<std::int64_t>::max(), 5).then([&got](auto const& result) { got = result; });
+    h.settle();
+    REQUIRE(got.has_value());
+    CHECK_FALSE(got->has_value());
+    got.reset();
+    rows->keysOf(0, 0).then([&got](auto const& result) { got = result; });
+    h.settle();
+    REQUIRE(got.has_value());
+    REQUIRE(got->has_value());
+    CHECK((*got)->empty());
+}
+
+TEST_CASE("cov window state: keys across two pages are answered when both have arrived", "[ui][table][cov][covr4]") {
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
+    std::optional<std::expected<std::vector<table::RowId>, table::TableError>> got;
+    rows->keysOf(190, 20).then([&got](auto const& result) { got = result; });  // rows 190..209: pages 0 and 1
+    h.settle();
+    REQUIRE(h.pending("Table.samples") == 2);
+    h.replyPage(pageJson(0, 200, 400, std::vector<std::string>{}));
+    CHECK_FALSE(got.has_value());  // one page still owed
+    h.replyPage(pageJson(200, 200, 400, std::vector<std::string>{}));
+    REQUIRE(got.has_value());
+    REQUIRE(got->has_value());
+    CHECK((*got)->size() == 20);
+    CHECK((*got)->front() == id(190));
+    // A page that fails fails the range, whatever the other says.
+    got.reset();
+    rows->keysOf(390, 20).then([&got](auto const& result) { got = result; });
+    h.settle();
+    h.dispatcher.fail(h.oldest("Table.samples"), "error", "no");
+    h.settle();
+    CHECK_FALSE(got.has_value());  // the other page is still owed
+    h.dispatcher.fail(h.oldest("Table.samples"), "error", "no");
+    h.settle();
+    REQUIRE(got.has_value());
+    CHECK_FALSE(got->has_value());
+}
+
+TEST_CASE("cov window state: locate answers the row's index to its caller and a later locate stops the earlier",
+          "[ui][table][cov][covr4]") {
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
+    std::vector<std::optional<std::int64_t>> found;
+    rows->locate(id(5), [&found](std::optional<std::int64_t> index) { found.push_back(index); });
+    h.settle();
+    h.replyPage(R"({"revision":")" + h.described.revision +
+                R"(","columns":["id"],"keys":[5],"rows":[[5]],"indices":[41],"total":100})");
+    REQUIRE(found.size() == 1);
+    CHECK(found.front() == 41);
+    rows->locate(id(6), [&found](std::optional<std::int64_t> index) { found.push_back(index); });
+    h.settle();
+    rows->locate(id(7), [&found](std::optional<std::int64_t> index) { found.push_back(index); });  // stops id 6's
+    h.settle();
+    CHECK(h.stopped(h.dispatcher.count("Table.samples") - 2));
+    h.dispatcher.reply(
+        h.dispatcher.last("Table.samples"),
+        R"({"revision":")" + h.described.revision + R"(","columns":["id"],"keys":[],"rows":[],"total":100})");
+    h.settle();
+    REQUIRE(found.size() == 2);
+    CHECK_FALSE(found.back().has_value());  // not in the view
+    rows->stopLocating();
 }
