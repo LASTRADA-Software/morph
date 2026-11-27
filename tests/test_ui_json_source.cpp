@@ -207,3 +207,121 @@ TEST_CASE("prettyJson breaks a container that starts past the line width, and co
     CHECK(morph::ui::compactJson(pretty) == document);
     CHECK(morph::ui::compactJson("{\t\"a\"\r\n:\t[ 1,\r2 ]\n}") == R"({"a":[1,2]})");
 }
+
+namespace {
+
+struct PointerCase {
+    std::string_view text;
+    std::string_view pointer;
+    std::string_view marker;  // where the pointer is found: the first occurrence of this text; empty for not found
+    bool last = false;        // the last occurrence instead
+};
+
+}  // namespace
+
+// Mutations: an escape in a member's name not decoded; the pair of surrogates decoded as two; a name's `~1` read as
+// `~0`; the first of equal names winning; a malformed tail after the match discarding the match.
+TEST_CASE("pointerOffset finds a pointer's place in text of every shape a person may leave", "[ui][json-source][r3]") {
+    using namespace std::string_view_literals;
+    for (PointerCase const& item : {
+             // The root, and the members and elements below it.
+             PointerCase{"  {\"a\":1}", "", "{"},
+             PointerCase{"{\"a\":1}", "/a", "\"a\""},
+             PointerCase{"{\"a\":{\"b\":[10,20,30]}}", "/a/b/1", "20"},
+             PointerCase{"{\"a\":{\"b\":[10,20,30]}}", "/a/b/2", "30"},
+             PointerCase{"[ 7 , [8] ]", "/1/0", "8"},
+             PointerCase{"{ \r\n\t\"a\" \t: \n 1 }", "/a", "\"a\""},
+             // The last of equal names wins.
+             PointerCase{"{\"a\":1,\"a\":2}", "/a", "\"a\"", true},
+             // Names with escapes of their own, and pointers escaping `~` and `/`.
+             PointerCase{"{\"a/b\":1,\"c~d\":2}", "/a~1b", "\"a/b\""},
+             PointerCase{"{\"a/b\":1,\"c~d\":2}", "/c~0d", "\"c~d\""},
+             PointerCase{"{\"x\\ty\":1,\"\\r\":2,\"\\b\":3,\"\\f\":4,\"\\n\":5,\"\\\"\":6,\"\\\\\":7,\"\\/\":8}",
+                         "/x\ty", "\"x\\ty\""},
+             PointerCase{"{\"x\\ty\":1,\"\\r\":2,\"\\b\":3,\"\\f\":4,\"\\n\":5}", "/\r", "\"\\r\""},
+             PointerCase{"{\"x\\ty\":1,\"\\r\":2,\"\\b\":3,\"\\f\":4,\"\\n\":5}", "/\b", "\"\\b\""},
+             PointerCase{"{\"x\\ty\":1,\"\\r\":2,\"\\b\":3,\"\\f\":4,\"\\n\":5}", "/\f", "\"\\f\""},
+             PointerCase{"{\"x\\ty\":1,\"\\r\":2,\"\\b\":3,\"\\f\":4,\"\\n\":5}", "/\n", "\"\\n\""},
+             PointerCase{"{\"q\\\"r\":1,\"s\\\\t\":2,\"u\\/v\":3}", "/q\"r", "\"q"},
+             PointerCase{"{\"q\\\"r\":1,\"s\\\\t\":2,\"u\\/v\":3}", "/s\\t", "\"s"},
+             PointerCase{"{\"q\\\"r\":1,\"s\\\\t\":2,\"u\\/v\":3}", "/u~1v", "\"u"},
+             // `\u` escapes of one, two and three bytes, a pair of surrogates, and a lone one.
+             PointerCase{"{\"\\u0041\":1}", "/A", "\"\\u0041\""},
+             PointerCase{"{\"\\u00e9\":1}", "/\xC3\xA9", "\"\\u00e9\""},
+             PointerCase{"{\"\\u20ac\":1}", "/\xE2\x82\xAC", "\"\\u20ac\""},
+             PointerCase{"{\"\\ud83d\\ude00\":1}", "/\xF0\x9F\x98\x80", "\"\\ud83d"},
+             PointerCase{"{\"\\ud83dx\":1}", "/\xED\xA0\xBDx", "\"\\ud83d"},
+             PointerCase{"{\"\\ud83d\\u0041\":1}",
+                         "/\xED\xA0\xBD"
+                         "A",
+                         "\"\\ud83d"},
+             // An escape in a value skipped on the way to a later member.
+             PointerCase{"{\"a\":\"\\u00e9\\n\\\"\",\"b\":2}", "/b", "\"b\""},
+             // What is not a pointer, and what is not there.
+             PointerCase{"{\"a\":1}", "a", ""},
+             PointerCase{"{\"a\":1}", "/a~", ""},
+             PointerCase{"{\"a\":1}", "/a~2", ""},
+             PointerCase{"{\"a\":1}", "/b", ""},
+             PointerCase{"{}", "/a", ""},
+             PointerCase{"[]", "/0", ""},
+             PointerCase{"[1,2]", "/2", ""},
+             PointerCase{"[1,2]", "/01", ""},
+             PointerCase{"[1,2]", "/-1", ""},
+             PointerCase{"[1,2]", "/1x", ""},
+             PointerCase{"[1,2]", "/", ""},
+             PointerCase{"[1,2]", "/a", ""},
+             PointerCase{"{\"a\":1}", "/a/b", ""},
+             PointerCase{"5", "/a", ""},
+             PointerCase{"\"s\"", "/a", ""},
+             PointerCase{"", "/a", ""},
+             PointerCase{"   ", "/a", ""},
+             // Text cut short or malformed, around a match or before one.
+             PointerCase{"{\"a\":1,", "/a", "\"a\""},
+             PointerCase{"{\"a\":1,\"b\":", "/a", "\"a\""},
+             PointerCase{"{\"a\":1 \"b\":2}", "/a", "\"a\""},
+             PointerCase{"{\"a\":1,\"b\":\"\\u12", "/a", "\"a\""},
+             PointerCase{"{\"a\":1,\"b\":\"\\u12G4\"}", "/a", "\"a\""},
+             PointerCase{"{\"a\":1,\"b\" 2}", "/a", "\"a\""},
+             PointerCase{"{\"a\":1,\"b\":\"x", "/a", "\"a\""},
+             PointerCase{"{\"a\":1,\"b\":\"x\\", "/a", "\"a\""},
+             PointerCase{"{\"a\":1,\"b\":[1,2", "/a", "\"a\""},
+             PointerCase{"[1,2", "/1", "2"},
+             PointerCase{"[1,2,", "/1", "2"},
+             PointerCase{"{\"a\" 1}", "/a", ""},
+             PointerCase{"{\"a\"", "/a", ""},
+             PointerCase{"{\"a\":}", "/a", ""},
+             PointerCase{"{\"a\":,\"b\":1}", "/a", ""},
+             PointerCase{"{\"a\":]", "/a", ""},
+             PointerCase{"{a:1}", "/a", ""},
+             PointerCase{"{\"\\u12G4\":1}", "/a", ""},
+             PointerCase{"{\"\\u12", "/a", ""},
+             PointerCase{"{\"b\":1,\"a", "/a", ""},
+             PointerCase{"[1,]", "/1", ""},
+             PointerCase{"[1 2]", "/1", ""},
+             PointerCase{"{\"b\":\"x\\", "/a", ""},
+             PointerCase{"{\"b\":,\"a\":1}", "/a", ""},
+         }) {
+        INFO(item.text << " at " << item.pointer);
+        std::optional<std::size_t> const found = morph::ui::pointerOffset(item.text, item.pointer);
+        if (item.marker.empty()) {
+            CHECK_FALSE(found.has_value());
+            continue;
+        }
+        std::size_t const expected = item.last ? item.text.rfind(item.marker) : item.text.find(item.marker);
+        REQUIRE(expected != std::string_view::npos);
+        CHECK(found == std::optional<std::size_t>{expected});
+    }
+}
+
+TEST_CASE("pointerOffset refuses a pointer deeper than the depth the source view reads", "[ui][json-source][r3]") {
+    std::string text;
+    std::string pointer;
+    for (std::size_t level = 0; level < 200; ++level) {
+        text += "[";
+        pointer += "/0";
+    }
+    text += "1";
+    text.append(200, ']');
+    CHECK_FALSE(morph::ui::pointerOffset(text, pointer).has_value());
+    CHECK(morph::ui::pointerOffset(text, "/0/0").has_value());
+}
