@@ -694,8 +694,12 @@ private:
         }
 
         [[nodiscard]] Clock::duration retryDelay(std::uint32_t failures) const {
-            auto const doublings = std::min<std::uint32_t>(failures == 0 ? 0 : failures - 1, 30);
-            auto const delay = options.retryAfter * static_cast<std::int64_t>(std::uint64_t{1} << doublings);
+            // Doubled one step at a time and stopped at the ceiling: a delay doubled in one multiplication by 2^30
+            // overflows the clock's tick count, and a wrapped delay is negative, so no failure would wait at all.
+            Clock::duration delay = options.retryAfter;
+            for (std::uint32_t doubled = 1; doubled < failures && delay < options.retryMax; ++doubled) {
+                delay *= 2;
+            }
             return std::min<Clock::duration>(delay, options.retryMax);
         }
 

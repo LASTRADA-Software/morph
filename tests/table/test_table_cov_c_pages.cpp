@@ -94,3 +94,54 @@ TEST_CASE("a registry skips a unit with no id and a page of a text column needs 
     auto const read = readGenericPage(R"({"columns":["t"],"keys":[1],"rows":[["x"]]})", description);
     REQUIRE(read);
 }
+
+TEST_CASE("the columns a query reads include their companions, once, unless the query overrides them",
+          "[covc][table][pages]") {
+    auto plain = columnOfKind("a", ColumnKind::Integer);
+    plain.tone = "aTone";
+    plain.tooltip = "aTip";
+    auto other = columnOfKind("b", ColumnKind::Integer);
+    other.tone = "aTone";
+    auto description =
+        described({plain, other, columnOfKind("aTone", ColumnKind::Text), columnOfKind("aTip", ColumnKind::Text),
+                   columnOfKind("rowTone", ColumnKind::Text), columnOfKind("lock", ColumnKind::Text)});
+    description.rowTone = "rowTone";
+    description.rowLock = "lock";
+    auto const asked = std::vector<std::string>{"a", "b", "a", "zz", ""};
+    CHECK(columnsWithCompanions(description, asked, {}) ==
+          std::vector<std::string>{"a", "aTone", "aTip", "b", "zz", "rowTone", "lock"});
+
+    CompanionOverrides overrides;
+    overrides.tone.insert("a");
+    overrides.tooltip.insert("a");
+    overrides.rowTone = true;
+    CHECK(columnsWithCompanions(description, asked, overrides) ==
+          std::vector<std::string>{"a", "b", "aTone", "zz", "lock"});
+    CHECK(companionColumns(description) == std::vector<std::string>{"aTip", "aTone", "lock", "rowTone"});
+    CHECK(companionColumns(described({columnOfKind("a", ColumnKind::Integer)})).empty());
+}
+
+TEST_CASE("a band names the columns it spans, or the description is refused", "[covc][table][pages]") {
+    std::vector<TableColumn> const columns{columnOfKind("a", ColumnKind::Integer),
+                                           columnOfKind("b", ColumnKind::Integer)};
+    auto const band = [](std::string label, std::vector<std::string> ids, std::vector<BandInfo> inner = {}) {
+        return BandInfo{.label = std::move(label), .unit = {}, .columns = std::move(ids), .bands = std::move(inner)};
+    };
+    auto const refusal = [&](std::vector<BandInfo> const& bands) {
+        auto const checked = checkBands(bands, columns);
+        REQUIRE_FALSE(checked);
+        CHECK(checked.error().code == TableErrorCode::SourceContract);
+        return checked.error().message;
+    };
+    CHECK(checkBands({}, columns));
+    CHECK(checkBands(std::vector<BandInfo>{band("All", {"a", "b"}, {band("One", {"a"})})}, columns));
+    CHECK(refusal({band("Empty", {})}).find("names no column") != std::string::npos);
+    CHECK(refusal({band("Ghost", {"a", "nope"})}).find("which is not a column of the table") != std::string::npos);
+    CHECK(refusal({band("Twice", {"a"}), band("Again", {"a"})}).find("another band of its level covers") !=
+          std::string::npos);
+    CHECK(refusal({band("Outer", {"a"}, {band("Inner", {"b"})})}).find("which its parent band does not") !=
+          std::string::npos);
+    auto const deep = band("L1", {"a"}, {band("L2", {"a"}, {band("L3", {"a"}, {band("L4", {"a"})})})});
+    CHECK(refusal({deep}).find("nests past 3 levels") != std::string::npos);
+    CHECK(bandRefusal(std::vector<BandInfo>{band("Free", {"anything"})}, {}) == std::nullopt);
+}

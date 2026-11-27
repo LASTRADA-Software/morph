@@ -59,6 +59,8 @@ set(MORPH_TABLE_TEST_SOURCES
     table/test_table_cov_c_parse.cpp
     table/test_table_cov_c_units.cpp
     table/test_table_cov_c_selection.cpp
+    table/test_table_cov_c_levels.cpp
+    table/test_table_cov_c_answer.cpp
     table/test_table_cov_c_pages.cpp
     table/test_table_state.cpp
     table/test_table_measure.cpp

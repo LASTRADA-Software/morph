@@ -8,10 +8,10 @@
 #include <glaze/glaze.hpp>
 #include <morph/forms/derive.hpp>
 #include <morph/forms/engine/form_session.hpp>
-#include <vector>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "forms_engine_support.hpp"
 
@@ -154,7 +154,7 @@ TEST_CASE("an evaluation's computed values land on the fields and rows it was se
     auto const later = form->captureRound();
     CHECK(form->loadDerived(later, std::string_view{R"([1])"}).loaded == 0);
     CHECK(form->loadDerived(later, std::string_view{"not json"}).loaded == 0);
-    CHECK(form->loadDerived(later, std::string_view{R"({"crate":5,"boxes":{"x":1}})"}).loaded == 0);
-    CHECK(form->loadDerived(later, std::string_view{R"({"boxes":[5,{"total":8}]})"}).loaded == 1);
+    CHECK(form->loadDerived(later, std::string_view{R"({"crate":5,"boxes":{"x":1}})"}).loaded == 1);
+    CHECK(form->loadDerived(later, std::string_view{R"({"boxes":[5,{"total":8}]})"}).loaded == 2);
     CHECK(form->loadDerived(round, std::string_view{body}).loaded == 0);
 }

@@ -6,6 +6,7 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/records.hpp>
+#include <morph/core/registry.hpp>
 #include <optional>
 #include <string>
 #include <typeindex>
@@ -86,4 +87,10 @@ TEST_CASE("two registrations of one record are the same only when every member a
     CHECK(differs([](RecordInfo& r) { r.privateKeys = true; }));
     CHECK(differs([](RecordInfo& r) { r.keyIsString = true; }));
     CHECK(differs([](RecordInfo& r) { r.table = true; }));
+}
+
+TEST_CASE("an unregistered pair has no schema and no required fields", "[covc][core][registry]") {
+    auto& dispatcher = morph::model::detail::ActionDispatcher::instance();
+    CHECK(dispatcher.actionSchema("CovC_NoSuchModel", "CovC_NoSuchAction").empty());
+    CHECK(dispatcher.requiredFieldsFor("CovC_NoSuchModel", "CovC_NoSuchAction") == nullptr);
 }
