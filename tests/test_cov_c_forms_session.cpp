@@ -9,6 +9,7 @@
 #include <morph/forms/derive.hpp>
 #include <morph/forms/engine/form_session.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -157,4 +158,81 @@ TEST_CASE("an evaluation's computed values land on the fields and rows it was se
     CHECK(form->loadDerived(later, std::string_view{R"({"crate":5,"boxes":{"x":1}})"}).loaded == 1);
     CHECK(form->loadDerived(later, std::string_view{R"({"boxes":[5,{"total":8}]})"}).loaded == 2);
     CHECK(form->loadDerived(round, std::string_view{body}).loaded == 0);
+}
+
+namespace {
+
+constexpr std::string_view kRows = R"({"type":"object","properties":{
+  "note":{"type":["string","null"],"x-order":0},
+  "rows":{"type":"array","x-order":1,"items":{"type":"object","properties":{
+    "name":{"type":["string","null"],"x-order":0}}}}},
+  "required":[]})";
+
+}  // namespace
+
+TEST_CASE("a field is found by its path, by row position or by row key, and refused when it is not there",
+          "[covc][forms][session]") {
+    Harness harness;
+    auto const form = harness.session("Rows", kRows);
+    form->prefill(R"({"note":"n","rows":[{"name":"a"},{"name":"b"}]})");
+    harness.settle();
+    CHECK(form->field("rows[1].name").draft() == "b");
+    auto const key = form->field("rows").rows().front()->key();
+    CHECK(form->field("rows#" + std::to_string(key) + ".name").draft() == "a");
+    for (std::string_view const missing : {"rows[5].name", "rows[x].name", "rows[0", "rows#x.name", "rows#999.name",
+                                           "rows[0]", "rows#1", "nosuch", "rows.name", "note.deeper", ""}) {
+        CAPTURE(missing);
+        CHECK_THROWS_AS(form->field(missing), std::out_of_range);
+    }
+    CHECK_FALSE(form->refusal("nosuch"));
+}
+
+TEST_CASE("rows are inserted, removed and restored where they stood", "[covc][forms][session]") {
+    Harness harness;
+    auto const form = harness.session("Rows", kRows);
+    form->prefill(R"({"rows":[{"name":"a"},{"name":"b"},{"name":"c"}]})");
+    harness.settle();
+    auto& rows = form->field("rows");
+    CHECK(form->field("note").insertRow(0) == 0);
+    auto const first = rows.insertRow(0);
+    CHECK(first != 0);
+    CHECK(rows.rows().front()->key() == first);
+    CHECK(rows.insertRow(99) != first);
+    CHECK(rows.rows().size() == 5);
+
+    CHECK(rows.removeRows(std::vector<std::uint64_t>{12345}).empty());
+    auto const keys = std::vector<std::uint64_t>{rows.rows().at(1)->key(), rows.rows().at(3)->key()};
+    auto removed = rows.removeRows(keys);
+    REQUIRE(removed.size() == 2);
+    CHECK(rows.rows().size() == 3);
+    rows.restoreRows({});
+    rows.restoreRows(std::move(removed));
+    CHECK(rows.rows().size() == 5);
+    CHECK(rows.rows().at(1)->key() == keys.front());
+}
+
+TEST_CASE("reverting a row restores its loaded cells, or removes a row added since the load",
+          "[covc][forms][session]") {
+    Harness harness;
+    auto const form = harness.session("Rows", kRows);
+    form->prefill(R"({"rows":[{"name":"a"}]})");
+    harness.settle();
+    auto const loaded = form->field("rows").rows().front()->key();
+    form->field("rows[0].name").text().set("changed");
+    harness.settle();
+    CHECK(form->modified("rows#" + std::to_string(loaded) + ".name"));
+    form->revert("rows#" + std::to_string(loaded));
+    harness.settle();
+    CHECK(form->field("rows[0].name").draft() == "a");
+    CHECK_FALSE(form->modified("rows#" + std::to_string(loaded) + ".name"));
+
+    auto const added = form->field("rows").addRow();
+    harness.settle();
+    CHECK(form->field("rows").rows().size() == 2);
+    form->revert("rows#" + std::to_string(added));
+    harness.settle();
+    CHECK(form->field("rows").rows().size() == 1);
+    form->revert("rows#999");
+    form->revert("rows#x");
+    CHECK(form->field("rows").rows().size() == 1);
 }
