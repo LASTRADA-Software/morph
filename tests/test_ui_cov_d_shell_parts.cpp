@@ -619,3 +619,47 @@ TEST_CASE("covd shell parts: the inbox sums the sources that answered and marks 
         CHECK(*inbox.count == count);
     }
 }
+
+TEST_CASE("covd shell parts: a shell that declares only some parts draws only those, and the others answer nothing",
+          "[ui][shell][parts][covd]") {
+    enum class Keep : unsigned char { Nothing, Modules, Search, Inbox, Principal, Context };
+    auto const keep = GENERATE(Keep::Nothing, Keep::Modules, Keep::Search, Keep::Inbox, Keep::Principal, Keep::Context);
+    ui::ShellParts all = fullParts();
+    ui::ShellParts parts;
+    parts.searchHint = "";
+    switch (keep) {
+        case Keep::Modules:
+            parts.modules = all.modules;
+            break;
+        case Keep::Search:
+            parts.search = all.search;
+            break;
+        case Keep::Inbox:
+            parts.inbox = all.inbox;
+            break;
+        case Keep::Principal:
+            parts.principal = all.principal;
+            break;
+        case Keep::Context:
+            parts.context = all.context;
+            break;
+        case Keep::Nothing:
+        default:
+            break;
+    }
+    Rig r{parts};
+    ui::ShellPartsModel& model = r.binding->model();
+    ui::ShellPartsView const view = model.view();
+    CHECK(view.context.shown == (keep == Keep::Context));
+    CHECK(view.search.shown == (keep == Keep::Search));
+    CHECK(view.inbox.shown == (keep == Keep::Inbox));
+    CHECK(view.principal.shown == (keep == Keep::Principal));
+    CHECK_FALSE(view.brand.shown);
+    CHECK_FALSE(view.help.shown);
+    CHECK(model.inboxScreen() == (keep == Keep::Inbox ? "lims.approvals" : ""));
+    CHECK(model.moduleCounts().size() == (keep == Keep::Modules ? 2U : 0U));
+    CHECK(model.contextReady() == (keep != Keep::Context));
+    model.setSearchText("x");
+    CHECK(model.allHits().empty());
+    CHECK_FALSE(model.hit(0, 0).has_value());
+}

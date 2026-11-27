@@ -204,3 +204,78 @@ TEST_CASE("covd shell frame: a compact menu of a frame with no person's menu end
     }
     CHECK(signOuts == 1);
 }
+
+TEST_CASE("covd shell frame: the foot and the brand mark follow the brand and the connection the parts give",
+          "[ui][shell][covd]") {
+    struct Case {
+        std::string_view brandTitle;
+        std::string_view brandIcon;
+        std::string_view version;
+        std::optional<morph::ui::ConnectionState> connection;
+        std::string mark;
+        bool footerShown;
+        std::string state;
+        std::string versionText;
+    };
+    using morph::ui::ConnectionState;
+    auto const c = GENERATE(
+        Case{"Lims", "", "v1", ConnectionState::Connected, "L", true, "Connected", "v1"},
+        Case{"Lims", "", "", ConnectionState::Reconnecting, "L", true, "Reconnecting…", ""},
+        Case{"Lims", "", "v2", std::nullopt, "L", true, "", "v2"},
+        Case{"Lims", "", "", std::nullopt, "L", false, "", ""},
+        Case{"", "", "v3", ConnectionState::Offline, "", true, "Offline", "v3"},
+        Case{"Lims", "flask", "", ConnectionState::Connected, "", true, "Connected", ""});
+    CAPTURE(c.brandTitle, c.brandIcon, c.version);
+    RecordingBackend backend;
+    ShellFrame frame{backend, nullptr, ShellFrameOptions{}};
+    ShellPartsView view = fullView();
+    view.brand = {.shown = true, .title = std::string{c.brandTitle}, .icon = std::string{c.brandIcon},
+                  .version = std::string{c.version}};
+    view.connection = c.connection;
+    frame.setParts(std::move(view));
+    auto const id = [&backend](std::string_view testId) {
+        return backend.find("Text", "testId", testId);
+    };
+    int const footer = backend.find("Row", "testId", "shell_footer").value();
+    CHECK((backend.prop(footer, "visible") != "false") == c.footerShown);
+    CHECK(backend.prop(backend.find("Badge", "testId", "shell_brand_mark").value(), "text") == c.mark);
+    if (c.connection) {
+        REQUIRE(id("shell_connection").has_value());
+        CHECK(backend.prop(*id("shell_connection"), "text") == c.state);
+    }
+    REQUIRE(id("shell_version").has_value());
+    CHECK(backend.prop(*id("shell_version"), "text") == c.versionText);
+}
+
+TEST_CASE("covd shell frame: the inbox shows a count only above zero, and the scope names the chosen option or its own label",
+          "[ui][shell][covd]") {
+    struct Case {
+        std::optional<long long> count;
+        std::optional<std::size_t> chosen;
+        bool counted;
+        std::string scopeLabel;
+    };
+    auto const c = GENERATE(Case{3, 1, true, "Osaka"}, Case{0, 0, false, "Koeln"}, Case{std::nullopt, std::nullopt, false, "Scope"},
+                            Case{5, 9, true, "Scope"});
+    RecordingBackend backend;
+    ShellFrame frame{backend, nullptr, ShellFrameOptions{}};
+    ShellPartsView view = fullView();
+    view.inbox.count = c.count;
+    view.context.chosen = c.chosen;
+    frame.setParts(std::move(view));
+    int const badge = backend.find("Badge", "testId", "shell_inbox_count").value();
+    CHECK((backend.prop(badge, "visible") != "false") == c.counted);
+    int const context = backend.find("Menu", "testId", "shell_context").value();
+    CHECK(backend.prop(context, "label").contains(c.scopeLabel));
+}
+
+TEST_CASE("covd shell frame: a search the parts do not offer has no field", "[ui][shell][covd]") {
+    RecordingBackend backend;
+    ShellFrame frame{backend, nullptr, ShellFrameOptions{}};
+    ShellPartsView view = fullView();
+    view.search.shown = false;
+    frame.setParts(std::move(view));
+    frame.setSearchText("abc");
+    int const box = backend.find("Column", "testId", "shell_search_box").value();
+    CHECK(backend.prop(box, "visible") == "false");
+}
