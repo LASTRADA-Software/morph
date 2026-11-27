@@ -909,6 +909,12 @@ public:
           _groups{std::move(groups)},
           _pinnedAt{nextPin()} {}
 
+    PinnedSource(PinnedSource const&) = delete;
+    PinnedSource& operator=(PinnedSource const&) = delete;
+    PinnedSource(PinnedSource&&) = delete;
+    PinnedSource& operator=(PinnedSource&&) = delete;
+    ~PinnedSource() override = default;
+
     /// @brief When the snapshot was pinned, among every pin of the process: larger for later.
     /// @return The pin's sequence number.
     [[nodiscard]] std::uint64_t pinnedAt() const noexcept { return _pinnedAt; }

@@ -1849,6 +1849,12 @@ public:
     LeveledSource(std::shared_ptr<DataSource const> const& base, std::vector<ColumnInfo> columns,
                   std::vector<LevelInput> levels);
 
+    LeveledSource(LeveledSource const&) = delete;
+    LeveledSource& operator=(LeveledSource const&) = delete;
+    LeveledSource(LeveledSource&&) = delete;
+    LeveledSource& operator=(LeveledSource&&) = delete;
+    ~LeveledSource() override = default;
+
     /// @brief The view's columns.
     /// @return The columns given.
     [[nodiscard]] std::span<ColumnInfo const> columns() const override { return _columns; }

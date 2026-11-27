@@ -629,6 +629,12 @@ public:
         grow(16);
     }
 
+    SparseKeys(SparseKeys const&) = delete;
+    SparseKeys& operator=(SparseKeys const&) = delete;
+    SparseKeys(SparseKeys&&) = delete;
+    SparseKeys& operator=(SparseKeys&&) = delete;
+    ~SparseKeys() = default;
+
     /// @brief A row's local index, its keys built at the first call.
     /// @param row The source row.
     /// @return Its index into the key columns `pointers` gives.

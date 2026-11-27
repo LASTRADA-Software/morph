@@ -175,6 +175,9 @@ struct FocusLink {
 // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 class MORPH_API GridSource {
 public:
+    GridSource() = default;
+    GridSource(GridSource const&) = delete;
+    GridSource& operator=(GridSource const&) = delete;
     virtual ~GridSource() = default;
 
     /// @brief The view's rows, fetched or not.
