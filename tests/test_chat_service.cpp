@@ -746,7 +746,7 @@ TEST_CASE("cancelling_a_turn_cancels_its_provider_call", "[chat][service]") {
     cancel.kind = std::string{chat::kCancelKind};
     auto const cancelReply = rig.call(std::move(cancel), cid);
     REQUIRE(cancelReply.kind == "ok");
-    CHECK(rig.fake->cancelled() == 1);
+    CHECK(morph::testing::waitUntil([&] { return rig.fake->cancelled() == 1; }));
     auto const state = rig.finished(turnId, cid);
     CHECK(state.status == chat::TurnStatus::Cancelled);
     rig.fake->release();
@@ -776,7 +776,7 @@ TEST_CASE("destroying_the_server_during_a_call_is_safe", "[chat][service]") {
     REQUIRE(waitFor([&] { return rig.fake->calls() == 1; }));
     rig.chatService.reset();
     rig.server.reset();
-    CHECK(rig.fake->cancelled() == 1);
+    CHECK(morph::testing::waitUntil([&] { return rig.fake->cancelled() == 1; }));
     rig.fake->release();
     morph::testing::storageOwner().runFor(50ms);
     CHECK(noteCount() == 0);
@@ -982,7 +982,7 @@ TEST_CASE("end_of_chat_stops_the_turn_and_ends_the_conversations", "[chat][conve
     end.kind = std::string{chat::kEndKind};
     auto const endReply = rig.call(std::move(end), cid);
     REQUIRE(endReply.kind == "ok");
-    CHECK(rig.fake->cancelled() == 1);
+    CHECK(morph::testing::waitUntil([&] { return rig.fake->cancelled() == 1; }));
     CHECK(rig.finished(running, cid).status == chat::TurnStatus::Cancelled);
     rig.fake->release();
     rig.fake->script(chat::Response{.text = "fresh", .calls = {}, .opaque = {}});
@@ -1227,7 +1227,7 @@ TEST_CASE("cancelling_stops_only_this_connections_turn", "[chat][service]") {
     cancel.kind = std::string{chat::kCancelKind};
     auto const cancelReply = rig.call(std::move(cancel), mine);
     REQUIRE(cancelReply.kind == "ok");
-    CHECK(rig.fake->cancelled() == 1);
+    CHECK(morph::testing::waitUntil([&] { return rig.fake->cancelled() == 1; }));
     CHECK(rig.state(myTurn, mine).status == chat::TurnStatus::Cancelled);
     CHECK(rig.state(theirTurn, theirs, "bob").status == chat::TurnStatus::Running);
     rig.fake->release();
