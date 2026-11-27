@@ -132,3 +132,52 @@ TEST_CASE("cov model columns: a column the description lacks, and a companion, a
     CHECK(missing);
     CHECK(companion);
 }
+
+TEST_CASE("cov model columns: a row's tone and label follow its record, and a locked row says why",
+          "[ui][table][display][cov]") {
+    TableHarness h;
+    auto const screen = h.mount(doc(
+        R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
+            "rowTone":{"row":"massTone"},"rowLabel":{"row":"name"},"showHeader":false})"));
+    replyDescribe(h, describeJson(companionDescription()));
+    CompanionRow locked = companionRow(1);
+    locked.insert_or_assign("lockedBy", table::Cell{std::string{"Ann"}});
+    replyPage(h, companionPage(h, {locked, companionRow(2)}));
+    int const table = h.backend.all("Table").front();
+    auto const first = h.backend.tableRow(table, morph::ui::Key{std::int64_t{1}});
+    auto const second = h.backend.tableRow(table, morph::ui::Key{std::int64_t{2}});
+    REQUIRE(first.has_value());
+    REQUIRE(second.has_value());
+    CHECK(h.backend.prop(table, "showHeader") != "true");
+    auto const marks = h.backend.rowMarks(table, morph::ui::Key{std::int64_t{1}});
+    REQUIRE(marks.has_value());
+    CHECK(marks->locked);
+    CHECK(marks->tooltip == "Ann");
+    auto const open = h.backend.rowMarks(table, morph::ui::Key{std::int64_t{2}});
+    REQUIRE(open.has_value());
+    CHECK_FALSE(open->locked);
+    CHECK(open->tooltip.empty());
+}
+
+TEST_CASE("cov model columns: bands over the description's columns draw, and a stray band is reported and dropped",
+          "[ui][table][display][cov]") {
+    TableHarness h;
+    auto const screen = h.mount(doc(
+        R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
+            "bands":[{"label":"Values","columns":{"lit":["mass","count"]}}]})"));
+    replyDescribe(h, describeJson(companionDescription()));
+    int const table = h.backend.all("Table").front();
+    CHECK(h.backend.prop(table, "bands").contains("Values"));
+    TableHarness stray;
+    auto const strayScreen = stray.mount(doc(
+        R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
+            "bands":[{"label":"Ghost","columns":{"lit":["ghost"]}}]})"));
+    replyDescribe(stray, describeJson(companionDescription()));
+    int const strayTable = stray.backend.all("Table").front();
+    CHECK_FALSE(stray.backend.prop(strayTable, "bands").contains("Ghost"));
+    bool reported = false;
+    for (auto const& report : stray.diagnostics) {
+        reported = reported || report.reason.contains("Ghost");
+    }
+    CHECK(reported);
+}
