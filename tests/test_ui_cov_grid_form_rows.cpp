@@ -4,10 +4,13 @@
 // kind under every column kind it can be read as.
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <cstdint>
+#include <functional>
 #include <morph/forms/engine/form_session.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/ui/form_rows.hpp>
+#include <morph/ui/grid.hpp>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -173,4 +176,69 @@ TEST_CASE("cov form rows: a per-row member is its string, else its draft, else e
     REQUIRE(cellAs<std::string>(count) != nullptr);
     CHECK(*cellAs<std::string>(count) == "3");
     CHECK(std::holds_alternative<std::monostate>(ui::detail::perRowCell(f.form->field("rows[1].word"))));
+}
+
+namespace {
+
+std::vector<table::ColumnInfo> infosOf(std::vector<std::string> const& ids) {
+    std::vector<table::ColumnInfo> infos;
+    for (std::string const& id : ids) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): a fixture list built once
+        infos.push_back(table::ColumnInfo{.id = id, .kind = ColumnKind::Text});
+    }
+    return infos;
+}
+
+using PerRow = std::vector<std::function<std::string(forms::RowState const&)>>;
+
+}  // namespace
+
+TEST_CASE("cov form rows: a source is refused what does not match the form's collection", "[ui][grid][cov]") {
+    using Catch::Matchers::ContainsSubstring;
+    GridFixture f = membersFixture(R"({"rows":[{"word":"a"}]})");
+    forms::FormSession& form = *f.form;
+    // Not a collection.
+    CHECK_THROWS_WITH((ui::FormRowsSource{form, "rows[0].word", infosOf({"word"}), {}, {}}),
+                      ContainsSubstring("is not a collection"));
+    // More members than columns.
+    CHECK_THROWS_WITH((ui::FormRowsSource{form, "rows", infosOf({"word"}), {"word", "count"}, {}}),
+                      ContainsSubstring("one member per column"));
+    // A reader per row for some columns only.
+    CHECK_THROWS_WITH((ui::FormRowsSource{form, "rows", infosOf({"word", "count"}), {}, PerRow(1)}),
+                      ContainsSubstring("one per-row member reader per column"));
+    // A member the rows do not have.
+    CHECK_THROWS_WITH((ui::FormRowsSource{form, "rows", infosOf({"nope"}), {}, {}}),
+                      ContainsSubstring("no member `nope` in `rows`"));
+    // A column with its own reader names no member of the rows.
+    PerRow readers(1);
+    readers.front() = [](forms::RowState const&) { return std::string{"word"}; };
+    CHECK_NOTHROW((ui::FormRowsSource{form, "rows", infosOf({"nope"}), {"nope"}, std::move(readers)}));
+    // Columns alone name their members.
+    ui::FormRowsSource const named{form, "rows", infosOf({"word", "count"}), {}, {}};
+    CHECK(named.columns().size() == 2);
+}
+
+TEST_CASE("cov form rows: a grid is refused a collection it cannot edit or a member it lacks", "[ui][grid][cov]") {
+    using Catch::Matchers::ContainsSubstring;
+    GridFixture f = membersFixture(R"({"rows":[{}]})");
+    auto const columnOf = [](std::string id, std::string field) {
+        return ui::GridColumn{.id = id, .label = id, .field = std::move(field), .value = {}};
+    };
+    std::vector<ui::GridColumn> columns;
+    columns.push_back(columnOf("word", "word"));
+    CHECK_THROWS_WITH((ui::FormGridSource{*f.form, "rows[0].word", columns, ui::FormatContext{}}),
+                      ContainsSubstring("is not a collection"));
+    columns.push_back(columnOf("nope", "nope"));
+    CHECK_THROWS_WITH((ui::FormGridSource{*f.form, "rows", columns, ui::FormatContext{}}),
+                      ContainsSubstring("no member `nope` in `rows`"));
+    columns.pop_back();
+    columns.push_back(
+        ui::GridColumn{.id = "shown", .label = "shown", .field = {}, .value = [](forms::RowState const&) {
+                           return std::string{"v"};
+                       }});
+    ui::FormGridSource source{*f.form, "rows", columns, ui::FormatContext{}};
+    ui::Key const first{std::int64_t{1}};
+    CHECK(source.text(first, "shown") == "v");  // a display column shows what its reader gives
+    CHECK(source.readOnly(first, "shown"));
+    CHECK(source.draft(first, "shown").empty());
 }
