@@ -505,6 +505,11 @@ add_library(morph ${_morph_library_type}
     src/ui/interpreter_table_model.cpp
     src/ui/interpreter_charts.cpp
     src/ui/interpreter_mount.cpp
+    src/ui/table_config.cpp
+    src/ui/table_dialogs.cpp
+    src/ui/table_state.cpp
+    src/ui/table_state_model.cpp
+    src/ui/table_views.cpp
     src/forms/field_control.cpp
     src/forms/form_session.cpp
     src/table/description.cpp

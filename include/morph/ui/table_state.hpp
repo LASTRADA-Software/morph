@@ -10,6 +10,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <morph/export.hpp>
 #include <optional>
 #include <random>
 #include <stdexcept>
@@ -18,13 +19,6 @@
 #include <utility>
 #include <vector>
 
-#include "../core/bridge.hpp"
-#include "../core/callback_scope.hpp"
-#include "../core/completion.hpp"
-#include "../core/executor.hpp"
-#include "../reactive/scheduler.hpp"
-#include "../table/state_store.hpp"
-#include "interpreter.hpp"
 #include "table_state_model.hpp"
 
 /// @file
@@ -36,6 +30,9 @@
 
 namespace morph::ui {
 
+class Dispatcher;
+class ModelChannel;
+
 /// @brief A table-state store over the server's `morph.tableState` model, so table state lives in the application's
 ///        preferences store under the person the server verified.
 ///
@@ -45,7 +42,7 @@ namespace morph::ui {
 /// `read` calls by offset, started again when its revision changes meanwhile. A document over a part's size is saved
 /// as parts under one upload id; one the server refuses because its person has `kMaxTableStateUploads` uploads open
 /// is sent again after a short wait, so a screen of many large states unmounting at once saves them all.
-class PreferencesTableStateStore final : public table::ITableStateStore {
+class MORPH_API PreferencesTableStateStore final : public table::ITableStateStore {
 public:
     /// @brief A store calling through @p dispatcher.
     /// @param dispatcher Where model calls go; bound to `morph.tableState` once, at the first call. Borrowed: it must
@@ -67,20 +64,13 @@ public:
     ///        `Session` calls it with its own scheduler and `tableStateTimeout` when its `tableState` is this store.
     /// @param scheduler  The timers. Borrowed: it must outlive the store.
     /// @param retryDelay How long such a save waits before it is sent again.
-    void retryOn(reactive::Scheduler& scheduler, std::chrono::milliseconds retryDelay) {
-        _scheduler = &scheduler;
-        _retryDelay = retryDelay;
-    }
+    void retryOn(reactive::Scheduler& scheduler, std::chrono::milliseconds retryDelay);
 
     /// @brief Reads a stored document, in the owner's turn's one `load` call.
     /// @param key Which table's state, and which part.
     /// @return The stored document, or nothing when none is stored.
     [[nodiscard]] async::Completion<std::optional<table::StoredTableState>> load(
-        table::TableStateKey const& key) override {
-        auto [completion, promise] = async::Completion<std::optional<table::StoredTableState>>::makeSettleable(_owner);
-        queue(std::make_shared<Reading>(Reading{.key = key, .promise = std::move(promise)}));
-        return std::move(completion);
-    }
+        table::TableStateKey const& key) override;
 
     /// @brief Stores @p json under the `expected` rule of `ITableStateStore::save`.
     /// @param key      Which table's state, and which part.
@@ -88,42 +78,12 @@ public:
     /// @param expected The revision the caller loaded, or empty.
     /// @return What the server answered.
     [[nodiscard]] async::Completion<table::SaveResult> save(table::TableStateKey const& key, std::string json,
-                                                            std::string expected = {}) override {
-        auto [completion, promise] = async::Completion<table::SaveResult>::makeSettleable(_owner);
-        auto upload = std::make_shared<Upload>(Upload{.key = key,
-                                                      .expected = std::move(expected),
-                                                      .id = {},
-                                                      .text = std::move(json),
-                                                      .offset = 0,
-                                                      .promise = std::move(promise),
-                                                      .retries = 0});
-        if (upload->text.size() > kPartBytes) {
-            upload->id = std::format("{:016x}", _random());
-        }
-        sendPart(upload);
-        return std::move(completion);
-    }
+                                                            std::string expected = {}) override;
 
     /// @brief Forgets a stored document.
     /// @param key Which table's state, and which part.
     /// @return Whether a document was stored.
-    [[nodiscard]] async::Completion<bool> remove(table::TableStateKey const& key) override {
-        auto [completion, promise] = async::Completion<bool>::makeSettleable(_owner);
-        auto const settle = std::make_shared<async::Completion<bool>::Promise>(std::move(promise));
-        channel()
-            ->execute("remove", model::ActionTraits<TableStateRemove>::toJson(TableStateRemove{.key = key}),
-                      CallOptions{})
-            .then(_scope,
-                  [settle](std::string const& reply) {
-                      try {
-                          settle->resolve(model::ActionTraits<TableStateRemove>::resultFromJson(reply).removed);
-                      } catch (...) {
-                          settle->reject(std::current_exception());
-                      }
-                  })
-            .onError(_scope, [settle](std::exception_ptr const& error) { settle->reject(error); });
-        return std::move(completion);
-    }
+    [[nodiscard]] async::Completion<bool> remove(table::TableStateKey const& key) override;
 
     /// @brief Whether the store keeps the `shared` part for everyone.
     /// @return `true`: the server keeps it with no person.
@@ -137,24 +97,7 @@ public:
     /// @return What the server answered; the call's failure when the server refused it.
     [[nodiscard]] async::Completion<table::SaveResult> publish(table::TableStateKey const& key,
                                                                table::ViewOperation const& operation,
-                                                               std::string expected) override {
-        auto [completion, promise] = async::Completion<table::SaveResult>::makeSettleable(_owner);
-        auto const settle = std::make_shared<async::Completion<table::SaveResult>::Promise>(std::move(promise));
-        TableStatePublish const request{
-            .key = key, .operation = table::writeViewOperation(operation), .expected = std::move(expected)};
-        channel()
-            ->execute("publish", model::ActionTraits<TableStatePublish>::toJson(request), CallOptions{})
-            .then(_scope,
-                  [settle](std::string const& reply) {
-                      try {
-                          settle->resolve(model::ActionTraits<TableStatePublish>::resultFromJson(reply).result);
-                      } catch (...) {
-                          settle->reject(std::current_exception());
-                      }
-                  })
-            .onError(_scope, [settle](std::exception_ptr const& error) { settle->reject(error); });
-        return std::move(completion);
-    }
+                                                               std::string expected) override;
 
 private:
     /// The most bytes one `save` part carries: the server's default part size.
@@ -184,176 +127,30 @@ private:
         int retries = 0;
     };
 
-    [[nodiscard]] std::shared_ptr<ModelChannel> const& channel() {
-        if (_channel == nullptr) {
-            _channel = _dispatcher->bind(std::string{kTableStateModel}, bridge::BindSharing::Private, {});
-        }
-        return _channel;
-    }
+    [[nodiscard]] std::shared_ptr<ModelChannel> const& channel();
 
     /// Adds a load to the owner's turn's batch, posting the batch's call with the first.
-    void queue(std::shared_ptr<Reading> reading) {
-        _batch.push_back(std::move(reading));
-        if (_batch.size() == 1) {
-            _owner->post(_scope.token().guard([this] { flushLoads(); }));
-        }
-    }
+    void queue(std::shared_ptr<Reading> reading);
 
     /// Sends the turn's loads, in calls of at most `kMaxTableStateKeys` keys.
-    void flushLoads() {
-        std::vector<std::shared_ptr<Reading>> all = std::move(_batch);
-        _batch.clear();
-        for (std::size_t first = 0; first < all.size(); first += kMaxTableStateKeys) {
-            auto const last = std::min(all.size(), first + kMaxTableStateKeys);
-            sendLoads(std::make_shared<std::vector<std::shared_ptr<Reading>>>(
-                all.begin() + static_cast<std::ptrdiff_t>(first), all.begin() + static_cast<std::ptrdiff_t>(last)));
-        }
-    }
+    void flushLoads();
 
-    void sendLoads(std::shared_ptr<std::vector<std::shared_ptr<Reading>>> const& batch) {
-        TableStateLoad request;
-        for (auto const& reading : *batch) {
-            request.keys.push_back(reading->key);
-        }
-        channel()
-            ->execute("load", model::ActionTraits<TableStateLoad>::toJson(request), CallOptions{})
-            .then(_scope,
-                  [this, batch](std::string const& reply) {
-                      TableStateLoaded loaded;
-                      try {
-                          loaded = model::ActionTraits<TableStateLoad>::resultFromJson(reply);
-                          if (loaded.entries.size() != batch->size()) {
-                              throw std::runtime_error{"a table-state load answered " +
-                                                       std::to_string(loaded.entries.size()) + " entries for " +
-                                                       std::to_string(batch->size()) + " keys"};
-                          }
-                      } catch (...) {
-                          for (auto const& reading : *batch) {
-                              reading->promise.reject(std::current_exception());
-                          }
-                          return;
-                      }
-                      for (std::size_t at = 0; at < batch->size(); ++at) {
-                          // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): loaded.entries.size() == batch->size(), checked above
-                          start((*batch)[at], std::move(loaded.entries[at]));
-                      }
-                  })
-            .onError(_scope, [batch](std::exception_ptr const& error) {
-                for (auto const& reading : *batch) {
-                    reading->promise.reject(error);
-                }
-            });
-    }  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the load registers are owned by the scope.
+    void sendLoads(
+        std::shared_ptr<std::vector<std::shared_ptr<Reading>>> const&
+            batch);  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the load registers are owned by the scope.
 
-    void start(std::shared_ptr<Reading> const& reading, TableStateHead head) {
-        if (head.deferred) {
-            queue(reading);  // the reply was full: asked for again in the next call
-            return;
-        }
-        if (!head.error.empty()) {
-            reading->promise.reject(std::make_exception_ptr(std::runtime_error{head.error}));
-            return;
-        }
-        if (!head.found) {
-            reading->promise.resolve(std::nullopt);
-            return;
-        }
-        reading->revision = std::move(head.revision);
-        reading->size = head.size;
-        reading->text = std::move(head.text);
-        readMore(reading);
-    }
+    void start(std::shared_ptr<Reading> const& reading, TableStateHead head);
 
-    void readMore(std::shared_ptr<Reading> const& reading) {
-        if (reading->text.size() >= reading->size) {
-            reading->promise.resolve(
-                table::StoredTableState{.json = std::move(reading->text), .revision = std::move(reading->revision)});
-            return;
-        }
-        TableStateRead const request{
-            .key = reading->key, .revision = reading->revision, .offset = reading->text.size()};
-        channel()
-            ->execute("read", model::ActionTraits<TableStateRead>::toJson(request), CallOptions{})
-            .then(_scope,
-                  [this, reading](std::string const& reply) {
-                      TableStateChunk chunk;
-                      try {
-                          chunk = model::ActionTraits<TableStateRead>::resultFromJson(reply);
-                      } catch (...) {
-                          reading->promise.reject(std::current_exception());
-                          return;
-                      }
-                      if (chunk.revision != reading->revision) {
-                          if (++reading->restarts > kMaxRestarts) {
-                              reading->promise.reject(std::make_exception_ptr(
-                                  std::runtime_error{"a table's state kept changing while it was read"}));
-                              return;
-                          }
-                          reading->text.clear();
-                          queue(reading);
-                          return;
-                      }
-                      if (chunk.text.empty()) {
-                          reading->promise.reject(
-                              std::make_exception_ptr(std::runtime_error{"a table's state ended before its size"}));
-                          return;
-                      }
-                      reading->text += chunk.text;
-                      readMore(reading);
-                  })
-            .onError(_scope, [reading](std::exception_ptr const& error) { reading->promise.reject(error); });
-    }  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the read registers are owned by the scope.
+    void readMore(
+        std::shared_ptr<Reading> const&
+            reading);  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the read registers are owned by the scope.
 
     /// Sends a save the server refused for its open uploads again, after `retryDelay`.
-    void retryLater(std::shared_ptr<Upload> const& upload) {
-        auto send = _scope.token().guard([this, upload] { sendPart(upload); });
-        if (_scheduler == nullptr) {
-            _owner->post(std::move(send));
-            return;
-        }
-        std::uint64_t const token = ++_lastRetry;
-        _retries.insert_or_assign(token,
-                                  _scheduler->after(_retryDelay, _scope.token().guard([this, token, send] mutable {
-                                      _retries.erase(token);
-                                      send();
-                                  })));
-    }
+    void retryLater(std::shared_ptr<Upload> const& upload);
 
-    void sendPart(std::shared_ptr<Upload> const& upload) {
-        std::string_view const rest = std::string_view{upload->text}.substr(upload->offset);
-        std::size_t const length = upload->id.empty() ? rest.size() : detail::utf8Prefix(rest, kPartBytes);
-        TableStateSave const request{.key = upload->key,
-                                     .expected = upload->expected,
-                                     .upload = upload->id,
-                                     .offset = upload->offset,
-                                     .text = std::string{rest.substr(0, length)},
-                                     .last = length == rest.size()};
-        channel()
-            ->execute("save", model::ActionTraits<TableStateSave>::toJson(request), CallOptions{})
-            .then(_scope,
-                  [this, upload, length, last = request.last](std::string const& reply) {
-                      table::SaveResult result;
-                      try {
-                          result = model::ActionTraits<TableStateSave>::resultFromJson(reply).result;
-                      } catch (...) {
-                          upload->promise.reject(std::current_exception());
-                          return;
-                      }
-                      if (upload->offset == 0 && result.outcome == table::SaveOutcome::Refused &&
-                          result.reason == kTableStateUploadsBusy && upload->retries < kMaxUploadRetries) {
-                          ++upload->retries;
-                          retryLater(upload);
-                          return;
-                      }
-                      if (last) {
-                          upload->promise.resolve(std::move(result));
-                          return;
-                      }
-                      upload->offset += length;
-                      sendPart(upload);
-                  })
-            .onError(_scope, [upload](std::exception_ptr const& error) { upload->promise.reject(error); });
-    }  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the save registers are owned by the scope.
+    void sendPart(
+        std::shared_ptr<Upload> const&
+            upload);  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the save registers are owned by the scope.
 
     Dispatcher* _dispatcher;
     exec::IExecutor* _owner;
@@ -409,7 +206,7 @@ enum class StateParts : std::uint8_t {
 /// the changed parts, and nothing is written until a change.
 ///
 /// Everything runs on the owner, where the store delivers its completions.
-class TableStates {
+class MORPH_API TableStates {
 public:
     /// @brief The kept states of a session.
     /// @param store     Where states are loaded from and saved to.
@@ -418,12 +215,7 @@ public:
     /// @param debounce  How long a key must stay unchanged before its save goes out.
     /// @throws std::invalid_argument for a null store.
     TableStates(std::shared_ptr<table::ITableStateStore> store, exec::IExecutor& owner MORPH_LIFETIMEBOUND,
-                reactive::Scheduler* scheduler, std::chrono::milliseconds debounce)
-        : _store{std::move(store)}, _owner{&owner}, _scheduler{scheduler}, _debounce{debounce} {
-        if (_store == nullptr) {
-            throw std::invalid_argument{"TableStates: a null store"};
-        }
-    }
+                reactive::Scheduler* scheduler, std::chrono::milliseconds debounce);
 
     TableStates(TableStates const&) = delete;
     TableStates& operator=(TableStates const&) = delete;
@@ -434,78 +226,31 @@ public:
     /// @brief The kept copy of a key's state: what the store held when it was loaded, or what was last saved.
     /// @param key The key.
     /// @return It; nothing when the key was not loaded, or nothing is stored under it.
-    [[nodiscard]] std::optional<table::StoredTableState> kept(table::TableStateKey const& key) const {
-        auto const found = _entries.find(tie(key));
-        return found == _entries.end() ? std::nullopt : found->second.kept;
-    }
+    [[nodiscard]] std::optional<table::StoredTableState> kept(table::TableStateKey const& key) const;
 
     /// @brief A key's stored state: the kept copy at once, with no call, when the key is known; otherwise from the
     ///        store, one load in flight per key however many ask.
     /// @param key The key.
     /// @return The stored document, or nothing; the store's failure when the load fails.
-    [[nodiscard]] async::Completion<std::optional<table::StoredTableState>> load(table::TableStateKey const& key) {
-        auto [completion, promise] = async::Completion<std::optional<table::StoredTableState>>::makeSettleable(_owner);
-        Entry& entry = _entries[tie(key)];
-        if (entry.known) {
-            promise.resolve(entry.kept);
-            return std::move(completion);
-        }
-        entry.waiters.push_back(std::move(promise));
-        if (!entry.loading) {
-            startLoad(key, entry);
-        }
-        return std::move(completion);
-    }
+    [[nodiscard]] async::Completion<std::optional<table::StoredTableState>> load(table::TableStateKey const& key);
 
     /// @brief Marks @p parts of the key's state changed to those of @p document; a debounced save, one in flight per
     ///        key.
     /// @param key      The key.
     /// @param document The arrangement now; only @p parts of it are taken.
     /// @param parts    The parts that changed.
-    void changed(table::TableStateKey const& key, table::StateDocument const& document, StateParts parts) {
-        Entry& entry = _entries[tie(key)];
-        if (entry.settled) {
-            take(entry.current, document, parts);
-        } else {
-            take(entry.held, document, parts);
-            entry.heldParts = entry.heldParts | parts;
-            if (entry.known && !entry.loading) {
-                settle(entry, entry.kept);
-            } else if (!entry.loading) {
-                startLoad(key, entry);
-            }
-        }
-        entry.dirty = true;
-        if (_scheduler == nullptr) {
-            trySave(key);
-            return;
-        }
-        entry.timer = _scheduler->after(_debounce, _scope.token().guard([this, key] { trySave(key); }));
-    }
+    void changed(table::TableStateKey const& key, table::StateDocument const& document, StateParts parts);
 
     /// @brief Takes @p document as the key's state now, without saving it, as a table does when it starts from a view
     ///        while nothing is stored: the next change is saved on top of it, so the rest of what it started from is
     ///        kept. Ignored until the key's load settles, and once a change has been made.
     /// @param key      The key.
     /// @param document The state the table started from.
-    void start(table::TableStateKey const& key, table::StateDocument document) {
-        auto const found = _entries.find(tie(key));
-        if (found == _entries.end() || !found->second.settled || found->second.dirty) {
-            return;
-        }
-        found->second.current = std::move(document);
-    }
+    void start(table::TableStateKey const& key, table::StateDocument document);
 
     /// @brief Saves a key's unsaved change now, as a table does when it unmounts; held until its load settles.
     /// @param key The key.
-    void flush(table::TableStateKey const& key) {
-        auto const found = _entries.find(tie(key));
-        if (found == _entries.end()) {
-            return;
-        }
-        found->second.timer.cancel();
-        trySave(key);
-    }
+    void flush(table::TableStateKey const& key);
 
     /// @brief Sets the one handler told of every save that did not end `Saved`: the store's completion failed (as
     ///        `Refused` with the failure's text as `reason`), or it answered `Refused` or `Conflict`.
@@ -522,14 +267,7 @@ public:
     ///        A debounced save of the key still goes out, with its own document.
     /// @param key   The key.
     /// @param state What the store holds now.
-    void keep(table::TableStateKey const& key, table::StoredTableState state) {
-        Entry& entry = _entries[tie(key)];
-        entry.kept = std::move(state);
-        entry.known = true;
-        if (!entry.settled && !entry.loading) {
-            settle(entry, entry.kept);
-        }
-    }
+    void keep(table::TableStateKey const& key, table::StoredTableState state);
 
 private:
     using Key = std::tuple<std::string, std::string, std::string, std::string, std::string>;
@@ -560,119 +298,26 @@ private:
     }
 
     /// Copies @p parts of @p from into @p into, with what each part carries for an absent column.
-    static void take(table::StateDocument& into, table::StateDocument const& from, StateParts parts) {
-        if (holds(parts, StateParts::Layout)) {
-            into.layout = from.layout;
-            into.carried.columns = from.carried.columns;
-            into.carried.groups = from.carried.groups;
-        }
-        if (holds(parts, StateParts::Sort)) {
-            into.sort = from.sort;
-            into.carried.sort = from.carried.sort;
-        }
-        if (holds(parts, StateParts::Filters)) {
-            into.filters = from.filters;
-            into.carried.filters = from.carried.filters;
-            into.carried.groupFilters = from.carried.groupFilters;
-        }
-        if (holds(parts, StateParts::View)) {
-            into.view = from.view;
-        }
-    }
+    static void take(table::StateDocument& into, table::StateDocument const& from, StateParts parts);
 
-    void startLoad(table::TableStateKey const& key, Entry& entry) {
-        entry.loading = true;
-        _store->load(key)
-            .then(_scope, [this, key](std::optional<table::StoredTableState> const& stored) { loaded(key, stored); })
-            .onError(_scope, [this, key](std::exception_ptr const& error) { loadFailed(key, error); });
-    }  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the load registers are owned by the scope.
+    void startLoad(
+        table::TableStateKey const& key,
+        Entry&
+            entry);  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the load registers are owned by the scope.
 
-    void loaded(table::TableStateKey const& key, std::optional<table::StoredTableState> const& stored) {
-        Entry& entry = _entries[tie(key)];
-        entry.loading = false;
-        bool const wasKnown = entry.known;
-        if (!wasKnown) {
-            entry.kept = stored;
-            entry.known = true;
-        }
-        if (!entry.settled || (entry.fromFailure && !wasKnown && !entry.dirty && !entry.saving)) {
-            settle(entry, entry.kept);
-        }
-        for (auto& waiter : std::exchange(entry.waiters, {})) {
-            waiter.resolve(entry.kept);
-        }
-        if (entry.dirty) {
-            trySave(key);
-        }
-    }
+    void loaded(table::TableStateKey const& key, std::optional<table::StoredTableState> const& stored);
 
-    void loadFailed(table::TableStateKey const& key, std::exception_ptr const& error) {
-        Entry& entry = _entries[tie(key)];
-        entry.loading = false;
-        if (!entry.settled) {
-            settle(entry, std::nullopt);
-            entry.fromFailure = true;
-        }
-        for (auto& waiter : std::exchange(entry.waiters, {})) {
-            waiter.reject(error);
-        }
-        if (entry.dirty) {
-            trySave(key);
-        }
-    }
+    void loadFailed(table::TableStateKey const& key, std::exception_ptr const& error);
 
     /// Decides the document changes are made to: @p stored as `readState` reads it, or an empty one, with the held
     /// changes applied.
-    static void settle(Entry& entry, std::optional<table::StoredTableState> const& stored) {
-        table::StateDocument base;
-        if (stored) {
-            if (auto read = table::readState(stored->json)) {
-                base = std::move(*read);
-            }
-        }
-        take(base, entry.held, entry.heldParts);
-        entry.current = std::move(base);
-        entry.held = {};
-        entry.heldParts = {};
-        entry.settled = true;
-        entry.fromFailure = false;
-    }
+    static void settle(Entry& entry, std::optional<table::StoredTableState> const& stored);
 
-    void trySave(table::TableStateKey const& key) {
-        auto const found = _entries.find(tie(key));
-        if (found == _entries.end()) {
-            return;
-        }
-        Entry& entry = found->second;
-        if (!entry.settled || entry.saving || !entry.dirty || entry.timer.active()) {
-            return;
-        }
-        std::string const json = table::writeState(entry.current);
-        entry.dirty = false;
-        entry.saving = true;
-        _store->save(key, json)
-            .then(_scope, [this, key, json](table::SaveResult const& result) { saved(key, json, result); })
-            .onError(_scope, [this, key](std::exception_ptr const& error) {
-                saved(
-                    key, {},
-                    table::SaveResult{
-                        .outcome = table::SaveOutcome::Refused, .revision = {}, .reason = detail::failureText(error)});
-            });
-    }  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the save registers are owned by the scope.
+    void trySave(
+        table::TableStateKey const&
+            key);  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the save registers are owned by the scope.
 
-    void saved(table::TableStateKey const& key, std::string const& json, table::SaveResult const& result) {
-        Entry& entry = _entries[tie(key)];
-        entry.saving = false;
-        if (result.outcome == table::SaveOutcome::Saved) {
-            entry.kept = table::StoredTableState{.json = json, .revision = result.revision};
-            entry.known = true;
-        } else if (_onSaveFailed) {
-            _onSaveFailed(key, result);
-        }
-        if (entry.dirty) {
-            trySave(key);
-        }
-    }
+    void saved(table::TableStateKey const& key, std::string const& json, table::SaveResult const& result);
 
     std::shared_ptr<table::ITableStateStore> _store;
     exec::IExecutor* _owner;

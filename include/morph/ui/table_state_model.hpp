@@ -3,8 +3,6 @@
 #pragma once
 #include <algorithm>
 #include <chrono>
-#include <core/async/ExecutorContext.hpp>
-#include <core/async/ParkedWork.hpp>
 #include <coroutine>
 #include <cstddef>
 #include <cstdint>
@@ -13,6 +11,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <morph/export.hpp>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -21,11 +20,6 @@
 #include <utility>
 #include <vector>
 
-#include "../core/coroutine.hpp"
-#include "../core/model.hpp"
-#include "../core/registry.hpp"
-#include "../session/session.hpp"
-#include "../session/session_auth.hpp"
 #include "../table/state_store.hpp"
 #include "preferences.hpp"
 
@@ -218,38 +212,19 @@ inline constexpr glz::opts kStoredRead{.null_terminated = false, .error_on_unkno
 /// @param text   The text.
 /// @param digits How many digits, at most 64.
 /// @return The digits.
-[[nodiscard]] inline std::string sha256Hex(std::string_view text, std::size_t digits) {
-    std::string const digest = session::detail::sha256(text);
-    std::string out;
-    out.reserve(digits);
-    for (char const byte : digest) {
-        if (out.size() >= digits) {
-            break;
-        }
-        out += std::format("{:02x}", static_cast<unsigned char>(byte));
-    }
-    out.resize(std::min(out.size(), digits));
-    return out;
-}
+[[nodiscard]] MORPH_API std::string sha256Hex(std::string_view text, std::size_t digits);
 
 /// @brief The preferences scope a key's entries are kept under: `morph.table.` and 32 hex digits of the digest of
 ///        its `model`, `table` and `qualifier`, so the scope fits a preference name's length whatever the ids are.
 /// @param key The key.
 /// @return The scope.
-[[nodiscard]] inline std::string tableStateScope(table::TableStateKey const& key) {
-    return std::string{kTableStateScopePrefix} + "." +
-           sha256Hex(key.model + "\x1F" + key.table + "\x1F" + key.qualifier, 32);
-}
+[[nodiscard]] MORPH_API std::string tableStateScope(table::TableStateKey const& key);
 
 /// @brief A document's revision: 16 hex digits of the digest of the revision it replaces and its text.
 /// @param previous The replaced revision; empty when none.
 /// @param document The document's text.
 /// @return The revision.
-[[nodiscard]] inline std::string tableStateRevision(std::string const& previous, std::string_view document) {
-    std::string input = previous;
-    input += document;
-    return sha256Hex(input, 16);
-}
+[[nodiscard]] MORPH_API std::string tableStateRevision(std::string const& previous, std::string_view document);
 
 /// @brief How many bytes a byte takes inside a JSON string as `quotedSegment` writes it.
 /// @param byte The byte.
@@ -272,45 +247,7 @@ inline constexpr glz::opts kStoredRead{.null_terminated = false, .error_on_unkno
 /// @brief @p text as a JSON string, quotes included.
 /// @param text The text.
 /// @return The JSON string.
-[[nodiscard]] inline std::string quotedSegment(std::string_view text) {
-    std::string out;
-    out.reserve(text.size() + 2);
-    out += '"';
-    for (char const each : text) {
-        auto const byte = static_cast<unsigned char>(each);
-        switch (byte) {
-            case '"':
-                out += "\\\"";
-                break;
-            case '\\':
-                out += "\\\\";
-                break;
-            case '\b':
-                out += "\\b";
-                break;
-            case '\f':
-                out += "\\f";
-                break;
-            case '\n':
-                out += "\\n";
-                break;
-            case '\r':
-                out += "\\r";
-                break;
-            case '\t':
-                out += "\\t";
-                break;
-            default:
-                if (byte < 0x20) {
-                    out += std::format("\\u{:04x}", byte);
-                } else {
-                    out += each;
-                }
-        }
-    }
-    out += '"';
-    return out;
-}
+[[nodiscard]] MORPH_API std::string quotedSegment(std::string_view text);
 
 /// @brief The length of the UTF-8 sequence @p lead starts; 1 for a byte that starts none.
 /// @param lead The byte.
@@ -329,46 +266,20 @@ inline constexpr glz::opts kStoredRead{.null_terminated = false, .error_on_unkno
 /// @param text  The text.
 /// @param limit The most bytes; at least 4.
 /// @return The prefix's length.
-[[nodiscard]] inline std::size_t utf8Prefix(std::string_view text, std::size_t limit) noexcept {
-    if (text.size() <= limit) {
-        return text.size();
-    }
-    std::size_t end = limit;
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): end <= limit < text.size(), and the loop only lowers it
-    while (end > 0 && (static_cast<unsigned char>(text[end]) & 0xC0U) == 0x80U && limit - end < 3) {
-        --end;
-    }
-    return end == 0 ? limit : end;
-}
+[[nodiscard]] MORPH_API std::size_t utf8Prefix(std::string_view text, std::size_t limit) noexcept;
 
 /// @brief How many bytes @p text takes as it travels in a `load` reply: escaped once as a JSON string in the reply,
 ///        and the reply escaped again as the envelope's body.
 /// @param text The text.
 /// @return Its length on the wire, quotes excluded.
-[[nodiscard]] inline std::uint64_t wireBytes(std::string_view text) noexcept {
-    std::uint64_t out = 0;
-    for (char const each : text) {
-        auto const byte = static_cast<unsigned char>(each);
-        switch (escapedBytes(byte)) {
-            case 1:
-                out += 1;
-                break;
-            case 2:  // a short escape: its backslash escaped again, and the escaped quote or backslash too
-                out += 2 + ((byte == '"' || byte == '\\') ? 2 : 1);
-                break;
-            default:  // a six-byte unicode escape: its backslash escaped again
-                out += 7;
-        }
-    }
-    return out;
-}
+[[nodiscard]] MORPH_API std::uint64_t wireBytes(std::string_view text) noexcept;
 
 /// @brief A lock per name for coroutines: one holder at a time, the others waiting their turn in order and resumed
 ///        where they were running.
-class TableStateLocks {
+class MORPH_API TableStateLocks {
 public:
     /// @brief The held lock of one name, released when it is destroyed.
-    class Lease {
+    class MORPH_API Lease {
     public:
         /// @brief A lease of @p name.
         /// @param locks The locks. Borrowed.
@@ -381,11 +292,7 @@ public:
         Lease(Lease&& other) noexcept : _locks{std::exchange(other._locks, nullptr)}, _name{std::move(other._name)} {}
         Lease& operator=(Lease&&) = delete;
         /// @brief Releases the lock, handing it to the next waiter.
-        ~Lease() {
-            if (_locks != nullptr) {
-                _locks->release(_name);
-            }
-        }
+        ~Lease();
 
     private:
         TableStateLocks* _locks;
@@ -393,7 +300,7 @@ public:
     };
 
     /// @brief The awaiter `lock` returns.
-    class Acquire {
+    class MORPH_API Acquire {
     public:
         /// @brief An acquisition of @p name.
         /// @param locks The locks. Borrowed.
@@ -405,20 +312,7 @@ public:
         Acquire& operator=(Acquire&&) = delete;
         /// @brief Leaves the queue when the waiting coroutine is destroyed before its turn, and passes the lock on
         ///        when it was handed the lock but destroyed before it ran.
-        ~Acquire() {
-            bool handed = false;
-            {
-                std::scoped_lock const lock{_locks->_mutex};
-                if (auto const held = _queued ? _locks->_held.find(_name) : _locks->_held.end();
-                    held != _locks->_held.end()) {
-                    std::erase(held->second, this);
-                }
-                handed = _handed;
-            }
-            if (handed) {
-                _locks->release(_name);
-            }
-        }
+        ~Acquire();
 
         /// @brief Never ready before `await_suspend` has decided.
         /// @return `false`.
@@ -428,30 +322,11 @@ public:
         /// @brief Takes the lock when it is free, or queues for it.
         /// @param awaiting The coroutine taking it.
         /// @return `false` when taken at once; `true` when queued.
-        bool await_suspend(std::coroutine_handle<> awaiting) {
-            std::scoped_lock const lock{_locks->_mutex};
-            // `find` then `emplace`, not `try_emplace`: the latter's already-present path, inlined here, makes GCC at
-            // -O3 report a `-Wstrict-overflow` inside the deque's destructor.
-            auto const held = _locks->_held.find(_name);
-            if (held == _locks->_held.end()) {
-                _locks->_held.emplace(_name, std::deque<Acquire*>{});
-                _handed = true;
-                return false;
-            }
-            _awaiting = awaiting;
-            _context = ::core::async::ResumeTarget::current();
-            _queued = true;
-            held->second.push_back(this);
-            return true;
-        }
+        bool await_suspend(std::coroutine_handle<> awaiting);
 
         /// @brief The lease.
         /// @return It.
-        [[nodiscard]] Lease await_resume() {
-            std::scoped_lock const lock{_locks->_mutex};
-            _handed = false;  // the lease owns the lock from here
-            return Lease{_locks, _name};
-        }
+        [[nodiscard]] Lease await_resume();
 
     private:
         friend class TableStateLocks;
@@ -470,32 +345,7 @@ public:
     [[nodiscard]] Acquire lock(std::string name) { return Acquire{*this, std::move(name)}; }
 
 private:
-    void release(std::string const& name) {
-        std::coroutine_handle<> next;
-        ::core::async::ResumeTarget context;
-        {
-            std::scoped_lock const lock{_mutex};
-            auto const held = _held.find(name);
-            if (held == _held.end()) {
-                return;
-            }
-            if (held->second.empty()) {
-                _held.erase(held);
-                return;
-            }
-            Acquire* const waiter = held->second.front();
-            held->second.pop_front();
-            waiter->_queued = false;
-            waiter->_handed = true;
-            next = waiter->_awaiting;
-            context = waiter->_context;
-        }
-        if (context) {
-            context.submit(::core::async::ParkedWork{.resume = next, .abandon = {}});
-        } else {
-            next.resume();
-        }
-    }
+    void release(std::string const& name);
 
     std::mutex _mutex;
     /// @brief Each held name and its waiters, oldest first.
@@ -541,34 +391,7 @@ struct TableStateShared {
 /// @param text         The document's text.
 /// @param segmentBytes The longest segment entry; at least 32.
 /// @return Each segment's entry, a JSON string.
-[[nodiscard]] inline std::vector<std::string> segmentText(std::string_view text, std::size_t segmentBytes) {
-    std::size_t const budget = segmentBytes - 2;  // the quotes
-    std::vector<std::string> out;
-    std::size_t start = 0;
-    std::size_t used = 0;
-    std::size_t cursor = 0;
-    while (cursor < text.size()) {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): cursor < text.size() by the loop
-        auto const lead = static_cast<unsigned char>(text[cursor]);
-        std::size_t const length = std::min(sequenceBytes(lead), text.size() - cursor);
-        std::size_t cost = 0;
-        for (std::size_t each = cursor; each < cursor + length; ++each) {
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): each < cursor + length <= text.size()
-            cost += escapedBytes(static_cast<unsigned char>(text[each]));
-        }
-        if (used + cost > budget && cursor > start) {
-            out.push_back(quotedSegment(text.substr(start, cursor - start)));
-            start = cursor;
-            used = 0;
-        }
-        used += cost;
-        cursor += length;
-    }
-    if (start < text.size()) {
-        out.push_back(quotedSegment(text.substr(start)));
-    }
-    return out;
-}
+[[nodiscard]] MORPH_API std::vector<std::string> segmentText(std::string_view text, std::size_t segmentBytes);
 
 }  // namespace detail
 
@@ -593,7 +416,7 @@ struct TableStateShared {
 /// not. The write order is: clean up a previous intent, write the intent, the segments, the head, then remove the
 /// replaced segments and the intent. A reader takes the head and then the segments it names, so it reads one whole
 /// revision or the other.
-class TableStateModel {
+class MORPH_API TableStateModel {
 public:
     /// @brief A model over @p store.
     /// @param store   Where states are kept. Shared by every instance.
@@ -602,18 +425,7 @@ public:
     /// @throws std::invalid_argument for a null store, a `segmentBytes` under 32, or a `partBytes` under 16 or over
     ///         `kTableStatePartBytes`: a head of more than that could outgrow a reply's envelope.
     TableStateModel(std::shared_ptr<IPreferencesStore> store, TableStateOptions options,
-                    std::shared_ptr<detail::TableStateShared> shared = nullptr)
-        : _store{std::move(store)},
-          _options{std::move(options)},
-          _shared{shared != nullptr ? std::move(shared) : std::make_shared<detail::TableStateShared>()} {
-        if (_store == nullptr) {
-            throw std::invalid_argument{"TableStateModel: a null store"};
-        }
-        if (_options.segmentBytes < 32 || _options.partBytes < 16 || _options.partBytes > kTableStatePartBytes) {
-            throw std::invalid_argument{"TableStateModel: segmentBytes is at least 32, and partBytes 16 to " +
-                                        std::to_string(kTableStatePartBytes)};
-        }
-    }
+                    std::shared_ptr<detail::TableStateShared> shared = nullptr);
 
     /// @brief Reads the heads of the caller's documents.
     ///
@@ -861,55 +673,22 @@ private:
 
     /// @brief The verified principal of the call being run.
     /// @return It; empty when the server verified nobody.
-    [[nodiscard]] static std::string verifiedPerson() {
-        session::Context const* const session = session::current();
-        return session == nullptr ? std::string{} : session->principal;
-    }
+    [[nodiscard]] static std::string verifiedPerson();
 
     /// @brief The verified principal, for a call that writes.
     /// @return It.
     /// @throws std::runtime_error when the server verified nobody.
-    [[nodiscard]] static std::string signedInPerson() {
-        std::string person = verifiedPerson();
-        if (person.empty()) {
-            throw std::runtime_error{"table state is stored for a signed-in person"};
-        }
-        return person;
-    }
+    [[nodiscard]] static std::string signedInPerson();
 
     /// @brief What is wrong with a key: a member out of bounds (`model` is 0 to 256 bytes, the others 1 to 256), or
     ///        a `part` holding a `.`, which would name another part's intent or segment points.
     /// @param key The key.
     /// @return The problem; nothing for a key in bounds.
-    [[nodiscard]] static std::optional<std::string> keyProblem(table::TableStateKey const& key) {
-        auto const check = [](std::string const& member, std::string_view name,
-                              std::size_t least) -> std::optional<std::string> {
-            if (member.size() < least || member.size() > kMaxTableStateNameBytes) {
-                return "a table-state key's `" + std::string{name} + "` is " + std::to_string(least) + " to " +
-                       std::to_string(kMaxTableStateNameBytes) + " bytes";
-            }
-            return std::nullopt;
-        };
-        for (auto problem :
-             {check(key.application, "application", 1), check(key.model, "model", 0), check(key.table, "table", 1),
-              check(key.qualifier, "qualifier", 1), check(key.part, "part", 1)}) {
-            if (problem) {
-                return problem;
-            }
-        }
-        if (key.part.contains('.')) {
-            return std::string{"a table-state key's `part` holds no `.`"};
-        }
-        return std::nullopt;
-    }
+    [[nodiscard]] static std::optional<std::string> keyProblem(table::TableStateKey const& key);
 
     /// @brief Refuses a key out of bounds.
     /// @param key The key.
-    static void checkKey(table::TableStateKey const& key) {
-        if (auto problem = keyProblem(key)) {
-            throw std::invalid_argument{*problem};
-        }
-    }
+    static void checkKey(table::TableStateKey const& key);
 
     /// @brief The lock of one owner's key: two writes of it never interleave on this server.
     /// @param owner The person whose entries they are; empty for the shared views.
@@ -921,13 +700,7 @@ private:
 
     /// @brief The options' clock now.
     /// @return It.
-    [[nodiscard]] std::chrono::milliseconds now() const {
-        if (_options.clock) {
-            return _options.clock();
-        }
-        return std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch());
-    }
+    [[nodiscard]] std::chrono::milliseconds now() const;
 
     /// @brief Adds one part to its upload, after dropping every upload that waited past `uploadExpiry`.
     /// @param person  The caller.
@@ -935,41 +708,7 @@ private:
     /// @return The whole text at the last part; nothing before it.
     /// @throws std::invalid_argument for a part that does not continue its upload, or that takes it past the quota;
     ///         detail::UploadsBusy for a first part while the person has `kMaxTableStateUploads` open.
-    [[nodiscard]] std::optional<std::string> takePart(std::string const& person, TableStateSave& request) {
-        std::scoped_lock const lock{_shared->mutex};
-        auto& uploads = _shared->uploads;
-        auto const instant = now();
-        std::erase_if(uploads,
-                      [&](auto const& entry) { return instant - entry.second.touched > _options.uploadExpiry; });
-        std::pair<std::string, std::string> const uploadKey{person, request.upload};
-        if (request.offset == 0) {
-            uploads.erase(uploadKey);
-            auto const open =
-                std::ranges::count_if(uploads, [&](auto const& entry) { return entry.first.first == person; });
-            if (std::cmp_greater_equal(open, kMaxTableStateUploads)) {
-                throw detail::UploadsBusy{std::string{kTableStateUploadsBusy}};
-            }
-            uploads.emplace(uploadKey, detail::TableStateShared::Upload{
-                                           .key = request.key, .text = {}, .started = instant, .touched = instant});
-        }
-        auto const found = uploads.find(uploadKey);
-        if (found == uploads.end() || !(found->second.key == request.key) ||
-            found->second.text.size() != request.offset) {
-            throw std::invalid_argument{"a table-state save part does not continue its upload"};
-        }
-        if (_options.maxBytesPerPerson && request.offset + request.text.size() > *_options.maxBytesPerPerson) {
-            uploads.erase(found);
-            throw std::invalid_argument{"a table-state upload is over the table-state quota"};
-        }
-        found->second.text += request.text;
-        found->second.touched = instant;
-        if (!request.last) {
-            return std::nullopt;
-        }
-        std::string text = std::move(found->second.text);
-        uploads.erase(found);
-        return text;
-    }
+    [[nodiscard]] std::optional<std::string> takePart(std::string const& person, TableStateSave& request);
 
     [[nodiscard]] static std::string pendingPoint(table::TableStateKey const& key) { return key.part + ".pending"; }
 
@@ -979,19 +718,9 @@ private:
     }
 
     [[nodiscard]] static PrefKey pointKey(std::string const& person, table::TableStateKey const& key,
-                                          std::string point) {
-        return PrefKey{.person = person,
-                       .app = key.application,
-                       .scope = detail::tableStateScope(key),
-                       .point = std::move(point)};
-    }
+                                          std::string point);
 
-    [[nodiscard]] static PrefKey usageKey(std::string const& person) {
-        return PrefKey{.person = person,
-                       .app = std::string{kTableStateModel},
-                       .scope = std::string{kTableStateScopePrefix},
-                       .point = "usage"};
-    }
+    [[nodiscard]] static PrefKey usageKey(std::string const& person);
 
     template <typename T>
     [[nodiscard]] static std::string write(T const& value) {
@@ -1115,15 +844,7 @@ private:
 
     /// @brief Whether @p expected holds over @p head: empty always; `kNoDocument` when nothing is stored; otherwise
     ///        when the stored document has that revision.
-    [[nodiscard]] static bool holds(std::string const& expected, Head const& head) {
-        if (expected.empty()) {
-            return true;
-        }
-        if (expected == table::kNoDocument) {
-            return !head.found;
-        }
-        return head.found && expected == head.revision;
-    }
+    [[nodiscard]] static bool holds(std::string const& expected, Head const& head);
 
     /// @brief Removes a revision's segments; a removal the store does not make is left to a later save.
     ::core::async::Task<void> removeSegments(std::string person, table::TableStateKey key, std::string revision,
@@ -1283,20 +1004,8 @@ namespace morph::ui {
 /// @param dispatcher The server's action dispatcher.
 /// @param registry   The server's model registry.
 /// @param options    The bounds and the quota.
-inline void registerTableState(std::shared_ptr<IPreferencesStore> store, model::detail::ActionDispatcher& dispatcher,
-                               model::detail::ModelRegistryFactory& registry, TableStateOptions options = {}) {
-    if (store == nullptr) {
-        throw std::invalid_argument{"registerTableState: a null store"};
-    }
-    registry.registerModel<TableStateModel>(kTableStateModel, [store = std::move(store), options = std::move(options),
-                                                               shared = std::make_shared<detail::TableStateShared>()] {
-        return std::make_unique<model::detail::ModelHolder<TableStateModel>>(store, options, shared);
-    });
-    dispatcher.registerAction<TableStateModel, TableStateLoad>(kTableStateModel, "load");
-    dispatcher.registerAction<TableStateModel, TableStateRead>(kTableStateModel, "read");
-    dispatcher.registerAction<TableStateModel, TableStateSave>(kTableStateModel, "save");
-    dispatcher.registerAction<TableStateModel, TableStateRemove>(kTableStateModel, "remove");
-    dispatcher.registerAction<TableStateModel, TableStatePublish>(kTableStateModel, "publish");
-}
+MORPH_API void registerTableState(std::shared_ptr<IPreferencesStore> store,
+                                  model::detail::ActionDispatcher& dispatcher,
+                                  model::detail::ModelRegistryFactory& registry, TableStateOptions options = {});
 
 }  // namespace morph::ui
