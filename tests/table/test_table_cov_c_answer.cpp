@@ -151,3 +151,66 @@ TEST_CASE("an order level that cannot hold the rows refuses, naming the column t
     CHECK(byDistinct.error().code == TableErrorCode::Unavailable);
     CHECK(byDistinct.error().column == "text");
 }
+
+TEST_CASE("an order level too small for a page's sort or filter refuses, naming the column that asked",
+          "[covc][table][answer]") {
+    Slow slow;
+    auto const level = slow.cache(1);
+    auto const served = slow.served(level);
+
+    TableQuery sorted;
+    sorted.sort = {SortKey{.column = "text"}};
+    auto const bySort = detail::answerQuery(served, sorted);
+    REQUIRE_FALSE(bySort);
+    CHECK(bySort.error().code == TableErrorCode::Unavailable);
+    CHECK(bySort.error().column == "text");
+
+    TableQuery filtered;
+    filtered.filters.columns["text"].include = {FilterEntry{.eq = "v"}};
+    auto const byFilter = detail::answerQuery(served, filtered);
+    REQUIRE_FALSE(byFilter);
+    CHECK(byFilter.error().column == "text");
+}
+
+TEST_CASE("a page sorted by an order level waits for the level, then answers in its order", "[covc][table][answer]") {
+    Slow slow;
+    auto const level = slow.cache();
+    auto const served = slow.served(level);
+    ViewCache views;
+    TableQuery sorted;
+    sorted.sort = {SortKey{.column = "text"}, SortKey{.column = "id", .dir = SortDirection::Descending}};
+    auto const context = detail::AnswerContext{.views = &views, .record = "T.rows", .rowScoped = false};
+
+    auto const first = detail::answerQuery(served, sorted, context);
+    REQUIRE(first);
+    CHECK(first->awaiting == std::vector<std::string>{"slow"});
+    tabletest::drain(slow.loads);
+    auto const second = detail::answerQuery(served, sorted, context);
+    REQUIRE(second);
+    CHECK(second->awaiting.empty());
+    CHECK(second->keys == std::vector<RowId>{RowId{std::int64_t{2}}, RowId{std::int64_t{1}}, RowId{std::int64_t{0}}});
+    CHECK(second->undecided == 0);
+}
+
+TEST_CASE("a selection of the view filtered by an order level reads the level's values", "[covc][table][answer]") {
+    Slow slow;
+    auto const level = slow.cache();
+    auto const served = slow.served(level);
+    detail::PlainSelection selection;
+    selection.isView = true;
+    selection.filters.columns["text"].include = {FilterEntry{.eq = "v"}};
+    REQUIRE(level->want(std::vector<RowId>{RowId{std::int64_t{0}}, RowId{std::int64_t{1}}, RowId{std::int64_t{2}}},
+                        LevelUse::Display));
+    tabletest::drain(slow.loads);
+    auto const members = detail::membership(served, selection.filters, {}, nullptr, {});
+    REQUIRE(members);
+    CHECK(members->rows == std::vector<std::uint32_t>{0, 1, 2});
+    auto const resolved = detail::resolveSelection(served, selection, SelectionPolicy::Current, nullptr, {}, false);
+    REQUIRE(resolved);
+    CHECK(resolved->keys.size() == 3);
+
+    selection.filters.columns["text"].include = {FilterEntry{.eq = "other"}};
+    auto const none = detail::resolveSelection(served, selection, SelectionPolicy::Current, nullptr, {}, false);
+    REQUIRE(none);
+    CHECK(none->keys.empty());
+}
