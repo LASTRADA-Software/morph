@@ -3,6 +3,8 @@
 // The table inputs an action's schema declares: which members take a selection, a row or a cell edit.
 
 #include <catch2/catch_test_macros.hpp>
+#include <morph/table/query.hpp>
+#include <morph/ui/document.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <string>
 #include <vector>
@@ -40,4 +42,18 @@ TEST_CASE("an action's schema names its table inputs by the keywords it carries"
     CHECK(row[0].kind == TableInputKind::CellEdit);
     CHECK(inputs(R"({"x-cellEditOf":3,"x-rowEditOf":null})").empty());
     CHECK(inputs(R"({"x-cellEditOf":"A","x-rowEditOf":"B","properties":{"s":{"x-selectionOf":"C"}}})").size() == 3);
+}
+
+TEST_CASE("a list action's schema names the members that carry the table's query", "[covc][ui][document]") {
+    using morph::ui::tableQueryMembers;
+    auto const marker = std::string{morph::table::TableQuery::schemaMarker()};
+    CHECK(tableQueryMembers("not json").empty());
+    CHECK(tableQueryMembers("[1]").empty());
+    CHECK(tableQueryMembers("{}").empty());
+    CHECK(tableQueryMembers(R"({"properties":5})").empty());
+    CHECK(tableQueryMembers(R"({"properties":{"a":5,"b":{},"c":{")" + marker + R"(":false},"d":{")" + marker +
+                            R"(":"yes"}}})")
+              .empty());
+    CHECK(tableQueryMembers(R"({"properties":{"a":{")" + marker + R"(":true},"b":{},"c":{")" + marker +
+                            R"(":true}}})") == std::vector<std::string>{"a", "c"});
 }
