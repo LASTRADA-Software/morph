@@ -1,0 +1,384 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// The shell parts model over replies a server can send: how an option and a count are worded and read, what a reply
+// that does not fit is reported as, and the texts the shell has of its own.
+
+#include <algorithm>
+#include <array>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <cstddef>
+#include <glaze/glaze.hpp>
+#include <memory>
+#include <morph/core/wire.hpp>
+#include <morph/ui/bundle.hpp>
+#include <morph/ui/document.hpp>
+#include <morph/ui/interpreter.hpp>
+#include <morph/ui/navigator.hpp>
+#include <morph/ui/service.hpp>
+#include <morph/ui/shell_frame.hpp>
+#include <morph/ui/shell_parts.hpp>
+#include <morph/ui/shell_parts_binding.hpp>
+#include <morph/ui/testing/recording_backend.hpp>
+#include <string>
+#include <catch2/generators/catch_generators.hpp>
+#include <optional>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "ui_interpreter_support.hpp"
+
+namespace ui = morph::ui;
+using ui::testing::Harness;
+
+namespace {
+
+/// A reading of a catalog entry: module, group and id.
+ui::CatalogEntry entry(std::string id, std::string module, std::string group) {
+    ui::CatalogEntry made;
+    made.id = std::move(id);
+    made.title = "t";
+    made.module = std::move(module);
+    made.group = std::move(group);
+    return made;
+}
+
+/// The navigator's entries: two modules of two screens, and a module of one.
+std::vector<ui::CatalogEntry> entries() {
+    return {entry("lims.home", "shell", "Home"), entry("lims.lab.samples", "lab", "Lab"),
+            entry("lims.lab.verification", "lab", "Lab"), entry("lims.billing.invoices", "billing", "Billing"),
+            entry("lims.billing.runs", "billing", "Billing")};
+}
+
+/// Every part, over the corpus catalog's actions. The count of the lab reads a record the probe mutation changes.
+ui::ShellParts fullParts() {
+    ui::ShellParts parts;
+    parts.context = ui::ContextSwitch{.model = "Lims_ClientModel",
+                                      .action = "Lims_ClientScopes",
+                                      .localeField = "lang",
+                                      .optionsField = "options",
+                                      .labelField = "label",
+                                      .valueField = "value",
+                                      .detailField = "detail",
+                                      .groupField = "group"};
+    parts.modules = {ui::ModuleCount{.module = "lab",
+                                     .model = "Lims_ClientModel",
+                                     .action = "Shell_Rows",
+                                     .countField = "total",
+                                     .contextField = "scope",
+                                     .localeField = {}},
+                     ui::ModuleCount{.module = "billing",
+                                     .model = "Lims_ClientModel",
+                                     .action = "Lims_ClientCount",
+                                     .countField = "open",
+                                     .contextField = "scope",
+                                     .localeField = {}}};
+    parts.search = {ui::SearchSource{.module = "lab",
+                                     .title = "Lab",
+                                     .model = "Lims_ClientModel",
+                                     .action = "Lims_ClientSearchLab",
+                                     .queryField = "q",
+                                     .resultsField = "hits",
+                                     .contextField = "scope",
+                                     .localeField = {}},
+                    ui::SearchSource{.module = "billing",
+                                     .title = "Billing",
+                                     .model = "Lims_ClientModel",
+                                     .action = "Lims_ClientSearchBilling",
+                                     .queryField = "q",
+                                     .resultsField = "hits",
+                                     .contextField = {},
+                                     .localeField = {}}};
+    parts.inbox = ui::InboxEntry{.screen = "lims.approvals",
+                                 .sources = {ui::ModuleCount{.module = "billing",
+                                                             .model = "Lims_ClientModel",
+                                                             .action = "Lims_ClientApprovalsBilling",
+                                                             .countField = "n",
+                                                             .contextField = {},
+                                                             .localeField = {}},
+                                             ui::ModuleCount{.module = "lab",
+                                                             .model = "Lims_ClientModel",
+                                                             .action = "Lims_ClientApprovalsLab",
+                                                             .countField = "waiting",
+                                                             .contextField = {},
+                                                             .localeField = {}}}};
+    parts.principal = ui::PrincipalMenu{.model = "Lims_ClientModel",
+                                        .action = "Lims_ClientPerson",
+                                        .contextField = {},
+                                        .localeField = {},
+                                        .nameField = "name",
+                                        .detailField = "detail",
+                                        .subtitleField = "role",
+                                        .rolesField = "roles",
+                                        .locales = {"en", "de"},
+                                        .formats = {"en", "de"}};
+    parts.searchHint = "Search samples";
+    return parts;
+}
+
+constexpr char const* kScopes = R"({"options":[{"label":"Koeln","value":"k","detail":"EUR","group":"Rheinlab"},)"
+                                R"({"label":"Osaka","value":"o","detail":"JPY","group":"Nippon"}]})";
+
+/// A screen that shows the scope and whether it can be changed, and asks the shell to change it.
+constexpr char const* kScopeScreen = R"({
+  "vocab": "ui/1", "id": "probe.scope",
+  "view": { "kind": "column", "children": [
+    { "kind": "text", "testId": "scope", "text": { "fn": "coalesce", "args": [ { "env": "context" }, "-" ] } },
+    { "kind": "text", "testId": "can", "text": { "if": [ { "can": "context" }, "yes", "no" ] } },
+    { "kind": "button", "testId": "toO", "label": "o", "onClick": { "setContext": "o" } },
+    { "kind": "button", "testId": "toZ", "label": "z", "onClick": { "setContext": "zzz" } } ] } })";
+
+/// The application, the frame and the binding over one harness.
+struct Rig {
+    Harness h;
+    ui::ShellParts parts;
+    std::shared_ptr<ui::Document const> document;
+    std::unique_ptr<ui::AppRoot> root;
+    std::unique_ptr<ui::ShellFrame> frame;
+    std::unique_ptr<ui::ShellPartsBinding> binding;
+    std::vector<ui::ShellPartsModel::Target> opened;
+    std::vector<std::vector<ui::ShellPartsModel::Target>> openedAll;
+    std::vector<std::string> problems;
+    std::size_t dirty = 0;
+    int closedDirty = 0;
+    int signedOut = 0;
+
+    /// @param declared The parts.
+    /// @param facts    What the catalog says (`screenListed`, `moduleListed`, `replyIsRecord`); the rest is ignored.
+    /// @param navigated The navigator's entries.
+    explicit Rig(ui::ShellParts declared, ui::ShellModelOptions facts = {},
+                 std::vector<ui::CatalogEntry> navigated = entries())
+        : parts{std::move(declared)} {
+        std::string const text = std::string{R"({"vocab":"ui/1","id":"app","shell":)"} +
+                                 glz::write<morph::wire::detail::EscapingWriteOpts{}>(parts).value_or("{}") + "}";
+        document = ui::testing::loadOrFail(text, ui::testing::corpusCatalog());
+        auto mounted = h.interpreter.mountApp(document);
+        REQUIRE(mounted.has_value());
+        root = std::move(*mounted);
+        ui::ShellFrameOptions options;
+        options.applicationName = "lims";
+        options.navigator.entries = std::move(navigated);
+        options.onSignOut = [this] { ++signedOut; };
+        frame = std::make_unique<ui::ShellFrame>(h.backend, nullptr, std::move(options));
+        ui::ShellBindingOptions binding_options;
+        binding_options.model.screenListed = std::move(facts.screenListed);
+        binding_options.model.moduleListed = std::move(facts.moduleListed);
+        binding_options.model.replyIsRecord = std::move(facts.replyIsRecord);
+        binding_options.model.dirtyTabs = [this] { return dirty; };
+        binding_options.model.closeDirtyTabs = [this] { ++closedDirty; };
+        binding_options.model.onProblem = [this](std::string const& message) { problems.push_back(message); };
+        binding_options.open = [this](ui::ShellPartsModel::Target const& target) { opened.push_back(target); };
+        binding_options.openAll = [this](std::vector<ui::ShellPartsModel::Target> const& targets) {
+            openedAll.push_back(targets);
+        };
+        binding = std::make_unique<ui::ShellPartsBinding>(h.session, *root, *document->shell, *frame,
+                                                          std::move(binding_options));
+        h.settle();
+    }
+
+    ~Rig() {
+        binding.reset();
+        frame.reset();
+        root.reset();
+    }
+    Rig(Rig const&) = delete;
+    Rig& operator=(Rig const&) = delete;
+    Rig(Rig&&) = delete;
+    Rig& operator=(Rig&&) = delete;
+
+    /// Answers the last call of @p action.
+    void reply(std::string_view action, std::string json) { h.reply(h.dispatcher.last(action), std::move(json)); }
+
+    /// The id of the widget of @p kind with test id @p testId.
+    [[nodiscard]] int id(std::string_view kind, std::string_view testId) const {
+        return h.backend.find(kind, "testId", testId).value();
+    }
+
+    [[nodiscard]] bool has(std::string_view kind, std::string_view testId) const {
+        return h.backend.find(kind, "testId", testId).has_value();
+    }
+
+    [[nodiscard]] std::string prop(std::string_view kind, std::string_view testId, std::string_view name) const {
+        return h.backend.prop(id(kind, testId), name);
+    }
+};
+
+}  // namespace
+
+namespace {
+
+std::string menuItems(Rig& r) { return r.h.backend.prop(r.id("Menu", "shell_context"), "items"); }
+
+}  // namespace
+
+TEST_CASE("covd shell parts: an option's label is the translation, then its fallback, with its arguments in place",
+          "[ui][shell][parts][covd]") {
+    struct Case {
+        std::string_view label;
+        std::string_view shown;
+    };
+    auto const [label, shown] = GENERATE(
+        Case{R"({"t":"scope.k","fallback":"Cologne"})", "Cologne"},
+        Case{R"({"t":"scope.k"})", "scope.k"},
+        Case{R"({"t":"scope.hit","fallback":"unused"})", "Hit"},
+        Case{R"({"t":"scope.args","args":{"n":3,"name":"lab"}})", "3 of lab"},
+        Case{R"({"t":"scope.args","args":7})", "{$n} of {$name}"},
+        Case{R"("plain")", "plain"});
+    CAPTURE(label);
+    Rig r{fullParts()};
+    r.h.session.setTranslations([](std::string_view key, std::string_view) -> std::optional<std::string> {
+        if (key == "scope.hit") {
+            return "Hit";
+        }
+        if (key == "scope.args") {
+            return "{$n} of {$name}";
+        }
+        return std::nullopt;
+    });
+    r.reply("Lims_ClientScopes", R"({"options":[{"label":)" + std::string{label} + R"(,"value":"k"}]})");
+    r.h.settle();
+    CHECK(menuItems(r).contains(std::string{shown} + ";checked=true"));
+}
+
+TEST_CASE("covd shell parts: a scope reply that does not fit is reported once and offers nothing",
+          "[ui][shell][parts][covd]") {
+    struct Case {
+        std::string_view reply;
+        std::string_view problem;
+    };
+    auto const [reply, problem] =
+        GENERATE(Case{R"({"options":"none"})", "the reply has no list `options`"},
+                 Case{R"({"options":[{"label":"x"}]})", "an option has no string or integer `value`"},
+                 Case{R"({"options":[{"label":"x","value":[1]}]})", "an option has no string or integer `value`"});
+    CAPTURE(reply);
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", std::string{reply});
+    r.h.settle();
+    bool reported = false;
+    for (std::string const& text : r.problems) {
+        reported = reported || text.contains(problem);
+    }
+    CHECK(reported);
+    CHECK_FALSE(menuItems(r).contains("checked"));
+}
+
+TEST_CASE("covd shell parts: an integer option is a scope too", "[ui][shell][parts][covd]") {
+    Rig r{fullParts()};
+    auto const screen = r.h.mount(kScopeScreen);
+    r.reply("Lims_ClientScopes", R"({"options":[{"label":"Seven","value":7},{"label":"Eight","value":8}]})");
+    r.h.settle();
+    CHECK(r.h.text("scope") == "7");
+    CHECK(menuItems(r).contains("Seven;checked=true"));
+}
+
+TEST_CASE("covd shell parts: a count reply that is no non-negative integer is reported", "[ui][shell][parts][covd]") {
+    auto const reply = GENERATE(as<std::string_view>{}, R"({"code":"a","total":-1})", R"({"code":"a"})",
+                                R"({"code":"a","total":"many"})");
+    CAPTURE(reply);
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    r.reply("Shell_Rows", std::string{reply});
+    r.h.settle();
+    bool reported = false;
+    for (std::string const& text : r.problems) {
+        reported = reported || (text.contains("shell count") && text.contains("`total`"));
+    }
+    CHECK(reported);
+}
+
+TEST_CASE("covd shell parts: the shell's own words are the translation, then the built-in English or German",
+          "[ui][shell][parts][covd]") {
+    ui::FormatContext english;
+    english.locale = "en";
+    ui::FormatContext german;
+    german.locale = "de-CH";
+    ui::FormatContext translated;
+    translated.translations = [](std::string_view key, std::string_view) -> std::optional<std::string> {
+        return key == "morph.shell.offline" ? std::optional<std::string>{"Away"} : std::nullopt;
+    };
+    CHECK(ui::shellText("morph.shell.offline", translated) == "Away");
+    CHECK(ui::shellText("morph.shell.offline", english) == "Offline");
+    CHECK(ui::shellText("morph.shell.connected", german) == "Verbunden");
+    CHECK(ui::shellText("morph.shell.connected", translated) == "Connected");
+    CHECK(ui::shellText("morph.shell.nosuch", english) == "morph.shell.nosuch");
+}
+
+namespace {
+
+// A rig with two hits in the lab source and one in billing, found by the text `x`, and the search field's id.
+struct Searched {
+    Rig r{fullParts()};
+    int search = 0;
+
+    Searched() {
+        r.reply("Lims_ClientScopes", kScopes);
+        search = r.id("TextInput", "shell_search");
+        r.h.backend.edit(search, "x");
+        r.h.settle();
+        r.h.advance(std::chrono::milliseconds{ui::kSearchPause});
+        r.reply("Lims_ClientSearchLab", R"({"hits":[{"screen":"a","title":"A"},{"screen":"b","title":"B"}]})");
+        r.reply("Lims_ClientSearchBilling", R"({"hits":[{"screen":"c","title":"C"}]})");
+    }
+
+    [[nodiscard]] bool selected(std::string_view hit) { return r.prop("Button", hit, "selected") == "true"; }
+};
+
+}  // namespace
+
+TEST_CASE("covd shell parts: Up and Down walk the hits and wrap at either end", "[ui][shell][parts][covd]") {
+    Searched s;
+    REQUIRE(s.selected("shell_search_hit_0_0"));
+    s.r.h.backend.press(s.search, "Up");
+    s.r.h.settle();
+    CHECK(s.selected("shell_search_hit_1_0"));  // up from the first wraps to the last
+    s.r.h.backend.press(s.search, "Down");
+    s.r.h.settle();
+    CHECK(s.selected("shell_search_hit_0_0"));  // down from the last wraps to the first
+    s.r.h.backend.press(s.search, "Down");
+    s.r.h.settle();
+    CHECK(s.selected("shell_search_hit_0_1"));
+    s.r.h.backend.press(s.search, "Up");
+    s.r.h.settle();
+    CHECK(s.selected("shell_search_hit_0_0"));
+}
+
+TEST_CASE("covd shell parts: Alt Enter opens every hit, and a chord the search does not know does nothing",
+          "[ui][shell][parts][covd]") {
+    Searched s;
+    s.r.h.backend.press(s.search, "Ctrl+Q");
+    s.r.h.settle();
+    CHECK(s.r.openedAll.empty());
+    CHECK(s.r.prop("Popover", "shell_search_popover", "open") == "true");
+    s.r.h.backend.press(s.search, "Alt+Enter");
+    s.r.h.settle();
+    REQUIRE(s.r.openedAll.size() == 1);
+    CHECK(s.r.openedAll.front().size() == 3);
+}
+
+TEST_CASE("covd shell parts: opening every hit of a search that found none opens nothing",
+          "[ui][shell][parts][covd]") {
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    int const search = r.id("TextInput", "shell_search");
+    r.h.backend.edit(search, "x");
+    r.h.settle();
+    r.h.advance(std::chrono::milliseconds{ui::kSearchPause});
+    r.reply("Lims_ClientSearchLab", R"({"hits":[]})");
+    r.reply("Lims_ClientSearchBilling", R"({"hits":[]})");
+    r.h.backend.press(search, "Shift+Enter");
+    r.h.backend.press(search, "Down");
+    r.h.backend.submit(search, "x");
+    r.h.settle();
+    CHECK(r.openedAll.empty());
+    CHECK(r.opened.empty());
+}
+
+TEST_CASE("covd shell parts: Escape in an empty field returns focus to the content", "[ui][shell][parts][covd]") {
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    int const search = r.id("TextInput", "shell_search");
+    CHECK(r.h.backend.press(search, "Escape"));
+    r.h.settle();
+    CHECK_FALSE(r.prop("TextInput", "shell_search", "text").contains("x"));
+}

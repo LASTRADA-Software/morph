@@ -139,6 +139,12 @@ add_executable(morph_tests
     test_ui_cov_interp_forms.cpp
     test_ui_cov_mount_extents.cpp
     test_ui_cov_interp_fixed_grid.cpp
+    test_ui_cov_d_form_grid.cpp
+    test_ui_cov_d_fixed_grid.cpp
+    test_ui_cov_d_custom_screen_checks.cpp
+    test_ui_cov_d_custom_screen_words.cpp
+    test_ui_cov_d_shell_parts.cpp
+    test_ui_cov_d_chat_tools.cpp
     forms/test_forms_derive.cpp
     test_ui_table_state.cpp
     test_push_agent.cpp
