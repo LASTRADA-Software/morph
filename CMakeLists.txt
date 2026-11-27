@@ -505,6 +505,12 @@ add_library(morph ${_morph_library_type}
     src/ui/interpreter_table_model.cpp
     src/ui/interpreter_charts.cpp
     src/ui/interpreter_mount.cpp
+    src/ui/grid_1.cpp
+    src/ui/grid_2.cpp
+    src/ui/grid_3.cpp
+    src/ui/mount_1.cpp
+    src/ui/mount_2.cpp
+    src/ui/mount_3.cpp
     src/ui/table_config.cpp
     src/ui/table_dialogs.cpp
     src/ui/table_filter_menu.cpp
