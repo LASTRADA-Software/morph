@@ -41,8 +41,6 @@
 #include "ui_table_model_support.hpp"
 #include "ui_table_support.hpp"
 
-namespace table = morph::table;
-
 using namespace table_model_support;
 
 using namespace std::chrono_literals;
@@ -156,10 +154,10 @@ TEST_CASE("model table: editMode is refused on a table that is not a model's", "
         R"("view":{"kind":"table","rows":{"ref":"items"},"columns":[{"id":"a"}],"editMode":"row"}})",
         load);
     REQUIRE_FALSE(rows.has_value());
-    CHECK(rows.error().reason.find("editMode") != std::string::npos);
+    CHECK(rows.error().reason.contains("editMode"));
     auto const sideways = morph::ui::loadDocumentText(editDoc(R"(,"editMode":"sideways")"), load);
     REQUIRE_FALSE(sideways.has_value());
-    CHECK(sideways.error().reason.find("sideways") != std::string::npos);
+    CHECK(sideways.error().reason.contains("sideways"));
     auto const screen = mountEdits(h, editDoc(R"(,"editMode":"row")"));
     int const table = h.byTestId("Table", "t");
     h.backend.clickCell(table, 0, columnIndex(h, "label"));

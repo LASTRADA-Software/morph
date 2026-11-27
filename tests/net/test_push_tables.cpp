@@ -1430,7 +1430,7 @@ TEST_CASE("tables: Table.<id>.resolve answers for the caller", "[net][tables][se
                                   R"({"selection":{"keys":[1,3,8]},"policy":"current"})");
     REQUIRE(keys.kind == "ok");
     CHECK(keysOfReply(keys.body, "keys") == std::vector<std::int64_t>{1, 3});
-    CHECK(keys.body.find(R"("dropped":1)") != std::string::npos);
+    CHECK(keys.body.contains(R"("dropped":1)"));
     std::string const view = R"({"selection":{"view":{"filters":)" + std::string{kOpen} +
                              R"(,"retained":[],"revision":""},"except":[]},"policy":"current"})";
     auto const scoped = bob.execute(bobModel, "selnet::Rows", "Table.rows.resolve", view);
@@ -1461,8 +1461,8 @@ TEST_CASE("tables: a changed key's event names both keys", "[net][tables][keys]"
     auto const model = alice.create("selnet::Rows");
     auto const saved = alice.execute(model, "selnet::Rows", "SaveAs", R"({"key":2})");
     REQUIRE(saved.kind == "ok");
-    CHECK(saved.body.find(R"("from":2)") != std::string::npos);
-    CHECK(saved.body.find(R"("message":"Locked")") != std::string::npos);
+    CHECK(saved.body.contains(R"("from":2)"));
+    CHECK(saved.body.contains(R"("message":"Locked")"));
     REQUIRE(alice.pumpUntil([&] { return !alice.changes.empty(); }));
     alice.pumpFor(3 * kCoalesce);
     REQUIRE(alice.changes.size() == 1);
@@ -1557,7 +1557,7 @@ TEST_CASE("push tables: a cell edit reaches the model and the change event refet
     // The description is checked against the action's input on the server: the count column's field fits it.
     auto const described = alice.execute(model, "editnet::Specimens", "Table.specimens.describe", "{}");
     REQUIRE(described.kind == "ok");
-    CHECK(described.body.find(R"("edit":{"action":"Lims_EditSpecimenCount")") != std::string::npos);
+    CHECK(described.body.contains(R"("edit":{"action":"Lims_EditSpecimenCount")"));
     auto const edited = alice.execute(model, "editnet::Specimens", "Lims_EditSpecimenCount", R"({"key":1,"value":4})");
     REQUIRE(edited.kind == "ok");
     REQUIRE(alice.pumpUntil([&] { return !alice.changes.empty(); }));

@@ -66,7 +66,6 @@ using morph::ui::testing::replyPage;
 using morph::ui::testing::statusOf;
 using morph::ui::testing::storeExecutor;
 using morph::ui::testing::TableHarness;
-using morph::ui::testing::value;
 using morph::ui::testing::withTableKey;
 
 // Mutation: the lowering applying a stored layout after the first query.
@@ -86,7 +85,7 @@ TEST_CASE("persisted layout: a stored layout applies before the first query, a c
         h.settle();
         // c3 to c9 are placed after their nearest declared predecessor the layout places, c2; c3 stays hidden.
         CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["c2","c4","c5","c6","c7","c8","c9","c1"])");
-        CHECK(elementValue(*screen, "t", "layout").find(R"("widths":{"c2":20})") != std::string::npos);
+        CHECK(elementValue(*screen, "t", "layout").contains(R"("widths":{"c2":20})"));
         CHECK_FALSE(morph::ui::testing::rowOrder(h).empty());
         chooseMenu(h, table, 0, {"Hide column"});
         h.advance(100ms);
@@ -336,7 +335,7 @@ TEST_CASE("column chooser and sort dialog: locks, the pin boundary, a key's colu
         int const table = h.backend.all("Table").front();
         chooseMenu(h, table, 1, {"Pin column"});
         moveColumn(h, table, 2, 1);
-        REQUIRE(elementValue(*screen, "t", "layout").find(R"("pinned":1)") != std::string::npos);
+        REQUIRE(elementValue(*screen, "t", "layout").contains(R"("pinned":1)"));
         REQUIRE(elementValue(*screen, "t", "visibleColumns").starts_with(R"(["c2","c3","c1",)"));
         chooseMenu(h, table, std::nullopt, {"Columns…"});
         CHECK_FALSE(enabled(h, "Checkbox", "table_columns_show_c1"));  // locked

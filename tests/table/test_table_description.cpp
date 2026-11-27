@@ -265,12 +265,12 @@ TEST_CASE("generic page: a cell that does not read as its column's kind is inval
         INFO("kind " << static_cast<int>(kind));
         CHECK(statesOf(kind, {Cell{2.0}}) == std::vector<CellState>{Invalid});
         auto const wire = throughTheWire(kind, {Cell{2.0}});
-        CHECK(wire.json.find("[[2.0]]") != std::string::npos);
+        CHECK(wire.json.contains("[[2.0]]"));
         CHECK(std::holds_alternative<double>(wire.read.rows.at(0).at(0)));
         CHECK(statesOf(kind, columnOf(wire.read, 0)) == std::vector<CellState>{Invalid});
     }
     auto const number = throughTheWire(ColumnKind::Number, {Cell{2.0}});
-    CHECK(number.json.find("[[2.0]]") != std::string::npos);
+    CHECK(number.json.contains("[[2.0]]"));
     CHECK(sameCell(number.read.rows.at(0).at(0), Cell{2.0}));
     CHECK(statesOf(ColumnKind::Number, columnOf(number.read, 0)) == std::vector<CellState>{Valid});
     // Mutation: cellFromJson parsing "abc"-like strings for the column's kind on read (2.5 read as Integer 2).
@@ -283,7 +283,7 @@ TEST_CASE("generic page: numbers at the edges cross the wire unchanged", "[table
         throughTheWire(ColumnKind::Number,
                        {Cell{std::numeric_limits<double>::quiet_NaN()}, Cell{std::numeric_limits<double>::infinity()},
                         Cell{-std::numeric_limits<double>::infinity()}, Cell{-0.0}, Cell{1e308}});
-    CHECK(number.json.find(R"([["nan"],["inf"],["-inf"],[-0.0],[)" + huge + "]]") != std::string::npos);
+    CHECK(number.json.contains(R"([["nan"],["inf"],["-inf"],[-0.0],[)" + huge + "]]"));
     auto const reals = columnOf(number.read, 0);
     REQUIRE(reals.size() == 5);
     REQUIRE(std::ranges::all_of(reals, [](Cell const& cell) { return std::holds_alternative<double>(cell); }));
@@ -301,8 +301,8 @@ TEST_CASE("generic page: numbers at the edges cross the wire unchanged", "[table
     Rational const thirds{Numerator{kInt64Max}, Denominator{3}, DecimalPlaces{2}};
     Rational const scaled{Numerator{kInt64Max / 10}, Denominator{1}, DecimalPlaces{18}};
     auto const exact = throughTheWire(ColumnKind::Decimal, {Cell{thirds}, Cell{scaled}});
-    CHECK(exact.json.find("[[9223372036854775807,3]]") != std::string::npos);
-    CHECK(exact.json.find("[[922337203685477580,1]]") != std::string::npos);
+    CHECK(exact.json.contains("[[9223372036854775807,3]]"));
+    CHECK(exact.json.contains("[[922337203685477580,1]]"));
     CHECK(exact.read.rows.at(0).at(0) == Cell{thirds});
     CHECK(exact.read.rows.at(1).at(0) == Cell{scaled});
     // Mutation: writing a non-finite double with glaze's default (the page fails to write, or reads back empty).
@@ -358,7 +358,7 @@ TEST_CASE("table query: columns round-trip and are bounded", "[table][query]") {
     TableQuery const query{.columns = std::vector<std::string>{"a", "b"}};
     auto const json = glz::write_json(query);
     REQUIRE(json.has_value());
-    CHECK(json->find(R"("columns":["a","b"])") != std::string::npos);
+    CHECK(json->contains(R"("columns":["a","b"])"));
     TableQuery back;
     REQUIRE_FALSE(glz::read_json(back, *json));
     CHECK(back.columns == query.columns);
@@ -1274,7 +1274,7 @@ TEST_CASE("generic page: an unloaded cell is null and named per level", "[table]
     CHECK(page.unloadedRows ==
           std::vector<UnloadedRow>{UnloadedRow{.index = 1, .levels = {"recipe"}, .failed = {}}});  // not "stock"
     auto const json = toJson(page);
-    CHECK(json.find(R"("rows":[[10,"a"],[11,null]])") != std::string::npos);
+    CHECK(json.contains(R"("rows":[[10,"a"],[11,null]])"));
     auto const back =
         readGenericPage(json, describedOf({column("id", ColumnKind::Integer), column("r", ColumnKind::Text)}));
     REQUIRE(back.has_value());
@@ -1300,7 +1300,7 @@ TEST_CASE("generic page: an empty failed or indices is left out, and read either
           R"("undecided":0,"awaiting":[]})");
     typed.failed = {"recipe"};
     typed.indices = {3};
-    CHECK(glz::write_json(typed).value_or("").find(R"("failed":["recipe"],"indices":[3])") != std::string::npos);
+    CHECK(glz::write_json(typed).value_or("").contains(R"("failed":["recipe"],"indices":[3])"));
 
     auto const present = readGenericPage(
         R"({"revision":"r","columns":[],"keys":[5],"rows":[[]],"totalKind":"exact","offset":0,)"
@@ -1545,7 +1545,7 @@ TEST_CASE("view cache: a view keeps order keys only when its query has an order 
     query.sort = {SortKey{.column = "id", .dir = SortDirection::Ascending}};
     query.columns = std::vector<std::string>{"id", "r"};
     REQUIRE(detail::answerQuery(scriptedTable(level), query, answer).has_value());
-    CHECK(views.stats().bytes == 4 * 10);  // the view's ten rows and nothing else
+    CHECK(views.stats().bytes == std::size_t{4} * 10);  // the view's ten rows and nothing else
     query.sort = {SortKey{.column = "r", .dir = SortDirection::Ascending}};
     REQUIRE(detail::answerQuery(scriptedTable(level), query, answer).has_value());
     CHECK(views.stats().bytes >= (2UZ * 4 * 10) + (10 * sizeof(RowId)));  // the level-sorted view keeps its ten keys
@@ -2446,8 +2446,8 @@ TEST_CASE("description: a display travels in the description and changes its rev
     };
     auto const described = describe(d);
     auto const json = glz::write_json(described).value_or(std::string{});
-    CHECK(json.find(R"("rounding":"halfUp")") != std::string::npos);
-    CHECK(json.find(R"("labels":[{"operand":"3","text":"three"}])") != std::string::npos);
+    CHECK(json.contains(R"("rounding":"halfUp")"));
+    CHECK(json.contains(R"("labels":[{"operand":"3","text":"three"}])"));
     TableDescription back;
     REQUIRE_FALSE(glz::read_json(back, json));
     CHECK(back == described);
@@ -2542,7 +2542,7 @@ void refusedNaming(std::vector<BandInfo> const& bands, std::string_view label) {
     auto const checked = checkBands(bands, bandColumns());
     REQUIRE_FALSE(checked.has_value());
     CHECK(checked.error().code == TableErrorCode::SourceContract);
-    CHECK(checked.error().message.find(label) != std::string::npos);
+    CHECK(checked.error().message.contains(label));
 }
 
 }  // namespace
@@ -2636,7 +2636,7 @@ TEST_CASE("description: an edit whose field does not fit its column is a source 
     auto const lacking = checkEdits(missing, editSchemas(R"({"type":"integer"})"));
     REQUIRE_FALSE(lacking.has_value());
     CHECK(lacking.error().code == TableErrorCode::SourceContract);
-    CHECK(lacking.error().message.find("nosuch") != std::string::npos);
+    CHECK(lacking.error().message.contains("nosuch"));
 
     auto const fits =
         describedOf({column("id", ColumnKind::Integer),
@@ -2684,7 +2684,7 @@ TEST_CASE("description: a measure edited in a unit the table lacks is a source c
     auto const lacking = checkEdits(measured({gram}), schemas);
     REQUIRE_FALSE(lacking.has_value());
     CHECK(lacking.error().code == TableErrorCode::SourceContract);
-    CHECK(lacking.error().message.find("kg") != std::string::npos);
+    CHECK(lacking.error().message.contains("kg"));
     CHECK(checkEdits(measured({gram, kilogram}), schemas).has_value());
 }
 
@@ -2695,13 +2695,11 @@ TEST_CASE("description: a column's edit is on the wire, and absent when it has n
                      editedColumn("label", ColumnKind::Text,
                                   {.action = "Lims_EditSpecimenRow", .member = "label", .readonly = "frozen"})});
     std::string const json = glz::write_json(described).value_or("");
-    CHECK(json.find(R"("edit":{"action":"Lims_EditSpecimenRow","member":"label","readonly":"frozen"})") !=
-          std::string::npos);
+    CHECK(json.contains(R"("edit":{"action":"Lims_EditSpecimenRow","member":"label","readonly":"frozen"})"));
     TableDescription read;
     REQUIRE_FALSE(glz::read_json(read, json));
     CHECK(read == described);
-    CHECK(glz::write_json(describedOf({column("id", ColumnKind::Integer)})).value_or("").find("edit") ==
-          std::string::npos);
+    CHECK(!glz::write_json(describedOf({column("id", ColumnKind::Integer)})).value_or("").contains("edit"));
 }
 
 // NOLINTBEGIN(misc-use-internal-linkage): registered types must have external linkage.
@@ -2793,7 +2791,7 @@ TEST_CASE("description: a server refuses to describe a table whose edit does not
     };
     auto const fits = describe("Table.fits.describe");
     CHECK(fits.kind == "ok");
-    CHECK(fits.body.find(R"("edit":{"action":"FitsEdit")") != std::string::npos);
+    CHECK(fits.body.contains(R"("edit":{"action":"FitsEdit")"));
     auto const misfits = describe("Table.misfits.describe");
     CHECK(misfits.kind == "err");
     INFO(misfits.message);

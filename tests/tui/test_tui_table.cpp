@@ -1239,7 +1239,7 @@ TEST_CASE("tui table: a table that never had a span plans nothing, and one that 
 TEST_CASE("tui table: lifting a tall spanning cell shrinks the table in the frame that does it",
           "[tui][table][span]") {
     Harness harness{30, 10};
-    auto column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
     Fruit fruit{harness, ui::SelectionMode::Single, column.get()};
     auto foot = harness.make<TextImpl>(column.get());
     foot->setText("foot");
@@ -1531,7 +1531,7 @@ TEST_CASE("tui table: cell widgets alive are rows in view times columns in view"
     TuiWindowFixture f{100'000, 300, {.pinned = 0}};
     f.scrollRows(5'000);
     f.scrollColumns(100 * 12);
-    CHECK(f.cellWidgetsAlive() == 30 * 10);               // the terminal keeps no overscan
+    CHECK(f.cellWidgetsAlive() == std::size_t{30} * 10);  // the terminal keeps no overscan
     CHECK(f.screenLine(31).starts_with("100,000 rows"));  // the status line, last
 }
 
@@ -1828,9 +1828,9 @@ TEST_CASE("tui table: select-all asks the handler; a status entry reports its id
         .shown = true});
     f.settle();
     std::string const line = f.screenLine(31);
-    CHECK(line.find("[Alt+1 Select them]") != std::string::npos);
-    CHECK(line.find("[Alt+2 Clear marks]") != std::string::npos);
-    CHECK(line.find("[Alt+3 Run on these]") != std::string::npos);
+    CHECK(line.contains("[Alt+1 Select them]"));
+    CHECK(line.contains("[Alt+2 Clear marks]"));
+    CHECK(line.contains("[Alt+3 Run on these]"));
     static_cast<void>(f.screen.dispatchEvent(core::tui::test::charKey('2', core::tui::Modifier::Alt)));
     f.settle();
     CHECK(chosen == std::vector<std::string>{"clear"});
@@ -1961,7 +1961,7 @@ TEST_CASE("tui grid: typing on a focused cell opens its editor, Enter commits an
     }
     std::size_t const massAt = g.line(headerLine).find("mass");
     REQUIRE(massAt != std::string::npos);
-    CHECK(g.line(headerLine + 1).substr(massAt, 6).find('5') != std::string::npos);
+    CHECK(g.line(headerLine + 1).substr(massAt, 6).contains('5'));
     g.send(core::tui::test::specialKey(KeyCode::Enter));
     CHECK(g.f.form->field("specimens[0].mass").draft() == "5");
     CHECK_FALSE(g.f.grid->editing().has_value());
@@ -1995,9 +1995,9 @@ TEST_CASE("tui table: bands draw above the header", "[tui][table][bands]") {
     std::size_t const m8 = drawn.at(1).find("M8");
     REQUIRE(m8 != std::string::npos);
     CHECK(drawn.at(0).find("Mass retained [g]") == m8);  // over columns 1 to 3, not over Name
-    CHECK(drawn.at(1).find("Name") != std::string::npos);
+    CHECK(drawn.at(1).contains("Name"));
     table->setBands({});
-    CHECK(harness.draw().at(0).find("Name") != std::string::npos);  // no band line once none is given
+    CHECK(harness.draw().at(0).contains("Name"));  // no band line once none is given
     cells.clear();
     row.reset();
 }
@@ -2026,12 +2026,12 @@ TEST_CASE("tui table: a span across columns and a summary row", "[tui][table][sp
     table->setRowSpans(*rows.at(0), {ui::RowSpan{.column = 0, .rows = 1, .columns = 3}});
     Rows const drawn = harness.draw();
     REQUIRE(drawn.size() >= 3);
-    CHECK(drawn.at(1).find("wide text here") != std::string::npos);
-    CHECK(drawn.at(1).find("B1") == std::string::npos);
-    CHECK(drawn.at(1).find("C1") == std::string::npos);
-    CHECK(drawn.at(1).find("D1") != std::string::npos);
+    CHECK(drawn.at(1).contains("wide text here"));
+    CHECK(!drawn.at(1).contains("B1"));
+    CHECK(!drawn.at(1).contains("C1"));
+    CHECK(drawn.at(1).contains("D1"));
     CHECK(drawn.at(2).starts_with("\u03A3"));
-    CHECK(drawn.at(2).find("A2") != std::string::npos);
+    CHECK(drawn.at(2).contains("A2"));
     cells.clear();
     rows.clear();
 }

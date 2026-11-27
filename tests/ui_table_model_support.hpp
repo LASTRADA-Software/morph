@@ -109,12 +109,10 @@ table::ColumnKind kindOf(table::DataSource const& source, std::string_view colum
 
 // A document's text with a top-level `state` entry @p name initialised to @p init (JSON).
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withState(text, name, init)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
-
 std::string withState(std::string_view text, std::string_view name, std::string_view init);
 
 // A document's text whose table's first column part takes the member @p member, written `"key":value`.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withFirstColumnKey(text, member)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
-
 std::string withFirstColumnKey(std::string_view text, std::string_view member);
 
 // The commands that count a table event's runs in `n` and keep its last `event` in `last`.
@@ -276,7 +274,6 @@ inline constexpr std::string_view kSelectionMutations = R"({
 
 // The document of @p table and @p mutations: the table, and a button `run-<name>` running each mutation.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `selectionDoc(table, mutations, h)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
-
 std::string selectionDoc(std::string_view table, std::string_view mutations, TableHarness& h);
 
 // Mounts it and answers the describe request and the first page: six open rows, total 6, viewRevision "v1".

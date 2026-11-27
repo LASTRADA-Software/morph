@@ -943,5 +943,5 @@ TEST_CASE("collection: header and table menus are present and its arrangement pe
     REQUIRE(stored.has_value());
     REQUIRE(stored->has_value());
     CHECK((*stored)->revision == "1");  // one save
-    CHECK((*stored)->json.find(R"("hidden":["name"])") != std::string::npos);
+    CHECK((*stored)->json.contains(R"("hidden":["name"])"));
 }

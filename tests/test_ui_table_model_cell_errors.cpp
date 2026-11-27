@@ -61,8 +61,8 @@ TEST_CASE("model table: a reply's field errors land on the cells they name", "[u
     h.settle();
     REQUIRE(h.dispatcher.count("Lims_EditSpecimenRow") == 1);
     h.reply(h.dispatcher.last("Lims_EditSpecimenRow"), R"({"errors":{"values.remarkText":["too long"]}})");
-    CHECK(cellMarks(h, 1, "remark").find('e') != std::string::npos);
-    CHECK(cellMarks(h, 1, "label").find('e') == std::string::npos);
+    CHECK(cellMarks(h, 1, "remark").contains('e'));
+    CHECK(!cellMarks(h, 1, "label").contains('e'));
 }
 
 // Mutation: sendRowEdit ignoring the reply's failed rows (the cell is marked modified instead).
@@ -120,8 +120,8 @@ TEST_CASE("model table: a refusal of one call of a row lands on that call's cell
     REQUIRE(h.dispatcher.count("Lims_EditSpecimenRow") == 1);
     h.fail(h.dispatcher.last("Lims_EditSpecimenCount"));
     h.reply(h.dispatcher.last("Lims_EditSpecimenRow"), R"({"rows":{"rows":[{"key":1}]}})");
-    CHECK(cellMarks(h, 1, "count").find('e') != std::string::npos);
-    CHECK(cellMarks(h, 1, "label").find('e') == std::string::npos);
+    CHECK(cellMarks(h, 1, "count").contains('e'));
+    CHECK(!cellMarks(h, 1, "label").contains('e'));
 }
 
 namespace {
@@ -162,8 +162,8 @@ TEST_CASE("model table: an editable model table keeps its row selection in the m
     auto const screen = mountEdits(h, editDoc(R"(,"selectionMode":"multiple")"));
     int const table = h.byTestId("Table", "t");
     CHECK_FALSE(h.backend.hasProp(table, "cellSelection"));
-    CHECK(h.backend.prop(table, "keys").find("Shift+Down") == std::string::npos);
-    CHECK(h.backend.prop(table, "keys").find("Ctrl+A") == std::string::npos);
+    CHECK(!h.backend.prop(table, "keys").contains("Shift+Down"));
+    CHECK(!h.backend.prop(table, "keys").contains("Ctrl+A"));
 }
 
 // Mutation: ModelGridSource::moveKey not telling the controller (focus stays on key 1, which the view no longer has:

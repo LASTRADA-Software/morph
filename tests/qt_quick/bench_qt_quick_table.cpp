@@ -161,6 +161,7 @@ void reportRange(BenchHarness& harness, QQuickItem& flick) {
 }
 
 // Scrolls @p flick's @p property from its current value by @p step a frame for @p frames frames, timing each.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the step per frame, then the limit, as the cases state them.
 std::vector<double> scrollFrames(BenchHarness& harness, QQuickItem& flick, char const* property, double step,
                                  int frames, double limit) {
     std::vector<double> times;
@@ -196,7 +197,7 @@ TEST_CASE("qt quick baseline: F2 to F5 on a rows table of 2,000 x 300", "[.bench
     watchdog.step("mount: parse", seconds{300});
     auto const loaded = ui::testing::loadOrFail(document);
     watchdog.step("mount: interpreter mount", seconds{300});
-    auto screen = harness.interpreter.mount(loaded, {}, harness.scene.backend());
+    auto const screen = harness.interpreter.mount(loaded, {}, harness.scene.backend());
     REQUIRE(screen.has_value());
     watchdog.step("mount: settle", seconds{300});
     harness.scene.settle();
@@ -256,11 +257,31 @@ TEST_CASE("qt quick baseline: F2 to F5 on a rows table of 2,000 x 300", "[.bench
         double limit;
     };
     std::vector<Scroll> const scrolls{
-        {"F3: vertical, 20 rows/s", flick, "contentY", rowHeight * 20.0 / 60.0, bottom},
-        {"F3: vertical fling, 2,000 rows/s", flick, "contentY", rowHeight * 2'000.0 / 60.0, bottom},
-        {"F3: thumb drag across the table in 2 s", flick, "contentY", bottom / kFrames, bottom},
-        {"F4: horizontal, 10 columns/s", hflick, "contentX", columnWidth * 10.0 / 60.0, right},
-        {"F4: horizontal fling, 100 columns/s", hflick, "contentX", columnWidth * 100.0 / 60.0, right},
+        {.name = "F3: vertical, 20 rows/s",
+         .flickable = flick,
+         .property = "contentY",
+         .step = rowHeight * 20.0 / 60.0,
+         .limit = bottom},
+        {.name = "F3: vertical fling, 2,000 rows/s",
+         .flickable = flick,
+         .property = "contentY",
+         .step = rowHeight * 2'000.0 / 60.0,
+         .limit = bottom},
+        {.name = "F3: thumb drag across the table in 2 s",
+         .flickable = flick,
+         .property = "contentY",
+         .step = bottom / kFrames,
+         .limit = bottom},
+        {.name = "F4: horizontal, 10 columns/s",
+         .flickable = hflick,
+         .property = "contentX",
+         .step = columnWidth * 10.0 / 60.0,
+         .limit = right},
+        {.name = "F4: horizontal fling, 100 columns/s",
+         .flickable = hflick,
+         .property = "contentX",
+         .step = columnWidth * 100.0 / 60.0,
+         .limit = right},
     };
     for (Scroll const& scroll : scrolls) {
         watchdog.step(scroll.name, seconds{120});
@@ -309,8 +330,9 @@ TEST_CASE("qt quick windowed: F3 to F5 on a source table of 100,000 x 300", "[.b
     Watchdog watchdog;
     watchdog.step("mount", seconds{300});
     BenchHarness harness;
-    auto rows = std::make_shared<morph::testing::FakeRows>(100'000, 300, harness.scene.owner());
+    auto const rows = std::make_shared<morph::testing::FakeRows>(100'000, 300, harness.scene.owner());
     std::vector<ui::TableColumn> columns;
+    columns.reserve(300);
     for (std::size_t column = 0; column < 300; ++column) {
         columns.push_back(ui::TableColumn{
             .id = "c" + std::to_string(column), .label = "C" + std::to_string(column), .width = ui::Sizing::fixed(8)});
@@ -331,7 +353,7 @@ TEST_CASE("qt quick windowed: F3 to F5 on a source table of 100,000 x 300", "[.b
                            ui::table(std::move(columns), std::move(source), ui::TableOptions{})};
     harness.scene.settle();
     static_cast<void>(harness.frame());
-    QQuickItem* const tableItem = &Scene::itemOf(view.root());
+    QQuickItem const* const tableItem = &Scene::itemOf(view.root());
     auto* const flick = tableItem->findChild<QQuickItem*>(QStringLiteral("flick"));
     auto* const hflick = tableItem->findChild<QQuickItem*>(QStringLiteral("hflick"));
     REQUIRE(flick != nullptr);
@@ -371,11 +393,31 @@ TEST_CASE("qt quick windowed: F3 to F5 on a source table of 100,000 x 300", "[.b
         double limit;
     };
     std::vector<Scroll> const scrolls{
-        {"F3: vertical, 20 rows/s", flick, "contentY", rowHeight * 20.0 / 60.0, bottom},
-        {"F3: vertical fling, 2,000 rows/s", flick, "contentY", rowHeight * 2'000.0 / 60.0, bottom},
-        {"F3: thumb drag across the table in 2 s", flick, "contentY", bottom / kFrames, bottom},
-        {"F4: horizontal, 10 columns/s", hflick, "contentX", columnWidth * 10.0 / 60.0, right},
-        {"F4: horizontal fling, 100 columns/s", hflick, "contentX", columnWidth * 100.0 / 60.0, right},
+        {.name = "F3: vertical, 20 rows/s",
+         .flickable = flick,
+         .property = "contentY",
+         .step = rowHeight * 20.0 / 60.0,
+         .limit = bottom},
+        {.name = "F3: vertical fling, 2,000 rows/s",
+         .flickable = flick,
+         .property = "contentY",
+         .step = rowHeight * 2'000.0 / 60.0,
+         .limit = bottom},
+        {.name = "F3: thumb drag across the table in 2 s",
+         .flickable = flick,
+         .property = "contentY",
+         .step = bottom / kFrames,
+         .limit = bottom},
+        {.name = "F4: horizontal, 10 columns/s",
+         .flickable = hflick,
+         .property = "contentX",
+         .step = columnWidth * 10.0 / 60.0,
+         .limit = right},
+        {.name = "F4: horizontal fling, 100 columns/s",
+         .flickable = hflick,
+         .property = "contentX",
+         .step = columnWidth * 100.0 / 60.0,
+         .limit = right},
     };
     for (Scroll const& scroll : scrolls) {
         watchdog.step(scroll.name, seconds{120});

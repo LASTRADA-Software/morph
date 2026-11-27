@@ -331,7 +331,8 @@ TEST_CASE("table state: state of any size", "[ui][state]") {
     REQUIRE(big.size() > std::size_t{1} << 20);  // sent in parts, and read back past the first head
     REQUIRE(save(h, kKey, big).outcome == table::SaveOutcome::Saved);
     CHECK(load(h, kKey)->json == big);
-    CHECK(h.prefs.largestValue() <= 12 * 1024);  // every entry within segmentBytes, a segment's quotes included
+    CHECK(h.prefs.largestValue() <=
+          std::size_t{12} * 1024);  // every entry within segmentBytes, a segment's quotes included
 
     h.prefs.failSetsAfter(h.prefs.setCount() + 1 + segmentsOf(big2));  // the intent and segments go; the head fails
     CHECK_FALSE(trySave(h, kKey, big2));
@@ -807,7 +808,7 @@ TEST_CASE(
         auto const bigStored = load(big, key);
         REQUIRE(bigStored.has_value());
         CHECK(bigStored->json == ticked);
-        CHECK(big.prefs.largestValue() <= 12 * 1024);
+        CHECK(big.prefs.largestValue() <= std::size_t{12} * 1024);
     }
 }
 
@@ -1106,7 +1107,7 @@ TEST_CASE("table state: a key out of bounds fails its own load, and its neighbou
 TEST_CASE("table state: a load whose heads would outgrow its envelope defers the rest", "[ui][state]") {
     StoreFixture h;
     std::string const big = escapedState(800UZ * 1024);
-    REQUIRE(ui::detail::wireBytes(big) > 3 * 800 * 1024);
+    REQUIRE(ui::detail::wireBytes(big) > std::uint64_t{3} * 800 * 1024);
     REQUIRE(save(h, keyOf("t1"), big).outcome == table::SaveOutcome::Saved);
     REQUIRE(save(h, keyOf("t2"), big).outcome == table::SaveOutcome::Saved);
     REQUIRE(save(h, keyOf("t3"), "{}").outcome == table::SaveOutcome::Saved);

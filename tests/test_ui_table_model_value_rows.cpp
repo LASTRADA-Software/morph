@@ -56,7 +56,6 @@ using morph::ui::ValueList;
 using morph::ui::ValueRecord;
 using morph::ui::ValueRowsCollator;
 using morph::ui::ValueRowsSource;
-using morph::ui::testing::change;
 using morph::ui::testing::coreOf;
 using morph::ui::testing::describedFrom;
 using morph::ui::testing::diagnosticsMentioning;
@@ -81,7 +80,6 @@ using morph::ui::testing::statusOf;
 using morph::ui::testing::storeExecutor;
 using morph::ui::testing::TableHarness;
 using morph::ui::testing::tableOf;
-using morph::ui::testing::value;
 
 // Mutation: reporting per row, which reports twice ("purple" and "pink").
 

@@ -89,7 +89,7 @@ public:
     void click(ui::Widget& widget) override {
         settle();
         QQuickItem const* target = Backend::itemOf(widget);
-        if (auto* const part =
+        if (auto const* const part =
                 target != nullptr ? target->findChild<QQuickItem*>(QStringLiteral("action")) : nullptr) {
             target = part;
         }
@@ -148,7 +148,7 @@ public:
         if (_fault == Fault::DeadInput) {
             return;
         }
-        if (auto* const banner = dynamic_cast<detail::BannerImpl*>(&widget)) {
+        if (auto const* const banner = dynamic_cast<detail::BannerImpl*>(&widget)) {
             QQuickItem const* const item = banner->item();
             mouseClick(item != nullptr ? item->findChild<QQuickItem*>(QStringLiteral("dismiss")) : nullptr);
             return;
@@ -199,7 +199,7 @@ public:
     // A right click on the header, or a click on the `⋯`, opens the menu; its entries are read back from the open
     // popup, and Esc must close it. A menu that does not open, or does not close on Esc, reads as none.
     std::vector<ui::MenuEntry> headerMenu(ui::Widget& table, std::optional<std::size_t> column) override {
-        QObject* const menu = openMenu(table, column);
+        QObject const* const menu = openMenu(table, column);
         std::vector<ui::MenuEntry> entries;
         if (menu == nullptr) {
             return entries;
@@ -219,13 +219,13 @@ public:
     // The menu opened as `headerMenu` opens it, then a click on each level's entry in the open popup.
     void chooseHeaderMenuEntry(ui::Widget& table, std::optional<std::size_t> column,
                                std::vector<std::size_t> const& path) override {
-        QObject* const menu = openMenu(table, column);
+        QObject const* const menu = openMenu(table, column);
         if (menu == nullptr) {
             return;
         }
         for (std::size_t const index : path) {
             auto* const entries = menu->property("contentItem").value<QQuickItem*>();
-            QQuickItem* const entry =
+            QQuickItem const* const entry =
                 entries == nullptr ? nullptr : namedUnder(*entries, QStringLiteral("menuEntry%1").arg(index));
             if (entry == nullptr || !menu->property("opened").toBool()) {
                 return;
@@ -234,12 +234,15 @@ public:
         }
     }
     // A drag of the header onto the header at the place asked for: the column the table shows there.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the interface fixes the order: the column, then the position it moves to.
     void moveColumn(ui::Widget& table, std::size_t column, std::size_t position) override {
         settle();
         QVariantList const visible = Backend::itemOf(table)->property("visibleColumns").toList();
-        qsizetype const place = static_cast<qsizetype>(position);
-        int const target =
-            visible.isEmpty() ? static_cast<int>(position) : (place < visible.size() ? visible.at(place).toInt() : -1);
+        auto const place = static_cast<qsizetype>(position);
+        int target = static_cast<int>(position);
+        if (!visible.isEmpty()) {
+            target = place < visible.size() ? visible.at(place).toInt() : -1;
+        }
         QQuickItem const* const from = named(table, QStringLiteral("header%1").arg(column));
         QQuickItem const* const to = target < 0 ? nullptr : named(table, QStringLiteral("header%1").arg(target));
         if (from == nullptr || to == nullptr || !from->isVisible() || _fault == Fault::DeadInput) {
@@ -293,7 +296,7 @@ public:
 
     void moveCursor(ui::Widget& field, std::size_t position) override {
         settle();
-        auto* const input = dynamic_cast<detail::TextInputImpl*>(&field);
+        auto const* const input = dynamic_cast<detail::TextInputImpl*>(&field);
         if (input == nullptr || _fault == Fault::DeadInput) {
             return;
         }
@@ -365,7 +368,7 @@ public:
     std::optional<ui::testing::WidgetBounds> boundsOf(ui::Widget const& widget) override {
         settle();
         QQuickItem const* const item = base(widget).item();
-        auto* const theme =
+        auto const* const theme =
             _scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
         if (item == nullptr || theme == nullptr) {
             return std::nullopt;
@@ -392,7 +395,7 @@ public:
     std::optional<ui::testing::WidgetBounds> textExtentOf(ui::Widget const& widget) override {
         settle();
         QQuickItem const* const item = base(widget).item();
-        auto* const theme =
+        auto const* const theme =
             _scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
         if (item == nullptr || theme == nullptr) {
             return std::nullopt;
@@ -498,7 +501,7 @@ private:
         } else {
             mouseClick(named(table, QStringLiteral("tableMenuButton")));
         }
-        QObject* const menu = Backend::itemOf(table)->findChild<QObject*>(QStringLiteral("configMenu"));
+        auto* const menu = Backend::itemOf(table)->findChild<QObject*>(QStringLiteral("configMenu"));
         bool const open =
             menu != nullptr && menu->property("opened").toBool() && !listOf(menu->property("level")).isEmpty();
         return open ? menu : nullptr;

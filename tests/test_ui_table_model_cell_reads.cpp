@@ -248,8 +248,8 @@ TEST_CASE("model table: reading another cell of the column leaves an open editor
     f.grid->focusCell(at(1, "count"));
     f.grid->type("5");
     morph::ui::testing::RecordingBackend backend;
-    morph::ui::Mounted view{f.h.rt, backend,
-                            f.source->editor(key(1), "count")};  // the open editor, as the mount builds it
+    morph::ui::Mounted const view{f.h.rt, backend,
+                                  f.source->editor(key(1), "count")};  // the open editor, as the mount builds it
     f.h.settle();
     int const input = backend.find("TextInput", "text", "5").value_or(0);
     REQUIRE(input != 0);

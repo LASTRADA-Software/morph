@@ -539,9 +539,9 @@ TEST_CASE("table: a total kind goes over the wire by name", "[table][query]") {
     Page<int> page{.rows = {1}, .total = 5, .offset = 0, .totalKind = TotalKind::AtLeast};
     auto const json = glz::write_json(page);
     REQUIRE(json.has_value());
-    CHECK(json->find("\"totalKind\":\"atLeast\"") != std::string::npos);
+    CHECK(json->contains("\"totalKind\":\"atLeast\""));
     page.totalKind = TotalKind::Exact;
-    CHECK(glz::write_json(page).value().find("\"totalKind\":\"exact\"") != std::string::npos);
+    CHECK(glz::write_json(page).value().contains("\"totalKind\":\"exact\""));
     Page<int> back;
     REQUIRE_FALSE(glz::read_json(back, R"({"rows":[],"total":3,"offset":0,"totalKind":"atLeast"})"));
     CHECK(back.totalKind == TotalKind::AtLeast);

@@ -41,8 +41,6 @@
 #include "ui_table_model_support.hpp"
 #include "ui_table_support.hpp"
 
-namespace table = morph::table;
-
 using namespace table_model_support;
 
 using morph::ui::Value;
@@ -51,7 +49,6 @@ using morph::test::grid::at;
 using morph::test::grid::committedOk;
 using morph::test::grid::ModelGridFixture;
 using morph::test::grid::specimenRecord;
-using morph::ui::testing::value;
 
 // Mutations: the walk passing over a row not fetched yet as if it were read-only (focus lands on row 5); the
 // placeholder's key read untracked in GridController::place (the binding over the focus never hears row 3 arrive).
@@ -96,7 +93,6 @@ namespace {
 
 // The text of the cell of a mounted table's row in a column.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `mountedText(backend, rowWidget, column)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
-
 std::string mountedText(morph::ui::testing::RecordingBackend const& backend, int rowWidget, std::size_t column) {
     for (int const cell : backend.children(rowWidget)) {
         if (backend.prop(cell, "column") == std::to_string(column)) {

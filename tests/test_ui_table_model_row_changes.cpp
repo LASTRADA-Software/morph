@@ -102,7 +102,7 @@ TEST_CASE("table rows: a new description revision drops a view selection that na
             CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[]})"));
             CHECK_FALSE(lastQuery(h).filters.columns.contains("c"));
             runMutation(h, "tag");
-            CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_TagRows")).body.find("\"c\"") == std::string::npos);
+            CHECK(!h.dispatcher.calls.at(h.dispatcher.last("Lims_TagRows")).body.contains("\"c\""));
         } else {
             Value const selection = elementValue(h, "t", "selectionSet");
             REQUIRE(selection.field("view") != nullptr);
@@ -437,7 +437,6 @@ std::string keyedAt(std::vector<std::pair<std::int64_t, SelRow>> const& placed, 
 
 // The document: @p table, a button `run-<name>` for each mutation, and buttons `pick-<key>` setting `picked`.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `actingDoc(h, table, mutations)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
-
 std::string actingDoc(TableHarness& h, std::string_view table, std::string_view mutations) {
     h.mutationActions.insert_or_assign("save", "Lims_SaveAs");
     h.mutationActions.insert_or_assign("touch", "Lims_TouchRow");
@@ -964,6 +963,7 @@ TEST_CASE("key change: focus follows a new key outside the rows in view", "[ui][
     CHECK(focusedKey(*screen, h, table) == std::optional{rid(299)});
 }
 
+// NOLINTBEGIN(misc-use-internal-linkage)
 namespace edit_rows {
 
 // A model whose table `specimens` the edit actions below name: its record is `T_EditRows.specimens`.

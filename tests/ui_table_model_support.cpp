@@ -26,7 +26,6 @@ using morph::ui::testing::queryOf;
 using morph::ui::testing::replyDescribe;
 using morph::ui::testing::replyPage;
 using morph::ui::testing::TableHarness;
-using morph::ui::testing::value;
 using morph::ui::testing::withTableKey;
 
 namespace table_model_support {
@@ -159,7 +158,6 @@ table::ColumnKind kindOf(table::DataSource const& source, std::string_view colum
 
 // A document's text with a top-level `state` entry @p name initialised to @p init (JSON).
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withState(text, name, init)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
-
 std::string withState(std::string_view text, std::string_view name, std::string_view init) {
     auto json = morph::ui::parseJson(text);
     REQUIRE(json.has_value());
@@ -175,7 +173,6 @@ std::string withState(std::string_view text, std::string_view name, std::string_
 
 // A document's text whose table's first column part takes the member @p member, written `"key":value`.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `withFirstColumnKey(text, member)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
-
 std::string withFirstColumnKey(std::string_view text, std::string_view member) {
     auto json = morph::ui::parseJson(text);
     REQUIRE(json.has_value());
@@ -447,7 +444,6 @@ morph::ui::ActionInfo samplesAction() {
 
 // The document of @p table and @p mutations: the table, and a button `run-<name>` running each mutation.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `selectionDoc(table, mutations, h)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
-
 std::string selectionDoc(std::string_view table, std::string_view mutations, TableHarness& h) {
     auto const parsed = morph::ui::parseJson(mutations);
     REQUIRE(parsed.has_value());

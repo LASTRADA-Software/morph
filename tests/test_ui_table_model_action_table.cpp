@@ -51,7 +51,6 @@ using morph::ui::testing::RowsFixture;
 using morph::ui::testing::samplesDescription;
 using namespace std::chrono_literals;
 using morph::ui::ActionInfo;
-using morph::ui::Decimal;
 using morph::ui::HeaderClick;
 using morph::ui::MountStats;
 using morph::ui::Refusal;

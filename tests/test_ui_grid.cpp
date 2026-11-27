@@ -264,7 +264,7 @@ TEST_CASE("grid: the form's submit ends an open edit first", "[ui][grid]") {
     CHECK_FALSE(f.grid->editing().has_value());
     CHECK(commits == 1);
     REQUIRE(f.h.server.submits().size() == 1);
-    CHECK(f.h.server.lastBody().find(R"("mass":{"num":750,"den":100,"dp":2})") != std::string::npos);
+    CHECK(f.h.server.lastBody().contains(R"("mass":{"num":750,"den":100,"dp":2})"));
 }
 
 // Mutation: GridController::click only focusing the cell (the check box stays unset).
@@ -342,7 +342,7 @@ TEST_CASE("grid: a cell's marks are drawn by its cell view and follow the row it
     m.f.h.settle();
     CHECK(m.backend.prop(m.row(1), "marks:1") == "m");
     CHECK(m.backend.prop(m.row(1), "modified") == "true");
-    CHECK(m.backend.prop(m.row(1), "marks:3").find('r') != std::string::npos);  // density, computed
+    CHECK(m.backend.prop(m.row(1), "marks:3").contains('r'));  // density, computed
     CHECK(m.backend.prop(m.row(2), "marks:1").empty());
     CHECK(m.backend.prop(m.row(2), "modified") == "false");
     int const shownOne = m.row(1);
@@ -911,7 +911,7 @@ TEST_CASE("grid: cells on a model's table are refused when the document loads", 
     std::string const text = ui::testing::withTableKey(ui::testing::kModelTable, R"("selectionMode":"cells")");
     auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
     REQUIRE_FALSE(loaded.has_value());
-    CHECK(loaded.error().reason.find("selectionMode") != std::string::npos);
+    CHECK(loaded.error().reason.contains("selectionMode"));
 }
 
 // Mutations, each with its own build: a paste that shifts a value past a read-only cell into the next editable one;
@@ -1262,7 +1262,7 @@ TEST_CASE("grid: submission commits the open editor and places the reply's field
     CHECK(g.value("editing") == ui::Value{});
     CHECK(g.h.backend.prop(g.row(1), "editor:0").empty());
     auto const& call = g.h.dispatcher.calls.at(g.h.dispatcher.last("Lims_RecordSpecimens"));
-    CHECK(call.body.find(R"("mass":{"num":750,"den":100,"dp":2})") != std::string::npos);
+    CHECK(call.body.contains(R"("mass":{"num":750,"den":100,"dp":2})"));
     g.h.dispatcher.reply(g.h.dispatcher.last("Lims_RecordSpecimens"),
                          R"({"errors":{"specimens[1].mass":"must be positive","nosuch":"ignored"}})");
     g.h.settle();
@@ -1319,7 +1319,7 @@ TEST_CASE("grid: the cell menu offers copy and filter before the grid's own entr
     CHECK(g.h.backend.prop(g.table, "filtered") == "[1]");
     CHECK(g.value("filters").field("columns") != nullptr);
     CHECK(g.value("filters").field("columns")->field("note") != nullptr);
-    CHECK(g.h.backend.prop(g.table, "columns").find("filterable=true") != std::string::npos);
+    CHECK(g.h.backend.prop(g.table, "columns").contains("filterable=true"));
     g.h.backend.chooseMenu(g.table, std::nullopt, {"Clear all filters"});
     g.h.settle();
     CHECK(g.h.backend.tableRow(g.table, ui::Key{std::int64_t{1}}).has_value());
@@ -1349,12 +1349,12 @@ TEST_CASE("grid: copy, the cell menu and the filter buttons outlive a remount", 
     form.prefill(R"({"sampleId":4,"specimens":[{"note":"a"},{"note":"b"}]})");
     h.settle();
     int const before = h.byTestId("Table", "grid");
-    CHECK(h.backend.prop(before, "columns").find("filterable=true") != std::string::npos);
+    CHECK(h.backend.prop(before, "columns").contains("filterable=true"));
     h.backend.click(h.byTestId("Button", "toDe"));
     h.settle();
     int const table = h.byTestId("Table", "grid");
     REQUIRE(table != before);  // the table was mounted again
-    CHECK(h.backend.prop(table, "columns").find("filterable=true") != std::string::npos);
+    CHECK(h.backend.prop(table, "columns").contains("filterable=true"));
     std::vector<std::string> labels;
     for (ui::MenuEntry const& shown : h.backend.rightClickCell(table, ui::Key{std::int64_t{1}}, 1)) {
         labels.push_back(shown.label);
@@ -1462,7 +1462,7 @@ TEST_CASE("grid: a column with neither a field nor a value is refused when the d
                  std::string_view{R"({"id":"note","field":"note"})"}.size(), R"({"id":"note"})");
     auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
     REQUIRE_FALSE(loaded.has_value());
-    CHECK(loaded.error().reason.find("`field`") != std::string::npos);
+    CHECK(loaded.error().reason.contains("`field`"));
 }
 
 constexpr std::string_view kOverlayGridDocument = R"({"vocab":"ui/1","id":"specimens",
@@ -1522,7 +1522,7 @@ TEST_CASE("grid: a field overlay's grid part needs the grid widget", "[ui][grid]
     text.replace(text.find(R"("widget":"grid",)"), std::string_view{R"("widget":"grid",)"}.size(), "");
     auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
     REQUIRE_FALSE(loaded.has_value());
-    CHECK(loaded.error().reason.find("widget") != std::string::npos);
+    CHECK(loaded.error().reason.contains("widget"));
 }
 
 constexpr std::string_view kCellsGridDocument = R"({"vocab":"ui/1","id":"specimens",
@@ -1585,14 +1585,14 @@ TEST_CASE("grid: the loader keeps cells and row operations to grids", "[ui][grid
     std::string single{kCellsGridDocument};
     single.replace(single.find(R"("selectionMode":"cells")"), std::string_view{R"("selectionMode":"cells")"}.size(),
                    R"("selectionMode":"single")");
-    CHECK(refusal(single).find("selects cells") != std::string::npos);
+    CHECK(refusal(single).contains("selects cells"));
     std::string both{kCellsGridDocument};
     both.replace(both.find(R"("appendRows":true)"), std::string_view{R"("appendRows":true)"}.size(),
                  R"("appendRows":true,"rowsFixed":true)");
-    CHECK(refusal(both).find("rowsFixed") != std::string::npos);
+    CHECK(refusal(both).contains("rowsFixed"));
     constexpr std::string_view kRowsTable = R"({"vocab":"ui/1","id":"plain","state":{"items":{"init":{"lit":[]}}},
       "view":{"kind":"table","id":"t","rows":{"ref":"items"},"appendRows":true,"columns":[{"id":"a"}]}})";
-    CHECK(refusal(std::string{kRowsTable}).find("`appendRows` is a grid's") != std::string::npos);
+    CHECK(refusal(std::string{kRowsTable}).contains("`appendRows` is a grid's"));
 }
 
 // Mutation: the mount ignoring KeyOutcome::FocusNext.
@@ -1620,7 +1620,7 @@ TEST_CASE("grid: a column naming no member is refused when the document loads", 
                  std::string_view{R"({"id":"note","field":"note"})"}.size(), R"({"id":"x","field":"nosuch"})");
     auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
     REQUIRE_FALSE(loaded.has_value());
-    CHECK(loaded.error().reason.find("nosuch") != std::string::npos);
+    CHECK(loaded.error().reason.contains("nosuch"));
 }
 
 // Mutation: the mount not wiring setOnFocusOut to GridController::leave (the editor stays open: `editing` is not
@@ -1770,7 +1770,7 @@ TEST_CASE("grid: the loader checks a form's derive keys and keeps a grid column'
     std::string computed = text;
     computed.replace(computed.find(R"("deriveDebounce":40)"), std::string_view{R"("deriveDebounce":40)"}.size(),
                      R"("deriveDebounce":{"ref":"rec.ready"})");
-    CHECK(refusal(computed).find("`deriveDebounce` is a literal count of milliseconds") != std::string::npos);
+    CHECK(refusal(computed).contains("`deriveDebounce` is a literal count of milliseconds"));
     // The debounce times the evaluation too, so a form whose rows are only computed takes it without `derive`.
     std::string unnamed = text;
     unnamed.replace(unnamed.find(R"("derive":"Lims_DeriveSpecimens",)"),
@@ -1781,12 +1781,12 @@ TEST_CASE("grid: the loader checks a form's derive keys and keeps a grid column'
                     "Lims_ClientDerive");  // an action of another model
     std::string const foreignReason = refusal(foreign);
     INFO(foreignReason);
-    CHECK(foreignReason.find("belongs to `Lims_ClientModel`") != std::string::npos);
+    CHECK(foreignReason.contains("belongs to `Lims_ClientModel`"));
     constexpr std::string_view kRowsTable = R"({"vocab":"ui/1","id":"plain","state":{"items":{"init":{"lit":[]}}},
       "view":{"kind":"table","rows":{"ref":"items"},"columns":[{"id":"a","placeholder":"x"}]}})";
     std::string const plainReason = refusal(std::string{kRowsTable});
     INFO(plainReason);
-    CHECK(plainReason.find("is a grid column's") != std::string::npos);
+    CHECK(plainReason.contains("is a grid column's"));
 }
 
 // ── Spans and summary rows (editing.md delivery step 4) ─────────────────────
@@ -2014,17 +2014,17 @@ TEST_CASE("summary: a model-backed table refuses summaries", "[ui][summary][inte
         text.replace(text.find("SUMMARIES"), std::string_view{"SUMMARIES"}.size(), summaries);
         return text;
     };
-    CHECK(refusal(with(R"("summaries":[{"key":"s","cells":{}}])")).find("refuses `summaries`") != std::string::npos);
+    CHECK(refusal(with(R"("summaries":[{"key":"s","cells":{}}])")).contains("refuses `summaries`"));
     CHECK(
         refusal(
             with(
                 R"("group":{"by":{"lit":1},"heading":[{"kind":"text","text":"h"}],"summaries":[{"key":"s","cells":{}}]})"))
-            .find("refuses `summaries`") != std::string::npos);
+            .contains("refuses `summaries`"));
     // On a grid, a summary's position is bottom or top, and its cells name the grid's columns.
     std::string top{kSummaryGridDocument};
     top.replace(top.find(R"({"key":"sd",)"), std::string_view{R"({"key":"sd",)"}.size(),
                 R"({"key":"sd","position":"middle",)");
-    CHECK(refusal(top).find("`bottom` or `top`") != std::string::npos);
+    CHECK(refusal(top).contains("`bottom` or `top`"));
     CHECK(refusal(std::string{kSummaryGridDocument}).empty());
 }
 
@@ -2038,13 +2038,13 @@ TEST_CASE("bands: the loader refuses bands a table cannot draw", "[ui][bands][in
         return loaded.has_value() ? std::string{} : loaded.error().reason;
     };
     CHECK(refusal(R"([{"label":"AB","columns":{"lit":["a","b"]}}])").empty());
-    CHECK(refusal(R"([{"label":"Stray","columns":{"lit":["c"]}}])").find("Stray") != std::string::npos);
+    CHECK(refusal(R"([{"label":"Stray","columns":{"lit":["c"]}}])").contains("Stray"));
     CHECK(refusal(R"([{"label":"One","columns":{"lit":["a"]},"bands":[{"label":"Two","columns":{"lit":["a"]},"bands":[
                      {"label":"Three","columns":{"lit":["a"]},"bands":[{"label":"Four","columns":{"lit":["a"]}}]}]}]}])")
-              .find("Four") != std::string::npos);
+              .contains("Four"));
     CHECK(
         refusal(R"([{"label":"Parent","columns":{"lit":["a"]},"bands":[{"label":"Child","columns":{"lit":["b"]}}]}])")
-            .find("Child") != std::string::npos);
+            .contains("Child"));
 }
 
 // Mutation: the lowering leaving a table's `bands` out of the table's options (the backend records no bands).
@@ -2276,7 +2276,7 @@ void addLimitsAction(ui::testing::TableHarness& h) {
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `replaced(text, from, to)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
 std::string replaced(std::string_view text, std::string_view from, std::string_view to) {
     std::string out{text};
-    REQUIRE(out.find(from) != std::string::npos);
+    REQUIRE(out.contains(from));
     out.replace(out.find(from), from.size(), to);
     return out;
 }
@@ -2290,28 +2290,25 @@ TEST_CASE("fixed grid: the loader refuses what the spec refuses", "[ui][grid][fi
         return loaded.has_value() ? std::string{} : loaded.error().reason;
     };
     CHECK(refusal(std::string{kFixedGridDocument}).empty());
-    CHECK(refusal(replaced(kFixedGridDocument, R"("key":"method")", R"("key":"density")")).find("`density`") !=
-          std::string::npos);
+    CHECK(refusal(replaced(kFixedGridDocument, R"("key":"method")", R"("key":"density")")).contains("`density`"));
     CHECK(refusal(replaced(kFixedGridDocument, R"("form":"rec",)", R"("form":"rec","rows":{"lit":[]},)"))
-              .find("`rows`") != std::string::npos);
+              .contains("`rows`"));
     CHECK(refusal(replaced(kFixedGridDocument, R"("form":"rec",)", R"("form":"rec","field":"specimens",)"))
-              .find("`field`") != std::string::npos);
-    CHECK(refusal(replaced(kFixedGridDocument, R"("form":"rec",)", "")).find("`form`") != std::string::npos);
+              .contains("`field`"));
+    CHECK(refusal(replaced(kFixedGridDocument, R"("form":"rec",)", "")).contains("`form`"));
     constexpr std::string_view kFormAndRows = R"({"vocab":"ui/1","id":"limits",
       "models":{"sample":{"type":"Lims_SampleModel"}},
       "view":{"kind":"column","children":[
         {"kind":"form","id":"rec","model":"sample","action":"Lims_SetLimits","submit":"explicit"},
         {"kind":"table","id":"grid","form":"rec","field":"specimens","rows":{"lit":[]},
          "columns":[{"id":"mass","field":"mass"}]}]}})";
-    CHECK(refusal(std::string{kFormAndRows}).find("`rows` or a `form`, not both") != std::string::npos);
+    CHECK(refusal(std::string{kFormAndRows}).contains("`rows` or a `form`, not both"));
     // A key repeated between a block's row and a fixed row is one key twice in the grid.
-    CHECK(refusal(replaced(kFixedGridDocument, R"({"key":"mass")", R"({"key":"count")")).find("`count`") !=
-          std::string::npos);
+    CHECK(refusal(replaced(kFixedGridDocument, R"({"key":"mass")", R"({"key":"count")")).contains("`count`"));
     // A cell names a field of the form, and a column of the table.
-    CHECK(refusal(replaced(kFixedGridDocument, "limits.count", "limits.nosuch")).find("limits.nosuch") !=
-          std::string::npos);
+    CHECK(refusal(replaced(kFixedGridDocument, "limits.count", "limits.nosuch")).contains("limits.nosuch"));
     CHECK(refusal(replaced(kFixedGridDocument, R"("max":{"text":"none"})", R"("other":{"text":"none"})"))
-              .find("`other`") != std::string::npos);
+              .contains("`other`"));
 }
 
 // Mutation: a table with `layoutRows` lowered as a table over `rows` (no row keyed "density" is drawn).
@@ -2448,7 +2445,7 @@ TEST_CASE("fixed grid: a document's cells take their overlays, and a block's val
             shown = h.backend.prop(cell, "text");
         }
     }
-    CHECK(shown.find("2.5") != std::string::npos);
+    CHECK(shown.contains("2.5"));
 }
 
 // Mutations, each its own: the loader not refusing a `{field}` cell without `form` (the block-less document loads);
@@ -2469,18 +2466,17 @@ TEST_CASE(
        "layoutRows":[{"key":"count","cells":{"name":{"text":"Count"},"value":{"value":{"ref":"n"}}}}]}})";
     CHECK(refusal(std::string{kTextGrid}).empty());  // values only: no form needed
     CHECK(refusal(replaced(kTextGrid, R"({"value":{"ref":"n"}})", R"({"field":"limits.count"})"))
-              .find("a cell that edits a field names the form's") != std::string::npos);
-    CHECK(refusal(replaced(kFixedGridDocument, R"("key":"count")", R"("key":"1/mass")")).find("holds a `/`") !=
-          std::string::npos);
+              .contains("a cell that edits a field names the form's"));
+    CHECK(refusal(replaced(kFixedGridDocument, R"("key":"count")", R"("key":"1/mass")")).contains("holds a `/`"));
     // The refusal is the label's: `row` is unbound there.
     auto const labelRow = ui::loadDocumentText(
         replaced(kFixedGridDocument, R"({"key":"mass","label":"Mass")", R"({"key":"mass","label":{"ref":"row.mass"})"),
         ui::LoadOptions{.catalog = h.session.options().catalog});
     REQUIRE_FALSE(labelRow.has_value());
     CAPTURE(labelRow.error().message());
-    CHECK(labelRow.error().message().find("/layoutRows/3/rows/0/label") != std::string::npos);
+    CHECK(labelRow.error().message().contains("/layoutRows/3/rows/0/label"));
     CHECK(refusal(replaced(kFixedGridDocument, R"("max":{"text":"none"})", R"("max":{"text":"none","unit":"g"})"))
-              .find("edits no field") != std::string::npos);
+              .contains("edits no field"));
 }
 
 // Mutation: the source's key check letting a `/` through (no exception).
@@ -2597,7 +2593,7 @@ TEST_CASE("fixed grid: the loader refuses two units for one field", "[ui][grid][
          "layoutRows":[{"key":"w","cells":{"v":{"field":"limits.weight","unit":"g"}})",
                                                 R"("id":"b","form":"rec","columns":[{"id":"v"}],
          "layoutRows":[{"key":"w","cells":{"v":{"field":"limits.weight","unit":"kg"}})"));
-    CHECK(reason.find("`limits.weight` is given the units `g` and `kg`") != std::string::npos);
+    CHECK(reason.contains("`limits.weight` is given the units `g` and `kg`"));
 }
 
 // Mutation: a derive round not moving the load count (the round loads the field in kg, and the overlay's g is not

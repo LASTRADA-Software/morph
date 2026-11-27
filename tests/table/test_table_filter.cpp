@@ -33,6 +33,7 @@
 #include <ranges>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "table/table_fixtures.hpp"
@@ -1360,7 +1361,7 @@ TEST_CASE("groups: undecided rows are the three-valued rule's", "[table][filter]
         auto const page = apply(*source, TableQuery{.sort = {}, .filters = spec, .page = {}});
         REQUIRE(page);
         CHECK(page->undecided == oracleUnknown);
-        CHECK(static_cast<std::int64_t>(must(f.by(spec)).size()) == oracleYes);
+        CHECK(std::cmp_equal(must(f.by(spec)).size(), oracleYes));
     }
 }
 
@@ -1412,10 +1413,10 @@ TEST_CASE("groups: a row costs k lookups and at most one augmentation an entry",
     }
     GroupFilter const together{.columns = ids, .mode = GroupMode::Together, .include = sixteen};
     auto const togetherCounters = counted(together);
-    CHECK(absentSetCounters.setLookups == 16 * kRows);
+    CHECK(absentSetCounters.setLookups == std::uint64_t{16} * kRows);
     CHECK(heldSetCounters.setLookups >= kRows);
-    CHECK(heldSetCounters.setLookups < 16 * kRows);
-    CHECK(togetherCounters.setLookups == 16 * kRows);
+    CHECK(heldSetCounters.setLookups < std::uint64_t{16} * kRows);
+    CHECK(togetherCounters.setLookups == std::uint64_t{16} * kRows);
     std::uint64_t maxAugmentationsOnUncoveredRows = 0;
     std::uint64_t maxAugmentationsOnCoveredRows = 0;
     std::size_t coveredRows = 0;

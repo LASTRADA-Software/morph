@@ -59,7 +59,6 @@ using morph::ui::testing::TestRowsSource;
 using morph::ui::testing::valueToJsonText;
 using namespace std::chrono_literals;
 using morph::ui::testing::answerPages;
-using morph::ui::testing::change;
 using morph::ui::testing::diagnosticsMentioning;
 using morph::ui::testing::elementValue;
 using morph::ui::testing::GatedTableStateStore;

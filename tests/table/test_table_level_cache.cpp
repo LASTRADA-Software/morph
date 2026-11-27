@@ -439,7 +439,7 @@ TEST_CASE("level cache: size is deep", "[table][levels]") {
                 }
                 return out;
             }};
-    CHECK(valueBytes > 20 * 40);
+    CHECK(valueBytes > std::size_t{20} * 40);
     REQUIRE(rig.cache.want(keys(150), LevelUse::Display));
     rig.drain();
     CHECK(rig.cache.stats().bytes <= 100 * valueBytes);

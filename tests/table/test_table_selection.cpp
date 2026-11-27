@@ -695,7 +695,7 @@ TEST_CASE("retained rows: the bound and the wire", "[table][retain]") {
     page.keys = keysOf({1, 2});
     page.unmatched = {0, 6};
     auto const text = glz::write_json(page).value_or("");
-    CHECK(text.find(R"("unmatched":[0,6])") != std::string::npos);
+    CHECK(text.contains(R"("unmatched":[0,6])"));
     GenericPage read;
     REQUIRE_FALSE(glz::read_json(read, text));
     CHECK(read.unmatched == std::vector<std::int64_t>{0, 6});
@@ -703,11 +703,11 @@ TEST_CASE("retained rows: the bound and the wire", "[table][retain]") {
     REQUIRE_FALSE(glz::read_json(plain, std::string_view{R"({"revision":"r","columns":[],"keys":[],"rows":[]})"}));
     CHECK(plain.unmatched.empty());
     // A query that retains nothing is written without `retain`; one that does carries it.
-    CHECK(glz::write_json(TableQuery{}).value_or("").find("retain") == std::string::npos);
+    CHECK(!glz::write_json(TableQuery{}).value_or("").contains("retain"));
     TableQuery retaining;
     retaining.retain = keysOf({3});
     auto const query = glz::write_json(retaining).value_or("");
-    CHECK(query.find(R"("retain":[3])") != std::string::npos);
+    CHECK(query.contains(R"("retain":[3])"));
     TableQuery back;
     REQUIRE_FALSE(glz::read_json(back, query));
     CHECK(back.retain == keysOf({3}));

@@ -460,7 +460,7 @@ TEST_CASE("table over the bridge: the first page arrives before the level", "[ne
     REQUIRE(page.rows.size() == 200);
     REQUIRE(page.unloadedRows.size() == 200);
     for (std::size_t at = 0; at < 200; ++at) {
-        CHECK(page.unloadedRows[at].index == static_cast<std::int64_t>(at));
+        CHECK(std::cmp_equal(page.unloadedRows[at].index, at));
         CHECK(page.unloadedRows[at].levels == std::vector<std::string>{"recipe"});
         CHECK(page.keys[at] == RowId{static_cast<std::int64_t>(at + 1)});
         CHECK(std::holds_alternative<std::monostate>(page.rows[at][1]));

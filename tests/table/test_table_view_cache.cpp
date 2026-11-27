@@ -352,7 +352,7 @@ TEST_CASE("view cache: the bound evicts least recently used", "[table][views]") 
         REQUIRE(views.find(keyOf(name), snapshot, {}, compute).has_value());
     }
     CHECK(views.stats().evictions == 1);
-    CHECK(views.stats().bytes <= 2 * 4 * 10'000);
+    CHECK(views.stats().bytes <= std::size_t{2} * 4 * 10'000);
     REQUIRE(views.find(keyOf("three"), snapshot, {}, compute).has_value());
     REQUIRE(views.find(keyOf("two"), snapshot, {}, compute).has_value());
     CHECK(views.stats().computations == 3);

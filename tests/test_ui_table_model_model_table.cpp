@@ -97,7 +97,7 @@ TEST_CASE("model table: scrolling 10,000 rows keeps one row scope per realized r
         answerPages(h, 100'000);
     }
     // The realized rows, and at most one scroll's worth that left and are pruned when the next row comes.
-    CHECK(morph::ui::detail::ScreenCore::tableRowScopes(elementOf(*screen, "list")) <= 2 * 50);
+    CHECK(morph::ui::detail::ScreenCore::tableRowScopes(elementOf(*screen, "list")) <= std::size_t{2} * 50);
 }
 
 // Mutation: a new revision clearing the element's selection (`selectedCount` is 0 after it).
@@ -143,7 +143,6 @@ std::string selectTable() { return withTableKey(kModelTable, R"("selectionMode":
 // `kModelTable` with a state `hk`, null, as the table's `highlightKey`, and three buttons that set it to 5012, 77 and
 // null.
 // NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kHighlight` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
-
 std::string const kHighlight =
     R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},)"
     R"("state":{"hk":{"init":{"lit":null}}},)"
@@ -259,7 +258,6 @@ namespace {
 
 // A model-backed table whose `name` column's cell is a button `pick`, and a button that focuses `pick` in row 250.
 // NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kPick` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
-
 std::string const kPick =
     R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},)"
     R"("view":{"kind":"column","children":[)"
@@ -730,7 +728,7 @@ TEST_CASE("model table: an arrival for 50 rows re-evaluates their cells and no o
     };
     MountStats const before = statsOf(*screen);
     arrive(keys);
-    CHECK(statsOf(*screen).cellBinds - before.cellBinds == 50 * 3);  // every cell of the 50 rows
+    CHECK(statsOf(*screen).cellBinds - before.cellBinds == std::size_t{50} * 3);  // every cell of the 50 rows
     CHECK(statsOf(*screen).rowBinds - before.rowBinds == 50);
     CHECK(statsOf(*screen).cellsCreated == before.cellsCreated);  // nothing rebuilt
     MountStats const again = statsOf(*screen);
@@ -864,7 +862,7 @@ TEST_CASE("table display: companion columns are not arranged", "[ui][table][disp
         for (auto const& entries : menus) {
             for (std::string const& label : labelsOf(entries)) {
                 for (std::string_view const companion : {"massTone", "massTip", "lockedBy"}) {
-                    CHECK(label.find(companion) == std::string::npos);
+                    CHECK(!label.contains(companion));
                 }
             }
         }
