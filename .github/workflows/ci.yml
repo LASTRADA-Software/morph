@@ -807,8 +807,12 @@ jobs:
           # Required for the ladder tests, which open real Qt widgets/sockets
           # on a runner with no display.
           QT_QPA_PLATFORM: offscreen
+        # %4m, not %p: each test process writes a profile the size of its
+        # binary's counters, and one file per process over every Catch2 case
+        # fills the runner's disk. The merge pool keeps at most four files per
+        # binary and merges into them, under a lock, as processes exit.
         run: |
-          LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage --parallel "$(nproc)" -LE stress
+          LLVM_PROFILE_FILE="build/clang-coverage/%4m.profraw" ctest --preset clang-coverage --parallel "$(nproc)" -LE stress
 
       # Deliberately left on the implicit `success()`, unlike the three test
       # steps that carry `!cancelled()` (ladder-tests' scenario corpus,
