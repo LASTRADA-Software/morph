@@ -503,3 +503,132 @@ TEST_CASE("cove: a page region belongs to a page, and a cell load outside the en
     table->setCellLoad(*row, 0, static_cast<ui::CellLoad>(9));
     CHECK(backend.prop(3, "load0") == "Loaded");
 }
+
+// Mutation: let a heading row be selected, clicked or activated, or a row with no recorded tone or marks answer one.
+TEST_CASE("cove: a heading row takes no selection and a row with no recorded look answers none", "[ui][cove]") {
+    DrivenTable fixture;
+    RecordingBackend& backend = fixture.backend;
+    fixture.table->setRowHeading(*fixture.rowA);
+    CHECK_THROWS_AS(backend.selectRows(1, {intKey(1)}), std::logic_error);
+    CHECK_THROWS_AS(backend.activateRow(1, intKey(1)), std::logic_error);
+    backend.clickRow(1, intKey(1), ui::RowClick::Only);
+    CHECK(fixture.calls == 0);
+    CHECK(backend.rowTone(1, intKey(2)).empty());
+    CHECK_FALSE(backend.rowMarks(1, intKey(2)).has_value());
+    fixture.table->setRowTone(*fixture.rowB, ui::Tone::Warn);
+    fixture.table->setRowMarks(*fixture.rowB, {.busy = true});
+    CHECK(backend.rowTone(1, intKey(2)) == "Warn");
+    CHECK(backend.rowMarks(1, intKey(2))->busy);
+}
+
+// Mutation: report a status entry that has no handler, or take a standing entry for no entry.
+TEST_CASE("cove: a status entry is chosen when the table shows it and has a handler for it", "[ui][cove]") {
+    RecordingBackend backend;
+    auto table = backend.createTable(nullptr);
+    table->setStatus({.entries = {{.id = "more", .label = "More"}}, .standingEntries = {{.id = "stay", .label = "Stay"}}});
+    CHECK_THROWS_AS(backend.chooseStatusEntry(1, "stay"), std::logic_error);  // no handler yet
+    std::vector<std::string> chosen;
+    table->setOnStatusEntry([&chosen](std::string entry) { chosen.push_back(std::move(entry)); });
+    backend.chooseStatusEntry(1, "stay");
+    backend.chooseStatusEntry(1, "more");
+    CHECK(chosen == std::vector<std::string>{"stay", "more"});
+}
+
+// Mutation: let a cell menu or a header menu choose with no label, or a heading by its label.
+TEST_CASE("cove: a menu chosen with no labels, or by a disabled or heading entry's label, reports nothing",
+          "[ui][cove]") {
+    RecordingBackend backend;
+    auto table = backend.createTable(nullptr);
+    table->setColumns({{.label = "A"}});
+    auto row = backend.createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, intKey(1));
+    int chosen = 0;
+    table->setMenu(
+        [](std::optional<std::size_t>) {
+            return std::vector<ui::MenuEntry>{{.label = "Off", .enabled = false}, {.label = "On"}};
+        },
+        [&chosen](std::optional<std::size_t>, std::vector<std::size_t>) { ++chosen; });
+    table->setCellMenu(
+        [](ui::Key const&, std::size_t) {
+            return std::vector<ui::MenuEntry>{{.label = "Title", .heading = true}, {.label = "Off", .enabled = false}};
+        },
+        [&chosen](ui::Key const&, std::size_t, std::vector<std::size_t> const&) { ++chosen; });
+    backend.chooseMenu(1, 0, {});
+    backend.chooseMenu(1, 0, {"Off"});
+    backend.chooseCellMenu(1, intKey(1), 0, {});
+    backend.chooseCellMenu(1, intKey(1), 0, {"Off"});
+    CHECK(chosen == 0);
+    CHECK_THROWS_AS(backend.chooseCellMenu(1, intKey(1), 0, {"Title"}), std::logic_error);
+    backend.chooseMenu(1, 0, {"On"});
+    CHECK(chosen == 1);
+}
+
+// Mutation: ask a table with no cell menu for entries, or report a cell menu chord with no chosen handler.
+TEST_CASE("cove: a table with no cell menu, or no handler for its chosen entry, answers nothing", "[ui][cove]") {
+    RecordingBackend backend;
+    auto table = backend.createTable(nullptr);
+    table->setColumns({{.label = "A"}});
+    table->setSelectionMode(ui::SelectionMode::Multiple);
+    auto row = backend.createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, intKey(1));
+    table->setRowIndex(*row, 0);
+    CHECK(backend.rightClickCell(1, intKey(1), 0).empty());
+    CHECK(backend.rightClickCell(1, intKey(1), 0).empty());  // the row is the selection already
+    CHECK(backend.cellMenuAsks(1) == 0);
+    table->setCellMenuKeys({"Ctrl+K"});
+    table->setCellMenu([](ui::Key const&, std::size_t) { return std::vector<ui::MenuEntry>{{.label = "Go", .keys = "Ctrl+K"}}; },
+                       {});
+    table->setFocusCell(0, 0);
+    CHECK_FALSE(backend.press(1, "Ctrl+K"));
+    row->setVisible(false);
+    CHECK(backend.rightClickCell(1, intKey(1), 0).empty());
+}
+
+// Mutation: report a move to the column's own place or past the last column, or a paste from a missing clipboard.
+TEST_CASE("cove: a column move to its own place or past the end reports nothing, and a missing clipboard pastes none",
+          "[ui][cove]") {
+    DrivenTable fixture;
+    fixture.backend.moveColumn(1, 0, 0);
+    fixture.backend.moveColumn(1, 0, 5);
+    CHECK(fixture.calls == 0);
+    fixture.backend.moveColumn(1, 0, 1);
+    CHECK(fixture.calls == 1);
+    CHECK(fixture.backend.pasteText().value_or("none").empty());
+    fixture.backend.setClipboard(false);
+    CHECK_FALSE(fixture.backend.pasteText().has_value());
+    CHECK_FALSE(fixture.backend.copyText("x"));
+}
+
+// Mutation: let Left or Right step a select that is not segmented, or a hidden slider be dragged.
+TEST_CASE("cove: arrows step only a segmented select, and a hidden slider is not dragged", "[ui][cove]") {
+    RecordingBackend backend;
+    auto select = backend.createSelect(nullptr, ui::SelectStyle::Dropdown);
+    CHECK_FALSE(backend.press(1, "Left"));
+    auto slider = backend.createSlider(nullptr);
+    int moved = 0;
+    slider->setOnChange([&moved](std::int64_t) { ++moved; });
+    slider->setRange(0, 10, 1);
+    backend.dragSlider(2, 4);
+    CHECK(moved == 1);
+    slider->setVisible(false);
+    backend.dragSlider(2, 5);
+    CHECK(moved == 1);
+}
+
+// Mutation: ignore a handler a bare table has not been given when its drivers run.
+TEST_CASE("cove: a table with no scroll, measure, focus or range handler takes those drivers without error",
+          "[ui][cove]") {
+    RecordingBackend backend;
+    auto table = backend.createTable(nullptr);
+    table->setColumns({{.label = "A"}, {.label = "B"}});
+    auto row = backend.createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, intKey(1));
+    CHECK_NOTHROW(backend.scrollTableColumns(1, 10, 80));
+    CHECK_NOTHROW(backend.focusMove(1, ui::FocusMove::Right));
+    CHECK_NOTHROW(backend.selectCells(1, 0, 0, 0, 1));
+    CHECK_NOTHROW(backend.measureColumn(1, 0, 12));
+    CHECK_NOTHROW(backend.scrollTable(1, 0, 1));
+    table->setVisible(false);
+    CHECK_NOTHROW(backend.selectCells(1, 0, 0, 0, 1));
+    CHECK_NOTHROW(backend.typeInto(1, "x"));
+}
