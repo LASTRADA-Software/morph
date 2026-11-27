@@ -304,6 +304,7 @@ TEST_CASE("a_watch_whose_body_does_not_parse_is_refused", "[push][channel]") {
     CHECK(reply.callId == 3);
 }
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("post_above_envelope_cap_is_dropped_and_counted", "[push][channel]") {
     ::morph::observe::ScopedObserveOverride const restore;
     std::atomic<int> oversize{0};
@@ -326,6 +327,7 @@ TEST_CASE("post_above_envelope_cap_is_dropped_and_counted", "[push][channel]") {
     CHECK(oversize.load() == 1);
     CHECK(wire.snapshot() == std::vector<std::string>{fits});
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
 // Mutation: drop an envelope of exactly `kMaxEnvelopeBytes` (a `<` bound) -- the cap is inclusive.
 TEST_CASE("post_at_exactly_the_envelope_cap_is_written", "[push][channel]") {

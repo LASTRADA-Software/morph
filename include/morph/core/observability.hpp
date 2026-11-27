@@ -11,6 +11,14 @@
 #include <string_view>
 #include <utility>
 
+// With `MORPH_OBSERVABILITY_DISABLED` defined (CMake option
+// `MORPH_ENABLE_OBSERVABILITY=OFF`, which defines it publicly on the `morph`
+// target), the process-wide state does not exist: `detail::emitMetric`,
+// `detail::beginSpan` and `detail::endSpan` do nothing, `metricsEnabled()` is
+// the constant `false`, and the sink setters and `ScopedObserveOverride` refuse
+// to compile. Every translation unit of a program must agree on the macro, as
+// it changes what these inline functions are.
+
 namespace morph::observe {
 
 /// @brief Kinds of metric observation the framework's hot paths can emit.
@@ -77,6 +85,8 @@ struct TraceSink {
     ///        successful (`ok`/resolved-value) outcome, `false` for an error.
     std::function<void(SpanId spanId, bool ok)> endSpan;
 };
+
+#ifndef MORPH_OBSERVABILITY_DISABLED
 
 namespace detail {
 
@@ -215,7 +225,32 @@ inline void endSpan(SpanId id, bool ok) {
 
 }  // namespace detail
 
+#else  // MORPH_OBSERVABILITY_DISABLED
+
+namespace detail {
+
+/// @brief Compiled out: observability is disabled for this build, so nothing is
+///        emitted and nothing is evaluated at the call site beyond its arguments.
+inline void emitMetric(Metric /*metric*/, double /*value*/,
+                       std::span<const std::pair<std::string_view, std::string_view>> /*tags*/ = {}) noexcept {}
+
+/// @brief Compiled out: tracing is disabled for this build.
+/// @return The `SpanId{0}` sentinel, always.
+[[nodiscard]] inline SpanId beginSpan(std::string_view /*requestId*/, std::string_view /*modelType*/,
+                                      std::string_view /*actionType*/) noexcept {
+    return SpanId{0};
+}
+
+/// @brief Compiled out: tracing is disabled for this build.
+inline void endSpan(SpanId /*id*/, bool /*ok*/) noexcept {}
+
+}  // namespace detail
+
+#endif  // MORPH_OBSERVABILITY_DISABLED
+
 // ── Configuration ─────────────────────────────────────────────────────────────
+
+#ifndef MORPH_OBSERVABILITY_DISABLED
 
 /// @brief Installs the process-wide metric sink.
 ///
@@ -236,6 +271,27 @@ inline void setMetricSink(MetricSink sink) {
 [[nodiscard]] inline bool metricsEnabled() noexcept {
     return detail::observeState().metricsOn.load(std::memory_order_relaxed);
 }
+
+#else  // MORPH_OBSERVABILITY_DISABLED
+
+/// @brief Refused: observability is compiled out of this build
+///        (`MORPH_ENABLE_OBSERVABILITY=OFF`), so a sink would never be called.
+///
+/// A template, so the refusal is a compile error at the call site that names
+/// the option instead of a sink that silently receives nothing.
+/// @tparam Sink Whatever the call passes; never usable.
+template <typename Sink = MetricSink>
+void setMetricSink(Sink /*sink*/) {
+    static_assert(sizeof(Sink) == 0, "observability is compiled out (MORPH_ENABLE_OBSERVABILITY=OFF)");
+}
+
+/// @brief Compiled out: no metric sink can be installed, so none is.
+/// @return `false`, a constant, so a branch on it is removed.
+[[nodiscard]] constexpr bool metricsEnabled() noexcept { return false; }
+
+#endif  // MORPH_OBSERVABILITY_DISABLED
+
+#ifndef MORPH_OBSERVABILITY_DISABLED
 
 /// @brief Installs the process-wide trace sink.
 ///
@@ -299,5 +355,35 @@ private:
     MetricSink _savedMetricSink;
     TraceSink _savedTraceSink;
 };
+
+#else  // MORPH_OBSERVABILITY_DISABLED
+
+/// @brief Refused: observability is compiled out of this build
+///        (`MORPH_ENABLE_OBSERVABILITY=OFF`), so a sink would never be called.
+///
+/// A template, like `setMetricSink` in this configuration: the refusal is a
+/// compile error at the call site that names the option.
+/// @tparam Sink Whatever the call passes; never usable.
+template <typename Sink = TraceSink>
+void setTraceSink(Sink /*sink*/) {
+    static_assert(sizeof(Sink) == 0, "observability is compiled out (MORPH_ENABLE_OBSERVABILITY=OFF)");
+}
+
+/// @brief Refused: there are no sinks to snapshot and restore in this build.
+///
+/// Declaring one is a compile error that names the option, as installing a
+/// sink is.
+class ScopedObserveOverride {
+public:
+    /// @brief Refused at the point of use.
+    /// @tparam Guard Always `ScopedObserveOverride`; the dependent type that
+    ///         lets the refusal fire only when a guard is constructed.
+    template <typename Guard = ScopedObserveOverride>
+    ScopedObserveOverride() {
+        static_assert(sizeof(Guard) == 0, "observability is compiled out (MORPH_ENABLE_OBSERVABILITY=OFF)");
+    }
+};
+
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
 }  // namespace morph::observe

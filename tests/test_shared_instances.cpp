@@ -1553,6 +1553,7 @@ TEST_CASE("deregistering a poisoned instance evicted from the directory tears it
 // instead would leave the first stretch of it -- the one between settling and
 // `endSpan` -- unpinned, and a regression that moved settling to just after
 // `endSpan` would sail through.
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("an attach racing a failed first action out of the dispatch is not handed the failed instance",
           "[shared-instances][backend]") {
     morph::exec::ThreadPoolExecutor pool{2};
@@ -1601,6 +1602,7 @@ TEST_CASE("an attach racing a failed first action out of the dispatch is not han
     REQUIRE(attached.load() != 0U);
     REQUIRE(attached.load() != first.v);
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
 // The per-type index `listInstances` is served from must shrink as well as
 // grow: a type whose last shared instance has been released must report no
@@ -1634,6 +1636,7 @@ TEST_CASE("releasing the last shared instance of a type empties its listInstance
 // The server half of the property above. `RemoteServer` kept its own copy of
 // this logic, so it needs its own proof that the directory learns the outcome
 // before anything that can attach gets to run.
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("the server does not hand out an instance between its first action failing and the directory learning of it",
           "[shared-instances][remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
@@ -1679,6 +1682,7 @@ TEST_CASE("the server does not hand out an instance between its first action fai
     REQUIRE(attached.load() != 0U);
     REQUIRE(attached.load() != reg.modelId);
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
 // An instance that was *created* for a directory key can never be
 // promoted onto a second one, and "created for a key" outlives being filed

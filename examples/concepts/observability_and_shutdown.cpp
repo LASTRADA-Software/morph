@@ -83,6 +83,7 @@ BRIDGE_REGISTER_ACTION(ObsDemoModel, ObsDemoAction, "ObsDemo_Action")
 // register/execute/deregister call on every server, with no per-call code
 // anywhere else.
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("observability: setMetricSink observes a registerCount event during register", "[concepts][observability]") {
     // ScopedObserveOverride snapshots the current sink and restores it on
     // scope exit, so this test's sink never leaks into another test case.
@@ -105,6 +106,7 @@ TEST_CASE("observability: setMetricSink observes a registerCount event during re
     }
     REQUIRE(sawRegisterCount);
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
 // ── (b) Graceful shutdown ────────────────────────────────────────────────────
 //

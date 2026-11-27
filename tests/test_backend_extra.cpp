@@ -171,6 +171,7 @@ TEST_CASE("morph::bridge::BridgeHandler destructor deregisters model cleanly", "
 
 // ── morph::backend::LocalBackend: observability (metrics + tracing) ─────────
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::LocalBackend: execute emits executeLatencyMs and toggles executeInFlight",
           "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride guard;
@@ -210,7 +211,9 @@ TEST_CASE("morph::backend::LocalBackend: execute emits executeLatencyMs and togg
     REQUIRE(inFlightSamples[0] == 1.0);
     REQUIRE(inFlightSamples[1] == 0.0);
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::LocalBackend: an erroring action emits executeErrors", "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride guard;
     morph::exec::ThreadPoolExecutor pool{2};
@@ -241,7 +244,9 @@ TEST_CASE("morph::backend::LocalBackend: an erroring action emits executeErrors"
     REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return errored.load(); }));
     REQUIRE(errorEvents.load() == 1);
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::LocalBackend: registerModel/deregisterModel emit their counters",
           "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride guard;
@@ -264,7 +269,9 @@ TEST_CASE("morph::backend::LocalBackend: registerModel/deregisterModel emit thei
     REQUIRE(registerEvents.load() == 1);
     REQUIRE(deregisterEvents.load() == 1);
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::LocalBackend: one execute produces exactly one beginSpan/endSpan pair",
           "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride guard;
@@ -305,6 +312,7 @@ TEST_CASE("morph::backend::LocalBackend: one execute produces exactly one beginS
     REQUIRE(beginCalls.load() == 1);
     REQUIRE(endCalls.load() == 1);
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
 // ── morph::backend::LocalBackend: amortised pending-list compaction ─────────
 
@@ -465,6 +473,7 @@ TEST_CASE("morph::backend::LocalBackend: trackedPendingCount counts every call s
     REQUIRE(morph::testing::waitUntil([&] { return ran.load() == 3; }));
 }
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::LocalBackend: executeLatencyMs covers the time the handler ran",
           "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride const guard;
@@ -493,6 +502,39 @@ TEST_CASE("morph::backend::LocalBackend: executeLatencyMs covers the time the ha
     // and how much longer the span took depends on the machine.
     CHECK(latencies.front() >= 20.0);
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
+
+#ifndef MORPH_OBSERVABILITY_DISABLED
+TEST_CASE("morph::backend::LocalBackend: a call that started with no metric sink emits no latency sample",
+          "[backend][local][observability]") {
+    morph::observe::ScopedObserveOverride const guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::backend::LocalBackend backend{pool};
+    auto mid = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
+
+    std::atomic<int> latencies{0};
+    auto const sink = [&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::executeLatencyMs) {
+            latencies.fetch_add(1);
+        }
+    };
+
+    // The sink appears while the handler runs, after the call was admitted
+    // with none installed: there is no start reading to measure from.
+    std::atomic<bool> first{false};
+    backend.execute(mid, pendingCall([&] { morph::observe::setMetricSink(sink); }), &cbExec)
+        .then([&](const std::shared_ptr<void>&) { first = true; });
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return first.load(); }));
+    CHECK(latencies.load() == 0);
+
+    // The same sink is installed when the next call starts, so that one is timed.
+    std::atomic<bool> second{false};
+    backend.execute(mid, pendingCall([] {}), &cbExec).then([&](const std::shared_ptr<void>&) { second = true; });
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return second.load(); }));
+    CHECK(latencies.load() == 1);
+}
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
 namespace {
 
@@ -550,6 +592,7 @@ TEST_CASE("morph::backend::LocalBackend: destruction requests stop on a Task han
     slot->finish(std::make_exception_ptr(std::runtime_error{"stopped"}));
 }
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::LocalBackend: a call cancelled while it waited behind a Task handler finishes as a failure",
           "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride const guard;
@@ -580,6 +623,7 @@ TEST_CASE("morph::backend::LocalBackend: a call cancelled while it waited behind
     REQUIRE(morph::testing::waitUntil([&] { return errors.load() == 1; }));
     CHECK_FALSE(queuedRan.load());
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
 // Mutation: call a null serializeAction (undefined behaviour) instead of throwing the named error.
 TEST_CASE("ActionCall: serialising a call without serializeAction throws a named error", "[backend]") {

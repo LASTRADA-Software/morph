@@ -329,6 +329,14 @@ struct HandlerBinding {
     ///        made. Each is resumed with null to proceed, or with the error it
     ///        is rejected with.
     std::deque<std::function<void(std::exception_ptr)>> waiting;
+
+    /// @brief Where the owning `Bridge` keeps this binding in its tracking
+    ///        list, or `untracked`. Lets the bridge remove the binding without
+    ///        scanning the list. Written only by the bridge, on its owner.
+    std::size_t trackedSlot = untracked;
+
+    /// @brief `trackedSlot` value of a binding no bridge tracks.
+    static constexpr std::size_t untracked = static_cast<std::size_t>(-1);
 };
 
 /// @brief Renders @p failure as the diagnostic string a log line wants.
@@ -837,7 +845,7 @@ public:
     ///        and `contextKey` must be set.
     void registerHandler(const std::shared_ptr<detail::HandlerBinding>& binding) {
         note("Bridge::registerHandler");
-        _handlers.push_back(binding);
+        track(binding);
         auto superseded = startBind(binding,
                                     ::morph::backend::detail::BindRequest{.typeId = binding->typeId,
                                                                           .factory = binding->modelFactory,
@@ -860,7 +868,7 @@ public:
     std::shared_ptr<detail::HandlerBinding> registerSharedHandler() {
         note("Bridge::registerSharedHandler");
         auto binding = makeBinding<Model>(true);
-        _handlers.push_back(binding);
+        track(binding);
         return binding;
     }
 
@@ -1319,6 +1327,7 @@ public:
             }
         }
         _handlers = std::move(live);
+        reindexHandlers();
         auto previous = std::exchange(_backend, next);
         next->notifyBackendChanged();
         installReconnectHandler(next);
@@ -1354,10 +1363,7 @@ public:
         if (raw != 0U) {
             _backend->deregisterModel(::morph::exec::detail::ModelId{raw});
         }
-        std::erase_if(_handlers, [&binding](const auto& weak) {
-            auto strong = weak.lock();
-            return !strong || strong.get() == binding.get();
-        });
+        untrack(binding);
         auto const destroyed = std::make_exception_ptr(::morph::backend::HandlerDestroyedError{});
         for (auto& resume : rejected) {
             resume(destroyed);
@@ -1845,7 +1851,7 @@ private:
     void adoptOnOwner(const std::shared_ptr<detail::HandlerBinding>& binding) {
         if (binding->shared) {
             note("Bridge::registerSharedHandler");
-            _handlers.push_back(binding);
+            track(binding);
             drainWaiting(*binding);
             return;
         }
@@ -2529,9 +2535,64 @@ private:
         }
     }
 
+    /// @brief Appends @p binding to the tracking list and records its slot.
+    ///
+    /// Entries whose binding has been destroyed without deregistering are
+    /// compacted away whenever the list has doubled since the last compaction,
+    /// so the sweep is amortised O(1) per registration.
+    /// @param binding Binding to track.
+    void track(const std::shared_ptr<detail::HandlerBinding>& binding) {
+        if (_handlers.size() >= _sweepAt) {
+            std::erase_if(_handlers, [](const auto& weak) { return weak.expired(); });
+            reindexHandlers();
+            _sweepAt = std::max<std::size_t>(kMinSweepAt, _handlers.size() * 2);
+        }
+        binding->trackedSlot = _handlers.size();
+        _handlers.push_back(binding);
+    }
+
+    /// @brief Removes @p binding from the tracking list in O(1).
+    ///
+    /// The last entry moves into the vacated slot, so the list's order is not
+    /// registration order; every reader of the list visits each live binding
+    /// once and needs no order. A binding this bridge does not track is left
+    /// alone.
+    /// @param binding Binding to stop tracking.
+    void untrack(const std::shared_ptr<detail::HandlerBinding>& binding) {
+        auto const slot = std::exchange(binding->trackedSlot, detail::HandlerBinding::untracked);
+        if (slot >= _handlers.size()) {
+            return;
+        }
+        auto const entry = std::next(_handlers.begin(), static_cast<std::ptrdiff_t>(slot));
+        if (entry->owner_before(binding) || binding.owner_before(*entry)) {
+            return;
+        }
+        if (slot + 1 != _handlers.size()) {
+            *entry = std::move(_handlers.back());
+            if (auto const moved = entry->lock()) {
+                moved->trackedSlot = slot;
+            }
+        }
+        _handlers.pop_back();
+    }
+
+    /// @brief Rewrites every live binding's `trackedSlot` to its position in the list.
+    void reindexHandlers() {
+        std::size_t slot = 0;
+        for (auto const& weak : _handlers) {
+            if (auto const binding = weak.lock()) {
+                binding->trackedSlot = slot;
+            }
+            ++slot;
+        }
+    }
+
+    static constexpr std::size_t kMinSweepAt = 64;
+
     ::morph::exec::detail::OwnerAffinity _affinity;
     std::shared_ptr<::morph::backend::detail::IBackend> _backend;
     std::vector<std::weak_ptr<detail::HandlerBinding>> _handlers;
+    std::size_t _sweepAt = kMinSweepAt;
     ::morph::session::Context _defaultSession;
     ::morph::session::Principal _principal;
     // Client-side execute deadline (see setExecuteDeadline). The scheduler is

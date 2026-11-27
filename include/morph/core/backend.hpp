@@ -1367,23 +1367,29 @@ public:
         run.holder = std::move(holder);
         run.sink = std::move(sink);
         run.hydration = std::move(hydration);
-        run.strands = _strands;
-        run.cancels = _cancels;
-        run.admittedEpoch = admittedEpoch;
-        run.mid = mid;
         // Held by shared_ptr, never by raw `this`. A shared_ptr copy has its
         // own lifetime, independent of LocalBackend's, so it stays valid even
         // if the backend is torn down while this task is still queued or
         // running. `hydration` follows the same rule and may be null (a
-        // private instance has no entry).
-        run.inFlightCounter = _inFlight;
-        auto const inFlightAfterInc = run.inFlightCounter->fetch_add(1, std::memory_order_relaxed) + 1;
+        // private instance has no entry). One copy covers the cancel record and
+        // the in-flight counter, which share an owner.
+        run.shared = _shared;
+        run.admittedEpoch = admittedEpoch;
+        run.mid = mid;
+#ifndef MORPH_OBSERVABILITY_DISABLED
+        auto const inFlightAfterInc = run.shared->inFlight.fetch_add(1, std::memory_order_relaxed) + 1;
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
                                              static_cast<double>(inFlightAfterInc));
+#endif
         // Through the instance's action gate: an action starts only once the one
         // before it has finished, which a Task handler does when its Task
         // completes rather than when the strand task that started it returns.
         if (run.localOpAsync != nullptr) {
+            // Only a Task run needs the strands: its resumer and completion
+            // callback reach them after the strand task that started it has
+            // returned. An ordinary run never touches them, so it does not
+            // copy the pointer.
+            run.strands = _strands;
             // A Task run is shared: its completion callback outlives the strand
             // task, and every Task run can be stopped, deadline or not -- the
             // destructor stops the ones still running.
@@ -1425,7 +1431,7 @@ public:
         _compactAt = kPendingCompactFloor;
         // With the swap: a run admitted before this point is in `snapshot`
         // and is failed below, and one admitted after it is not.
-        _cancels->record(exc);
+        _shared->record(exc);
         // Settle before stopping. A stopped Task handler resumes on its strand
         // and settles its own sink with `OperationCancelled`; requested first,
         // that settle can land before this one, and the caller would be
@@ -1576,19 +1582,30 @@ private:
             _compactAt = std::max(kPendingCompactFloor, _pending.size() * 2);
         }
         _pending.emplace_back(sink);
-        return _cancels->epoch();
+        return _shared->epoch();
     }
 
-    /// What `cancelPending` has done so far, shared with every run: how many
-    /// times it has run, and with what reason the last time.
+    /// What every run of this backend shares, so a dispatch copies one
+    /// `shared_ptr` for all of it: what `cancelPending` has done so far (how
+    /// many times it has run, and with what reason the last time), and how many
+    /// executes are in flight.
     ///
-    /// Written only by `cancelPending`, on the owner; read by runs on their
-    /// strands. Each reason is an immutable node published with a release
-    /// store before the epoch moves, so a run that sees the epoch move reads a
-    /// complete reason. Nodes live as long as the record: one per
-    /// `cancelPending`, which runs on a switch, a teardown or a disconnect.
-    class CancelRecord {
+    /// The cancel record is written only by `cancelPending`, on the owner, and
+    /// read by runs on their strands. Each reason is an immutable node
+    /// published with a release store before the epoch moves, so a run that
+    /// sees the epoch move reads a complete reason. Nodes live as long as this
+    /// object: one per `cancelPending`, which runs on a switch, a teardown or a
+    /// disconnect.
+    class RunShared {
     public:
+#ifndef MORPH_OBSERVABILITY_DISABLED
+        /// Concurrent in-flight executes, for the `executeInFlight` metric:
+        /// incremented when a run is admitted, decremented when it finishes.
+        /// Absent when observability is compiled out, as nothing else reads it.
+        // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): runs bump it directly.
+        std::atomic<std::size_t> inFlight{0};
+#endif
+
         /// Publishes @p reason, then bumps the epoch. One writer: the owner.
         void record(const std::exception_ptr& reason) {
             auto node = std::make_unique<Node>(Node{.reason = reason, .previous = std::move(_chain)});
@@ -1631,12 +1648,17 @@ private:
         std::shared_ptr<::morph::model::detail::IModelHolder> holder;
         std::shared_ptr<::morph::async::detail::ISettleSink> sink;
         std::shared_ptr<detail::HydrationState> hydration;
-        std::shared_ptr<std::atomic<std::size_t>> inFlightCounter;
+        // Null for an ordinary run; set for a Task run only.
         std::shared_ptr<::morph::exec::detail::ModelStrands> strands;
-        std::shared_ptr<CancelRecord> cancels;
+        std::shared_ptr<RunShared> shared;
         std::uint64_t admittedEpoch = 0;
         ::morph::exec::detail::ModelId mid{};
+        // Stamped by `admitLocal` only when a metric sink was installed then;
+        // `timed` says whether `start` holds a reading.
+#ifndef MORPH_OBSERVABILITY_DISABLED
         std::chrono::steady_clock::time_point start;
+        bool timed = false;
+#endif
         ::morph::observe::SpanId spanId{};
     };
 
@@ -1644,9 +1666,17 @@ private:
     /// settles it instead if `cancelPending` failed it while it waited there.
     /// @return Whether the handler is to run.
     static bool admitLocal(LocalRun& run) {
-        run.start = std::chrono::steady_clock::now();
+        // The clock is read only for a latency sample, so only when something
+        // will receive it. A sink installed after this point gets no sample for
+        // this run.
+#ifndef MORPH_OBSERVABILITY_DISABLED
+        run.timed = ::morph::observe::metricsEnabled();
+        if (run.timed) {
+            run.start = std::chrono::steady_clock::now();
+        }
+#endif
         run.spanId = ::morph::observe::detail::beginSpan(run.session.requestId, run.modelTypeId, run.actionTypeId);
-        if (run.cancels->epoch() == run.admittedEpoch) {
+        if (run.shared->epoch() == run.admittedEpoch) {
             return true;
         }
         // `cancelPending` failed this call while it waited for the gate;
@@ -1657,7 +1687,7 @@ private:
         // dropped its `Completion` this run holds the last reference, so
         // the sink is gone by the time `cancelPending` would reach it.
         // Where `cancelPending` got there first, this settle is ignored.
-        finishLocal(run, nullptr, run.cancels->lastReason());
+        finishLocal(run, nullptr, run.shared->lastReason());
         return false;
     }
 
@@ -1748,17 +1778,21 @@ private:
             run.hydration->settle(succeeded);
         }
         ::morph::observe::detail::endSpan(run.spanId, succeeded);
-        auto const elapsedMs =
-            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - run.start).count();
+#ifndef MORPH_OBSERVABILITY_DISABLED
         std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
             {{"modelType", run.modelTypeId}, {"actionType", run.actionTypeId}}};
-        ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
+        if (run.timed) {
+            auto const elapsedMs =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - run.start).count();
+            ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
+        }
         if (!succeeded) {
             ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
         }
-        auto const inFlightAfterDec = run.inFlightCounter->fetch_sub(1, std::memory_order_relaxed) - 1;
+        auto const inFlightAfterDec = run.shared->inFlight.fetch_sub(1, std::memory_order_relaxed) - 1;
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
                                              static_cast<double>(inFlightAfterDec));
+#endif
         // Resolve last: the sink is still settled exactly once, only its
         // position relative to the now-recorded instrumentation moved.
         if (succeeded) {
@@ -1811,9 +1845,9 @@ private:
     // Size at which `trackPending` next sweeps `_pending` for expired entries;
     // re-armed at twice the surviving count after each sweep. See `trackPending`.
     std::size_t _compactAt = kPendingCompactFloor;
-    // Recorded by `cancelPending` as it takes the pending list. Shared with every run, which notes the epoch it was
-    // admitted under and skips its handler if the epoch has moved on by the time it starts.
-    std::shared_ptr<CancelRecord> _cancels = std::make_shared<CancelRecord>();
+    // What `cancelPending` records as it takes the pending list, and the in-flight count. Shared with every run, which
+    // notes the epoch it was admitted under and skips its handler if the epoch has moved on by the time it starts.
+    std::shared_ptr<RunShared> _shared = std::make_shared<RunShared>();
     // The Task runs `cancelPending` and the destructor stop. Weak, so a
     // finished run is not kept. Owner-only.
     std::vector<std::weak_ptr<LocalRun>> _taskRuns;
@@ -1822,10 +1856,6 @@ private:
     std::shared_ptr<std::function<void(::morph::wire::EventBody)>> _eventHandler;
     ::morph::exec::IExecutor* _eventExec = nullptr;
     std::size_t _taskRunsCompactAt = kPendingCompactFloor;
-    // Concurrent in-flight executes, for the executeInFlight metric. A
-    // shared_ptr (not a plain atomic member) so strand tasks hold their own
-    // reference instead of capturing `this` — see execute()'s comment.
-    std::shared_ptr<std::atomic<std::size_t>> _inFlight = std::make_shared<std::atomic<std::size_t>>(0);
 };
 
 }  // namespace morph::backend

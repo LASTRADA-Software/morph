@@ -288,6 +288,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: a dedup hit at capacity is reject
     removeDbFiles(dbPath);
 }
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::offline::SqliteOfflineQueue: enqueue at maxDepth emits queueOverflow metric",
           "[sqlite][overflow][observability]") {
     morph::observe::ScopedObserveOverride guard;
@@ -310,6 +311,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: enqueue at maxDepth emits queueOv
     }
     removeDbFiles(dbPath);
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
 // ── IOfflineQueue conformance ─────────────────────────────────────────────────
 //

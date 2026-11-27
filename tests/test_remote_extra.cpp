@@ -507,6 +507,7 @@ TEST_CASE(
 
 // ── morph::backend::RemoteServer: observability (metrics + tracing) ──────────
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::RemoteServer: execute emits executeLatencyMs and toggles executeInFlight",
           "[remote][observability]") {
     morph::observe::ScopedObserveOverride guard;
@@ -549,7 +550,9 @@ TEST_CASE("morph::backend::RemoteServer: execute emits executeLatencyMs and togg
     REQUIRE(inFlightSamples[0] == 1.0);
     REQUIRE(inFlightSamples[1] == 0.0);
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::RemoteServer: executeLatencyMs measures the handler's run time",
           "[remote][observability]") {
     morph::observe::ScopedObserveOverride const guard;
@@ -590,7 +593,9 @@ TEST_CASE("morph::backend::RemoteServer: executeLatencyMs measures the handler's
     // least this long. No upper bound, so a loaded machine cannot fail it.
     CHECK(latencies.front() >= static_cast<double>(kHandlerMs));
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::RemoteServer: an erroring execute emits executeErrors", "[remote][observability]") {
     morph::observe::ScopedObserveOverride guard;
     morph::exec::ThreadPoolExecutor pool{2};
@@ -620,7 +625,9 @@ TEST_CASE("morph::backend::RemoteServer: an erroring execute emits executeErrors
     REQUIRE(waiter.env.kind == "err");
     REQUIRE(errorEvents.load() == 1);
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::RemoteServer: register/deregister emit their counters", "[remote][observability]") {
     morph::observe::ScopedObserveOverride guard;
     morph::exec::ThreadPoolExecutor pool{2};
@@ -647,7 +654,9 @@ TEST_CASE("morph::backend::RemoteServer: register/deregister emit their counters
     REQUIRE(registerEvents.load() == 1);
     REQUIRE(deregisterEvents.load() == 1);
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::RemoteServer: with no sink installed, register still works and metrics stay disabled",
           "[remote][observability]") {
     morph::observe::ScopedObserveOverride guard;
@@ -662,7 +671,9 @@ TEST_CASE("morph::backend::RemoteServer: with no sink installed, register still 
     REQUIRE(reg.env.kind == "ok");
     REQUIRE_FALSE(morph::observe::metricsEnabled());
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE(
     "morph::backend::RemoteServer: one execute produces exactly one beginSpan/endSpan pair with the caller's "
     "requestId",
@@ -710,7 +721,9 @@ TEST_CASE(
     REQUIRE(endCalls.load() == 1);
     REQUIRE(capturedRequestId == "req-abc");
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::RemoteServer: endSpan reports ok=false for a failing execute", "[remote][observability]") {
     morph::observe::ScopedObserveOverride guard;
     morph::exec::ThreadPoolExecutor pool{2};
@@ -746,6 +759,7 @@ TEST_CASE("morph::backend::RemoteServer: endSpan reports ok=false for a failing 
     REQUIRE(endCalls.load() == 1);
     REQUIRE_FALSE(capturedOk.load());
 }
+#endif  // MORPH_OBSERVABILITY_DISABLED
 
 // ── morph::backend::RemoteServer: health / readiness ──────────────────────────
 

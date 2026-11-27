@@ -17,6 +17,7 @@ if the seam did not exist. `RemoteServer` additionally exposes a
 - [Tracing](#tracing)
 - [Health / readiness](#health--readiness)
 - [Call sites](#call-sites)
+- [Compile-time switch](#compile-time-switch)
 - [Thread safety](#thread-safety)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -137,6 +138,47 @@ in-flight gauge's paired decrement, by contrast, is centralized so it fires
 exactly once regardless of which path (timeout or dispatch) resolves the call
 first.
 
+`LocalBackend` reads the clock for `executeLatencyMs` only when a metric sink is
+installed at the moment the call starts (`admitLocal`). A call that starts with
+no sink emits no latency sample, even if a sink is installed before it finishes:
+the start reading it would need was never taken. With no sink installed, a
+dispatch costs no clock read. Tracing is decided separately, at `beginSpan`.
+
+## Compile-time switch
+
+CMake option `MORPH_ENABLE_OBSERVABILITY` (default `ON`). With it `OFF` the
+`morph` target defines `MORPH_OBSERVABILITY_DISABLED` publicly: the headers are
+mostly inline, so every translation unit that includes them, the library's own
+and each consumer's, must see the same value, and a public definition on the
+target gives them one. A consumer that does not use the CMake target keeps the
+default (observability on) unless it defines the macro itself.
+
+With the macro defined:
+
+- `detail::emitMetric`, `detail::beginSpan` and `detail::endSpan` are empty
+  inline functions, and `metricsEnabled()` is the constant `false`. The process-wide
+  state (`detail::ObserveState`, `detail::observeState()`) does not exist.
+- `LocalBackend` takes no clock reading in `admitLocal`/`finishLocal` and keeps
+  no in-flight counter or its two atomic updates per call: the counter exists
+  only to feed `executeInFlight`.
+- `setMetricSink`, `setTraceSink` and `ScopedObserveOverride` are templates
+  (a defaulted template parameter for a complete type) whose body is a
+  `static_assert` with the message `observability is compiled out
+  (MORPH_ENABLE_OBSERVABILITY=OFF)`. Installing a sink in such a build is a
+  compile error at the call site that names the option, rather than a sink that
+  is never called. `= delete("...")` would carry the same text, but it is C++26
+  and not every compiler the project builds with accepts it.
+- `RemoteServer::health()` and `ServerConfig::healthHandler` are not part of
+  the switch: readiness is not a metric.
+
+Test cases that install a sink are wrapped in
+`#if !defined(MORPH_OBSERVABILITY_DISABLED)`, as is the concepts example, so
+the unit tests build and pass with the option `OFF` (the sink cases are absent
+there). `tests/CMakeLists.txt` proves the refusal at configure time with
+`try_compile`, on every platform: each of the three ways to install a sink must
+fail to compile with the macro defined, with the message above in the compiler
+output, and must compile without it.
+
 ## Thread safety
 
 Metrics and tracing each have their own mutex (`metricMtx`, `traceMtx`) guarding
@@ -199,8 +241,8 @@ queued or running (see [backend.md](backend.md)'s Lifetime & ownership).
 | Symbol | Signature | Notes |
 |---|---|---|
 | `MetricSink` | `using MetricSink = std::function<void(const MetricEvent&)>` | Sink type. |
-| `setMetricSink` | `void setMetricSink(MetricSink)` | Thread-safe (mutex-guarded swap). `nullptr` disables metrics. |
-| `metricsEnabled` | `[[nodiscard]] bool metricsEnabled() noexcept` | Lock-free hot-path check (relaxed atomic load). |
+| `setMetricSink` | `void setMetricSink(MetricSink)` | Thread-safe (mutex-guarded swap). `nullptr` disables metrics. Refused at compile time when observability is compiled out. |
+| `metricsEnabled` | `[[nodiscard]] bool metricsEnabled() noexcept` | Lock-free hot-path check (relaxed atomic load). `constexpr false` when observability is compiled out. |
 
 ### `SpanId` / `TraceSink`
 
@@ -209,14 +251,15 @@ queued or running (see [backend.md](backend.md)'s Lifetime & ownership).
 | `SpanId` | `using SpanId = std::uint64_t` | `0` is the "no span" sentinel. |
 | `TraceSink::beginSpan` | `std::function<SpanId(std::string_view requestId, std::string_view modelType, std::string_view actionType)>` | Called at dispatch start (on the strand). |
 | `TraceSink::endSpan` | `std::function<void(SpanId, bool ok)>` | Called at dispatch end. |
-| `setTraceSink` | `void setTraceSink(TraceSink)` | Both callbacks must be set to enable tracing. Thread-safe. |
+| `setTraceSink` | `void setTraceSink(TraceSink)` | Both callbacks must be set to enable tracing. Thread-safe. Refused at compile time when observability is compiled out. |
 
 ### `ScopedObserveOverride`
 
 RAII guard, snapshot-only constructor, restores the previous metric and trace
 sinks on destruction. Mirrors `morph::log::ScopedLoggerOverride`'s
 snapshot-only constructor; used by tests to avoid leaking a sink across test
-cases. Not copyable or movable.
+cases. Not copyable or movable. Refused at compile time when observability is
+compiled out.
 
 ### `RemoteServer::HealthStatus` / `health()` / `ServerConfig::healthHandler`
 
@@ -241,7 +284,7 @@ See [backend.md](backend.md)'s `RemoteServer` API reference table.
 | Two independent sinks (metric, trace), each with its own mutex/atomic | No shared state between them | Installing/using one never contends with the other; matches the fact that they observe different things (numbers vs. spans) and can be wired to entirely different backends. |
 | `registerCount`/`deregisterCount` count every call, not just successes | Counts attempts | Gives an accurate load/rate signal on that path (an unauthorized or malformed register still costs the server work); `executeErrors` is the separate counter for outcome-scoped failure signal on the execute path. |
 | `RemoteServer`'s in-flight metric reuses the in-flight count | No second counter added | `LimitPolicy::maxInFlightExecutes` already needs an in-flight count with exactly this admit/complete lifecycle; a parallel one for the metric alone would have to be kept in lockstep for no benefit. `health()`'s `inFlight` field reads the same count. |
-| `LocalBackend`'s in-flight counter is a `shared_ptr`, not a plain atomic member | Avoids capturing `this` in a strand-posted lambda | `LocalBackend`'s existing strand tasks already avoid `this` captures for lifetime safety (see Limitations); the counter follows the same rule rather than becoming a new dangling-pointer risk. `RemoteServer`'s equivalent count is a plain member of its server-strand state, reached through tasks that capture `self = shared_from_this()`, keeping the whole object alive. |
+| `LocalBackend`'s in-flight counter lives in the shared run state, held by `shared_ptr`, not a plain atomic member | Avoids capturing `this` in a strand-posted lambda, and one `shared_ptr` copy per run covers it and the cancel record | `LocalBackend`'s existing strand tasks already avoid `this` captures for lifetime safety (see Limitations); the counter follows the same rule rather than becoming a new dangling-pointer risk. `RemoteServer`'s equivalent count is a plain member of its server-strand state, reached through tasks that capture `self = shared_from_this()`, keeping the whole object alive. |
 | `ServerConfig::healthHandler` is called from the constructor | Once, synchronously, with the initial status | A subscriber gets a baseline status without waiting for the first transition; nothing else can reach the server yet, so the call needs no strand. |
 | `ready`'s sole mutator is `beginShutdown()` | `RemoteServer` sets `_ready` to `false` only from `beginShutdown()`, never back to `true` | Readiness has exactly one transition a load balancer needs to see — "stop sending me new work" — and shutdown is the one event that causes it ([backend.md](backend.md#graceful-shutdown-beginshutdown--drainedwithin)). A server with no un-shutdown has no second transition to report. |
 

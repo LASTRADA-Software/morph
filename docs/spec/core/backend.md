@@ -486,7 +486,7 @@ handlers belong to the caller's owner (the bridge's, given through `setOwner`)
 and are touched only there, without a lock; each verb checks it in a debug
 build. Only the strand tasks the backend posts run elsewhere, and they reach
 nothing of the backend but what each carries — the holder, the call, and the
-cancel record below.
+shared run state below (the cancel record and the in-flight count).
 
 **Lifecycle:**
 - `bindModel` — overridden to keep the shared directory: register (private),
@@ -502,8 +502,12 @@ cancel record below.
 - `executeInto` — looks up the holder; if `mid` is unknown it immediately
   settles the sink with `std::runtime_error("model not found: id=<n>")`.
   Otherwise it tracks the sink in the pending list, counts the call in flight,
-  and posts the call to the model's strand (serialised per-model), where it
-  enters the instance's action gate, sets up a `ScopedContext` (from
+  and posts the call to the model's strand (serialised per-model). The call
+  carries one `shared_ptr` to the backend's shared run state (the cancel record
+  and the in-flight counter, one allocation with one owner), and a Task run
+  carries a second, to the strands its resumer and completion callback reach
+  after the strand task returns; an ordinary run copies no strands pointer. On
+  the strand the call enters the instance's action gate, sets up a `ScopedContext` (from
   `call.session`) and runs `localOp` (or starts `localOpAsync`'s Task). The
   strand side emits `executeLatencyMs`/`executeErrors`, the in-flight
   decrement and `beginSpan`/`endSpan` before settling the sink — see
