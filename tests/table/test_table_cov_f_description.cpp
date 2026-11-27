@@ -24,8 +24,8 @@ using tabletest::levelCol;
 namespace {
 
 std::vector<ColumnInfo> orderColumns() {
-    return {col("a", ColumnKind::Text), levelCol("s", ColumnKind::Text, "slow"), levelCol("t", ColumnKind::Text, "slow"),
-            levelCol("u", ColumnKind::Text, "other")};
+    return {col("a", ColumnKind::Text), levelCol("s", ColumnKind::Text, "slow"),
+            levelCol("t", ColumnKind::Text, "slow"), levelCol("u", ColumnKind::Text, "other")};
 }
 
 std::vector<ColumnGroupInfo> orderGroups() {
@@ -67,11 +67,13 @@ TEST_CASE("the column an order level is read for is the first one a sort, a filt
         {"a sort key at the level", sorted({"s"}), "s"},
         {"a sort key at another level is passed over", sorted({"a", "u", "t"}), "t"},
         {"a sort key no column has is passed over", sorted({"zz", "s"}), "s"},
-        {"a filter when no sort key is at the level", [] {
+        {"a filter when no sort key is at the level",
+         [] {
              auto query = filtered("t");
              query.sort = {SortKey{.column = "a", .dir = {}}};
              return query;
-         }(), "t"},
+         }(),
+         "t"},
         {"a filter on a column at another level", filtered("u"), ""},
         {"a filter on the base level only", filtered("a"), ""},
         {"a distinct column at the level", listed(DistinctRequest{.column = "s"}), "s"},
@@ -91,7 +93,8 @@ TEST_CASE("a scope keeps its rows of the shared source and follows the source's 
           "[covf][table][description]") {
     using Rows = std::vector<std::vector<Cell>>;
     auto const source =
-        tabletest::makeSource({col("a", ColumnKind::Integer)}, Rows{{Cell{std::int64_t{10}}}, {Cell{std::int64_t{11}}}, {Cell{std::int64_t{12}}}});
+        tabletest::makeSource({col("a", ColumnKind::Integer)},
+                              Rows{{Cell{std::int64_t{10}}}, {Cell{std::int64_t{11}}}, {Cell{std::int64_t{12}}}});
     auto const scope = scoped(source, {RowId{std::int64_t{2}}, RowId{std::int64_t{0}}, RowId{std::int64_t{99}}});
     auto const first = scope->snapshot();
     REQUIRE(first->rowCount() == 2);
@@ -100,7 +103,8 @@ TEST_CASE("a scope keeps its rows of the shared source and follows the source's 
     // The shared snapshot is unchanged: the scope hands back the snapshot it already built.
     CHECK(scope->snapshot() == first);
 
-    source->setRows({RowId{std::int64_t{2}}, RowId{std::int64_t{5}}}, Rows{{Cell{std::int64_t{1}}}, {Cell{std::int64_t{2}}}});
+    source->setRows({RowId{std::int64_t{2}}, RowId{std::int64_t{5}}},
+                    Rows{{Cell{std::int64_t{1}}}, {Cell{std::int64_t{2}}}});
     auto const next = scope->snapshot();
     REQUIRE(next != first);
     REQUIRE(next->rowCount() == 1);

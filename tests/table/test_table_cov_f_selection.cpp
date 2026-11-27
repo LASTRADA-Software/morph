@@ -109,17 +109,16 @@ TEST_CASE("the inline executor runs a task at once and ignores an empty one", "[
 namespace {
 
 TableColumn describedColumn(std::string const& id, ColumnKind kind) {
-    return TableColumn{.info = {.id = id, .kind = kind, .comparator = {}, .format = {}, .level = {}},
-                       .label = id,
-                       .group = {}};
+    return TableColumn{
+        .info = {.id = id, .kind = kind, .comparator = {}, .format = {}, .level = {}}, .label = id, .group = {}};
 }
 
 ServedTable describedTable(bool pin) {
-    auto const description = describe(TableDescription{.id = "t",
-                                                      .label = "T",
-                                                      .columns = {describedColumn("n", ColumnKind::Integer),
-                                                                  describedColumn("parity", ColumnKind::Text)},
-                                                      .key = "n"});
+    auto const description = describe(TableDescription{
+        .id = "t",
+        .label = "T",
+        .columns = {describedColumn("n", ColumnKind::Integer), describedColumn("parity", ColumnKind::Text)},
+        .key = "n"});
     ServedTable out{.description = description,
                     .source = numbered(),
                     .levels = {},

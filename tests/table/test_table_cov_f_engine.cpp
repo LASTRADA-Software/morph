@@ -22,7 +22,8 @@ namespace {
 using Rows = std::vector<std::vector<Cell>>;
 
 Rows threeColumnRows() {
-    return {{std::string{"x"}, std::string{"p"}, std::string{"q"}}, {std::string{"y"}, std::string{"p"}, std::string{"r"}}};
+    return {{std::string{"x"}, std::string{"p"}, std::string{"q"}},
+            {std::string{"y"}, std::string{"p"}, std::string{"r"}}};
 }
 
 }  // namespace
@@ -30,8 +31,8 @@ Rows threeColumnRows() {
 TEST_CASE("a source that drops columns and groups takes their sort keys and filters with them",
           "[covf][table][engine]") {
     morph::exec::MainThreadExecutor owner;
-    auto const source = tabletest::makeSource({col("a", ColumnKind::Text), col("b", ColumnKind::Text), col("c", ColumnKind::Text)},
-                                              threeColumnRows());
+    auto const source = tabletest::makeSource(
+        {col("a", ColumnKind::Text), col("b", ColumnKind::Text), col("c", ColumnKind::Text)}, threeColumnRows());
     source->setGroups({ColumnGroupInfo{.id = "ab", .label = "AB", .columns = {"a", "b"}}});
     Engine engine{source, EngineOptions{.owner = &owner, .worker = nullptr}};
     REQUIRE(engine.setSort({{"a", SortDirection::Ascending}, {"c", SortDirection::Descending}}).has_value());
@@ -64,7 +65,8 @@ TEST_CASE("a source that drops columns and groups takes their sort keys and filt
 
 TEST_CASE("a filter that no longer compiles for a column's new kind is dropped", "[covf][table][engine]") {
     morph::exec::MainThreadExecutor owner;
-    auto const source = tabletest::makeSource({col("a", ColumnKind::Text)}, Rows{{std::string{"x"}}, {std::string{"7"}}});
+    auto const source =
+        tabletest::makeSource({col("a", ColumnKind::Text)}, Rows{{std::string{"x"}}, {std::string{"7"}}});
     Engine engine{source, EngineOptions{.owner = &owner, .worker = nullptr}};
     FilterSpec spec;
     spec.columns["a"].include = {FilterEntry{.eq = "x"}};
@@ -107,8 +109,8 @@ TEST_CASE("a filter is refused while the source's declared groups are malformed"
 }
 
 TEST_CASE("retaining the rows already retained changes nothing", "[covf][table][engine]") {
-    auto const source =
-        tabletest::makeSource({col("a", ColumnKind::Text)}, Rows{{std::string{"x"}}, {std::string{"y"}}, {std::string{"z"}}});
+    auto const source = tabletest::makeSource({col("a", ColumnKind::Text)},
+                                              Rows{{std::string{"x"}}, {std::string{"y"}}, {std::string{"z"}}});
     Engine engine{source};
     FilterSpec spec;
     spec.columns["a"].include = {FilterEntry{.eq = "x"}};

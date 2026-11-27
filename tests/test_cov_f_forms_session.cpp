@@ -251,8 +251,9 @@ TEST_CASE("a field below the nesting depth is never modified, reverted or report
     CHECK(form->field("top").addRow() == 0);
 }
 
-TEST_CASE("a field below the nesting depth is sent as typed when it is JSON, and as nothing or an empty list when blank",
-          "[covf][forms][session]") {
+TEST_CASE(
+    "a field below the nesting depth is sent as typed when it is JSON, and as nothing or an empty list when blank",
+    "[covf][forms][session]") {
     Harness harness;
     auto const form = harness.session("Deep", kDeepForm);
     harness.type(*form, "top", "1");
