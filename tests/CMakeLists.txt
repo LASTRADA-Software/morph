@@ -100,6 +100,13 @@ add_executable(morph_tests
     test_ui_table_model_cell_edits.cpp
     test_ui_table_model_cell_errors.cpp
     test_ui_grid.cpp
+    test_ui_cov_grid_form_rows.cpp
+    test_ui_cov_grid_keys.cpp
+    test_ui_cov_grid_fixed.cpp
+    test_ui_cov_interp_collections.cpp
+    test_ui_cov_interp_forms.cpp
+    test_ui_cov_mount_extents.cpp
+    test_ui_cov_interp_fixed_grid.cpp
     forms/test_forms_derive.cpp
     test_ui_table_state.cpp
     test_push_agent.cpp
