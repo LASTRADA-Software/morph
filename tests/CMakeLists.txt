@@ -84,7 +84,21 @@ add_executable(morph_tests
     test_push_watch.cpp
     test_push_cache.cpp
     test_ui_interpreter_cache.cpp
-    test_ui_table_model.cpp
+    ui_table_model_support.cpp
+    test_ui_table_model_window_rows.cpp
+    test_ui_table_model_table_catalog.cpp
+    test_ui_table_model_model_table.cpp
+    test_ui_table_model_value_rows.cpp
+    test_ui_table_model_action_table.cpp
+    test_ui_table_model_filter_menu.cpp
+    test_ui_table_model_copy_collection.cpp
+    test_ui_table_model_view_selection.cpp
+    test_ui_table_model_row_changes.cpp
+    test_ui_table_model_model_cells.cpp
+    test_ui_table_model_cell_walk.cpp
+    test_ui_table_model_cell_reads.cpp
+    test_ui_table_model_cell_edits.cpp
+    test_ui_table_model_cell_errors.cpp
     test_ui_grid.cpp
     forms/test_forms_derive.cpp
     test_ui_table_state.cpp

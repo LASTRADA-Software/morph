@@ -560,7 +560,7 @@ TEST_CASE("interpreter bench: K4 the query cache under an event and a wide page"
 }
 
 // U1, U2 and U4 on the engine: a document's rows through `ValueRowsSource`. Timings only; their count gates are the
-// "value rows source" cases of test_ui_table_model.cpp.
+// "value rows source" cases of test_ui_table_model_value_rows.cpp.
 
 namespace {
 

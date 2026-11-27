@@ -1605,7 +1605,7 @@ TEST_CASE("push tables: a principal refused the edit action sees the column read
     };
     // The catalog's permitted actions are what the client lowers the column by: the viewer's lack the edit action,
     // so its column is read-only ("model table: a column whose action is not permitted is read-only" in
-    // tests/test_ui_table_model.cpp lowers that), and alice's have it.
+    // tests/test_ui_table_model_*.cpp lowers that), and alice's have it.
     CHECK_FALSE(std::ranges::contains(permitted("viewer"), std::string{"Lims_EditSpecimenCount"}));
     CHECK(std::ranges::contains(permitted("alice"), std::string{"Lims_EditSpecimenCount"}));
 }
