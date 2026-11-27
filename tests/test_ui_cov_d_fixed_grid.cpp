@@ -3,6 +3,7 @@
 // A document's fixed grid as the document spells it: the configuring it allows, the arrangement and selection it
 // binds, the spans and bands it gives, and the copy of its focused row.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <cstddef>
@@ -103,4 +104,36 @@ TEST_CASE("covd fixed grid: a grid's bands reach the backend over its columns", 
     CAPTURE(bands);
     CHECK(bands.contains("AB|u@0+2"));
     CHECK(bands.contains("Only A@0+1"));
+}
+
+TEST_CASE("covd fixed grid: a cell's menu copies its row's cell under its column's label", "[ui][grid][fixed][covd]") {
+    ui::testing::TableHarness h;
+    auto const screen = h.mount(textGrid(R"("selectionMode":"cells")"));
+    int const table = h.byTestId("Table", "grid");
+    std::vector<std::string> labels;
+    for (ui::MenuEntry const& entry : h.backend.rightClickCell(table, ui::Key{std::string{"first"}}, 1)) {
+        labels.push_back(entry.label);
+    }
+    CHECK(std::ranges::find(labels, "Copy") != labels.end());
+    h.backend.chooseCellMenu(table, ui::Key{std::string{"first"}}, 1, {"Copy with headers"});
+    h.settle();
+    CHECK(h.backend.clipboardText() == "B\ntwo");
+    // A row that is not there has no cell to open a menu on: its key is gone, so the menu has no held cell.
+    h.backend.chooseCellMenu(table, ui::Key{std::string{"second"}}, 0, {"Copy"});
+    h.settle();
+    CHECK(h.backend.clipboardText() == "three");
+}
+
+TEST_CASE("covd fixed grid: the table menu of a grid has no row entries beyond its own", "[ui][grid][fixed][covd]") {
+    ui::testing::TableHarness h;
+    auto const screen = h.mount(textGrid(R"("selectionMode":"cells")"));
+    int const table = h.byTestId("Table", "grid");
+    h.backend.clickCell(table, 0, 0);
+    h.settle();
+    std::vector<std::string> labels;
+    for (ui::MenuEntry const& entry : h.backend.menuOf(table, std::nullopt)) {
+        labels.push_back(entry.separator ? std::string{"--"} : entry.label);
+    }
+    CHECK(std::ranges::count(labels, "--") == 1);
+    CHECK(std::ranges::find(labels, "Insert row below") == labels.end());
 }

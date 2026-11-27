@@ -145,6 +145,7 @@ add_executable(morph_tests
     test_ui_cov_d_custom_screen_words.cpp
     test_ui_cov_d_shell_parts.cpp
     test_ui_cov_d_chat_tools.cpp
+    test_ui_cov_d_host.cpp
     test_ui_cov_d_shell_frame.cpp
     test_ui_cov_d_grid_bound.cpp
     forms/test_forms_derive.cpp

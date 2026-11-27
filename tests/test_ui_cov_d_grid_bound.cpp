@@ -3,6 +3,7 @@
 // A form grid whose cell selection a document binds, and whose header sorts its rows: the
 // selection it holds follows the cells the user selects.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <cstdint>
@@ -80,4 +81,36 @@ TEST_CASE("covd bound grid: the selection the document holds follows the cells t
     CHECK(m.h.text("focus") == "note");
     CHECK(ui::testing::elementValue(m.h, "grid", "selection") ==
           ui::testing::value(R"({"anchor":{"key":3,"column":"note"},"focus":{"key":3,"column":"note"}})"));
+}
+
+TEST_CASE("covd bound grid: the table menu offers the focused row's entries, which insert and delete rows",
+          "[ui][grid][interpreter][covd]") {
+    Mounted m;
+    auto const labels = [&m] {
+        std::vector<std::string> out;
+        for (ui::MenuEntry const& entry : m.h.backend.menuOf(m.table, std::nullopt)) {
+            out.push_back(entry.separator ? std::string{"--"} : entry.label);
+        }
+        return out;
+    };
+    // With no focus there is no row to offer entries for.
+    std::vector<std::string> const before = labels();
+    CHECK(std::ranges::find(before, "Insert row below") == before.end());
+    CHECK(std::ranges::count(before, "--") == 1);
+
+    m.h.backend.clickCell(m.table, 0, 1);
+    m.h.settle();
+    std::vector<std::string> const focused = labels();
+    CHECK(std::ranges::count(focused, "--") == 2);
+    CHECK(std::ranges::find(focused, "Insert row below") != focused.end());
+    CHECK(m.order().size() == 3);
+    m.h.backend.chooseMenu(m.table, std::nullopt, {"Insert row below"});
+    m.h.settle();
+    CHECK(m.order().size() == 4);
+    m.h.backend.chooseMenu(m.table, std::nullopt, {"Insert row above"});
+    m.h.settle();
+    CHECK(m.order().size() == 5);
+    m.h.backend.chooseMenu(m.table, std::nullopt, {"Delete row"});
+    m.h.settle();
+    CHECK(m.order().size() == 4);
 }

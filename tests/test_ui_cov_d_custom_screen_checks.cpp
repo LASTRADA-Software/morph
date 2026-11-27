@@ -68,3 +68,29 @@ TEST_CASE("covd custom screen checks: a command that needs no capability passes 
     auto const refusal = rig.check(command);
     CHECK_FALSE(refusal);
 }
+
+TEST_CASE("covd custom screen checks: the allowance describes a base's params, actions, hosts and commands",
+          "[ui][custom-screens][checks][covd]") {
+    std::string const base = replaced(baseScreen("lims.base"), R"("models":)", R"("params":{"id":"int"},"models":)");
+    auto const described = morph::ui::describeAllowance(screens_test::load(base), base);
+    REQUIRE(described.has_value());
+    CHECK(described->contains("Params, which a custom screen declares exactly:"));
+    CHECK(described->contains("`id`: \"int\""));
+    CHECK_FALSE(described->contains("Params: none"));
+    CHECK(described->contains("Lims_Sample/Lims_Verify"));
+    CHECK(described->contains("host `print`"));
+    CHECK(described->contains("upload"));
+    CHECK(described->contains("Delivered components:"));
+
+    std::string const plain = baseScreen("lims.base");
+    auto const none = morph::ui::describeAllowance(screens_test::load(plain), plain);
+    REQUIRE(none.has_value());
+    CHECK(none->contains("Params: none; a custom screen declares exactly its base's."));
+}
+
+TEST_CASE("covd custom screen checks: the allowance of text that is no JSON is refused", "[ui][custom-screens][checks][covd]") {
+    auto const described =
+        morph::ui::describeAllowance(screens_test::load(baseScreen("lims.base")), "{not json");
+    REQUIRE_FALSE(described.has_value());
+    CHECK(described.error().reason.contains("JSON text"));
+}
