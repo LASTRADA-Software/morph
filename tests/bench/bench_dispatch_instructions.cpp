@@ -25,7 +25,11 @@
 //   * `Bridge` over `LocalBackend` over a four-thread pool; the owner is a
 //     serial executor whose `runUntil` sleeps on a condition variable. A
 //     polling owner spends ~10x the instructions spinning, and the figure
-//     would then measure the spin.
+//     would then measure the spin. The pool's workers do not spin before
+//     sleeping (`PoolOptions::spinBeforeSleep` zero) for the same reason: a
+//     spin is bounded by time, so its instructions follow how long a worker
+//     waited and not what dispatch executed. What the spin buys is latency
+//     and throughput, which docs/spec/core/executor.md measures.
 //   * The model holds one `double`; the action adds to it. The workload is
 //     the smallest there is, so what remains is framework overhead.
 //   * `kWarmup` calls are excluded; `kCalls` are counted, each waited out
@@ -43,6 +47,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -270,7 +275,8 @@ int run(bool baseline, double budget) {
         return kExitSkipped;
     }
 
-    ::morph::exec::ThreadPoolExecutor pool{kPoolThreads};
+    ::morph::exec::ThreadPoolExecutor pool{kPoolThreads,
+                                           ::morph::exec::PoolOptions{.spinBeforeSleep = std::chrono::microseconds{0}}};
     SleepingOwner owner;
     double perCall = 0.0;
     {

@@ -438,8 +438,11 @@ does not move with machine load or clock speed.
 
 The owning thread sleeps on a condition variable while it waits. A polling
 owner spends about ten times the instructions spinning, and the figure would
-then measure the spin. The owner is a serial executor of the benchmark's own,
-because a one-thread pool is not serial and is refused as an owner.
+then measure the spin. The pool's workers do not spin before sleeping
+(`PoolOptions::spinBeforeSleep` zero) for the same reason: a spin is bounded by
+time, so its instructions follow how long a worker waited, not what dispatch
+executed. The owner is a serial executor of the benchmark's own, because a
+one-thread pool is not serial and is refused as an owner.
 
 **It is a gate.** `bench.instr_budget` passes `--budget=<n>`, taken from the
 cache variable `MORPH_INSTR_BUDGET_PER_CALL`: 65000 for Debug (the build type CI
@@ -447,7 +450,7 @@ runs this target in) and 9000 for the optimized types; 0 disables it; it is not
 registered under a sanitizer. The count is not exact — it moves by about ±10%
 between processes — so each default is the worst figure measured plus a margin,
 and `tests/bench/CMakeLists.txt` carries the measurements. Typical figures on
-x86-64 Linux: about 7.4k per call in Release and 55k–59k in Debug, with clang and gcc
+x86-64 Linux: about 7.3k per call in Release and 55k–59k in Debug, with clang and gcc
 within 5% of each other. It was checked against an injected regression: a loop of
 volatile operations in the action turns the case red in both configurations.
 
