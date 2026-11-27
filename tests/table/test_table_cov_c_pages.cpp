@@ -6,11 +6,14 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <morph/table/description.hpp>
 #include <string>
 #include <utility>
 #include <variant>
 #include <vector>
+
+#include "table/table_fixtures.hpp"
 
 using namespace morph::table;
 using morph::math::DecimalPlaces;
@@ -144,4 +147,28 @@ TEST_CASE("a band names the columns it spans, or the description is refused", "[
     auto const deep = band("L1", {"a"}, {band("L2", {"a"}, {band("L3", {"a"}, {band("L4", {"a"})})})});
     CHECK(refusal({deep}).find("nests past 3 levels") != std::string::npos);
     CHECK(bandRefusal(std::vector<BandInfo>{band("Free", {"anything"})}, {}) == std::nullopt);
+}
+
+TEST_CASE("a page writes an empty cell for a column the source lacks and names each measure's unit",
+          "[covc][table][pages]") {
+    UnitRegistryBuilder builder;
+    REQUIRE(builder.add(kilogram()));
+    auto const registry = std::move(builder).build();
+    auto const kg = *registry->find("kg");
+    auto weight = tabletest::col("w", ColumnKind::Measure);
+    weight.dimensions = {"mass"};
+    auto const source = tabletest::makeSource(
+        {tabletest::col("n", ColumnKind::Integer), weight},
+        {{Cell{std::int64_t{1}}, Cell{Measure{.amount = Rational{3, DecimalPlaces{0}}, .unit = kg}}},
+         {Cell{std::int64_t{2}}, Cell{Measure{.amount = Rational{4, DecimalPlaces{0}}, .unit = 999}}}});
+    PageRows rows;
+    rows.rows = {0, 1};
+    rows.total = 2;
+    std::vector<std::string> const columns{"n", "zz", "w"};
+    auto const page = writeGenericPage(rows, *source, columns, registry.get());
+    CHECK(page.columns == columns);
+    REQUIRE(page.rows.size() == 2);
+    CHECK(std::holds_alternative<std::monostate>(page.rows[0][1]));
+    CHECK(page.units == std::map<UnitId, std::string>{{kg, "kg"}});
+    CHECK(page.keys.size() == 2);
 }
