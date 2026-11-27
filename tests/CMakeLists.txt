@@ -168,6 +168,9 @@ add_executable(morph_tests
     test_ui_cov_d_rows_bound.cpp
     test_ui_cov_g_action_table_view.cpp
     test_ui_cov_g_document_loader.cpp
+    test_ui_cov_g_table_points.cpp
+    test_ui_cov_g_menu_walk.cpp
+    test_ui_cov_g_rows_decorators.cpp
     test_ui_cov_d_rows_state.cpp
     test_ui_cov_d_chart.cpp
     test_ui_cov_d_grid_groups.cpp
