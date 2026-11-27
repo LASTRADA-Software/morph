@@ -305,6 +305,7 @@ add_executable(morph_tests
     test_ui_cov_table_views_menu.cpp
     test_ui_cov_table_filter_dialog.cpp
     test_ui_cov_table_model_columns.cpp
+    test_ui_cov_table_rows_pure.cpp
     test_ui_table_config.cpp
     bench_interpreter.cpp
     bench_mount.cpp
