@@ -216,3 +216,141 @@ TEST_CASE("a refill leaves the entry in another unit alone when the record holds
     harness.settle();
     CHECK(form.field("mass").draft().empty());
 }
+
+namespace {
+
+constexpr std::string_view kDeepForm = R"({"type":"object","properties":{
+  "l1":{"type":"object","x-order":0,"properties":{"l2":{"type":"object","properties":{"l3":{"type":"object","properties":{
+    "l4":{"type":"object","properties":{
+      "obj":{"type":"object","properties":{"x":{"type":"integer"}}},
+      "list":{"type":"array","items":{"type":"object","properties":{"y":{"type":"integer"}}}}}}}}}}}},
+  "top":{"type":"integer","x-order":1}},
+  "required":["top"]})";
+
+constexpr std::string_view kDeepList = "l1.l2.l3.l4.list";
+constexpr std::string_view kDeepObject = "l1.l2.l3.l4.obj";
+
+}  // namespace
+
+TEST_CASE("a field below the nesting depth is never modified, reverted or reported as the loaded value",
+          "[covf][forms][session]") {
+    Harness harness;
+    auto const form = harness.session("Deep", kDeepForm);
+    form->prefill(R"({"top":1,"l1":{"l2":{"l3":{"l4":{"obj":{"x":7},"list":[{"y":1}]}}}}})");
+    harness.settle();
+    CHECK_FALSE(form->modified(kDeepList));
+    CHECK_FALSE(form->modified(kDeepObject));
+    harness.type(*form, kDeepList, R"([{"y":5}])");
+    CHECK_FALSE(form->modified(kDeepList));
+    form->revert(kDeepList);
+    form->revert(kDeepObject);
+    harness.settle();
+    CHECK(form->field(kDeepList).draft() == R"([{"y":5}])");
+    // A list below the depth takes no rows of its own.
+    CHECK(form->field(kDeepList).addRow() == 0);
+    CHECK(form->field("top").addRow() == 0);
+}
+
+TEST_CASE("a field below the nesting depth is sent as typed when it is JSON, and as nothing or an empty list when blank",
+          "[covf][forms][session]") {
+    Harness harness;
+    auto const form = harness.session("Deep", kDeepForm);
+    harness.type(*form, "top", "1");
+    REQUIRE(form->body().has_value());
+    CHECK(*form->body() == R"({"top":1})");
+    harness.type(*form, std::string{kDeepList}, "[]");
+    CHECK(*form->body() == R"({"l1":{"l2":{"l3":{"l4":{"list":[]}}}},"top":1})");
+    harness.type(*form, std::string{kDeepList}, "");
+    CHECK(*form->body() == R"({"top":1})");
+    harness.type(*form, std::string{kDeepList}, R"([{"y":2}])");
+    // Only a blank list or `[]` can be sent from below the depth: any other text is not one the form can encode.
+    CHECK_FALSE(form->body().has_value());
+    CHECK(form->field(kDeepList).error().get().has_value());
+    harness.type(*form, std::string{kDeepList}, "");
+    CHECK(*form->body() == R"({"top":1})");
+}
+
+TEST_CASE("a refill replaces an object, a collection and a field below the depth a person has not touched",
+          "[covf][forms][session]") {
+    Harness harness;
+    auto const form = harness.session("Nested", kNested);
+    form->prefill(R"({"name":"n","crate":{"width":4,"label":"L"},"boxes":[{"count":1}]})");
+    harness.settle();
+    form->refill(R"({"name":"n","crate":{"width":8,"label":"M"},"boxes":[{"count":1},{"count":2}]})");
+    harness.settle();
+    CHECK(form->field("crate.width").draft() == "8");
+    CHECK(form->field("crate.label").draft() == "M");
+    CHECK(form->field("boxes").rows().size() == 2);
+
+    Harness deepHarness;
+    auto const deep = deepHarness.session("Deep", kDeepForm);
+    deep->prefill(R"({"top":1,"l1":{"l2":{"l3":{"l4":{"obj":{"x":7}}}}}})");
+    deepHarness.settle();
+    deep->refill(R"({"top":2,"l1":{"l2":{"l3":{"l4":{"obj":{"x":9}}}}}})");
+    deepHarness.settle();
+    CHECK(deep->field("top").draft() == "2");
+    CHECK(deep->field(kDeepObject).draft().contains(R"("x":9)"));
+}
+
+TEST_CASE("a string field that may be sent empty is engaged by a string value and not by null",
+          "[covf][forms][session]") {
+    constexpr std::string_view kBlank = R"({"properties":{
+      "remark":{"type":["string","null"],"x-order":0,"x-blankAs":"empty"},
+      "tag":{"type":["string","null"],"x-order":1}},"required":[]})";
+    Harness harness;
+    auto const form = harness.session("Blank", kBlank);
+    form->prefill(R"({"remark":null})");
+    harness.settle();
+    CHECK_FALSE(form->field("remark").engaged().peek());
+    CHECK(form->body() == std::optional<std::string>{"{}"});
+    form->prefill(R"({"remark":""})");
+    harness.settle();
+    CHECK(form->field("remark").engaged().peek());
+    CHECK(form->body() == std::optional<std::string>{R"({"remark":""})"});
+    form->prefill(R"({"remark":3})");
+    harness.settle();
+    CHECK_FALSE(form->field("remark").engaged().peek());
+    form->prefill(R"({"tag":"t"})");
+    harness.settle();
+    CHECK_FALSE(form->field("remark").engaged().peek());
+    CHECK(form->body() == std::optional<std::string>{R"({"tag":"t"})"});
+}
+
+TEST_CASE("assigning a member does not count the fields whose names it begins with", "[covf][forms][session]") {
+    constexpr std::string_view kNames = R"({"properties":{
+      "a":{"type":"string","x-order":0},
+      "ab":{"type":"string","x-order":1}},"required":[],"x-submitMode":"explicit"})";
+    Harness harness;
+    auto const form = harness.session("Names", kNames);
+    form->prefill(R"({"a":"1","ab":"2"})");
+    harness.settle();
+    harness.type(*form, "a", "typed");
+    form->assign("ab", R"("assigned")");
+    harness.settle();
+    CHECK(form->field("ab").draft() == "assigned");
+    CHECK(form->modified("a"));
+    form->refill(R"({"a":"record","ab":"record"})");
+    harness.settle();
+    // `a` was edited and is kept; `ab` was assigned, which counts as loaded, so the record replaces it.
+    CHECK(form->field("a").draft() == "typed");
+    CHECK(form->field("ab").draft() == "record");
+}
+
+TEST_CASE("a member of a read-only object is read-only, and a refusal is held only for a field that was refused",
+          "[covf][forms][session]") {
+    constexpr std::string_view kLocked = R"({"properties":{
+      "frozen":{"type":"object","x-order":0,"x-readonly":true,"properties":{"v":{"type":"integer","x-order":0}}},
+      "open":{"type":"integer","x-order":1}},"required":[]})";
+    Harness harness;
+    auto const form = harness.session("Locked", kLocked);
+    CHECK(form->field("frozen.v").readonly().get());
+    CHECK_FALSE(form->field("open").readonly().get());
+    CHECK_FALSE(form->refusal("open").has_value());
+    CHECK_FALSE(form->refusal("no.such.field").has_value());
+}
+
+TEST_CASE("the implicit group of a form without a layout has no title", "[covf][forms][session]") {
+    Harness harness;
+    auto const form = harness.session("Nested", kNested);
+    CHECK(form->groupTitle(0).empty());
+}
