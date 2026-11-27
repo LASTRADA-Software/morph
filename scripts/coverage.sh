@@ -205,7 +205,7 @@ done <<< "$_MORPH_LADDER_RUNGS"
 # source-tree path named here, so moc output is excluded automatically —
 # no separate exclusion mechanism needed. Demo src/, system headers and
 # fetched dependencies are excluded the same way.
-SOURCES=(include/morph src/ui)
+SOURCES=(include/morph src/ui src/table src/forms)
 # examples/common only when this configure also built the ladder
 # (MORPH_BUILD_LADDER=ON -- see the "coverage leg only" Qt install step in
 # ci.yml), so this script still works unchanged for a plain

@@ -189,15 +189,21 @@ def parse_lcov(path, repo_root):
     return files
 
 
-# The compiled half of morph::ui lives in src/ui and is scored with the headers under include/morph/ui, under the same
-# floor: moving code from a header to a translation unit must not move it out of the gate.
-COMPILED_UI_PREFIX = "src/ui/"
+# The compiled halves of morph::ui, morph::table and morph::forms live in src/<subsystem> and are scored with the
+# headers under include/morph/<subsystem>, under the same floor: moving code from a header to a translation unit must
+# not move it out of the gate. The other src/ directories are front ends (qt, qt_quick, tui, client), not scored here.
+COMPILED_PREFIXES = {
+    "src/ui/": "include/morph/ui",
+    "src/table/": "include/morph/table",
+    "src/forms/": "include/morph/forms",
+}
 
 
 def subsystem_of(path):
     """The FLOORS key a source path is scored under, or None when the gate does not score it."""
-    if path.startswith(COMPILED_UI_PREFIX):
-        return "include/morph/ui"
+    for prefix, subsystem in COMPILED_PREFIXES.items():
+        if path.startswith(prefix):
+            return subsystem
     if not path.startswith("include/morph/"):
         return None
     parts = path.split("/")
@@ -744,10 +750,18 @@ def self_test():
         fail("a below-floor src/ui source was not scored under include/morph/ui", output)
     else:
         note("ok: src/ui sources are scored under the include/morph/ui floor")
-    if subsystem_of("src/ui/interpreter.cpp") != "include/morph/ui" or subsystem_of("src/tui/x.cpp") is not None:
-        fail("subsystem_of maps src/ui wrongly, or scores src/tui")
+    compiled = {
+        "src/ui/interpreter.cpp": "include/morph/ui",
+        "src/table/table.cpp": "include/morph/table",
+        "src/forms/forms.cpp": "include/morph/forms",
+        "src/tui/x.cpp": None,
+        "src/qt_quick/x.cpp": None,
+    }
+    wrong = {path: subsystem_of(path) for path, want in compiled.items() if subsystem_of(path) != want}
+    if wrong:
+        fail(f"subsystem_of maps a src/ path wrongly: {wrong}")
     else:
-        note("ok: subsystem_of maps src/ui and nothing else under src/")
+        note("ok: subsystem_of maps src/ui, src/table and src/forms to their headers, and nothing else under src/")
 
     # 5. A partial line is a line that RAN with an untaken arm -- not a line that
     #    never ran. Conflating the two would let this gate report partials where

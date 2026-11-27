@@ -171,6 +171,8 @@ component_management:
       paths:
         - include/morph/**
         - src/ui/**
+        - src/table/**
+        - src/forms/**
       statuses:
         - type: project
           target: 97%
@@ -257,6 +259,7 @@ component_management:
       name: "morph forms (include/morph/forms)"
       paths:
         - include/morph/forms/**
+        - src/forms/**
       statuses:
         - type: project
           target: 97%
