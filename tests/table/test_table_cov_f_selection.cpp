@@ -105,3 +105,60 @@ TEST_CASE("the inline executor runs a task at once and ignores an empty one", "[
     owner.post({});
     CHECK(ran);
 }
+
+namespace {
+
+TableColumn describedColumn(std::string const& id, ColumnKind kind) {
+    return TableColumn{.info = {.id = id, .kind = kind, .comparator = {}, .format = {}, .level = {}},
+                       .label = id,
+                       .group = {}};
+}
+
+ServedTable describedTable(bool pin) {
+    auto const description = describe(TableDescription{.id = "t",
+                                                      .label = "T",
+                                                      .columns = {describedColumn("n", ColumnKind::Integer),
+                                                                  describedColumn("parity", ColumnKind::Text)},
+                                                      .key = "n"});
+    ServedTable out{.description = description,
+                    .source = numbered(),
+                    .levels = {},
+                    .mayRead = {},
+                    .scope = {},
+                    .services = {},
+                    .limits = {}};
+    return pin ? detail::pinned(std::move(out)) : out;
+}
+
+}  // namespace
+
+TEST_CASE("a page and a values list are cached under a record name, pinned or not, and not cached without one",
+          "[covf][table][selection]") {
+    for (bool const pin : {false, true}) {
+        CAPTURE(pin);
+        auto const table = describedTable(pin);
+        ViewCache views;
+        TableQuery page;
+        page.filters = evens();
+        TableQuery values;
+        values.distinct = DistinctRequest{.column = "parity"};
+        for (auto const& query : {page, values}) {
+            for (std::string_view const record : {"T.rows", ""}) {
+                CAPTURE(record);
+                auto const first = detail::answerQuery(
+                    table, query, detail::AnswerContext{.views = &views, .record = record, .rowScoped = false});
+                auto const second = detail::answerQuery(
+                    table, query, detail::AnswerContext{.views = &views, .record = record, .rowScoped = false});
+                REQUIRE(first);
+                REQUIRE(second);
+                if (query.distinct) {
+                    REQUIRE(second->distinct);
+                    CHECK(second->distinct->values.size() == 2);
+                } else {
+                    CHECK(second->total == 3);
+                    CHECK(second->rows.size() == 3);
+                }
+            }
+        }
+    }
+}
