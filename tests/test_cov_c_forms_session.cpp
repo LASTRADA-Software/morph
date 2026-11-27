@@ -236,3 +236,34 @@ TEST_CASE("reverting a row restores its loaded cells, or removes a row added sin
     form->revert("rows#x");
     CHECK(form->field("rows").rows().size() == 1);
 }
+
+namespace {
+
+// Four object levels hold their members; the fifth is truncated, and its value travels as the JSON it was given.
+constexpr std::string_view kDeep = R"({"type":"object","properties":{
+  "l1":{"type":"object","x-order":0,"properties":{"l2":{"type":"object","properties":{"l3":{"type":"object","properties":{
+    "l4":{"type":"object","properties":{
+      "obj":{"type":"object","properties":{"x":{"type":"integer"}}},
+      "list":{"type":"array","items":{"type":"object","properties":{"y":{"type":"integer"}}}}}}}}}}}},
+  "top":{"type":"integer","x-order":1}},
+  "required":["top"]})";
+
+}  // namespace
+
+TEST_CASE("a member below the nesting depth travels as the JSON it was given", "[covc][forms][session]") {
+    Harness harness;
+    auto const form = harness.session("Deep", kDeep);
+    form->prefill(R"({"top":1,"l1":{"l2":{"l3":{"l4":{"obj":{"x":7},"list":[{"y":1},{"y":2}]}}}}})");
+    harness.settle();
+    auto& deepList = form->field("l1.l2.l3.l4.list");
+    auto& deepObject = form->field("l1.l2.l3.l4.obj");
+    INFO(deepList.draft());
+    CHECK(deepList.spec().truncated);
+    CHECK(deepObject.spec().truncated);
+    CHECK(deepObject.draft().contains("\"x\":7"));
+    CHECK(deepList.draft().contains("\"y\":2"));
+    CHECK(deepList.edit(*morph::forms::detail::engine::parseJson(R"([{"y":3}])")).has_value());
+    harness.settle();
+    CHECK(deepList.draft().contains("\"y\":3"));
+    CHECK(deepList.edit(*morph::forms::detail::engine::parseJson("5")).has_value());
+}
