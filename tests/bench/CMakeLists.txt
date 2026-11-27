@@ -209,3 +209,28 @@ if(NOT MORPH_INSTR_BUDGET_PER_CALL EQUAL 0)
              COMMAND morph_bench_instr "--budget=${MORPH_INSTR_BUDGET_PER_CALL}")
     set_tests_properties(bench.instr_budget PROPERTIES TIMEOUT 120 LABELS "bench" SKIP_RETURN_CODE 77)
 endif()
+
+# ── Handler teardown scaling ─────────────────────────────────────────────────
+#
+# Per-handler destroy cost at 32000 live handlers over the cost at 2000. The
+# gate is the RATIO, so machine speed, build type and scheduler cancel: a
+# constant-cost teardown reads about 1, a teardown that scans every live
+# handler reads about 16 (the count ratio). MORPH_TEARDOWN_MAX_RATIO is the
+# ceiling; 0 disables the gate. Nothing in it is toolchain-specific, so the
+# default is the same everywhere, Windows included.
+#
+# TEARDOWN-MEASUREMENTS
+add_executable(morph_bench_teardown bench_handler_teardown.cpp)
+target_link_libraries(morph_bench_teardown PRIVATE morph::morph)
+morph_suppress_test_dialogs(morph_bench_teardown)
+apply_warnings(morph_bench_teardown)
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_bench_teardown ${AF_SANITIZER})
+endif()
+set(MORPH_TEARDOWN_MAX_RATIO 7.0 CACHE STRING
+    "Ceiling on per-handler destroy cost at 32000 live handlers over the cost at 2000, enforced by morph_bench_teardown as a ctest case. 0 disables the gate.")
+if(NOT MORPH_TEARDOWN_MAX_RATIO EQUAL 0)
+    add_test(NAME bench.teardown_scaling
+             COMMAND morph_bench_teardown "--max-ratio=${MORPH_TEARDOWN_MAX_RATIO}")
+    set_tests_properties(bench.teardown_scaling PROPERTIES TIMEOUT 300 LABELS "bench")
+endif()

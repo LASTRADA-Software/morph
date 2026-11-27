@@ -459,6 +459,30 @@ measured: ...`) and exits with 77, which the test registers as
 always: there the counter is not read at all, and the Linux-specific headers
 and system call are compiled out, so the target still builds.
 
+### Handler teardown scaling (`bench_handler_teardown.cpp`, target `morph_bench_teardown`)
+
+Destroying one `BridgeHandler` costs the same whether the bridge holds ten
+handlers or ten thousand, or tearing a population down is quadratic: invisible
+at the sizes a unit test builds, a stall at the sizes a long-lived client
+reaches. The benchmark creates and binds 2000 handlers on one `Bridge` over
+`LocalBackend`, destroys them one by one and times only the destruction; then
+the same for 32000. Each count is the best of several trials (7 and 3), the run
+least disturbed by the rest of the machine.
+
+**It is a gate on a ratio, not on a time**: the per-handler destroy cost at
+32000 over the cost at 2000. A constant-cost teardown reads near 1; a teardown
+that scans every live handler reads near 16, the count ratio. A ratio cancels
+machine speed, compiler and build type, so the one ceiling holds on a loaded
+runner, in Debug and under a slower scheduler such as Windows' alike. The
+case is `bench.teardown_scaling`, with `--max-ratio` from the cache variable
+`MORPH_TEARDOWN_MAX_RATIO` (default 7, 0 disables).
+
+7 is placed between the two populations measured. With the per-handler scan
+removed, the ratio is 1.3–4.8 over 11 runs, above 1 because 32000 handlers no
+longer fit in cache. With the scan, it is 9.5–12.6 in Release and about 20 in
+Debug. The case therefore fails while `Bridge::deregisterHandler` scans every
+live handler, and passes once it does not.
+
 ## Concurrent-user benchmark (`scripts/scenario/bench_bookmarks.py`)
 
 `morph_bench` measures one dispatch inside one process. This benchmark measures
