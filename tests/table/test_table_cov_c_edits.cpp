@@ -7,6 +7,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <morph/forms/forms.hpp>
+#include <morph/table/description.hpp>
+#include <optional>
+#include <string>
 #include <morph/table/edits.hpp>
 #include <string_view>
 #include <utility>
@@ -59,4 +62,55 @@ TEST_CASE("every field kind prints its own name, and an unknown one prints as te
                          "datetime", "date", "epochDateTime", "epochDate", "slider", "array", "object",
                          "objectArray"});
     CHECK(morph::forms::fieldKindName(static_cast<FieldKind>(250)) == "text");
+}
+
+namespace {
+
+morph::table::TableDescription editedTable(morph::table::EditInfo edit,
+                                           ColumnKind kind = ColumnKind::Integer) {
+    using morph::table::TableColumn;
+    TableColumn edited{
+        .info = {.id = "count", .kind = kind, .comparator = {}, .format = {}, .level = {}}, .label = "count", .group = {}};
+    edited.edit = std::move(edit);
+    return morph::table::describe(morph::table::TableDescription{.id = "t", .label = "T", .columns = {edited}, .key = "count"});
+}
+
+}  // namespace
+
+TEST_CASE("an edit is checked against the action's input schema, one refusal for each way it can fail",
+          "[covc][table][edits]") {
+    using morph::table::TableErrorCode;
+    auto const schemas = [](std::string_view body) {
+        return [text = std::string{body}](std::string_view action) -> std::optional<std::string> {
+            if (action == "Edit") {
+                return text;
+            }
+            return std::nullopt;
+        };
+    };
+    auto const refusal = [&](morph::table::EditInfo edit, std::string_view schema) {
+        auto const checked = morph::table::checkEdits(editedTable(std::move(edit)), schemas(schema));
+        REQUIRE_FALSE(checked);
+        CHECK(checked.error().code == TableErrorCode::SourceContract);
+        CHECK(checked.error().column == "count");
+        return checked.error().message;
+    };
+    constexpr std::string_view kValue = R"({"type":"object","properties":{"value":{"type":"integer"}}})";
+    constexpr std::string_view kValues =
+        R"({"type":"object","properties":{"values":{"type":"object","properties":{"count":{"type":"integer"}}}}})";
+
+    CHECK(refusal({.action = "Nope"}, kValue).find("is not an action here") != std::string::npos);
+    CHECK(refusal({.action = "Edit"}, "{").find("input schema that does not read") != std::string::npos);
+    CHECK(refusal({.action = "Edit"}, R"({"type":"object","properties":{}})").find("has no member `value`") !=
+          std::string::npos);
+    CHECK(refusal({.action = "Edit", .member = "count"}, kValue).find("has no member `count` in its `values`") !=
+          std::string::npos);
+    CHECK(refusal({.action = "Edit", .member = "other"}, kValues).find("has no member `other` in its `values`") !=
+          std::string::npos);
+    CHECK(refusal({.action = "Edit"}, R"({"type":"object","properties":{"value":{"type":"string"}}})")
+              .find("cannot be edited") != std::string::npos);
+    CHECK(morph::table::checkEdits(editedTable({.action = "Edit"}), schemas(kValue)));
+    CHECK(morph::table::checkEdits(editedTable({.action = "Edit", .member = "count"}), schemas(kValues)));
+    CHECK(morph::table::checkEdits(editedTable({.action = "Edit"}), {}).has_value() == false);
+    CHECK(morph::table::checkEdits(morph::table::describe(morph::table::TableDescription{.id = "t", .label = "T"}), {}));
 }

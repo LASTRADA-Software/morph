@@ -58,6 +58,7 @@ set(MORPH_TABLE_TEST_SOURCES
     table/test_table_cov_c_layout.cpp
     table/test_table_cov_c_parse.cpp
     table/test_table_cov_c_units.cpp
+    table/test_table_cov_c_selection.cpp
     table/test_table_cov_c_pages.cpp
     table/test_table_state.cpp
     table/test_table_measure.cpp
@@ -91,6 +92,8 @@ add_executable(morph_tests
     test_push_effects.cpp
     test_cov_c_effects.cpp
     test_cov_c_forms_values.cpp
+    test_cov_c_forms_session.cpp
+    test_cov_c_ui_document_mutations.cpp
     test_push_watch_table.cpp
     test_push_catalog.cpp
     test_push_channel.cpp
