@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// The grid's keys that take a rectangle, a toggle or a whole column of the grid: Space on a flag, Ctrl+A, Shift and the
-// arrows, fill down, and the commands a grid with no cells to act on refuses.
+// The grid's keys that take a rectangle, a toggle or a whole column of the grid: Space on a flag, Ctrl+A, Shift and
+// the arrows, fill down, and the commands a grid with no cells to act on refuses.
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
-#include <optional>
 #include <morph/ui/grid.hpp>
+#include <optional>
 #include <string>
 
 #include "grid_test_support.hpp"

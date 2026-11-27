@@ -80,7 +80,7 @@ TEST_CASE("cov extents: the window pins the leading columns and counts the width
     ColumnExtents const extents = extentsOf({10, 10, 10, 10, 10, 10});
     ColumnWindow const window = columnWindow(extents, 1, 25, 10, 0);
     CHECK(window.columns == std::vector<std::size_t>{0, 2, 3});  // 25 to 34 lies over columns 2 and 3
-    CHECK(window.leading == 10);                                  // column 1 is neither pinned nor shown
+    CHECK(window.leading == 10);                                 // column 1 is neither pinned nor shown
     CHECK(window.trailing == 20);
     ColumnWindow const wide = columnWindow(extents, 0, 0, 1000, 2);
     CHECK(wide.columns.size() == 6);

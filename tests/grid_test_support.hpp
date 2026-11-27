@@ -354,6 +354,8 @@ public:
         auto const index = static_cast<std::size_t>(at - view.begin());
         announce({table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = index, .count = 1, .to = 0}});
     }
+    // Reports a change of several operations, as an engine's view change is.
+    void announceChange(std::vector<table::ViewOp> ops) { announce(std::move(ops)); }
     // Reports the whole view replaced, as a new query does.
     void reset() { announce({table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0}}); }
     // Answers every `locateRow` asked so far with the key's place in `view`, fetched or not.
@@ -371,8 +373,9 @@ public:
     // Rows past `view` the total counts and nothing holds: a large view's window.
     // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the fake source's unheld-row count and read counter, which the cases set and read directly
     std::int64_t unheld = 0;
-    // How often `row` was read.
+    // How often `row` was read, and at which indices, in order.
     mutable std::size_t rowReads = 0;
+    mutable std::vector<std::int64_t> readIndices;
     // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
     [[nodiscard]] ui::TableTotal total() const override {
@@ -384,6 +387,7 @@ public:
     }
     [[nodiscard]] std::optional<ui::TableRowRef> row(std::int64_t index) const override {
         ++rowReads;
+        readIndices.push_back(index);
         if (index < 0 || static_cast<std::size_t>(index) >= view.size()) {
             return std::nullopt;
         }

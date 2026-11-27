@@ -3,11 +3,15 @@
 // A model table's grid: the text of a cell by the kind of the value it holds, and the draft an editor opens with when
 // the value does not fit the field.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <cstdint>
+#include <morph/table/view_change.hpp>
 #include <morph/ui/grid.hpp>
 #include <morph/ui/value.hpp>
 #include <string>
+#include <vector>
 
 #include "grid_test_support.hpp"
 #include "ui_table_model_support.hpp"
@@ -51,13 +55,57 @@ TEST_CASE("cov model grid: an editor opens blank on a value its field cannot rea
         CHECK(f.commits.sent.empty());
         return draft;
     };
-    CHECK(opened("day", Value{std::string{"junk"}}).empty());        // not a YYYY-MM-DD text
-    CHECK(opened("day", Value{std::string{"2026-13-40"}}).empty());  // not a date
+    CHECK(opened("day", Value{std::string{"junk"}}).empty());                // not a YYYY-MM-DD text
+    CHECK(opened("day", Value{std::string{"2026-13-40"}}).empty());          // not a date
     CHECK(opened("day", Value{std::string{"2026-11-20"}}) == "2026-11-20");  // read as a day, shown as one
-    CHECK(opened("at", Value{std::string{"junk"}}).empty());           // not an instant
+    CHECK(opened("at", Value{std::string{"junk"}}).empty());                 // not an instant
     auto const weight = [](std::string unit) {
         return Value{morph::ui::Quantity{.value = morph::table::parseDecimal("2").value(), .unit = std::move(unit)}};
     };
-    CHECK(opened("weight", weight("m")).empty());          // a unit of another dimension
+    CHECK(opened("weight", weight("m")).empty());      // a unit of another dimension
     CHECK(opened("weight", weight("kg")) == "2.000");  // the field's own unit
+}
+
+namespace {
+
+using morph::table::ViewOp;
+
+ViewOp op(ViewOp::Kind kind, std::size_t first, std::size_t count, std::size_t to = 0) {
+    return ViewOp{.kind = kind, .first = first, .count = count, .to = to};
+}
+
+// The view indices the grid reads after the model's rows announce @p ops.
+std::vector<std::int64_t> readAfter(std::vector<ViewOp> ops) {
+    ModelGridFixture f{{1, 2, 3, 4, 5, 6}};
+    f.rows->readIndices.clear();
+    f.rows->announceChange(std::move(ops));
+    std::vector<std::int64_t> read = f.rows->readIndices;
+    std::ranges::sort(read);
+    return read;
+}
+
+}  // namespace
+
+TEST_CASE("cov model grid: the rows a change brings are found through the operations that follow", "[ui][grid][cov]") {
+    using Kind = ViewOp::Kind;
+    using Indices = std::vector<std::int64_t>;
+    CHECK(readAfter({op(Kind::Inserted, 1, 2)}) == Indices{1, 2});
+    CHECK(readAfter({op(Kind::Changed, 4, 2)}) == Indices{4, 5});
+    // A later removal takes a brought row with it, and moves the ones after it down.
+    CHECK(readAfter({op(Kind::Inserted, 1, 2), op(Kind::Removed, 2, 1)}) == Indices{1});
+    CHECK(readAfter({op(Kind::Inserted, 3, 2), op(Kind::Removed, 0, 1)}) == Indices{2, 3});
+    CHECK(readAfter({op(Kind::Inserted, 1, 1), op(Kind::Removed, 3, 1)}) == Indices{1});  // one before it stays
+    // A later insertion moves the brought rows from its place on up.
+    CHECK(readAfter({op(Kind::Changed, 2, 1), op(Kind::Inserted, 0, 2)}) == Indices{0, 1, 4});
+    CHECK(readAfter({op(Kind::Changed, 2, 1), op(Kind::Inserted, 5, 1)}) == Indices{2, 5});
+    // A row changed twice is read once.
+    CHECK(readAfter({op(Kind::Changed, 2, 2), op(Kind::Changed, 3, 2)}) == Indices{2, 3, 4});
+    // A moved row takes its place; the rows between shift by one.
+    CHECK(readAfter({op(Kind::Changed, 1, 1), op(Kind::Moved, 1, 1, 4)}) == Indices{4});
+    CHECK(readAfter({op(Kind::Changed, 3, 1), op(Kind::Moved, 1, 1, 4)}) == Indices{2});
+    CHECK(readAfter({op(Kind::Changed, 3, 1), op(Kind::Moved, 5, 1, 1)}) == Indices{4});
+    CHECK(readAfter({op(Kind::Changed, 0, 1), op(Kind::Moved, 5, 1, 3)}) == Indices{0});
+    CHECK(readAfter({op(Kind::Changed, 5, 1), op(Kind::Moved, 1, 1, 3)}) == Indices{5});
+    // A reset forgets what came before it.
+    CHECK(readAfter({op(Kind::Changed, 1, 2), op(Kind::Reset, 0, 0), op(Kind::Changed, 5, 1)}) == Indices{5});
 }

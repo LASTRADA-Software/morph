@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "ui_interpreter_support.hpp"
+#include "ui_table_support.hpp"
 
 namespace ui = morph::ui;
 
@@ -52,7 +53,8 @@ TEST_CASE("cov rows: a row's spans name a column, and rows and columns from one"
     CHECK(reportsOf(h, "rowSpans is") == 0);
 }
 
-TEST_CASE("cov rows: spans that are no list of spans are reported once for the table", "[ui][interpreter][table][cov]") {
+TEST_CASE("cov rows: spans that are no list of spans are reported once for the table",
+          "[ui][interpreter][table][cov]") {
     Harness h;
     auto const screen = h.mount(spanDocument(R"("wide")", R"("wider")"));
     CHECK(spansOfRow(h, "1") == "-");
@@ -69,4 +71,39 @@ TEST_CASE("cov rows: a span with no column, an unknown one or a count that is no
         "null"));
     CHECK(spansOfRow(h, "1") == "1:2");  // only the last span is well formed
     CHECK(reportsOf(h, "rowSpans is") == 1);
+}
+
+TEST_CASE("cov rows: a column shows and copies each kind of value by its display parts",
+          "[ui][interpreter][table][cov]") {
+    morph::ui::testing::TableHarness h;
+    auto const screen = h.mount(R"({"vocab":"ui/1","id":"d",
+      "state":{"items":{"init":{"lit":[
+        {"id":1,"amount":{"num":12345,"den":1000,"dp":3},"weight":{"num":2,"den":1,"dp":0,"unit":"g"},"flag":true,
+         "day":"2026-11-20","code":3,"gone":null,"name":"x"},
+        {"id":2,"amount":7,"weight":{"num":5,"den":2,"dp":1},"flag":false,"day":"junk","code":4,"gone":null,"name":"y"}]}}},
+      "view":{"kind":"table","id":"t","testId":"t","rows":{"ref":"items"},"key":{"row":"id"},"selectionMode":"multiple",
+        "columns":[{"id":"id","label":"Id"},
+          {"id":"amount","label":"Amount","decimals":2,"rounding":"halfUp","padPlaces":true,"grouping":true},
+          {"id":"weight","label":"Weight","unit":"g"},
+          {"id":"flag","label":"Flag","labels":{"lit":[{"operand":"true","text":"Yes"}]}},
+          {"id":"day","label":"Day","date":"dd.MM.yyyy"},
+          {"id":"code","label":"Code","labels":{"lit":[{"operand":"3","text":"three"}]}},
+          {"id":"gone","label":"Gone","empty":"-"},
+          {"id":"name","label":"Name"}]}})");
+    int const table = h.byTestId("Table", "t");
+    CHECK(morph::ui::testing::cellText(h, 1, "amount") == "12.35");  // rounded half up to two places
+    CHECK(morph::ui::testing::cellText(h, 2, "amount") == "7.00");   // an integer, padded to them
+    CHECK(morph::ui::testing::cellText(h, 1, "weight") == "2 g");    // a quantity keeps its unit
+    CHECK(morph::ui::testing::cellText(h, 2, "weight") == "2.5");    // a decimal has none
+    CHECK(morph::ui::testing::cellText(h, 1, "flag") == "Yes");      // a flag with a label
+    CHECK(morph::ui::testing::cellText(h, 2, "flag") == "false");    // and one without
+    CHECK(morph::ui::testing::cellText(h, 1, "code") == "three");
+    CHECK(morph::ui::testing::cellText(h, 2, "code") == "4");
+    CHECK(morph::ui::testing::cellText(h, 1, "gone") == "-");
+    h.backend.selectRows(table, {morph::ui::Key{std::int64_t{1}}, morph::ui::Key{std::int64_t{2}}});
+    h.settle();
+    morph::ui::testing::pressCopy(h, table);
+    CHECK(morph::ui::testing::clipboardText(h) ==
+          "1\t12.35\t2 g\tYes\t2026-11-20\tthree\t-\tx\n"
+          "2\t7.00\t2.5\tfalse\tjunk\t4\t-\ty");
 }

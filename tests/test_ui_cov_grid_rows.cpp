@@ -134,8 +134,7 @@ TEST_CASE("cov grid rows: enter and tab past the last row append one when the gr
     CHECK(f.grid->focus().has_value());
 }
 
-TEST_CASE("cov grid rows: enter past the last row appends nothing in a grid that does not append",
-          "[ui][grid][cov]") {
+TEST_CASE("cov grid rows: enter past the last row appends nothing in a grid that does not append", "[ui][grid][cov]") {
     GridFixture f{1};
     f.grid->focusCell(at(1, "note"));
     f.grid->type("a");

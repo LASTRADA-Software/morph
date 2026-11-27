@@ -50,7 +50,7 @@ TEST_CASE("cov grid paste: lines past the last row and cells past the last colum
     GridFixture f{2};
     f.grid->focusCell(at(2, "volume"));
     ui::PasteResult const result = f.grid->paste("1\t2\t3\t4\t5\n6\t7");
-    CHECK(result.written == 2);     // volume and note; density and limit are read-only
+    CHECK(result.written == 2);  // volume and note; density and limit are read-only
     CHECK(result.readOnly == 2);
     CHECK(result.pastColumns == 1);  // the fifth cell of the first line
     CHECK(result.pastRows == 2);     // the second line has no row to land on
@@ -66,7 +66,7 @@ TEST_CASE("cov grid paste: a grid that appends takes the lines past the last row
     GridFixture f{2, ui::GridOptions{.appendRows = true}, schema};
     f.grid->focusCell(at(2, "label"));
     ui::PasteResult const result = f.grid->paste("a\nb\nc");
-    CHECK(result.written == 2);  // row 2 and the one appended
+    CHECK(result.written == 2);   // row 2 and the one appended
     CHECK(result.pastRows == 1);  // the third row would pass the bound
     REQUIRE(f.form->field("specimens").rows().size() == 3);
     CHECK(f.form->field("specimens[2].label").draft() == "b");

@@ -48,8 +48,9 @@ TEST_CASE("cov fixed grid: a bound selection is shown, and a new selection is re
           ui::testing::value(R"({"anchor":{"key":"density","column":"min"},"focus":{"key":"count","column":"max"}})"));
     h.backend.selectCells(table, 0, 0, 0, 1);
     h.settle();
-    CHECK(ui::testing::elementValue(h, "grid", "selection") ==
-          ui::testing::value(R"({"anchor":{"key":"density","column":"min"},"focus":{"key":"density","column":"max"}})"));
+    CHECK(
+        ui::testing::elementValue(h, "grid", "selection") ==
+        ui::testing::value(R"({"anchor":{"key":"density","column":"min"},"focus":{"key":"density","column":"max"}})"));
     CHECK(h.text("picked") == "max");
 }
 

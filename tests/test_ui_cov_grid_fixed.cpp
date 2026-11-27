@@ -98,8 +98,7 @@ TEST_CASE("cov fixed source: a cell the form refuses counts as an error", "[ui][
     CHECK(f.source->errorCount() == 0);
 }
 
-TEST_CASE("cov grid rows: a range of keys outside the view is refused, and one inside is listed",
-          "[ui][grid][cov]") {
+TEST_CASE("cov grid rows: a range of keys outside the view is refused, and one inside is listed", "[ui][grid][cov]") {
     morph::test::grid::GridFixture f{3};
     ui::GridRows& rows = f.source->view();
     std::optional<std::expected<std::vector<table::RowId>, table::TableError>> got;
@@ -121,14 +120,14 @@ TEST_CASE("cov grid rows: a range of keys outside the view is refused, and one i
     CHECK_FALSE(got->has_value());
 }
 
-TEST_CASE("cov fixed source: a part that names no form, no field or no collection is refused", "[ui][grid][fixed][cov]") {
+TEST_CASE("cov fixed source: a part that names no form, no field or no collection is refused",
+          "[ui][grid][fixed][cov]") {
     using Catch::Matchers::ContainsSubstring;
     auto const refusal = [](Parts parts, bool withForm) {
         FixedGridFixture f{R"({"limits":{}})", limits(), columns({"min", "max"})};
         try {
             ui::FixedGridSource source{f.h.rt, withForm ? f.form.get() : nullptr, std::move(parts),
-                                       columns({"min", "max"}),
-                                       ui::FormatContext{}};
+                                       columns({"min", "max"}), ui::FormatContext{}};
         } catch (std::invalid_argument const& failure) {
             return std::string{failure.what()};
         }
@@ -136,8 +135,8 @@ TEST_CASE("cov fixed source: a part that names no form, no field or no collectio
     };
     auto const block = [](std::string forEach) {
         Parts parts;
-        parts.emplace_back(ui::FixedBlock{.forEach = std::move(forEach),
-                                          .rows = {fixedRow("mass", {{"min", fieldCell("mass")}})}});
+        parts.emplace_back(
+            ui::FixedBlock{.forEach = std::move(forEach), .rows = {fixedRow("mass", {{"min", fieldCell("mass")}})}});
         return parts;
     };
     CHECK_THAT(refusal(block("specimens"), false), ContainsSubstring("there is no form"));

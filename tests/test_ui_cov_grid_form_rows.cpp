@@ -153,8 +153,8 @@ TEST_CASE("cov form rows: a date-time member reads as seconds since the epoch", 
 
 TEST_CASE("cov form rows: text kinds read the string or the encoded JSON", "[ui][grid][cov]") {
     GridFixture f = membersFixture(R"({"rows":[{"word":"hello","count":3}]})");
-    for (ColumnKind const kind : {ColumnKind::Text, ColumnKind::Key, ColumnKind::Custom, ColumnKind::Measure,
-                                  ColumnKind::Quantity}) {
+    for (ColumnKind const kind :
+         {ColumnKind::Text, ColumnKind::Key, ColumnKind::Custom, ColumnKind::Measure, ColumnKind::Quantity}) {
         table::Cell const word = ui::detail::memberCell(f.form->field("rows[0].word"), kind);
         REQUIRE(cellAs<std::string>(word) != nullptr);
         CHECK(*cellAs<std::string>(word) == "hello");
