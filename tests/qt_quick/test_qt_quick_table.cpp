@@ -434,7 +434,7 @@ TEST_CASE("qt_quick table: growing one row's cell does not rescan every row, and
 // Mutation: skip the invalidateColumn/reportCellWidth wiring from TableRowImpl::adopted entirely (a cell's width
 // changing then never reaches the table, so this never observes the rescan it measures).
 // Mutation: never update the cache in `reportCellWidth`, forcing every grow through the shrink/full-rescan path.
-TEST_CASE("qt_quick table: a single-row grow's scan cost does not scale with row count", "[qt_quick]") {
+TEST_CASE("qt_quick table: a single-row grow's scan cost does not scale with row count", "[qt_quick][scan_cost]") {
     // What this measures: the number of rows `widestCell` visits for a single-row grow, not wall-clock time. A
     // grown column's cells still all need their x/width updated once the column widens (MorphTableRow.qml's
     // onWidthsChanged: place(), one call per row) -- that O(rows) placement cost is real, necessary, and not what
