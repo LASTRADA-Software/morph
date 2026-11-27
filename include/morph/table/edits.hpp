@@ -35,12 +35,10 @@
 #include <initializer_list>
 #include <iterator>
 #include <map>
-#include <morph/core/callback_scope.hpp>
 #include <morph/forms/engine/field_model.hpp>
-#include <morph/table/data_source.hpp>
 // NOLINTNEXTLINE(misc-header-include-cycle): description.hpp includes edits.hpp at its end; the guard ends the cycle.
+#include <morph/export.hpp>
 #include <morph/table/description.hpp>
-#include <morph/table/engine.hpp>
 #include <morph/table/record_name.hpp>
 #include <optional>
 #include <span>
@@ -143,93 +141,9 @@ namespace detail {
 /// @param column The column's kind.
 /// @param field  The field's kind.
 /// @return `true` when the field's kind is one the column's kind is edited with.
-[[nodiscard]] inline bool editFits(ColumnKind column, forms::FieldKind field) {
-    using forms::FieldKind;
-    auto const among = [field](std::initializer_list<FieldKind> kinds) { return std::ranges::contains(kinds, field); };
-    switch (column) {
-        case ColumnKind::Integer:
-            return among({FieldKind::Integer, FieldKind::Slider, FieldKind::Enum, FieldKind::Choice});
-        case ColumnKind::Key:
-            return among({FieldKind::Integer, FieldKind::Choice});
-        case ColumnKind::Decimal:
-            return among({FieldKind::Decimal});
-        case ColumnKind::Quantity:
-        case ColumnKind::Measure:
-            return among({FieldKind::Quantity});
-        case ColumnKind::Number:
-            return among({FieldKind::Number, FieldKind::Slider});
-        case ColumnKind::Text:
-            return among({FieldKind::Text, FieldKind::Multiline, FieldKind::Enum, FieldKind::Choice});
-        case ColumnKind::Date:
-            return among({FieldKind::Date, FieldKind::EpochDate});
-        case ColumnKind::DateTime:
-            return among({FieldKind::DateTime, FieldKind::EpochDateTime});
-        case ColumnKind::Bool:
-            return among({FieldKind::Boolean});
-        case ColumnKind::Custom:
-            return among({FieldKind::Text, FieldKind::Enum, FieldKind::Choice});
-        default:
-            return false;
-    }
-}
+[[nodiscard]] MORPH_API bool editFits(ColumnKind column, forms::FieldKind field);
 
 }  // namespace detail
-
-// NOLINTNEXTLINE(readability-function-cognitive-complexity): a run of independent rules, one `if` each, in the order they are reported; splitting scatters that order.
-inline std::expected<void, TableError> checkEdits(
-    TableDescription const& description,
-    std::function<std::optional<std::string>(std::string_view action)> const& schemaOf) {
-    auto const refuse = [](std::string const& column, std::string message) -> std::expected<void, TableError> {
-        return std::unexpected(
-            TableError{.code = TableErrorCode::SourceContract, .column = column, .message = std::move(message)});
-    };
-    for (TableColumn const& column : description.columns) {
-        if (!column.edit) {
-            continue;
-        }
-        std::string const& columnId = column.info.id;
-        EditInfo const& edit = *column.edit;
-        std::optional<std::string> const schema = schemaOf ? schemaOf(edit.action) : std::nullopt;
-        if (!schema) {
-            return refuse(columnId,
-                          "column `" + columnId + "` is edited by `" + edit.action + "`, which is not an action here");
-        }
-        auto model = forms::FormModel::fromSchema(edit.action, *schema);
-        if (!model) {
-            return refuse(columnId, "column `" + columnId + "`'s edit action `" + edit.action +
-                                        "` has an input schema that does not read: " + model.error().message);
-        }
-        std::span<forms::FieldSpec const> const fields = model->fields();
-        forms::FieldSpec const* field = nullptr;
-        if (edit.member.empty()) {
-            auto const found = std::ranges::find(fields, std::string_view{"value"}, &forms::FieldSpec::name);
-            field = found == fields.end() ? nullptr : &*found;
-        } else {
-            auto const values = std::ranges::find(fields, std::string_view{"values"}, &forms::FieldSpec::name);
-            if (values != fields.end()) {
-                auto const found = std::ranges::find(values->children, edit.member, &forms::FieldSpec::name);
-                field = found == values->children.end() ? nullptr : &*found;
-            }
-        }
-        if (field == nullptr) {
-            return refuse(columnId, edit.member.empty() ? "column `" + columnId + "`'s edit action `" + edit.action +
-                                                              "` has no member `value`"
-                                                        : "column `" + columnId + "`'s edit action `" + edit.action +
-                                                              "` has no member `" + edit.member + "` in its `values`");
-        }
-        // A measure is edited in its field's unit: one the table's units lack could hold none of its cells.
-        if (column.info.kind == ColumnKind::Measure &&
-            !std::ranges::contains(description.units, field->unitAscii, &UnitInfo::id)) {
-            return refuse(columnId, "column `" + columnId + "` is a measure edited in `" + field->unitAscii +
-                                        "`, which is not one of the table's units");
-        }
-        if (!detail::editFits(column.info.kind, field->kind)) {
-            return refuse(columnId, "column `" + columnId + "` cannot be edited by `" + edit.action +
-                                        "`'s field of kind `" + std::string{forms::fieldKindName(field->kind)} + "`");
-        }
-    }
-    return {};
-}
 
 /// @brief One cell of a row commit on a model's table.
 struct EditCell {
@@ -262,7 +176,7 @@ using RowEditCommit = std::function<void(RowEditRequest const& request, RowEditD
 /// is ignored, and destroying it ends the engine edit of every row it still
 /// has in flight. The commit function, the patcher and the engine's handlers
 /// may commit again, or destroy this object, from inside a call it makes.
-class CellEdits {
+class MORPH_API CellEdits {
 public:
     /// @brief Builds the committer.
     /// @param patcher Replaces a row with the server's reply; must outlive this object.
@@ -285,20 +199,7 @@ public:
     /// @brief Ends the engine edit of every row with an edit in flight or
     ///        settling: its completion will be ignored, so nothing else would.
     // NOLINTNEXTLINE(bugprone-exception-escape) -- a handler that throws from here terminates, as from any destructor
-    ~CellEdits() {
-        if (_engine == nullptr) {
-            return;
-        }
-        std::vector<RowId> rows{_ending.begin(), _ending.end()};
-        for (auto const& [row, queue] : _queues) {
-            rows.push_back(row);
-        }
-        _queues.clear();
-        _ending.clear();
-        for (auto const& row : rows) {
-            _engine->endEdit(row);
-        }
-    }
+    ~CellEdits();
 
     /// @brief Commits an edit: now, or after the row's earlier edits settle.
     ///
@@ -306,215 +207,69 @@ public:
     /// committed: the cell's error becomes "not loaded yet" and the commit
     /// function is not called. Without an engine nothing is checked.
     /// @param request The edit.
-    void commit(EditRequest request) {
-        if (unloadedInView(request)) {
-            _errors[request.row].insert_or_assign(request.column, "not loaded yet");
-            return;
-        }
-        auto& queue = _queues[request.row];
-        queue.push_back(std::move(request));
-        if (queue.size() == 1) {
-            start(queue.front().row);
-        }
-    }
+    void commit(EditRequest request);
 
     /// @brief Commits a row's cells as one request: now, or after the row's earlier row commits settle, in order.
     /// @param request The row and its cells.
-    void commitRow(RowEditRequest request) {
-        RowId const row = request.row;
-        std::vector<std::optional<std::string>> drafts;
-        drafts.reserve(request.cells.size());
-        for (EditCell const& cell : request.cells) {
-            drafts.push_back(draft(row, cell.column));
-        }
-        auto& queue = _rowQueues[row];
-        queue.push_back(RowFlight{.id = ++_nextFlight,
-                                  .request = std::move(request),
-                                  .sent = false,
-                                  .discard = false,
-                                  .drafts = std::move(drafts)});
-        if (queue.size() == 1) {
-            startRow(row);
-        }
-    }
+    void commitRow(RowEditRequest request);
 
     /// @brief Holds a cell's draft, as the user typed it, with the error it does not encode by.
     /// @param row    The row's key.
     /// @param column The column's id.
     /// @param text   The draft.
     /// @param error  Why it does not encode; nothing when it does.
-    void setDraft(RowId const& row, std::string_view column, std::string text, std::optional<std::string> error) {
-        CellState& cell = _cells[row][std::string{column}];
-        cell.draft = std::move(text);
-        cell.settled = false;
-        if (error) {
-            _errors[row].insert_or_assign(std::string{column}, std::move(*error));
-        } else {
-            eraseError(row, column);
-        }
-    }
+    void setDraft(RowId const& row, std::string_view column, std::string text, std::optional<std::string> error);
 
     /// @brief A cell's draft.
     /// @param row    The row's key.
     /// @param column The column's id.
     /// @return The draft; nothing while none is held.
-    [[nodiscard]] std::optional<std::string> draft(RowId const& row, std::string_view column) const {
-        CellState const* const cell = cellOf(row, column);
-        return cell == nullptr ? std::nullopt : cell->draft;
-    }
+    [[nodiscard]] std::optional<std::string> draft(RowId const& row, std::string_view column) const;
 
     /// @brief Drops a cell's draft and its error.
     /// @param row    The row's key.
     /// @param column The column's id.
-    void clearDraft(RowId const& row, std::string_view column) {
-        if (auto const found = _cells.find(row); found != _cells.end()) {
-            if (auto const cell = found->second.find(column); cell != found->second.end()) {
-                cell->second.draft.reset();
-                cell->second.settled = false;
-                if (!cell->second.modified) {
-                    found->second.erase(cell);
-                }
-            }
-            if (found->second.empty()) {
-                _cells.erase(found);
-            }
-        }
-        eraseError(row, column);
-    }
+    void clearDraft(RowId const& row, std::string_view column);
 
     /// @brief Whether a cell is modified: from its row commit's success until the row is next fetched.
     /// @param row    The row's key.
     /// @param column The column's id.
     /// @return `true` while modified.
-    [[nodiscard]] bool modified(RowId const& row, std::string_view column) const {
-        CellState const* const cell = cellOf(row, column);
-        return cell != nullptr && cell->modified;
-    }
+    [[nodiscard]] bool modified(RowId const& row, std::string_view column) const;
 
     /// @brief Whether a row holds a modified mark or a draft in any of its cells.
     /// @param row The row's key.
     /// @return `true` when one does.
-    [[nodiscard]] bool rowEdited(RowId const& row) const {
-        auto const found = _cells.find(row);
-        return found != _cells.end() && std::ranges::any_of(found->second, [](auto const& entry) {
-                   return entry.second.modified || entry.second.draft.has_value();
-               });
-    }
+    [[nodiscard]] bool rowEdited(RowId const& row) const;
 
     /// @brief The window fetched a row: its modified marks end, and so do the drafts its row commits settled. A cell
     ///        still stale is left as it is: its commit has not replied, so the row fetched does not hold it yet.
     /// @param row The row's key.
-    void rowFetched(RowId const& row) {
-        auto const found = _cells.find(row);
-        if (found == _cells.end()) {
-            return;
-        }
-        for (auto cell = found->second.begin(); cell != found->second.end();) {
-            if (!cell->second.modified || stale(row, cell->first)) {
-                ++cell;
-                continue;
-            }
-            cell->second.modified = false;
-            if (cell->second.settled) {
-                cell->second.draft.reset();
-                cell->second.settled = false;
-            }
-            cell = cell->second.draft ? std::next(cell) : found->second.erase(cell);
-        }
-        if (found->second.empty()) {
-            _cells.erase(found);
-        }
-    }
+    void rowFetched(RowId const& row);
 
     /// @brief A fetch that named a row returned none: it was deleted, or no longer matches the filter. Its drafts,
     ///        errors, modified marks and the row commits not yet sent go; one in flight settles as it would and
     ///        leaves nothing behind.
     /// @param row The row's key.
-    void rowAbsent(RowId const& row) {
-        _cells.erase(row);
-        _errors.erase(row);
-        auto const found = _rowQueues.find(row);
-        if (found == _rowQueues.end()) {
-            return;
-        }
-        std::erase_if(found->second, [](RowFlight const& flight) { return !flight.sent; });
-        for (RowFlight& flight : found->second) {
-            flight.discard = true;
-        }
-        if (found->second.empty()) {
-            _rowQueues.erase(found);
-        }
-    }
+    void rowAbsent(RowId const& row);
 
     /// @brief A row's key changed: its drafts, errors, modified marks and row commits move to the new key. Where the
     ///        new key holds a cell of its own, the new key's is kept.
     /// @param from The row's old key.
     /// @param destination The row's new key.
-    void moveRow(RowId const& from, RowId const& destination) {
-        if (from == destination) {
-            return;
-        }
-        if (auto const found = _cells.find(from); found != _cells.end()) {
-            auto moved = std::move(found->second);
-            _cells.erase(found);
-            auto& target = _cells[destination];
-            for (auto& [column, cell] : moved) {
-                target.try_emplace(column, std::move(cell));
-            }
-        }
-        if (auto const found = _errors.find(from); found != _errors.end()) {
-            auto moved = std::move(found->second);
-            _errors.erase(found);
-            auto& target = _errors[destination];
-            for (auto& [column, message] : moved) {
-                target.try_emplace(column, std::move(message));
-            }
-        }
-        if (auto const found = _rowQueues.find(from); found != _rowQueues.end()) {
-            auto moved = std::move(found->second);
-            _rowQueues.erase(found);
-            auto& target = _rowQueues[destination];
-            for (RowFlight& flight : moved) {
-                flight.request.row = destination;
-                target.push_back(std::move(flight));
-            }
-        }
-    }
+    void moveRow(RowId const& from, RowId const& destination);
 
     /// @brief Keeps the drafts, errors and modified marks of these columns only: a new description dropped the others.
     /// @param columns The ids of the columns kept.
-    void keepColumns(std::span<std::string const> columns) {
-        auto const gone = [columns](std::string const& column) { return !std::ranges::contains(columns, column); };
-        for (auto row = _cells.begin(); row != _cells.end();) {
-            std::erase_if(row->second, [&gone](auto const& entry) { return gone(entry.first); });
-            row = row->second.empty() ? _cells.erase(row) : std::next(row);
-        }
-        for (auto row = _errors.begin(); row != _errors.end();) {
-            std::erase_if(row->second, [&gone](auto const& entry) { return gone(entry.first); });
-            row = row->second.empty() ? _errors.erase(row) : std::next(row);
-        }
-    }
+    void keepColumns(std::span<std::string const> columns);
 
     /// @brief Cells that show an error, wherever their row is.
     /// @return The count.
-    [[nodiscard]] std::size_t errorCount() const {
-        std::size_t out = 0;
-        for (auto const& [row, cells] : _errors) {
-            out += cells.size();
-        }
-        return out;
-    }
+    [[nodiscard]] std::size_t errorCount() const;
 
     /// @brief Cells marked modified, wherever their row is.
     /// @return The count.
-    [[nodiscard]] std::size_t modifiedCount() const {
-        std::size_t out = 0;
-        for (auto const& [row, cells] : _cells) {
-            out += static_cast<std::size_t>(
-                std::ranges::count_if(cells, [](auto const& entry) { return entry.second.modified; }));
-        }
-        return out;
-    }
+    [[nodiscard]] std::size_t modifiedCount() const;
 
     /// @brief Sets the one receiver of each row commit's settling, called once the cells took its outcome and the
     ///        row's next commit was sent, with the row's key now and whether the commit was refused. A commit whose
@@ -528,116 +283,28 @@ public:
     /// @param row    The row's key.
     /// @param column The column's id.
     /// @return `true` while stale.
-    [[nodiscard]] bool stale(RowId const& row, std::string_view column) const {
-        if (auto const found = _queues.find(row);
-            found != _queues.end() &&
-            std::ranges::any_of(found->second, [&](EditRequest const& request) { return request.column == column; })) {
-            return true;
-        }
-        auto const flights = _rowQueues.find(row);
-        return flights != _rowQueues.end() && std::ranges::any_of(flights->second, [&](RowFlight const& flight) {
-                   return !flight.discard && std::ranges::any_of(flight.request.cells, [&](EditCell const& cell) {
-                       return cell.column == column;
-                   });
-               });
-    }
+    [[nodiscard]] bool stale(RowId const& row, std::string_view column) const;
 
     /// @brief The error a cell shows, until its next edit succeeds.
     /// @param row    The row's key.
     /// @param column The column's id.
     /// @return The message, or nothing.
-    [[nodiscard]] std::optional<std::string> error(RowId const& row, std::string_view column) const {
-        auto const found = _errors.find(row);
-        if (found == _errors.end()) {
-            return std::nullopt;
-        }
-        auto const cell = found->second.find(column);
-        return cell == found->second.end() ? std::nullopt : std::optional{cell->second};
-    }
+    [[nodiscard]] std::optional<std::string> error(RowId const& row, std::string_view column) const;
 
     /// @brief Edits committed and not yet settled, across rows.
     /// @return The count.
-    [[nodiscard]] std::size_t unsettled() const {
-        std::size_t out = 0;
-        for (auto const& [row, queue] : _queues) {
-            out += queue.size();
-        }
-        return out;
-    }
+    [[nodiscard]] std::size_t unsettled() const;
 
 private:
     // Whether the engine's view shows the edited cell as unloaded.
-    [[nodiscard]] bool unloadedInView(EditRequest const& request) const {
-        if (_engine == nullptr) {
-            return false;
-        }
-        auto const viewRow = _engine->viewRowOfKey(request.row);
-        if (!viewRow) {
-            return false;
-        }
-        auto const columns = _engine->columns();
-        auto const column = std::ranges::find(columns, request.column, &ColumnInfo::id);
-        if (column == columns.end()) {
-            return false;
-        }
-        auto const index = static_cast<std::size_t>(column - columns.begin());
-        return std::holds_alternative<Unloaded>(_engine->cellAt(*viewRow, index));
-    }
+    [[nodiscard]] bool unloadedInView(EditRequest const& request) const;
 
-    void start(RowId const& row) {
-        if (_engine != nullptr) {
-            _engine->beginEdit(row);
-        }
-        // A copy: a commit that settles at once pops the queue's front, and the
-        // commit may still read its request afterwards.
-        auto const request = _queues.at(row).front();
-        // The commit runs last: it may settle, commit again or destroy this object.
-        _commit(request, _alive.guard([this, row](std::expected<std::vector<Cell>, FieldError> outcome) {
-            settle(row, std::move(outcome));
-        }));
-    }
+    void start(RowId const& row);
 
     // The queue is brought up to date before the patcher is called: patching
     // notifies the source's listeners at once, and their handlers may commit
     // to the same row or destroy this object.
-    void settle(RowId const& row, std::expected<std::vector<Cell>, FieldError>&& outcome) {
-        auto const found = _queues.find(row);
-        if (found == _queues.end() || found->second.empty()) {
-            return;
-        }
-        auto const request = std::move(found->second.front());
-        found->second.pop_front();
-        bool const more = !found->second.empty();
-        if (!more) {
-            _queues.erase(found);
-            _ending.insert(row);
-        }
-        if (outcome) {
-            if (auto const errors = _errors.find(row); errors != _errors.end()) {
-                errors->second.erase(request.column);
-            }
-            auto const alive = _alive.token();
-            _patcher->patchRow(row, std::move(*outcome));
-            if (alive.expired()) {
-                return;
-            }
-        } else {
-            auto const column = outcome.error().column.empty() ? request.column : outcome.error().column;
-            _errors[row].insert_or_assign(column, std::move(outcome.error().message));
-        }
-        if (more) {
-            start(row);
-            return;
-        }
-        _ending.erase(row);
-        if (_queues.contains(row)) {
-            // A commit made while the row was patched started its next edit.
-            return;
-        }
-        if (_engine != nullptr) {
-            _engine->endEdit(row);
-        }
-    }
+    void settle(RowId const& row, std::expected<std::vector<Cell>, FieldError>&& outcome);
 
     // A row commit: sent once it is at the front of its row's queue, and discarded on settling when its row went
     // absent meanwhile.
@@ -659,116 +326,21 @@ private:
         bool settled = false;
     };
 
-    [[nodiscard]] CellState const* cellOf(RowId const& row, std::string_view column) const {
-        auto const found = _cells.find(row);
-        if (found == _cells.end()) {
-            return nullptr;
-        }
-        auto const cell = found->second.find(column);
-        return cell == found->second.end() ? nullptr : &cell->second;
-    }
+    [[nodiscard]] CellState const* cellOf(RowId const& row, std::string_view column) const;
 
-    void eraseError(RowId const& row, std::string_view column) {
-        if (auto const found = _errors.find(row); found != _errors.end()) {
-            if (auto const cell = found->second.find(column); cell != found->second.end()) {
-                found->second.erase(cell);
-            }
-            if (found->second.empty()) {
-                _errors.erase(found);
-            }
-        }
-    }
+    void eraseError(RowId const& row, std::string_view column);
 
     // Sends the front of a row's queue unless it is out already. The commit runs last: it may settle, commit again
     // or destroy this object.
-    void startRow(RowId const& row) {
-        auto const found = _rowQueues.find(row);
-        if (found == _rowQueues.end() || found->second.empty() || found->second.front().sent) {
-            return;
-        }
-        RowFlight& front = found->second.front();
-        front.sent = true;
-        // A copy: a commit that settles at once pops the queue's front, and the commit may still read its request.
-        RowEditRequest const request = front.request;
-        _rowCommit(request,
-                   _alive.guard([this, flightId = front.id](std::expected<void, std::vector<FieldError>> outcome) {
-                       settleRow(flightId, std::move(outcome));
-                   }));
-    }
+    void startRow(RowId const& row);
 
     // A refusal lands by name: an error naming a cell's member (its column when it has none) is that cell's; one that
     // names no cell of the request, or nothing, is every other cell's. A cell no error reached takes none.
-    void landErrors(RowEditRequest const& request, std::vector<FieldError> const& errors) {
-        auto const nameOf = [](EditCell const& cell) -> std::string const& {
-            return cell.member.empty() ? cell.column : cell.member;
-        };
-        std::map<std::string, std::string, std::less<>> landed;
-        std::optional<std::string> general;
-        for (FieldError const& error : errors) {
-            auto const named = std::ranges::find_if(request.cells, [&](EditCell const& cell) {
-                return !error.column.empty() && nameOf(cell) == error.column;
-            });
-            if (named != request.cells.end()) {
-                landed.insert_or_assign(named->column, error.message);
-            } else if (!general) {
-                general = error.message;
-            }
-        }
-        for (EditCell const& cell : request.cells) {
-            if (auto const found = landed.find(cell.column); found != landed.end()) {
-                _errors[request.row].insert_or_assign(cell.column, found->second);
-            } else if (general) {
-                _errors[request.row].insert_or_assign(cell.column, *general);
-            } else {
-                eraseError(request.row, cell.column);
-            }
-        }
-    }
+    void landErrors(RowEditRequest const& request, std::vector<FieldError> const& errors);
 
     // A row commit settled. The cells take its outcome, and the row's next commit is sent, before the receiver hears
     // it: it may commit again or destroy this object.
-    void settleRow(std::uint64_t flightId, std::expected<void, std::vector<FieldError>> outcome) {
-        auto queue = _rowQueues.begin();
-        auto flight = std::deque<RowFlight>::iterator{};
-        for (; queue != _rowQueues.end(); ++queue) {
-            flight = std::ranges::find(queue->second, flightId, &RowFlight::id);
-            if (flight != queue->second.end()) {
-                break;
-            }
-        }
-        if (queue == _rowQueues.end()) {
-            return;
-        }
-        RowId const row = queue->first;
-        RowFlight const settled = std::move(*flight);
-        queue->second.erase(flight);
-        if (queue->second.empty()) {
-            _rowQueues.erase(queue);
-        }
-        if (!settled.discard) {
-            if (outcome) {
-                for (std::size_t at = 0; at < settled.request.cells.size(); ++at) {
-                    EditCell const& cell = settled.request.cells.at(at);
-                    eraseError(row, cell.column);
-                    CellState& state = _cells[row][cell.column];
-                    state.modified = true;
-                    state.settled =
-                        state.draft.has_value() && at < settled.drafts.size() && state.draft == settled.drafts.at(at);
-                }
-            } else {
-                RowEditRequest landing = settled.request;
-                landing.row = row;
-                landErrors(landing, outcome.error());
-            }
-        }
-        auto const alive = _alive.token();
-        startRow(row);
-        if (alive.expired() || settled.discard || !_rowSettled) {
-            return;
-        }
-        std::function<void(RowId const&, bool)> const heard = _rowSettled;
-        heard(row, !outcome.has_value());
-    }
+    void settleRow(std::uint64_t flightId, std::expected<void, std::vector<FieldError>> outcome);
 
     RowPatcher* _patcher;
     EditCommit _commit;

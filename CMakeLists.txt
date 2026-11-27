@@ -505,6 +505,13 @@ add_library(morph ${_morph_library_type}
     src/ui/interpreter_table_model.cpp
     src/ui/interpreter_charts.cpp
     src/ui/interpreter_mount.cpp
+    src/table/description.cpp
+    src/table/edits.cpp
+    src/table/level_cache.cpp
+    src/table/query.cpp
+    src/table/row_selection.cpp
+    src/table/state_store.cpp
+    src/table/view_cache.cpp
     src/ui/library.cpp
     src/ui/service.cpp
     src/ui/tour_checks.cpp

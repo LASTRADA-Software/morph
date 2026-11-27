@@ -26,11 +26,8 @@
 #include <limits>
 #include <map>
 #include <memory>
-#include <morph/attributes.hpp>
 #include <morph/core/change_types.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/core/logger.hpp>
-#include <morph/table/data_source.hpp>
+#include <morph/export.hpp>
 #include <morph/table/query.hpp>
 #include <mutex>
 #include <optional>
@@ -199,13 +196,7 @@ inline constexpr std::size_t kWantChunk = 1024;
 /// @brief A cell vector's deep size: the vector, and what each cell owns.
 /// @param cells The cells.
 /// @return The bytes.
-[[nodiscard]] inline std::size_t cellsBytes(std::vector<Cell> const& cells) noexcept {
-    std::size_t bytes = sizeof(std::vector<Cell>);
-    for (auto const& cell : cells) {
-        bytes += cellBytes(cell);
-    }
-    return bytes;
-}
+[[nodiscard]] MORPH_API std::size_t cellsBytes(std::vector<Cell> const& cells) noexcept;
 
 /// @brief What fixtures and benchmarks reach of a `LevelCache` beyond its interface.
 struct LevelCacheAccess {
@@ -1849,48 +1840,14 @@ struct LevelInput {
 /// id, so a caller whose description holds the level's columns in another order or only some of them reads each
 /// under its own id. A level column is `Unloaded` unless its snapshot reads the row `Loaded`; a level no input
 /// serves is `Unloaded` in every row.
-class LeveledSource final : public DataSource {
+class MORPH_API LeveledSource final : public DataSource {
 public:
     /// @brief The view of @p base and @p levels under @p columns.
     /// @param base    The table's rows; its snapshot is taken here, once.
     /// @param columns The columns the view has: the description's.
     /// @param levels  The levels the request read, each with its snapshot.
     LeveledSource(std::shared_ptr<DataSource const> const& base, std::vector<ColumnInfo> columns,
-                  std::vector<LevelInput> levels)
-        : _columns{std::move(columns)}, _groups(base->groups().begin(), base->groups().end()) {
-        auto const baseColumns = base->columns();
-        std::vector<Plan> plans;
-        plans.reserve(_columns.size());
-        for (auto const& column : _columns) {
-            Plan plan;
-            if (column.level.empty()) {
-                plan.base = detail::findColumn(baseColumns, column.id);
-            } else {
-                for (std::size_t input = 0; input < levels.size(); ++input) {
-                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): input < levels.size()
-                    if (levels[input].source == nullptr || levels[input].source->level() != column.level) {
-                        continue;
-                    }
-                    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): input < levels.size()
-                    if (auto const place = detail::findColumn(levels[input].source->columns(), column.id)) {
-                        plan.level = input;
-                        plan.place = *place;
-                    }
-                    break;
-                }
-            }
-            plans.push_back(plan);
-        }
-        std::vector<Level> read;
-        read.reserve(levels.size());
-        for (auto& input : levels) {
-            auto const width = input.source != nullptr ? input.source->columns().size() : 0;
-            read.push_back(Level{.name = input.source != nullptr ? std::string{input.source->level()} : std::string{},
-                                 .snapshot = std::move(input.snapshot),
-                                 .width = width});
-        }
-        _snapshot = std::make_shared<Snapshot const>(base->snapshot(), std::move(plans), std::move(read));
-    }
+                  std::vector<LevelInput> levels);
 
     /// @brief The view's columns.
     /// @return The columns given.
@@ -1934,7 +1891,7 @@ private:
     };
 
     // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- column and level indices come from the plans built against the same lists
-    class Snapshot final : public RowSnapshot {
+    class MORPH_API Snapshot final : public RowSnapshot {
     public:
         Snapshot(std::shared_ptr<RowSnapshot const> base, std::vector<Plan> plans, std::vector<Level> levels)
             : _base{std::move(base)}, _plans{std::move(plans)}, _levels{std::move(levels)} {}
@@ -1944,57 +1901,11 @@ private:
         [[nodiscard]] RowId rowId(std::size_t row) const override { return _base->rowId(row); }
 
         // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): row, then column, as DataSource::cell declares them.
-        [[nodiscard]] Cell cell(std::size_t row, std::size_t column) const override {
-            auto const& plan = _plans[column];
-            if (plan.base) {
-                return _base->cell(row, *plan.base);
-            }
-            if (!plan.level) {
-                return Unloaded{};
-            }
-            auto const& level = _levels[*plan.level];
-            std::vector<Cell> buffer(level.width);
-            if (level.snapshot->read(_base->rowId(row), buffer) != LevelRead::Loaded) {
-                return Unloaded{};
-            }
-            return std::move(buffer[plan.place]);
-        }
+        [[nodiscard]] Cell cell(std::size_t row, std::size_t column) const override;
 
-        void readColumn(std::size_t column, ColumnSink& sink, std::size_t first, std::size_t last) const override {
-            auto const& plan = _plans[column];
-            if (plan.base) {
-                _base->readColumn(*plan.base, sink, first, last);
-                return;
-            }
-            constexpr std::size_t kRun = 256;
-            std::vector<Cell> run;
-            run.reserve(kRun);
-            std::vector<Cell> buffer(plan.level ? _levels[*plan.level].width : 0);
-            for (std::size_t begin = first; begin < last; begin += kRun) {
-                auto const end = std::min(last, begin + kRun);
-                run.clear();
-                for (std::size_t row = begin; row < end; ++row) {
-                    if (plan.level &&
-                        _levels[*plan.level].snapshot->read(_base->rowId(row), buffer) == LevelRead::Loaded) {
-                        run.push_back(std::move(buffer[plan.place]));
-                    } else {
-                        run.emplace_back(Unloaded{});
-                    }
-                }
-                sink.cells(begin, run);
-            }
-        }
+        void readColumn(std::size_t column, ColumnSink& sink, std::size_t first, std::size_t last) const override;
 
-        [[nodiscard]] MORPH_PROCESS_UNIQUE LevelRead state(std::size_t row, std::string_view level) const {
-            for (auto const& entry : _levels) {
-                if (entry.name == level) {
-                    thread_local std::vector<Cell> buffer;
-                    buffer.resize(entry.width);
-                    return entry.snapshot->read(_base->rowId(row), buffer);
-                }
-            }
-            return LevelRead::Unloaded;
-        }
+        [[nodiscard]] MORPH_PROCESS_UNIQUE LevelRead state(std::size_t row, std::string_view level) const;
 
     private:
         std::shared_ptr<RowSnapshot const> _base;

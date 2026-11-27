@@ -38,8 +38,10 @@
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
 #include <morph/table/description.hpp>
+#include <morph/table/edits.hpp>
 #include <morph/table/query.hpp>
 #include <morph/table/sort.hpp>
+#include <morph/table/view_cache.hpp>
 #include <mutex>
 #include <numeric>
 #include <optional>

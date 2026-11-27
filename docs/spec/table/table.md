@@ -2976,7 +2976,7 @@ rows is recorded against them first, and that record is the measure of what the 
 | B4 | Requests sent while typing a ten-letter word in 1.5 s | One (gate) | A filter that is not debounced |
 | B5 | The WebAssembly build in a headless browser: mount of a `rows` table of 2,000 × 300, then one screen of vertical scroll | Recorded in step 0, against F1 and F3 natively | Nothing: it is the browser's baseline, taken before anything is built for it |
 
-The table module is header-only and builds for WebAssembly without Qt. Step 0 builds the table tests for that
+The table module builds for WebAssembly without Qt. Step 0 builds the table tests for that
 target and runs them under Node, so the count gates of the single-threaded path run there as they do natively;
 B2's factor is a timing and is recorded here with its date, as every timing is, and the engine's
 single-threaded step size is set from it. B5 and U8 need a browser and the Qt WebAssembly build and are run

@@ -55,7 +55,7 @@ set(MORPH_TABLE_TEST_SOURCES
 )
 
 # ── WebAssembly: the table tests alone, run under Node ──────────────────────
-# The table module is header-only and builds without Qt, so its tests run in WebAssembly too and the count gates of
+# The table module builds without Qt, so its tests run in WebAssembly too and the count gates of
 # the single-threaded path are checked there. Nothing else in this directory is built for that target, and Node runs
 # the executable by hand, so no test is registered with ctest.
 if(EMSCRIPTEN)

@@ -22,6 +22,7 @@
 #include <morph/table/data_source.hpp>
 #include <morph/table/description.hpp>
 #include <morph/table/level_cache.hpp>
+#include <morph/table/row_selection.hpp>
 #include <mutex>
 #include <span>
 #include <string>

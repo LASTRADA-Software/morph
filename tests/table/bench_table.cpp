@@ -37,6 +37,7 @@
 #include <morph/table/level_cache.hpp>
 #include <morph/table/query.hpp>
 #include <morph/table/state_store.hpp>
+#include <morph/table/view_cache.hpp>
 #include <morph/ui/locale_table.hpp>
 #include <morph/ui/measure.hpp>
 #include <optional>

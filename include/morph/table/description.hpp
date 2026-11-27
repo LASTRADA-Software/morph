@@ -28,35 +28,21 @@
 #include <cassert>
 #include <charconv>
 #include <cmath>
-#include <core/async/ExecutorContext.hpp>
-#include <core/async/ParkedWork.hpp>
-#include <core/async/Task.hpp>
 #include <coroutine>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <expected>
 #include <functional>
-#include <glaze/glaze.hpp>
 #include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
-#include <morph/attributes.hpp>
 #include <morph/core/action_refusal.hpp>
 #include <morph/core/effects.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/core/payload_schema.hpp>
-#include <morph/core/records.hpp>
-#include <morph/forms/forms.hpp>
-#include <morph/session/session.hpp>
 #include <morph/table/bands.hpp>
-#include <morph/table/data_source.hpp>
 #include <morph/table/level_cache.hpp>
-#include <morph/table/query.hpp>
 #include <morph/table/runtime.hpp>
-#include <morph/table/view_cache.hpp>
-#include <morph/util/rational.hpp>
 #include <mutex>
 #include <optional>
 #include <set>
@@ -285,24 +271,12 @@ struct TableDescription {
 /// of a member a client reads gives another.
 /// @param description The description; its `revision` is ignored.
 /// @return The description with `revision` set to 16 lowercase hex digits.
-[[nodiscard]] inline TableDescription describe(TableDescription description) {
-    description.revision.clear();
-    auto const json = glz::write_json(description).value_or(std::string{});
-    description.revision = model::detail::hex64(model::detail::fnv1a64(json));
-    return description;
-}
+[[nodiscard]] MORPH_API TableDescription describe(TableDescription description);
 
 /// @brief The columns of @p description as the engine reads them.
 /// @param description The description.
 /// @return Each column's `info`, in the description's order.
-[[nodiscard]] inline std::vector<ColumnInfo> columnInfos(TableDescription const& description) {
-    std::vector<ColumnInfo> out;
-    out.reserve(description.columns.size());
-    for (auto const& column : description.columns) {
-        out.push_back(column.info);
-    }
-    return out;
-}
+[[nodiscard]] MORPH_API std::vector<ColumnInfo> columnInfos(TableDescription const& description);
 
 /// @brief A registry of the units @p description lists: how a client resolves the unit ids of its measures.
 ///
@@ -310,19 +284,8 @@ struct TableDescription {
 /// server's, since the wire names a unit by its id.
 /// @param description The description.
 /// @return The registry, or what `UnitRegistryBuilder::add` refuses for a listed unit.
-[[nodiscard]] inline std::expected<std::shared_ptr<UnitRegistry const>, TableError> registryOf(
-    TableDescription const& description) {
-    UnitRegistryBuilder builder;
-    for (auto const& unit : description.units) {
-        if (unit.id.empty()) {
-            continue;
-        }
-        if (auto added = builder.add(unit); !added) {
-            return std::unexpected(std::move(added.error()));
-        }
-    }
-    return std::move(builder).build();
-}
+[[nodiscard]] MORPH_API std::expected<std::shared_ptr<UnitRegistry const>, TableError> registryOf(
+    TableDescription const& description);
 
 /// @brief Refuses a column display or a companion that cannot apply to @p description.
 ///
@@ -331,37 +294,7 @@ struct TableDescription {
 /// `Text`, is refused, naming the id it gives.
 /// @param description The description.
 /// @return Nothing, or `SourceContract` naming the offending column.
-[[nodiscard]] inline std::expected<void, TableError> validateDisplay(TableDescription const& description) {
-    using Refused = std::unexpected<TableError>;
-    auto const refuse = [](std::string column, std::string message) {
-        return Refused{TableError{
-            .code = TableErrorCode::SourceContract, .column = std::move(column), .message = std::move(message)}};
-    };
-    auto const isCompanion = [&description](std::string_view columnId) {
-        auto const found = std::ranges::find(description.columns, columnId,
-                                             [](TableColumn const& column) -> auto const& { return column.info.id; });
-        return found != description.columns.end() && found->info.kind == ColumnKind::Text;
-    };
-    for (TableColumn const& column : description.columns) {
-        if (column.info.kind == ColumnKind::Measure && (column.display.decimals || !column.display.unit.empty())) {
-            return refuse(column.info.id,
-                          "a measure column shows each cell in its own unit; it takes no `decimals` or `unit`");
-        }
-        for (std::string const* const named : {&column.tone, &column.tooltip}) {
-            if (!named->empty() && !isCompanion(*named)) {
-                return refuse(*named, "column `" + column.info.id + "` names `" + *named +
-                                          "` as a companion; a companion is a `Text` column of the table");
-            }
-        }
-    }
-    for (std::string const* const named : {&description.rowTone, &description.rowLock}) {
-        if (!named->empty() && !isCompanion(*named)) {
-            return refuse(*named,
-                          "the table names `" + *named + "` as a row's companion; a companion is a `Text` column");
-        }
-    }
-    return {};
-}
+[[nodiscard]] MORPH_API std::expected<void, TableError> validateDisplay(TableDescription const& description);
 
 /// @brief Refuses header bands a table cannot draw.
 ///
@@ -370,19 +303,8 @@ struct TableDescription {
 /// @param bands   The bands, outermost first.
 /// @param columns The table's columns.
 /// @return Nothing, or `SourceContract` whose message names the band's label.
-[[nodiscard]] inline std::expected<void, TableError> checkBands(std::span<BandInfo const> bands,
-                                                                std::span<TableColumn const> columns) {
-    std::vector<std::string> ids;
-    ids.reserve(columns.size());
-    for (TableColumn const& column : columns) {
-        ids.push_back(column.info.id);
-    }
-    if (std::optional<std::string> refused = bandRefusal(bands, ids)) {
-        return std::unexpected(
-            TableError{.code = TableErrorCode::SourceContract, .column = {}, .message = std::move(*refused)});
-    }
-    return {};
-}
+[[nodiscard]] MORPH_API std::expected<void, TableError> checkBands(std::span<BandInfo const> bands,
+                                                                   std::span<TableColumn const> columns);
 
 /// @brief Which companions a document overrides with its own expressions.
 struct CompanionOverrides {
@@ -404,50 +326,14 @@ struct CompanionOverrides {
 /// @param columns     The column ids, in the order the query names them.
 /// @param overrides   What the document gives itself.
 /// @return The ids.
-[[nodiscard]] inline std::vector<std::string> columnsWithCompanions(TableDescription const& description,
-                                                                    std::span<std::string const> columns,
-                                                                    CompanionOverrides const& overrides = {}) {
-    std::vector<std::string> out;
-    auto const add = [&out](std::string const& columnId) {
-        if (!columnId.empty() && !std::ranges::contains(out, columnId)) {
-            out.push_back(columnId);
-        }
-    };
-    for (std::string const& columnId : columns) {
-        add(columnId);
-        auto const found = std::ranges::find(description.columns, columnId,
-                                             [](TableColumn const& column) -> auto const& { return column.info.id; });
-        if (found == description.columns.end()) {
-            continue;
-        }
-        if (!overrides.tone.contains(columnId)) {
-            add(found->tone);
-        }
-        if (!overrides.tooltip.contains(columnId)) {
-            add(found->tooltip);
-        }
-    }
-    if (!overrides.rowTone) {
-        add(description.rowTone);
-    }
-    add(description.rowLock);
-    return out;
-}
+[[nodiscard]] MORPH_API std::vector<std::string> columnsWithCompanions(TableDescription const& description,
+                                                                       std::span<std::string const> columns,
+                                                                       CompanionOverrides const& overrides = {});
 
 /// @brief Every column @p description names as a companion: columns no user arranges.
 /// @param description The description.
 /// @return Every non-empty `tone`, `tooltip`, `rowTone` and `rowLock` name, sorted, without duplicates.
-[[nodiscard]] inline std::vector<std::string> companionColumns(TableDescription const& description) {
-    std::set<std::string, std::less<>> names;
-    for (TableColumn const& column : description.columns) {
-        names.insert(column.tone);
-        names.insert(column.tooltip);
-    }
-    names.insert(description.rowTone);
-    names.insert(description.rowLock);
-    names.erase(std::string{});
-    return {names.begin(), names.end()};
-}
+[[nodiscard]] MORPH_API std::vector<std::string> companionColumns(TableDescription const& description);
 
 /// @brief One row of a generic page: one cell per entry of the page's `columns`.
 using GenericRow = std::vector<Cell>;
@@ -518,55 +404,12 @@ namespace detail {
 /// @brief Appends an integer as JSON.
 /// @param out   The text to append to.
 /// @param value The integer.
-inline void appendInteger(std::string& out, std::int64_t value) {
-    std::array<char, 24> buffer{};
-    auto const result = std::to_chars(std::to_address(buffer.begin()), std::to_address(buffer.end()), value);
-    out.append(buffer.data(), result.ptr);
-}
+MORPH_API void appendInteger(std::string& out, std::int64_t value);
 
 /// @brief Appends a string as a JSON string, escaped as glaze escapes it.
 /// @param out  The text to append to.
 /// @param text The string.
-inline void appendJsonString(std::string& out, std::string_view text) {
-    static constexpr std::string_view kHex = "0123456789abcdef";
-    out += '"';
-    for (char const character : text) {
-        switch (character) {
-            case '"':
-                out += "\\\"";
-                break;
-            case '\\':
-                out += "\\\\";
-                break;
-            case '\b':
-                out += "\\b";
-                break;
-            case '\f':
-                out += "\\f";
-                break;
-            case '\n':
-                out += "\\n";
-                break;
-            case '\r':
-                out += "\\r";
-                break;
-            case '\t':
-                out += "\\t";
-                break;
-            default:
-                if (static_cast<unsigned char>(character) < 0x20U) {
-                    auto const code = static_cast<unsigned char>(character);
-                    out += "\\u00";
-                    out += kHex[code >> 4U];
-                    out += kHex[code & 0xFU];
-                } else {
-                    out += character;
-                }
-                break;
-        }
-    }
-    out += '"';
-}
+MORPH_API void appendJsonString(std::string& out, std::string_view text);
 
 /// @brief Appends a `Rational` as `[numerator, denominator]`.
 ///
@@ -576,25 +419,7 @@ inline void appendJsonString(std::string& out, std::string_view text) {
 /// it is the canonical pair.
 /// @param out   The text to append to.
 /// @param value The value.
-inline void appendRational(std::string& out, math::Rational const& value) {
-    auto numerator = value.numerator;
-    auto denominator = value.denominator;
-    auto const scale = powerOfTen(std::min(value.decimalPlaces.value, math::kMaxDecimalPlaces));
-    if (denominator > 0 && scale % denominator == 0) {
-        auto const factor = scale / denominator;
-        constexpr auto kMax = std::numeric_limits<std::int64_t>::max();
-        constexpr auto kMin = std::numeric_limits<std::int64_t>::min();
-        if (factor == 1 || (numerator <= kMax / factor && numerator >= kMin / factor)) {
-            numerator *= factor;
-            denominator = scale;
-        }
-    }
-    out += '[';
-    appendInteger(out, numerator);
-    out += ',';
-    appendInteger(out, denominator);
-    out += ']';
-}
+MORPH_API void appendRational(std::string& out, math::Rational const& value);
 
 /// @brief Appends a finite or non-finite `double`.
 ///
@@ -604,21 +429,7 @@ inline void appendRational(std::string& out, math::Rational const& value) {
 /// `"inf"` or `"-inf"`.
 /// @param out   The text to append to.
 /// @param value The value.
-inline void appendDouble(std::string& out, double value) {
-    if (std::isnan(value)) {
-        out += "\"nan\"";
-        return;
-    }
-    if (std::isinf(value)) {
-        out += value > 0 ? "\"inf\"" : "\"-inf\"";
-        return;
-    }
-    auto const text = glz::write_json(value).value_or(std::string{"null"});
-    out += text;
-    if (text.find_first_of(".eE") == std::string::npos) {
-        out += ".0";
-    }
-}
+MORPH_API void appendDouble(std::string& out, double value);
 
 /// @brief Appends one cell as JSON, by its `Cell` alternative.
 ///
@@ -631,140 +442,41 @@ inline void appendDouble(std::string& out, double value) {
 /// @param out   The text to append to.
 /// @param cell  The cell.
 /// @param units The id of each unit number a measure may hold.
-inline void appendCellJson(std::string& out, Cell const& cell, std::map<UnitId, std::string> const& units = {}) {
-    std::visit(
-        [&out, &units]<typename T>(T const& value) {
-            if constexpr (std::is_same_v<T, std::monostate> || std::is_same_v<T, Unloaded>) {
-                out += "null";
-            } else if constexpr (std::is_same_v<T, std::int64_t>) {
-                appendInteger(out, value);
-            } else if constexpr (std::is_same_v<T, double>) {
-                appendDouble(out, value);
-            } else if constexpr (std::is_same_v<T, std::string>) {
-                appendJsonString(out, value);
-            } else if constexpr (std::is_same_v<T, bool>) {
-                out += value ? "true" : "false";
-            } else if constexpr (std::is_same_v<T, math::Rational>) {
-                appendRational(out, value);
-            } else if constexpr (std::is_same_v<T, Measure>) {
-                appendRational(out, value.amount);
-                out.back() = ',';
-                if (auto const found = units.find(value.unit); found != units.end()) {
-                    appendJsonString(out, found->second);
-                } else {
-                    out += "null";
-                }
-                out += ']';
-            } else {
-                static_assert(std::is_same_v<T, QuantityCell>);
-                if (value.toCanonical.numerator == 1 && value.toCanonical.denominator == 1) {
-                    appendRational(out, value.amount);
-                    return;
-                }
-                appendRational(out, value.amount);
-                out.back() = ',';
-                appendRational(out, value.toCanonical);
-                out += ']';
-            }
-        },
-        cell);
-}
+MORPH_API void appendCellJson(std::string& out, Cell const& cell, std::map<UnitId, std::string> const& units = {});
 
 /// @brief Reads JSON text token by token, for the shapes a cell has.
-class CellCursor {
+class MORPH_API CellCursor {
 public:
     /// @brief A cursor at the start of @p text.
     /// @param text The JSON text.
     explicit CellCursor(std::string_view text) noexcept : _text{text} {}
 
     /// @brief Skips JSON whitespace.
-    void skipSpace() noexcept {
-        while (_at < _text.size() &&
-               (_text[_at] == ' ' || _text[_at] == '\t' || _text[_at] == '\n' || _text[_at] == '\r')) {
-            ++_at;
-        }
-    }
+    void skipSpace() noexcept;
 
     /// @brief Consumes @p character after any whitespace.
     /// @param character The character expected.
     /// @return `true` when it was next and is consumed.
-    [[nodiscard]] bool eat(char character) noexcept {
-        skipSpace();
-        if (_at < _text.size() && _text[_at] == character) {
-            ++_at;
-            return true;
-        }
-        return false;
-    }
+    [[nodiscard]] bool eat(char character) noexcept;
 
     /// @brief Whether only whitespace is left.
     /// @return `true` at the end of the text.
-    [[nodiscard]] bool atEnd() noexcept {
-        skipSpace();
-        return _at == _text.size();
-    }
+    [[nodiscard]] bool atEnd() noexcept;
 
     /// @brief The text not consumed yet, after any whitespace.
     /// @return The rest of the text.
-    [[nodiscard]] std::string_view rest() noexcept {
-        skipSpace();
-        return _text.substr(_at);
-    }
+    [[nodiscard]] std::string_view rest() noexcept;
 
     /// @brief Consumes a JSON integer token that fits `int64`.
     /// @return The integer, or nothing (and nothing consumed) when the next
     ///         token is not one.
-    [[nodiscard]] std::optional<std::int64_t> integer() noexcept {
-        skipSpace();
-        auto const token = numberToken(_text.substr(_at));
-        if (token.empty() || token.find_first_of(".eE") != std::string_view::npos) {
-            return std::nullopt;
-        }
-        std::int64_t value = 0;
-        auto const [end, error] = std::from_chars(std::to_address(token.begin()), std::to_address(token.end()), value);
-        if (error != std::errc{} || end != std::to_address(token.end())) {
-            return std::nullopt;
-        }
-        _at += token.size();
-        return value;
-    }
+    [[nodiscard]] std::optional<std::int64_t> integer() noexcept;
 
     /// @brief The JSON number token at the start of @p text.
     /// @param text The text.
     /// @return The token: `-?digits(.digits)?([eE][+-]?digits)?`, or empty when
     ///         @p text does not start with one.
-    [[nodiscard]] static std::string_view numberToken(std::string_view text) noexcept {
-        std::size_t position = 0;
-        auto const digits = [&] {
-            auto const from = position;
-            while (position < text.size() && text[position] >= '0' && text[position] <= '9') {
-                ++position;
-            }
-            return position > from;
-        };
-        if (position < text.size() && text[position] == '-') {
-            ++position;
-        }
-        if (!digits()) {
-            return {};
-        }
-        if (position < text.size() && text[position] == '.') {
-            ++position;
-            if (!digits()) {
-                return {};
-            }
-        }
-        if (position < text.size() && (text[position] == 'e' || text[position] == 'E')) {
-            ++position;
-            if (position < text.size() && (text[position] == '+' || text[position] == '-')) {
-                ++position;
-            }
-            if (!digits()) {
-                return {};
-            }
-        }
-        return text.substr(0, position);
-    }
+    [[nodiscard]] static std::string_view numberToken(std::string_view text) noexcept;
 
 private:
     std::string_view _text;
@@ -788,91 +500,25 @@ private:
 /// @param cursor The cursor.
 /// @return The `Rational`, its places from the denominator, or nothing when
 ///         the pair is not two integers with a positive denominator.
-[[nodiscard]] inline std::optional<math::Rational> readPair(CellCursor& cursor) {
-    auto const numerator = cursor.integer();
-    if (!numerator || !cursor.eat(',')) {
-        return std::nullopt;
-    }
-    auto const denominator = cursor.integer();
-    if (!denominator || *denominator <= 0) {
-        return std::nullopt;
-    }
-    return math::Rational{math::Numerator{*numerator}, math::Denominator{*denominator},
-                          math::DecimalPlaces{placesOf(*denominator)}};
-}
+[[nodiscard]] MORPH_API std::optional<math::Rational> readPair(CellCursor& cursor);
 
 /// @brief Reads an exact cell: `[n, d]` or `[n, d, [fn, fd]]`.
 /// @param text The JSON text, starting with `[`.
 /// @return The `Rational` or `QuantityCell`, or nothing when the array has
 ///         another shape.
-[[nodiscard]] inline std::optional<Cell> readExactCell(std::string_view text) {
-    CellCursor cursor{text};
-    if (!cursor.eat('[')) {
-        return std::nullopt;
-    }
-    auto const amount = readPair(cursor);
-    if (!amount) {
-        return std::nullopt;
-    }
-    if (cursor.eat(']')) {
-        return cursor.atEnd() ? std::optional<Cell>{Cell{*amount}} : std::nullopt;
-    }
-    if (!cursor.eat(',') || !cursor.eat('[')) {
-        return std::nullopt;
-    }
-    auto const factor = readPair(cursor);
-    if (!factor || !cursor.eat(']') || !cursor.eat(']') || !cursor.atEnd()) {
-        return std::nullopt;
-    }
-    return Cell{QuantityCell{.amount = *amount, .toCanonical = *factor}};
-}
+[[nodiscard]] MORPH_API std::optional<Cell> readExactCell(std::string_view text);
 
 /// @brief Reads a measure's JSON: `[n, d, "<unit id>"]`, or `[n, d, null]` for a unit its writer had no id for.
 /// @param text The JSON text, starting with `[`.
 /// @return The amount and the unit's id (nothing for `null`), or nothing when the array has another shape.
-[[nodiscard]] inline std::optional<std::pair<math::Rational, std::optional<std::string>>> readMeasureCell(
-    std::string_view text) {
-    CellCursor cursor{text};
-    if (!cursor.eat('[')) {
-        return std::nullopt;
-    }
-    auto const amount = readPair(cursor);
-    if (!amount || !cursor.eat(',')) {
-        return std::nullopt;
-    }
-    auto unit = cursor.rest();
-    auto const last = unit.find_last_not_of(" \t\n\r");
-    if (last == std::string_view::npos || unit[last] != ']') {
-        return std::nullopt;
-    }
-    unit = unit.substr(0, last);
-    unit = unit.substr(0, unit.find_last_not_of(" \t\n\r") + 1);
-    if (unit == "null") {
-        return std::pair{*amount, std::optional<std::string>{}};
-    }
-    std::string unitId;
-    if (unit.empty() || unit.front() != '"' || glz::read<glz::opts{.null_terminated = false}>(unitId, unit)) {
-        return std::nullopt;
-    }
-    return std::pair{*amount, std::optional<std::string>{std::move(unitId)}};
-}
+[[nodiscard]] MORPH_API std::optional<std::pair<math::Rational, std::optional<std::string>>> readMeasureCell(
+    std::string_view text);
 
 /// @brief The `double` a `Number` column holds for the strings JSON writes
 ///        a non-finite value as.
 /// @param text The decoded string.
 /// @return NaN, +inf or -inf, or nothing for any other string.
-[[nodiscard]] inline std::optional<double> nonFinite(std::string_view text) noexcept {
-    if (text == "nan") {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
-    if (text == "inf") {
-        return std::numeric_limits<double>::infinity();
-    }
-    if (text == "-inf") {
-        return -std::numeric_limits<double>::infinity();
-    }
-    return std::nullopt;
-}
+[[nodiscard]] MORPH_API std::optional<double> nonFinite(std::string_view text) noexcept;
 
 /// @brief Reads one cell from its JSON text, by the text's shape.
 ///
@@ -889,91 +535,18 @@ private:
 /// @param kind The column's kind, or nothing when it is not known.
 /// @return The cell.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
-[[nodiscard]] inline Cell cellFromJson(std::string_view json, std::optional<ColumnKind> kind) {
-    auto const first = json.find_first_not_of(" \t\n\r");
-    if (first == std::string_view::npos) {
-        return Cell{std::string{json}};
-    }
-    auto const text = json.substr(first, json.find_last_not_of(" \t\n\r") - first + 1);
-    if (text == "null") {
-        return Cell{};
-    }
-    if (text == "true" || text == "false") {
-        return Cell{text == "true"};
-    }
-    bool const number = kind == ColumnKind::Number;
-    if (text.front() == '"') {
-        std::string decoded;
-        if (glz::read<glz::opts{.null_terminated = false}>(decoded, text)) {
-            return Cell{std::string{text}};
-        }
-        if (number) {
-            if (auto const value = nonFinite(decoded)) {
-                return Cell{*value};
-            }
-        }
-        return Cell{std::move(decoded)};
-    }
-    if (text.front() == '[') {
-        if (auto cell = readExactCell(text)) {
-            return std::move(*cell);
-        }
-        return Cell{std::string{text}};
-    }
-    if (CellCursor::numberToken(text).size() == text.size()) {
-        if (!number && text.find_first_of(".eE") == std::string_view::npos) {
-            std::int64_t value = 0;
-            auto const [end, error] =
-                std::from_chars(std::to_address(text.begin()), std::to_address(text.end()), value);
-            if (error == std::errc{} && end == std::to_address(text.end())) {
-                return Cell{value};
-            }
-        }
-        double value = 0;
-        if (!glz::read<glz::opts{.null_terminated = false}>(value, text) && std::isfinite(value)) {
-            return Cell{value};
-        }
-    }
-    return Cell{std::string{text}};
-}
+[[nodiscard]] MORPH_API Cell cellFromJson(std::string_view json, std::optional<ColumnKind> kind);
 
 /// @brief Reads a page's rows with no column kinds; `readGenericPage` reads
 ///        them again with their columns' kinds.
 /// @param page The page to fill.
 /// @param rows Each row's cells as JSON text.
-inline void readPageRows(GenericPage& page, std::vector<std::vector<glz::raw_json_view>> const& rows) {
-    page.rows.clear();
-    page.rows.reserve(rows.size());
-    for (auto const& row : rows) {
-        GenericRow cells;
-        cells.reserve(row.size());
-        for (auto const& cell : row) {
-            cells.push_back(cellFromJson(cell.str, std::nullopt));
-        }
-        page.rows.push_back(std::move(cells));
-    }
-}
+MORPH_API void readPageRows(GenericPage& page, std::vector<std::vector<glz::raw_json_view>> const& rows);
 
 /// @brief Writes a page's rows, each cell by `appendCellJson`.
 /// @param page The page.
 /// @return The `rows` array as JSON.
-[[nodiscard]] inline glz::raw_json writePageRows(GenericPage const& page) {
-    glz::raw_json out;
-    out.str += '[';
-    for (std::size_t row = 0; row < page.rows.size(); ++row) {
-        out.str += row == 0 ? "[" : ",[";
-        auto const& cells = page.rows[row];
-        for (std::size_t column = 0; column < cells.size(); ++column) {
-            if (column > 0) {
-                out.str += ',';
-            }
-            appendCellJson(out.str, cells[column], page.units);
-        }
-        out.str += ']';
-    }
-    out.str += ']';
-    return out;
-}
+[[nodiscard]] MORPH_API glz::raw_json writePageRows(GenericPage const& page);
 
 }  // namespace detail
 
@@ -1034,60 +607,9 @@ namespace morph::table {
 ///                a precondition, which `detail::answerQuery` checks before it calls this.
 /// @return The page, its `revision` left empty for the caller to set.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
-[[nodiscard]] inline GenericPage writeGenericPage(PageRows const& page, DataSource const& source,
-                                                  std::span<std::string const> columns,
-                                                  UnitRegistry const* units = nullptr) {
-    auto const snapshot = source.snapshot();
-    auto const infos = source.columns();
-    std::vector<std::optional<std::size_t>> indices;
-    indices.reserve(columns.size());
-    for (auto const& column : columns) {
-        indices.push_back(detail::findColumn(infos, column));
-    }
-    GenericPage out;
-    out.columns.assign(columns.begin(), columns.end());
-    out.keys.reserve(page.rows.size());
-    out.rows.reserve(page.rows.size());
-    std::vector<std::string_view> unloaded;
-    for (std::size_t at = 0; at < page.rows.size(); ++at) {
-        auto const row = page.rows[at];
-        out.keys.push_back(snapshot->rowId(row));
-        GenericRow cells;
-        cells.reserve(indices.size());
-        unloaded.clear();
-        for (auto const& index : indices) {
-            if (!index) {
-                cells.emplace_back();
-                continue;
-            }
-            cells.push_back(snapshot->cell(row, *index));
-            if (std::holds_alternative<Unloaded>(cells.back())) {
-                unloaded.emplace_back(infos[*index].level);
-            } else if (auto const* const measure = std::get_if<Measure>(&cells.back())) {
-                // NOLINTNEXTLINE(cert-dcl03-c,misc-static-assert): units is known only at run time.
-                assert(units != nullptr && "writeGenericPage: a measure is written with a unit registry");
-                if (units != nullptr && units->contains(measure->unit)) {
-                    out.units.try_emplace(measure->unit, units->info(measure->unit).id);
-                }
-            }
-        }
-        out.rows.push_back(std::move(cells));
-        if (!unloaded.empty()) {
-            out.unloadedRows.push_back(UnloadedRow{
-                .index = static_cast<std::int64_t>(at), .levels = detail::sortedLevels(unloaded), .failed = {}});
-        }
-    }
-    out.total = page.total;
-    out.offset = page.offset;
-    out.totalKind = page.totalKind;
-    out.undecided = page.undecided;
-    out.awaiting = page.awaiting;
-    out.failed = page.failed;
-    out.indices = page.indices;
-    out.viewRevision = page.viewRevision;
-    out.unmatched = page.unmatched;
-    return out;
-}
+[[nodiscard]] MORPH_API GenericPage writeGenericPage(PageRows const& page, DataSource const& source,
+                                                     std::span<std::string const> columns,
+                                                     UnitRegistry const* units = nullptr);
 
 /// @brief Reads a generic page against its table's description.
 ///
@@ -1108,108 +630,15 @@ namespace morph::table {
 ///         one before it, `indices` is neither empty nor one non-negative
 ///         view row per row, or what `registryOf` refuses.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
-[[nodiscard]] inline std::expected<GenericPage, TableError> readGenericPage(std::string_view json,
-                                                                            TableDescription const& description,
-                                                                            UnitRegistry const* units = nullptr) {
-    auto const invalid = [](std::string message) {
-        return std::unexpected(
-            TableError{.code = TableErrorCode::InvalidValue, .column = {}, .message = std::move(message)});
-    };
-    GenericPage page;
-    if (glz::read<glz::opts{.null_terminated = false, .error_on_unknown_keys = false}>(page, json)) {
-        return invalid("not a generic page");
-    }
-    std::vector<ColumnKind> kinds;
-    kinds.reserve(page.columns.size());
-    for (auto const& columnId : page.columns) {
-        auto const found = std::ranges::find(description.columns, columnId,
-                                             [](TableColumn const& column) -> auto const& { return column.info.id; });
-        if (found == description.columns.end()) {
-            return std::unexpected(detail::unknownColumn(columnId));
-        }
-        kinds.push_back(found->info.kind);
-    }
-    if (page.keys.size() != page.rows.size()) {
-        return invalid("a page of " + std::to_string(page.keys.size()) + " keys and " +
-                       std::to_string(page.rows.size()) + " rows");
-    }
-    for (std::size_t row = 0; row < page.rows.size(); ++row) {
-        if (page.rows[row].size() != kinds.size()) {
-            return invalid("row " + std::to_string(row) + " has " + std::to_string(page.rows[row].size()) +
-                           " cells under " + std::to_string(kinds.size()) + " columns");
-        }
-    }
-    // A window looks a row's levels up by binary search and places a keyed row by its index, so both lists are
-    // checked against the rows here rather than trusted by every reader after.
-    auto const rowCount = static_cast<std::int64_t>(page.rows.size());
-    std::int64_t previous = -1;
-    for (auto const& unloaded : page.unloadedRows) {
-        if (unloaded.index <= previous || unloaded.index >= rowCount) {
-            return invalid("an unloaded row at " + std::to_string(unloaded.index) + " in a page of " +
-                           std::to_string(rowCount) + " rows, or out of order");
-        }
-        previous = unloaded.index;
-    }
-    if (!page.indices.empty() && page.indices.size() != page.rows.size()) {
-        return invalid("a page of " + std::to_string(page.indices.size()) + " indices and " +
-                       std::to_string(page.rows.size()) + " rows");
-    }
-    if (std::ranges::any_of(page.indices, [](std::int64_t index) { return index < 0; })) {
-        return invalid("a negative view row in indices");
-    }
-    // The rows were read with no kind: a measure's array is text until its column is known to be `Measure`.
-    std::shared_ptr<UnitRegistry const> built;
-    for (std::size_t column = 0; column < kinds.size(); ++column) {
-        if (kinds[column] != ColumnKind::Measure) {
-            continue;
-        }
-        if (units == nullptr) {
-            auto registry = registryOf(description);
-            if (!registry) {
-                return std::unexpected(std::move(registry.error()));
-            }
-            built = std::move(*registry);
-            units = built.get();
-        }
-        for (auto& cells : page.rows) {
-            auto& cell = cells[column];
-            auto const* const text = std::get_if<std::string>(&cell);
-            auto const measure =
-                text != nullptr && text->starts_with('[') ? detail::readMeasureCell(*text) : std::nullopt;
-            if (!measure) {
-                continue;
-            }
-            auto const unit = measure->second ? units->find(*measure->second) : std::nullopt;
-            if (unit) {
-                page.units.try_emplace(*unit, *measure->second);
-            }
-            cell = Measure{.amount = measure->first, .unit = unit.value_or(kUnknownUnit)};
-        }
-    }
-    // Only a `Number` column reads differently besides, taking an integer token or a non-finite string as a double.
-    for (std::size_t column = 0; column < kinds.size(); ++column) {
-        if (kinds[column] != ColumnKind::Number) {
-            continue;
-        }
-        for (auto& cells : page.rows) {
-            auto& cell = cells[column];
-            if (auto const* const integer = std::get_if<std::int64_t>(&cell)) {
-                cell = static_cast<double>(*integer);
-            } else if (auto const* const text = std::get_if<std::string>(&cell)) {
-                if (auto const real = detail::nonFinite(*text)) {
-                    cell = *real;
-                }
-            }
-        }
-    }
-    return page;
-}
+[[nodiscard]] MORPH_API std::expected<GenericPage, TableError> readGenericPage(std::string_view json,
+                                                                               TableDescription const& description,
+                                                                               UnitRegistry const* units = nullptr);
 
 namespace detail {
 
 /// @brief The cells of one page of a generic window, by column, so a column can be added or dropped without
 ///        touching the others.
-struct GenericWindowCells {
+struct MORPH_API GenericWindowCells {
     /// @brief Each held column's cells, one per row.
     std::map<std::string, std::vector<Cell>, std::less<>> cells;
 
@@ -1219,21 +648,10 @@ struct GenericWindowCells {
     [[nodiscard]] bool holds(std::string_view column) const { return cells.contains(column); }
     /// @brief The columns held, which a rest-of-page fetch names.
     /// @return The ids, sorted.
-    [[nodiscard]] std::vector<std::string> columns() const {
-        std::vector<std::string> out;
-        out.reserve(cells.size());
-        for (auto const& [column, values] : cells) {
-            out.push_back(column);
-        }
-        return out;
-    }
+    [[nodiscard]] std::vector<std::string> columns() const;
     /// @brief Keeps the first @p count rows of every column.
     /// @param count Rows kept.
-    void truncate(std::size_t count) {
-        for (auto& [column, values] : cells) {
-            values.resize(std::min(count, values.size()));
-        }
-    }
+    void truncate(std::size_t count);
 };
 
 }  // namespace detail
@@ -1247,7 +665,7 @@ struct GenericWindowCells {
 /// least recently named by `visible` go first. A patch drops from a page the columns its reply lacks, so the
 /// next `visible` fetches them again rather than showing a cell older than its row.
 template <>
-class PageWindow<GenericRow> : public detail::WindowCore<detail::GenericWindowCells> {
+class MORPH_API PageWindow<GenericRow> : public detail::WindowCore<detail::GenericWindowCells> {
     using Core = detail::WindowCore<detail::GenericWindowCells>;
 
 public:
@@ -1277,93 +695,24 @@ public:
     /// @return `false` when the reply was ignored: its fetch belongs to an earlier query, or is not the one in
     ///         flight for its page.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
-    bool accept(PageFetch const& fetch, GenericPage page) {
-        return acceptReply(
-            fetch, replyOf(page),
-            [this, &page](detail::GenericWindowCells& content, detail::WindowFetchKind kind, std::size_t take) {
-                if (kind == detail::WindowFetchKind::Whole) {
-                    content.cells.clear();
-                }
-                if (kind == detail::WindowFetchKind::Rest) {
-                    std::erase_if(content.cells, [&page](auto const& entry) {
-                        return std::ranges::find(page.columns, entry.first) == page.columns.end();
-                    });
-                }
-                // Each reply column's target, found once; the rows are then read in order, row by
-                // row, so the reply's cells are visited where they lie.
-                std::vector<std::vector<Cell>*> targets(page.columns.size(), nullptr);
-                for (std::size_t column = 0; column < page.columns.size(); ++column) {
-                    auto const& columnId = page.columns[column];
-                    if (kind == detail::WindowFetchKind::Rest && !content.holds(columnId)) {
-                        continue;
-                    }
-                    auto& values = content.cells[columnId];
-                    if (kind != detail::WindowFetchKind::Rest) {
-                        values.clear();
-                    }
-                    values.reserve(values.size() + take);
-                    targets[column] = &values;
-                }
-                for (std::size_t row = 0; row < take; ++row) {
-                    auto& cells = page.rows[row];
-                    for (std::size_t column = 0; column < targets.size(); ++column) {
-                        if (targets[column] != nullptr) {
-                            targets[column]->push_back(column < cells.size() ? std::move(cells[column]) : Cell{});
-                        }
-                    }
-                }
-                limitColumns(content);
-            });
-    }
+    bool accept(PageFetch const& fetch, GenericPage page);
 
     /// @brief Patches held rows from the reply to a `RowsFetch`.
     /// @param fetch The keyed fetch the reply answers, as `refresh` or `owed` returned it.
     /// @param reply The keyed reply.
     /// @return The view rows replaced, ascending; empty when the reply was ignored or the window invalidated.
-    std::vector<std::int64_t> patch(RowsFetch const& fetch, GenericPage reply) {
-        // The columns a page holds that the reply lacks go once per page, not once per row.
-        Core::Held const* trimmed = nullptr;
-        return patchRows(
-            // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the page's position, then the reply's row it is taken from.
-            fetch, replyOf(reply), [&reply, &trimmed](Core::Held& page, std::size_t position, std::size_t from) {
-                if (trimmed != &page) {
-                    std::erase_if(page.content.cells, [&reply](auto const& entry) {
-                        return std::ranges::find(reply.columns, entry.first) == reply.columns.end();
-                    });
-                    trimmed = &page;
-                }
-                auto& cells = reply.rows[from];
-                for (std::size_t column = 0; column < reply.columns.size() && column < cells.size(); ++column) {
-                    auto const found = page.content.cells.find(reply.columns[column]);
-                    if (found != page.content.cells.end() && position < found->second.size()) {
-                        found->second[position] = std::move(cells[column]);
-                    }
-                }
-            });
-    }
+    std::vector<std::int64_t> patch(RowsFetch const& fetch, GenericPage reply);
 
     /// @brief The key of the held row at a view row.
     /// @param index View row.
     /// @return The key, or null when the row is not held.
-    [[nodiscard]] RowId const* key(std::int64_t index) const {
-        auto const* const page = heldAt(index);
-        return page == nullptr ? nullptr : &page->keys[static_cast<std::size_t>(index % pageSize())];
-    }
+    [[nodiscard]] RowId const* key(std::int64_t index) const;
 
     /// @brief The cell of a held row in a column.
     /// @param index  View row.
     /// @param column The column's id.
     /// @return The cell, or null when the row or the column is not held.
-    [[nodiscard]] Cell const* cell(std::int64_t index, std::string_view column) const {
-        auto const* const page = heldAt(index);
-        if (page == nullptr) {
-            return nullptr;
-        }
-        auto const found = page->content.cells.find(column);
-        auto const position = static_cast<std::size_t>(index % pageSize());
-        return found == page->content.cells.end() || position >= found->second.size() ? nullptr
-                                                                                      : &found->second[position];
-    }
+    [[nodiscard]] Cell const* cell(std::int64_t index, std::string_view column) const;
 
     /// @brief Whether a held row's column is held.
     /// @param index  View row.
@@ -1374,46 +723,12 @@ public:
     }
 
 private:
-    [[nodiscard]] static detail::WindowReply replyOf(GenericPage const& page) {
-        return detail::WindowReply{.keys = page.keys,
-                                   .rows = page.rows.size(),
-                                   .unloadedRows = page.unloadedRows,
-                                   .total = page.total,
-                                   .totalKind = page.totalKind,
-                                   .undecided = page.undecided,
-                                   .awaiting = page.awaiting,
-                                   .failed = page.failed,
-                                   .indices = page.indices};
-    }
+    [[nodiscard]] static detail::WindowReply replyOf(GenericPage const& page);
 
     // Over the bound, the columns least recently named by `visible` go first, and a column shown now never goes:
     // dropping one would make the next `visible` fetch it again, and the next accept drop it again. `visible`
     // takes at most `maxColumns` columns, so the columns not shown always cover the excess.
-    void limitColumns(detail::GenericWindowCells& content) const {
-        if (content.cells.size() <= maxColumns()) {
-            return;
-        }
-        std::vector<std::pair<std::uint64_t, std::string_view>> candidates;
-        candidates.reserve(content.cells.size());
-        for (auto const& [column, values] : content.cells) {
-            if (!shownNow(column)) {
-                candidates.emplace_back(namedAt(column), column);
-            }
-        }
-        std::ranges::sort(candidates);
-        auto excess = content.cells.size() - maxColumns();
-        std::vector<std::string> dropped;
-        for (auto const& candidate : candidates) {
-            if (excess == 0) {
-                break;
-            }
-            dropped.emplace_back(candidate.second);
-            --excess;
-        }
-        for (auto const& column : dropped) {
-            content.cells.erase(column);
-        }
-    }
+    void limitColumns(detail::GenericWindowCells& content) const;
 };
 
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
@@ -1470,28 +785,7 @@ inline constexpr std::size_t kMaxSortKeysBound = 32;
 /// @return The description, its `capabilities.maxSortKeys` the limits', its units listed and its revision set;
 ///         `SourceContract` when `limits.maxSortKeys` is 0 or above `kMaxSortKeysBound`, or when a column is
 ///         `Measure` and `services.units` is null.
-[[nodiscard]] inline std::expected<TableDescription, TableError> servedDescription(ServedTable const& served) {
-    if (served.limits.maxSortKeys == 0 || served.limits.maxSortKeys > kMaxSortKeysBound) {
-        return std::unexpected(TableError{.code = TableErrorCode::SourceContract,
-                                          .column = {},
-                                          .message = "a table's `limits.maxSortKeys` is 1 to 32"});
-    }
-    TableDescription description = served.description;
-    description.capabilities.maxSortKeys = static_cast<std::uint32_t>(served.limits.maxSortKeys);
-    auto const measure = std::ranges::find(description.columns, ColumnKind::Measure,
-                                           [](TableColumn const& column) { return column.info.kind; });
-    if (measure != description.columns.end()) {
-        if (served.services.units == nullptr) {
-            return std::unexpected(TableError{.code = TableErrorCode::SourceContract,
-                                              .column = measure->info.id,
-                                              .message = "a table with measures needs a unit registry"});
-        }
-        if (description.units.empty()) {
-            description.units = unitsFor(*served.services.units, columnInfos(description));
-        }
-    }
-    return describe(std::move(description));
-}
+[[nodiscard]] MORPH_API std::expected<TableDescription, TableError> servedDescription(ServedTable const& served);
 
 /// @brief One row of a table that an action changed.
 struct ChangedRow {
@@ -1602,7 +896,7 @@ namespace detail {
 ///
 /// A `DataSource` is owner-affine and only its snapshot may cross threads, so the snapshot is taken on the
 /// owner's thread and this source carries it, with a copy of the columns and the groups. It never changes.
-class PinnedSource final : public DataSource {
+class MORPH_API PinnedSource final : public DataSource {
 public:
     /// @brief Holds @p snapshot under @p columns and @p groups.
     /// @param snapshot The rows.
@@ -1640,10 +934,7 @@ public:
     void unsubscribe(ChangeListener& listener) override { static_cast<void>(listener); }
 
 private:
-    [[nodiscard]] MORPH_PROCESS_UNIQUE static std::uint64_t nextPin() noexcept {
-        static std::atomic<std::uint64_t> pins{0};
-        return pins.fetch_add(1) + 1;
-    }
+    [[nodiscard]] MORPH_PROCESS_UNIQUE static std::uint64_t nextPin() noexcept;
 
     std::shared_ptr<RowSnapshot const> _snapshot;
     std::vector<ColumnInfo> _columns;
@@ -1686,7 +977,7 @@ private:
 ///
 /// Its row map is rebuilt, under a mutex, on the first `snapshot()` after the shared source's snapshot
 /// changed. It notifies no change of its own: a reader sees the shared source's changes on its next snapshot.
-class ScopedSource final : public DataSource {
+class MORPH_API ScopedSource final : public DataSource {
 public:
     /// @brief Scopes @p source to @p keys.
     /// @param source The shared source.
@@ -1705,22 +996,7 @@ public:
 
     /// @brief The scope's rows of the shared source's current snapshot.
     /// @return The snapshot.
-    [[nodiscard]] std::shared_ptr<RowSnapshot const> snapshot() const override {
-        auto base = _source->snapshot();
-        std::scoped_lock const lock{_mutex};
-        if (base != _base || _scoped == nullptr) {
-            std::vector<std::size_t> rows;
-            rows.reserve(std::min(_keys.size(), base->rowCount()));
-            for (std::size_t row = 0; row < base->rowCount(); ++row) {
-                if (_keys.contains(base->rowId(row))) {
-                    rows.push_back(row);
-                }
-            }
-            _scoped = std::make_shared<ScopedSnapshot const>(base, std::move(rows));
-            _base = std::move(base);
-        }
-        return _scoped;
-    }
+    [[nodiscard]] std::shared_ptr<RowSnapshot const> snapshot() const override;
 
     /// @brief Does nothing: the scope notifies no change of its own.
     /// @param listener Ignored.
@@ -1769,30 +1045,14 @@ struct AnswerContext {
 /// @param validated The query as `validate` returned it.
 /// @return The JSON of `sort`, then of `filters`; nothing when either cannot be written, and the view is then
 ///         computed for the request alone rather than cached under a key two queries could share.
-[[nodiscard]] inline std::optional<std::string> viewQueryOf(TableQuery const& validated) {
-    auto sort = glz::write_json(validated.sort);
-    auto filters = glz::write_json(validated.filters);
-    if (!sort || !filters) {
-        return std::nullopt;
-    }
-    return *sort + "\n" + *filters;
-}
+[[nodiscard]] MORPH_API std::optional<std::string> viewQueryOf(TableQuery const& validated);
 
 /// @brief @p served with its source replaced by a `PinnedSource` of one snapshot taken now.
 ///
 /// Called on the source's owner thread, the model's strand, before the reply is built anywhere else.
 /// @param served The table as the model served it.
 /// @return The same table over a pinned source; a null source stays null.
-[[nodiscard]] inline ServedTable pinned(ServedTable served) {
-    if (served.source != nullptr) {
-        auto const columns = served.source->columns();
-        auto const groups = served.source->groups();
-        served.source = std::make_shared<PinnedSource const>(
-            served.source->snapshot(), std::vector<ColumnInfo>(columns.begin(), columns.end()),
-            std::vector<ColumnGroupInfo>(groups.begin(), groups.end()));
-    }
-    return served;
-}
+[[nodiscard]] MORPH_API ServedTable pinned(ServedTable served);
 
 /// @brief A sorted, filtered or listed column of @p level: the column a refused order use names.
 /// @param query    The validated query.
@@ -1802,36 +1062,9 @@ struct AnswerContext {
 /// @param groups   The table's declared groups.
 /// @return The first sort key's column at @p level, else the first filtered column at it, else the first column a
 ///         `distinct` request lists at it; empty when none is.
-[[nodiscard]] inline std::string orderColumnOf(TableQuery const& query, std::span<ColumnInfo const> columns,
-                                               std::string_view level, Services const& services,
-                                               std::span<ColumnGroupInfo const> groups = {}) {
-    for (auto const& key : query.sort) {
-        if (auto const index = findColumn(columns, key.column); index && columns[*index].level == level) {
-            return key.column;
-        }
-    }
-    if (!query.filters.empty()) {
-        if (auto const filter = compileFilterGuarded(query.filters, columns, services, groups)) {
-            for (auto const column : filter->columnsUsed()) {
-                if (columns[column].level == level) {
-                    return columns[column].id;
-                }
-            }
-        }
-    }
-    if (query.distinct) {
-        auto const listed =
-            query.distinct->group.empty()
-                ? std::span<std::string const>{&query.distinct->column, 1}
-                : detail::groupColumns(groups, query.distinct->group).value_or(std::span<std::string const>{});
-        for (auto const& columnId : listed) {
-            if (auto const index = findColumn(columns, columnId); index && columns[*index].level == level) {
-                return columnId;
-            }
-        }
-    }
-    return {};
-}
+[[nodiscard]] MORPH_API std::string orderColumnOf(TableQuery const& query, std::span<ColumnInfo const> columns,
+                                                  std::string_view level, Services const& services,
+                                                  std::span<ColumnGroupInfo const> groups = {});
 
 /// @brief Answers @p query over a served table: the page a `Table.<id>` action returns.
 ///
@@ -1870,326 +1103,23 @@ struct AnswerContext {
 /// @return The page, its `revision` that of `servedDescription(served)`, or the error the client shows:
 ///         `SourceContract` when the table's `limits.maxSortKeys` is out of range.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
-[[nodiscard]] inline std::expected<GenericPage, TableError> answerQuery(ServedTable const& served,
-                                                                        TableQuery const& query,
-                                                                        AnswerContext const& context = {}) {
-    if (auto shown = validateDisplay(served.description); !shown) {
-        return std::unexpected(std::move(shown.error()));
-    }
-    if (context.rowScoped && served.scope.empty()) {
-        return std::unexpected(TableError{
-            .code = TableErrorCode::SourceContract, .column = {}, .message = "a row-scoped table needs a scope"});
-    }
-    if (served.source == nullptr) {
-        return std::unexpected(
-            TableError{.code = TableErrorCode::Unavailable, .column = {}, .message = "the table serves no source"});
-    }
-    auto const described = servedDescription(served);
-    if (!described) {
-        return std::unexpected(described.error());
-    }
-    if (query.keys && !served.description.capabilities.keys) {
-        return std::unexpected(TableError{
-            .code = TableErrorCode::Unavailable, .column = {}, .message = "this table answers no keyed query"});
-    }
-    if (query.distinct && !served.description.capabilities.distinct) {
-        return std::unexpected(TableError{
-            .code = TableErrorCode::Unavailable, .column = {}, .message = "this table answers no distinct request"});
-    }
-    auto const infos = columnInfos(served.description);
-    auto const groups = served.source->groups();
-    if (auto error = detail::checkGroups(served.source->columns(), groups)) {
-        return std::unexpected(std::move(*error));
-    }
-    auto checked = validate(query, infos, served.limits, served.mayRead, groups);
-    if (!checked) {
-        return std::unexpected(std::move(checked.error()));
-    }
-    auto const levelOf = [&served](std::string_view level) -> std::shared_ptr<LevelSource> {
-        for (auto const& source : served.levels) {
-            if (source != nullptr && source->level() == level) {
-                return source;
-            }
-        }
-        return nullptr;
-    };
-    auto const sourceColumns = served.source->columns();
-    for (auto const& info : infos) {
-        auto const level = info.level.empty() ? nullptr : levelOf(info.level);
-        bool const known = info.level.empty() ? findColumn(sourceColumns, info.id).has_value()
-                                              : level == nullptr || findColumn(level->columns(), info.id).has_value();
-        if (!known) {
-            return std::unexpected(TableError{.code = TableErrorCode::UnknownColumn,
-                                              .column = info.id,
-                                              .message = "the table's source has no column " + info.id});
-        }
-    }
-    if (checked->distinct) {
-        // The listed column's level is an order level: the values list reads it for every candidate row.
-        auto const needed = levelsNeeded(*checked, infos, served.mayRead, served.services.forTask(), groups);
-        std::vector<LevelInput> inputs;
-        for (auto const& level : needed.order) {
-            if (auto source = levelOf(level)) {
-                auto levelSnapshot = source->snapshot();
-                inputs.push_back(LevelInput{.source = std::move(source), .snapshot = std::move(levelSnapshot)});
-            }
-        }
-        LeveledSource const leveled{served.source, infos, std::move(inputs)};
-        auto values = distinctValues(
-            leveled, *checked, *checked->distinct,
-            ApplyOptions{.limits = served.limits, .services = served.services, .mayRead = served.mayRead});
-        if (!values) {
-            return std::unexpected(std::move(values.error()));
-        }
-        // Every row is a candidate: the order levels are wanted for every key of the snapshot. The set is kept in
-        // the view cache, under a key no sort or filter writes, so that the requests over one snapshot want one
-        // kept set, which a level holds once and each later request repeats, as a page's view does.
-        auto const snapshot = leveled.snapshot();
-        auto const everyRow = [&]() -> std::expected<ViewComputation, TableError> {
-            ViewComputation out{.view = {}, .awaiting = {}, .failed = {}, .orderKeys = {}};
-            auto all = std::make_shared<std::vector<RowId>>();
-            all->reserve(snapshot->rowCount());
-            out.view.rows.reserve(snapshot->rowCount());
-            for (std::size_t row = 0; row < snapshot->rowCount(); ++row) {
-                all->push_back(snapshot->rowId(row));
-                out.view.rows.push_back(static_cast<std::uint32_t>(row));
-            }
-            out.orderKeys = std::move(all);
-            return out;
-        };
-        std::shared_ptr<std::vector<RowId> const> keys;
-        if (!needed.order.empty()) {
-            if (context.views != nullptr && !context.record.empty()) {
-                auto const* const pinned = dynamic_cast<PinnedSource const*>(served.source.get());
-                auto found = context.views->find(
-                    ViewKey{.record = std::string{context.record}, .scope = served.scope, .query = "every row"},
-                    served.source->snapshot(), {}, everyRow, pinned != nullptr ? pinned->pinnedAt() : 0);
-                if (!found) {
-                    return std::unexpected(std::move(found.error()));
-                }
-                keys = (*found)->orderKeys;
-            } else {
-                keys = everyRow()->orderKeys;
-            }
-        }
-        std::vector<std::shared_ptr<LevelSource>> leased;
-        for (auto const& level : needed.order) {
-            auto const source = levelOf(level);
-            if (source == nullptr) {
-                continue;
-            }
-            if (auto wanted = source->wantSet(keys, LevelUse::Order, query.retry); !wanted) {
-                // The request is refused: the levels that accepted its order use hold nothing for it.
-                for (auto const& accepted : leased) {
-                    accepted->unwant(*keys);
-                }
-                auto error = std::move(wanted.error());
-                error.code = TableErrorCode::Unavailable;
-                error.column = orderColumnOf(*checked, infos, level, served.services.forTask(), groups);
-                return std::unexpected(std::move(error));
-            }
-            leased.push_back(source);
-        }
-        GenericPage page;
-        page.revision = described->revision;
-        page.distinct = std::move(*values);
-        return page;
-    }
-    std::vector<std::string> columns;
-    if (checked->columns) {
-        columns = *checked->columns;
-    } else {
-        columns.reserve(infos.size());
-        for (auto const& info : infos) {
-            if (!served.mayRead || served.mayRead(info.id)) {
-                columns.push_back(info.id);
-            }
-        }
-    }
-    // Before any view is computed: `writeGenericPage` writes a measure only through a registry.
-    for (auto const& column : columns) {
-        if (auto const columnIndex = findColumn(infos, column)) {
-            if (auto missing = unitsMissing(infos[*columnIndex], served.services)) {
-                return std::unexpected(std::move(*missing));
-            }
-        }
-    }
-    auto const needed = levelsNeeded(*checked, infos, served.mayRead, served.services.forTask(), groups);
-    std::vector<std::string> levels = needed.order;
-    levels.insert(levels.end(), needed.display.begin(), needed.display.end());
-    std::ranges::sort(levels);
-    auto const [firstDuplicate, lastDuplicate] = std::ranges::unique(levels);
-    levels.erase(firstDuplicate, lastDuplicate);
-    std::vector<LevelInput> inputs;
-    for (auto const& level : levels) {
-        if (auto source = levelOf(level)) {
-            auto levelSnapshot = source->snapshot();
-            inputs.push_back(LevelInput{.source = std::move(source), .snapshot = std::move(levelSnapshot)});
-        }
-    }
-    LeveledSource const leveled{served.source, infos, inputs};
-    ApplyOptions const options{.limits = served.limits, .services = served.services, .mayRead = served.mayRead};
-    // The keys of a view's rows and of its undecided rows: what its order levels are wanted for.
-    auto const keysOf = [](ComputedView const& computed, RowSnapshot const& rows) {
-        auto out = std::make_shared<std::vector<RowId>>();
-        out->reserve(computed.rows.size() + computed.undecided.size());
-        for (auto const row : computed.rows) {
-            out->push_back(rows.rowId(row));
-        }
-        for (auto const row : computed.undecided) {
-            out->push_back(rows.rowId(row));
-        }
-        return std::shared_ptr<std::vector<RowId> const>{std::move(out)};
-    };
-    auto const compute = [&]() -> std::expected<ViewComputation, TableError> {
-        auto view = computeView(leveled, *checked, options);
-        if (!view) {
-            return std::unexpected(std::move(view.error()));
-        }
-        ViewComputation out{.view = std::move(*view), .awaiting = {}, .failed = {}, .orderKeys = {}};
-        if (!needed.order.empty()) {
-            out.orderKeys = keysOf(out.view, *leveled.snapshot());
-        }
-        for (auto const& level : needed.order) {
-            bool unloaded = false;
-            bool failed = false;
-            auto const look = [&](std::uint32_t row) {
-                auto const state = leveled.state(row, level);
-                unloaded = unloaded || state == LevelRead::Unloaded;
-                failed = failed || state == LevelRead::Failed;
-                return unloaded && failed;
-            };
-            if (!std::ranges::any_of(out.view.rows, look)) {
-                static_cast<void>(std::ranges::any_of(out.view.undecided, look));
-            }
-            if (unloaded) {
-                out.awaiting.push_back(level);
-            }
-            if (failed) {
-                out.failed.push_back(level);
-            }
-        }
-        return out;
-    };
-    auto const snapshot = leveled.snapshot();
-    std::shared_ptr<ViewEntry const> entry;
-    auto const viewQuery = context.views != nullptr && !context.record.empty() ? viewQueryOf(*checked) : std::nullopt;
-    if (viewQuery) {
-        // The pinned source's snapshot, whose identity survives across requests, and the order levels' states.
-        std::vector<std::pair<std::string, std::uint64_t>> generations;
-        for (auto const& level : needed.order) {
-            for (auto const& input : inputs) {
-                if (input.source->level() == level) {
-                    generations.emplace_back(level, input.snapshot->generation());
-                }
-            }
-        }
-        auto const* const pinned = dynamic_cast<PinnedSource const*>(served.source.get());
-        auto found = context.views->find(
-            ViewKey{.record = std::string{context.record}, .scope = served.scope, .query = *viewQuery},
-            served.source->snapshot(), generations, compute, pinned != nullptr ? pinned->pinnedAt() : 0);
-        if (!found) {
-            return std::unexpected(std::move(found.error()));
-        }
-        entry = std::move(*found);
-    } else {
-        auto computed = compute();
-        if (!computed) {
-            return std::unexpected(std::move(computed.error()));
-        }
-        entry = std::make_shared<ViewEntry const>(
-            served.source->snapshot(), std::vector<std::pair<std::string, std::uint64_t>>{}, std::move(*computed));
-    }
-    auto const* const view = &entry->view;
-    // A cached entry keeps the keyed lookups for the requests after this one; a request's own view is scanned once.
-    // The retained rows are merged into a copy for this request alone: the entry is every session's.
-    bool const lookups = viewQuery && (checked->keys || !checked->retain.empty());
-    auto paged = lookups ? viewPage(*view, leveled, *snapshot, *checked, options,
-                                    checked->retain.empty() ? entry->viewRowOf() : std::span<std::uint32_t const>{},
-                                    [&entry](RowId const& key) { return entry->sourceRowOf(key); })
-                         : viewPage(*view, leveled, *snapshot, *checked, options);
-    if (!paged) {
-        return std::unexpected(std::move(paged.error()));
-    }
-    auto rows = std::move(*paged);
-    rows.awaiting = entry->awaiting;
-    rows.failed = entry->failed;
-    auto page = writeGenericPage(rows, leveled, columns, served.services.units.get());
-    page.unloadedRows.clear();
-    for (std::size_t at = 0; at < rows.rows.size(); ++at) {
-        UnloadedRow row{.index = static_cast<std::int64_t>(at), .levels = {}, .failed = {}};
-        for (auto const& level : levels) {
-            auto const state = leveled.state(rows.rows[at], level);
-            if (state != LevelRead::Loaded) {
-                row.levels.push_back(level);
-            }
-            if (state == LevelRead::Failed) {
-                row.failed.push_back(level);
-            }
-        }
-        if (!row.levels.empty()) {
-            page.unloadedRows.push_back(std::move(row));
-        }
-    }
-    // A level reached below has a source, so it is in `generations`; a cached entry is found only for the same
-    // order levels, which its computation read, so it built the keys.
-    auto const& orderKeys = entry->orderKeys;
-    std::vector<std::shared_ptr<LevelSource>> leased;
-    for (auto const& level : needed.order) {
-        auto const source = levelOf(level);
-        if (source == nullptr) {
-            continue;
-        }
-        auto const& keys = *orderKeys;
-        if (auto wanted = source->wantSet(orderKeys, LevelUse::Order, query.retry); !wanted) {
-            // The query is refused: the levels that accepted its order use hold nothing for it.
-            for (auto const& accepted : leased) {
-                accepted->unwant(keys);
-            }
-            auto error = std::move(wanted.error());
-            error.code = TableErrorCode::Unavailable;
-            error.column = orderColumnOf(*checked, infos, level, served.services.forTask(), groups);
-            return std::unexpected(std::move(error));
-        }
-        leased.push_back(source);
-    }
-    for (auto const& level : needed.display) {
-        if (auto const source = levelOf(level); source != nullptr && !page.keys.empty()) {
-            // NOLINTNEXTLINE(bugprone-unused-return-value): a display want is never refused: only an order use can exceed the cache's bound.
-            static_cast<void>(source->want(page.keys, LevelUse::Display, query.retry));
-        }
-    }
-    page.revision = described->revision;
-    return page;
-}
+[[nodiscard]] MORPH_API std::expected<GenericPage, TableError> answerQuery(ServedTable const& served,
+                                                                           TableQuery const& query,
+                                                                           AnswerContext const& context = {});
 
 /// @brief The name a `TableErrorCode` has on the wire.
 /// @param code The code.
 /// @return Its JSON name, as `unknownColumn`, without quotes.
-[[nodiscard]] inline std::string errorCodeName(TableErrorCode code) {
-    auto text = glz::write_json(code).value_or(std::string{});
-    if (text.size() >= 2 && text.front() == '"' && text.back() == '"') {
-        text = text.substr(1, text.size() - 2);
-    }
-    return text;
-}
+[[nodiscard]] MORPH_API std::string errorCodeName(TableErrorCode code);
 
 /// @brief The refusal a table's action throws for @p error.
 /// @param error The error.
 /// @return `ActionRefusal{"table." + code, {{"column", column}}, message}`.
-[[nodiscard]] inline model::ActionRefusal refusalOf(TableError const& error) {
-    return model::ActionRefusal{"table." + errorCodeName(error.code),
-                                {model::RefusalArg{.name = "column", .value = error.column}},
-                                error.message};
-}
+[[nodiscard]] MORPH_API model::ActionRefusal refusalOf(TableError const& error);
 
 /// @brief The caller's `TableContext`: the session installed on the calling thread, or an empty one.
 /// @return The context, valid while the session stays installed.
-[[nodiscard]] inline TableContext callerContext() {
-    static session::Context const empty{};
-    auto const* const current = session::current();
-    return TableContext{.session = current != nullptr ? *current : empty};
-}
+[[nodiscard]] MORPH_API TableContext callerContext();
 
 /// @brief The row type of a registration's function: `void` for one returning a `ServedTable`.
 /// @tparam F The registration's function type.
@@ -2398,7 +1328,7 @@ template <auto Function>
 ///
 /// The work item owns the pinned table and the query. The coroutine resumes through the executor it was
 /// running on when it suspended, its strand, or inline on the worker when it was running on none.
-class AnswerAwaiter {
+class MORPH_API AnswerAwaiter {
     struct Shared {
         std::expected<GenericPage, TableError> answer;
         std::exception_ptr error;
@@ -2427,35 +1357,11 @@ public:
 
     /// @brief Posts the answer to the table executor.
     /// @param awaiting The coroutine performing the `co_await`.
-    void await_suspend(std::coroutine_handle<> awaiting) {
-        auto const shared = _shared;
-        shared->continuation = awaiting;
-        shared->context = ::core::async::ResumeTarget::current();
-        // Nothing of this awaiter is touched after the post: the work may resume the coroutine, and free the
-        // awaiter with its frame, before `post` returns.
-        auto* const work = _work;
-        work->post([shared, served = std::move(_served), query = std::move(_query), context = _context] {
-            try {
-                shared->answer = answerQuery(served, query, context);
-            } catch (...) {
-                shared->error = std::current_exception();
-            }
-            if (shared->context) {
-                shared->context.submit(::core::async::ParkedWork{.resume = shared->continuation, .abandon = {}});
-            } else {
-                shared->continuation.resume();
-            }
-        });
-    }
+    void await_suspend(std::coroutine_handle<> awaiting);
 
     /// @brief The answer, or what building it threw.
     /// @return The answer.
-    std::expected<GenericPage, TableError> await_resume() {
-        if (_shared->error) {
-            std::rethrow_exception(_shared->error);
-        }
-        return std::move(_shared->answer);
-    }
+    std::expected<GenericPage, TableError> await_resume();
 
 private:
     exec::IExecutor* _work;
@@ -2503,7 +1409,7 @@ struct QueryTable {
 /// @param schemaOf    An action's input schema by its id; nothing for an action that is not known.
 /// @return `SourceContract` naming the first column whose action is unknown or does not read, whose field is missing,
 ///         or whose field's kind does not fit the column's; nothing when every edit fits.
-[[nodiscard]] inline std::expected<void, TableError> checkEdits(
+[[nodiscard]] MORPH_API std::expected<void, TableError> checkEdits(
     TableDescription const& description,
     std::function<std::optional<std::string>(std::string_view action)> const& schemaOf);
 
@@ -2592,8 +1498,7 @@ struct glz::meta<morph::table::QueryTable<Function>> {
 
 // The selection types `BRIDGE_REGISTER_TABLE` registers `Table.<id>.resolve` with; they build on this header.
 // NOLINTNEXTLINE(misc-header-include-cycle): row_selection.hpp needs the declarations above, so it is included after them.
-#include <morph/table/row_selection.hpp>
 
 // The commits of edited cells and the edit actions of a model's table; `checkEdits` above is defined there.
 // NOLINTNEXTLINE(misc-header-include-cycle): edits.hpp needs the declarations above, so it is included after them.
-#include <morph/table/edits.hpp>
+#include <morph/export.hpp>

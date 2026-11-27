@@ -30,6 +30,7 @@
 #include <morph/table/edits.hpp>
 #include <morph/table/row_selection.hpp>
 #include <morph/table/selection.hpp>
+#include <morph/table/view_cache.hpp>
 #include <optional>
 #include <random>
 #include <set>

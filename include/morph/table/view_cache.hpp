@@ -25,7 +25,7 @@
 #include <list>
 #include <map>
 #include <memory>
-#include <morph/table/data_source.hpp>
+#include <morph/export.hpp>
 #include <morph/table/query.hpp>
 #include <morph/table/runtime.hpp>
 #include <mutex>
@@ -71,7 +71,7 @@ struct ViewComputation {
 ///
 /// Held only by `std::shared_ptr`, never copied or moved.
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- source rows are below the snapshot's row count
-class ViewEntry {
+class MORPH_API ViewEntry {
 public:
     /// @brief An entry of @p computation.
     /// @param snapshotIn    The rows the view was computed over.
@@ -114,67 +114,24 @@ public:
 
     /// @brief The view row of each source row, `detail::kNotInView` for a row not in the view.
     /// @return The table, built at the first call.
-    [[nodiscard]] std::span<std::uint32_t const> viewRowOf() const {
-        build();
-        return _viewRowOf;
-    }
+    [[nodiscard]] std::span<std::uint32_t const> viewRowOf() const;
 
     /// @brief The source row of a key.
     /// @param key The key.
     /// @return The row, or nothing when the snapshot has no row with that key.
-    [[nodiscard]] std::optional<std::uint32_t> sourceRowOf(RowId const& key) const {
-        build();
-        auto const hash = std::hash<RowId>{}(key);
-        auto const [first, last] =
-            std::ranges::equal_range(_byHash, hash, {}, &std::pair<std::size_t, std::uint32_t>::first);
-        for (auto at = first; at != last; ++at) {
-            if (snapshot->rowId(at->second) == key) {
-                return at->second;
-            }
-        }
-        return std::nullopt;
-    }
+    [[nodiscard]] std::optional<std::uint32_t> sourceRowOf(RowId const& key) const;
 
     /// @brief What the entry holds.
     /// @return 4 bytes a row of the view and of the undecided rows; the order keys, each by `rowIdBytes`, and
     ///         their vector's spare capacity; once the keyed lookups are built, 4 bytes a source row for the view
     ///         rows and one `(hash, row)` pair a source row for the key index.
-    [[nodiscard]] std::size_t bytes() const {
-        auto out = (4 * (view.rows.size() + view.undecided.size())) + _orderKeyBytes;
-        if (_built.load()) {
-            out += (sizeof(std::uint32_t) + sizeof(std::pair<std::size_t, std::uint32_t>)) * snapshot->rowCount();
-        }
-        return out;
-    }
+    [[nodiscard]] std::size_t bytes() const;
 
 private:
     // Counted once: the keys never change after the entry is made.
-    [[nodiscard]] static std::size_t keysBytes(std::vector<RowId> const* keys) noexcept {
-        if (keys == nullptr) {
-            return 0;
-        }
-        auto out = sizeof(std::vector<RowId>) + ((keys->capacity() - keys->size()) * sizeof(RowId));
-        for (auto const& key : *keys) {
-            out += rowIdBytes(key);
-        }
-        return out;
-    }
+    [[nodiscard]] static std::size_t keysBytes(std::vector<RowId> const* keys) noexcept;
 
-    void build() const {
-        std::call_once(_once, [this] {
-            auto const rows = snapshot->rowCount();
-            _viewRowOf.assign(rows, detail::kNotInView);
-            for (std::size_t at = 0; at < view.rows.size(); ++at) {
-                _viewRowOf[view.rows[at]] = static_cast<std::uint32_t>(at);
-            }
-            _byHash.reserve(rows);
-            for (std::size_t row = 0; row < rows; ++row) {
-                _byHash.emplace_back(std::hash<RowId>{}(snapshot->rowId(row)), static_cast<std::uint32_t>(row));
-            }
-            std::ranges::sort(_byHash);
-            _built.store(true);
-        });
-    }
+    void build() const;
 
     mutable std::once_flag _once;
     std::size_t _orderKeyBytes = 0;
@@ -193,7 +150,7 @@ private:
 /// `ViewCacheOptions::maxBytes` bounds what the entries themselves hold (`ViewEntry::bytes`), not the snapshots
 /// they keep alive: an entry over an old snapshot holds that snapshot's rows until the entry is evicted or found
 /// invalid.
-class ViewCache {
+class MORPH_API ViewCache {
 public:
     /// @brief The result of a find.
     using Found = std::expected<std::shared_ptr<ViewEntry const>, TableError>;
@@ -220,71 +177,7 @@ public:
     [[nodiscard]] Found find(ViewKey const& key, std::shared_ptr<RowSnapshot const> const& snapshot,
                              std::span<std::pair<std::string, std::uint64_t> const> levels,
                              std::function<std::expected<ViewComputation, TableError>()> const& compute,
-                             std::uint64_t newness = 0) {
-        std::vector<std::pair<std::string, std::uint64_t>> const wanted(levels.begin(), levels.end());
-        auto const* const identity = snapshot->identity();
-        std::shared_ptr<Running> running;
-        // Entries leaving the cache: released after the mutex, since the last of one may free a whole snapshot.
-        std::vector<std::shared_ptr<ViewEntry const>> released;
-        {
-            std::unique_lock lock{_mutex};
-            if (auto const found = _entries.find(key); found != _entries.end()) {
-                auto const& slot = found->second;
-                if (slot.entry->snapshot->identity() == identity && slot.entry->levels == wanted) {
-                    _hits.fetch_add(1);
-                    _recency.splice(_recency.begin(), _recency, slot.recency);
-                    auto entry = slot.entry;
-                    remeasure(found->second);
-                    bound(released);
-                    lock.unlock();
-                    released.clear();
-                    return entry;
-                }
-                if (atLeastAsNew(newness, wanted, slot.newness, slot.entry->levels)) {
-                    drop(found, released);
-                    _invalidations.fetch_add(1);
-                }
-            }
-            _misses.fetch_add(1);
-            for (auto const& other : _running) {
-                if (other->key == key && other->identity == identity && other->levels == wanted) {
-                    _waits.fetch_add(1);
-                    auto const done = other->done;
-                    lock.unlock();
-                    return done.get();
-                }
-            }
-            running = std::make_shared<Running>();
-            running->key = key;
-            running->identity = identity;
-            running->levels = wanted;
-            running->snapshot = snapshot;
-            running->newness = newness;
-            running->order = ++_started;
-            running->done = running->promise.get_future().share();
-            _running.push_back(running);
-            _computations.fetch_add(1);
-        }
-        Found result;
-        try {
-            if (_options.onCompute) {
-                _options.onCompute();
-            }
-            auto computed = compute();
-            if (computed) {
-                result = std::make_shared<ViewEntry const>(snapshot, wanted, std::move(*computed));
-            } else {
-                result = std::unexpected(std::move(computed.error()));
-            }
-        } catch (...) {
-            finish(running, {});
-            running->promise.set_exception(std::current_exception());
-            throw;
-        }
-        finish(running, result);
-        running->promise.set_value(result);
-        return result;
-    }
+                             std::uint64_t newness = 0);
 
     /// @brief The counters.
     /// @return What the cache has done, and the bytes it holds.
@@ -322,80 +215,22 @@ private:
 
     // Ends @p running and caches its entry, unless the key's entry is newer: of a later snapshot, or of the same
     // newness and a later computation. What leaves the cache is released after the mutex.
-    void finish(std::shared_ptr<Running> const& running, Found const& result) {
-        std::vector<std::shared_ptr<ViewEntry const>> released;
-        std::unique_lock lock{_mutex};
-        std::erase(_running, running);
-        if (!result || *result == nullptr) {
-            return;
-        }
-        if (auto const found = _entries.find(running->key); found != _entries.end()) {
-            auto const& slot = found->second;
-            // Replaced only by an entry at least as new in its rows and in every order level; of two equally new,
-            // the later computation's.
-            bool const newer = atLeastAsNew(running->newness, running->levels, slot.newness, slot.entry->levels);
-            bool const same =
-                newer && atLeastAsNew(slot.newness, slot.entry->levels, running->newness, running->levels);
-            if (!newer || (same && slot.order > running->order)) {
-                return;
-            }
-            drop(found, released);
-        }
-        _recency.push_front(running->key);
-        auto [slot, inserted] = _entries.emplace(running->key, Slot{.entry = *result,
-                                                                    .newness = running->newness,
-                                                                    .order = running->order,
-                                                                    .bytes = 0,
-                                                                    .recency = _recency.begin()});
-        static_cast<void>(inserted);
-        remeasure(slot->second);
-        bound(released);
-        lock.unlock();
-        released.clear();
-    }
+    void finish(std::shared_ptr<Running> const& running, Found const& result);
 
-    void remeasure(Slot& slot) {
-        auto const now = slot.entry->bytes();
-        _held = _held - slot.bytes + now;
-        slot.bytes = now;
-        _bytes.store(_held);
-    }
+    void remeasure(Slot& slot);
 
     // Whether (newness, levels) is at least (otherNewness, otherLevels) in every part: the rows were pinned no
     // earlier, and no order level the other read is at an older generation.
     [[nodiscard]] static bool atLeastAsNew(std::uint64_t newness,
                                            std::vector<std::pair<std::string, std::uint64_t>> const& levels,
                                            std::uint64_t otherNewness,
-                                           std::vector<std::pair<std::string, std::uint64_t>> const& otherLevels) {
-        if (newness < otherNewness) {
-            return false;
-        }
-        for (auto const& [level, generation] : otherLevels) {
-            auto const found = std::ranges::find(levels, level, &std::pair<std::string, std::uint64_t>::first);
-            if (found != levels.end() && found->second < generation) {
-                return false;
-            }
-        }
-        return true;
-    }
+                                           std::vector<std::pair<std::string, std::uint64_t>> const& otherLevels);
 
     // Under the mutex: removes an entry, moving it into @p released for the caller to free after the mutex.
-    void drop(Entries::iterator found, std::vector<std::shared_ptr<ViewEntry const>>& released) {
-        _held -= found->second.bytes;
-        _bytes.store(_held);
-        _recency.erase(found->second.recency);
-        released.push_back(std::move(found->second.entry));
-        _entries.erase(found);
-    }
+    void drop(Entries::iterator found, std::vector<std::shared_ptr<ViewEntry const>>& released);
 
     // Under the mutex: evicts the least recently used entries until the bound holds, into @p released.
-    void bound(std::vector<std::shared_ptr<ViewEntry const>>& released) {
-        while (_held > _options.maxBytes && !_recency.empty()) {
-            auto const found = _entries.find(_recency.back());
-            drop(found, released);
-            _evictions.fetch_add(1);
-        }
-    }
+    void bound(std::vector<std::shared_ptr<ViewEntry const>>& released);
 
     ViewCacheOptions _options;
     std::mutex _mutex;

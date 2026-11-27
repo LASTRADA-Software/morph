@@ -6,6 +6,7 @@
 
 #include <morph/table/data_source.hpp>
 #include <morph/table/description.hpp>
+#include <morph/table/edits.hpp>
 #include <morph/table/filter.hpp>
 #include <morph/table/selection.hpp>
 #include <morph/table/state_store.hpp>

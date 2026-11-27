@@ -32,6 +32,7 @@
 #include <morph/reactive/runtime.hpp>
 #include <morph/session/session.hpp>
 #include <morph/table/description.hpp>
+#include <morph/table/edits.hpp>
 #include <morph/table/level_cache.hpp>
 #include <morph/table/row_selection.hpp>
 #include <morph/ui/author.hpp>
