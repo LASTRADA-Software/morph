@@ -66,6 +66,7 @@ set(MORPH_TABLE_TEST_SOURCES
     table/test_table_cov_c_pages.cpp
     table/test_table_cov_f_window.cpp
     table/test_table_cov_f_levels.cpp
+    table/test_table_cov_f_engine.cpp
     table/test_table_cov_f_edits.cpp
     table/test_table_cov_f_selection.cpp
     table/test_table_cov_f_description.cpp
@@ -366,6 +367,7 @@ add_executable(morph_tests
     test_ui_cov_e_conformance_faults.cpp
     test_ui_cov_e_recording_backend.cpp
     test_ui_cov_e_interpreter.cpp
+    test_ui_cov_f_interpreter.cpp
     test_ui_spotlight_recording.cpp
     test_ui_common.cpp
     test_ui_custom.cpp
