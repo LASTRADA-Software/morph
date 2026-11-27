@@ -307,6 +307,7 @@ add_executable(morph_tests
     test_ui_cov_table_model_columns.cpp
     test_ui_cov_table_rows_pure.cpp
     test_ui_cov_table_window_state.cpp
+    test_ui_cov_table_runs.cpp
     test_ui_cov_table_state_model.cpp
     test_ui_table_config.cpp
     bench_interpreter.cpp
