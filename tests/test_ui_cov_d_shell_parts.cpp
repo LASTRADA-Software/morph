@@ -382,3 +382,76 @@ TEST_CASE("covd shell parts: Escape in an empty field returns focus to the conte
     r.h.settle();
     CHECK_FALSE(r.prop("TextInput", "shell_search", "text").contains("x"));
 }
+
+TEST_CASE("covd shell parts: a scope request names an option or is refused, and asking for the chosen one changes nothing",
+          "[ui][shell][parts][covd]") {
+    Rig r{fullParts()};
+    auto const screen = r.h.mount(kScopeScreen);
+    r.reply("Lims_ClientScopes", kScopes);
+    ui::ShellPartsModel& model = r.binding->model();
+    model.chooseContext(9);  // no such option
+    CHECK(r.h.text("scope") == "k");
+    CHECK_FALSE(model.requestContext(ui::Value{std::string{"zzz"}}));
+    CHECK(model.requestContext(ui::Value{std::string{"k"}}));  // the scope it already is
+    CHECK(r.closedDirty == 0);
+    CHECK(model.requestContext(ui::Value{std::string{"o"}}));
+    r.h.settle();
+    CHECK(r.h.text("scope") == "o");
+}
+
+TEST_CASE("covd shell parts: a hit that is not there, and a model with no help, give nothing",
+          "[ui][shell][parts][covd]") {
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    ui::ShellPartsModel& model = r.binding->model();
+    CHECK_FALSE(model.hit(0, 0).has_value());  // nothing searched for
+    CHECK_FALSE(model.hit(9, 0).has_value());  // no such source
+    CHECK(model.allHits().empty());
+    CHECK_FALSE(model.helpScreen().has_value());
+    CHECK_FALSE(model.runHelp());
+    model.chooseLocale(9);
+    model.chooseFormat(9);
+    CHECK(model.currentLocale() == "en");
+    model.chooseLocale(1);
+    model.chooseFormat(1);
+    r.h.settle();
+    CHECK(model.currentLocale() == "de");
+}
+
+TEST_CASE("covd shell parts: a search that reads a hit with no title or screen, and a reply that is no list, keep only the hits",
+          "[ui][shell][parts][covd]") {
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    int const search = r.id("TextInput", "shell_search");
+    r.h.backend.edit(search, "x");
+    r.h.settle();
+    r.h.advance(std::chrono::milliseconds{ui::kSearchPause});
+    r.reply("Lims_ClientSearchLab",
+            R"({"hits":[{"title":"no screen"},{"screen":"a"},{"screen":"b","title":"B","params":7},)"
+            R"({"screen":"c","title":"C","params":{"id":1}}]})");
+    r.reply("Lims_ClientSearchBilling", R"({"hits":"none"})");
+    r.h.settle();
+    ui::ShellPartsModel& model = r.binding->model();
+    std::vector<ui::ShellPartsModel::Target> const all = model.allHits();
+    REQUIRE(all.size() == 2);
+    CHECK(all.at(0).screen == "b");
+    CHECK(all.at(0).params.empty());
+    CHECK(all.at(1).screen == "c");
+    CHECK(all.at(1).params.size() == 1);
+}
+
+TEST_CASE("covd shell parts: a help button's screen and its declared params are what the model offers",
+          "[ui][shell][parts][covd]") {
+    ui::ShellParts parts = fullParts();
+    parts.help = ui::HelpEntry{.screen = "lims.about",
+                               .model = {},
+                               .action = {},
+                               .params = {{"tab", std::string{"licence"}}, {"wide", true}}};
+    Rig r{parts};
+    ui::ShellPartsModel& model = r.binding->model();
+    auto const target = model.helpScreen();
+    REQUIRE(target.has_value());
+    CHECK(target->screen == "lims.about");
+    CHECK(target->params.size() == 2);
+    CHECK_FALSE(model.runHelp());  // a screen, not an action
+}
