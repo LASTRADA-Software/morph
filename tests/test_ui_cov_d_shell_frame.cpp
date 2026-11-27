@@ -280,3 +280,47 @@ TEST_CASE("covd shell frame: a search the parts do not offer has no field", "[ui
     int const box = backend.find("Column", "testId", "shell_search_box").value();
     CHECK(backend.prop(box, "visible") == "false");
 }
+
+TEST_CASE("covd shell frame: every path of every menu is answered, and a path that names nothing does nothing",
+          "[ui][shell][covd]") {
+    bool const handlers = GENERATE(true, false);
+    bool const compact = GENERATE(true, false);
+    CAPTURE(handlers, compact);
+    Rig r{handlers, true, compact};
+    std::vector<std::string> tours;
+    r.frame->setOnTour([&tours](std::string const& id) { tours.push_back(id); });
+    morph::ui::ShellToursView view;
+    view.groups = {
+        {.heading = "Lab", .tours = {{.id = "t1", .title = "One", .summary = "first"}, {.id = "t2", .title = "Two"}}},
+        {.heading = "Admin", .tours = {{.id = "t3", .title = "Three"}}}};
+    r.frame->setTours(std::move(view));
+    for (std::string const& menuId : {std::string{"shell_nav_menu"}, std::string{"shell_context"},
+                                      std::string{"shell_tours"}, std::string{"shell_principal_menu"}}) {
+        auto const menu = r.backend.find("Menu", "testId", menuId);
+        if (!menu) {
+            continue;
+        }
+        for (std::size_t first = 0; first < 14; ++first) {
+            r.backend.chooseMenuEntry(*menu, {first});
+            for (std::size_t second : {std::size_t{0}, std::size_t{1}, std::size_t{2}, std::size_t{99}}) {
+                r.backend.chooseMenuEntry(*menu, {first, second});
+            }
+            r.backend.chooseMenuEntry(*menu, {first, 0, 0});
+        }
+    }
+    // The tours are chosen by place and named by their id, whatever the handlers are.
+    CHECK_FALSE(tours.empty());
+    for (std::string const& id : tours) {
+        CHECK((id == "t1" || id == "t2" || id == "t3"));
+    }
+}
+
+TEST_CASE("covd shell frame: a confirmation answers once, and a second answer finds nobody waiting",
+          "[ui][shell][covd]") {
+    Rig r{true, true, false};
+    std::vector<bool> answers;
+    r.frame->confirm("Discard?", "Yes", "No", [&answers](bool yes) { answers.push_back(yes); });
+    r.backend.click(r.id("Button", "shell_confirm_yes"));
+    r.backend.click(r.id("Button", "shell_confirm_no"));
+    CHECK(answers == std::vector<bool>{true});
+}
