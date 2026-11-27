@@ -165,6 +165,9 @@ struct Rig {
         binding_options.model.screenListed = std::move(facts.screenListed);
         binding_options.model.moduleListed = std::move(facts.moduleListed);
         binding_options.model.replyIsRecord = std::move(facts.replyIsRecord);
+        binding_options.model.moduleLabel = std::move(facts.moduleLabel);
+        binding_options.model.screenTitle = std::move(facts.screenTitle);
+        binding_options.model.catalogueLocales = std::move(facts.catalogueLocales);
         binding_options.model.dirtyTabs = [this] { return dirty; };
         binding_options.model.closeDirtyTabs = [this] { ++closedDirty; };
         binding_options.model.onProblem = [this](std::string const& message) { problems.push_back(message); };
@@ -454,4 +457,164 @@ TEST_CASE("covd shell parts: a help button's screen and its declared params are 
     CHECK(target->screen == "lims.about");
     CHECK(target->params.size() == 2);
     CHECK_FALSE(model.runHelp());  // a screen, not an action
+}
+
+TEST_CASE("covd shell parts: the person's menu reads the name, the roles of every shape and what fails",
+          "[ui][shell][parts][covd]") {
+    struct Case {
+        std::string_view reply;
+        std::string_view name;
+        std::string_view initials;
+        std::vector<std::string> roles;
+    };
+    using Roles = std::vector<std::string>;
+    auto const [reply, name, initials, roles] = GENERATE(
+        Case{R"({"name":"Ann Lee","role":"Chemist","roles":[{"label":"Admin","detail":"all"},"Plain",)"
+             R"({"label":{"t":"role.k","fallback":"Keyed"}},7]})",
+             "Ann Lee", "AL", Roles{"Admin", "Plain", "Keyed", "7"}},
+        Case{R"({"name":"Bo","roles":"admin"})", "Bo", "B", Roles{}},
+        Case{R"({"name":"Cy","roles":[]})", "Cy", "C", Roles{}},
+        Case{R"({"name":"Di"})", "Di", "D", Roles{}});
+    CAPTURE(reply);
+    Rig r{fullParts()};
+    r.reply("Lims_ClientPerson", std::string{reply});
+    r.h.settle();
+    ui::ShellPrincipalView const person = r.binding->model().view().principal;
+    CHECK(person.shown);
+    CHECK(person.name == name);
+    CHECK(person.initials == initials);
+    std::vector<std::string> labels;
+    for (ui::ShellRoleView const& role : person.roles) {
+        labels.push_back(role.label);
+    }
+    CHECK(labels == roles);
+    CHECK(r.problems.empty());
+}
+
+TEST_CASE("covd shell parts: a person's reply with no name, and one that fails, are reported",
+          "[ui][shell][parts][covd]") {
+    Rig r{fullParts()};
+    r.reply("Lims_ClientPerson", R"({"role":"Chemist"})");
+    r.h.settle();
+    static_cast<void>(r.binding->model().view());
+    bool noName = false;
+    for (std::string const& text : r.problems) {
+        noName = noName || text.contains("the reply has no `name`");
+    }
+    CHECK(noName);
+
+    Rig failing{fullParts()};
+    failing.h.fail(failing.h.dispatcher.last("Lims_ClientPerson"));
+    failing.h.settle();
+    static_cast<void>(failing.binding->model().view());
+    bool failed = false;
+    for (std::string const& text : failing.problems) {
+        failed = failed || text.contains("shell principal: the read failed");
+    }
+    CHECK(failed);
+}
+
+TEST_CASE("covd shell parts: the languages come from the catalogue when the app names none, and are worded by translation",
+          "[ui][shell][parts][covd]") {
+    ui::ShellParts parts = fullParts();
+    parts.principal->locales = {};
+    ui::ShellModelOptions facts;
+    facts.catalogueLocales = [] { return std::vector<std::string>{"fr", "en"}; };
+    Rig r{parts, std::move(facts)};
+    r.h.session.setTranslations([](std::string_view key, std::string_view) -> std::optional<std::string> {
+        return key == "morph.shell.locale.fr" ? std::optional<std::string>{"Francais"} : std::nullopt;
+    });
+    r.reply("Lims_ClientPerson", R"({"name":"Ann"})");
+    r.h.settle();
+    ui::ShellPrincipalView const person = r.binding->model().view().principal;
+    REQUIRE(person.locales.size() == 2);
+    CHECK(person.locales.at(0).tag == "fr");
+    CHECK(person.locales.at(0).label == "Francais");
+    CHECK(person.locales.at(1).label == "English");
+    REQUIRE(person.chosenLocale.has_value());
+    CHECK(*person.chosenLocale == 1);
+}
+
+TEST_CASE("covd shell parts: a search source is titled by its declaration, then its module's label, then the module",
+          "[ui][shell][parts][covd]") {
+    struct Case {
+        std::string_view title;
+        bool label;
+        std::string_view shown;
+    };
+    auto const [title, label, shown] =
+        GENERATE(Case{"Lab", true, "Lab"}, Case{"", true, "Laboratory"}, Case{"", false, "lab"});
+    ui::ShellParts parts = fullParts();
+    parts.search.front().title = std::string{title};
+    ui::ShellModelOptions facts;
+    if (label) {
+        facts.moduleLabel = [](std::string_view) { return std::string{"Laboratory"}; };
+    }
+    Rig r{parts, std::move(facts)};
+    r.reply("Lims_ClientScopes", kScopes);
+    int const search = r.id("TextInput", "shell_search");
+    r.h.backend.edit(search, "x");
+    r.h.settle();
+    r.h.advance(std::chrono::milliseconds{ui::kSearchPause});
+    r.reply("Lims_ClientSearchLab", R"({"hits":[]})");
+    r.reply("Lims_ClientSearchBilling", R"({"hits":[]})");
+    r.h.settle();
+    ui::ShellSearchView const view = r.binding->model().view().search;
+    REQUIRE_FALSE(view.sources.empty());
+    CHECK(view.sources.front().title == shown);
+}
+
+TEST_CASE("covd shell parts: a failed search source is reported, and a hit without a title is dropped with a problem",
+          "[ui][shell][parts][covd]") {
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    int const search = r.id("TextInput", "shell_search");
+    r.h.backend.edit(search, "x");
+    r.h.settle();
+    r.h.advance(std::chrono::milliseconds{ui::kSearchPause});
+    r.reply("Lims_ClientSearchLab", R"({"hits":[{"screen":"a"}]})");
+    r.h.fail(r.h.dispatcher.last("Lims_ClientSearchBilling"));
+    r.h.settle();
+    ui::ShellSearchView const view = r.binding->model().view().search;
+    REQUIRE(view.sources.size() == 2);
+    CHECK(view.sources.at(0).hits.empty());
+    CHECK_FALSE(view.sources.at(0).failed);
+    CHECK(view.sources.at(1).failed);
+    int dropped = 0;
+    int failed = 0;
+    for (std::string const& text : r.problems) {
+        dropped += text.contains("is dropped") ? 1 : 0;
+        failed += text.contains("the read failed") ? 1 : 0;
+    }
+    CHECK(dropped == 1);
+    CHECK(failed == 1);
+}
+
+TEST_CASE("covd shell parts: the inbox sums the sources that answered and marks one that failed or sent no count",
+          "[ui][shell][parts][covd]") {
+    struct Case {
+        std::string_view billing;
+        std::string_view lab;
+        bool failed;
+        bool counted;
+        long long count;
+    };
+    auto const [billing, lab, failed, counted, count] = GENERATE(
+        Case{R"({"n":2})", R"({"waiting":3})", false, true, 5}, Case{R"({"n":2})", R"({"other":3})", true, true, 2},
+        Case{R"({"other":1})", R"({"other":3})", true, false, 0});
+    CAPTURE(billing, lab);
+    ui::ShellModelOptions facts;
+    facts.screenTitle = [](std::string_view) { return std::string{"Approvals"}; };
+    Rig r{fullParts(), std::move(facts)};
+    r.reply("Lims_ClientApprovalsBilling", std::string{billing});
+    r.reply("Lims_ClientApprovalsLab", std::string{lab});
+    r.h.settle();
+    ui::ShellInboxView const inbox = r.binding->model().view().inbox;
+    CHECK(inbox.shown);
+    CHECK(inbox.title == "Approvals");
+    CHECK(inbox.failed == failed);
+    CHECK(inbox.count.has_value() == counted);
+    if (counted) {
+        CHECK(*inbox.count == count);
+    }
 }
