@@ -110,7 +110,7 @@ TEST_CASE("cov model grid: the rows a change brings are found through the operat
     CHECK(readAfter({op(Kind::Changed, 1, 2), op(Kind::Reset, 0, 0), op(Kind::Changed, 5, 1)}) == Indices{5});
 }
 
-TEST_CASE("cov model grid: cells held for a row follow it when the row's key changes", "[ui][grid][cov]") {
+TEST_CASE("cov model grid: cells held for a row follow it when the row's key changes", "[r2][ui][grid][cov]") {
     ModelGridFixture f{{1, 2}, morph::ui::EditMode::Row};
     f.grid->focusCell(at(1, "label"));
     f.grid->type("a");
@@ -127,7 +127,7 @@ TEST_CASE("cov model grid: cells held for a row follow it when the row's key cha
     CHECK(f.commits.sent.at(0).cells.at(1).json == R"("b")");
 }
 
-TEST_CASE("cov model grid: a cell dropped for a busy row is resent under the row's new key", "[ui][grid][cov]") {
+TEST_CASE("cov model grid: a cell dropped for a busy row is resent under the row's new key", "[r2][ui][grid][cov]") {
     ModelGridFixture f{{1, 2}, morph::ui::EditMode::Row};
     f.grid->focusCell(at(1, "label"));
     f.grid->type("a");

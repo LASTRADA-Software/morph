@@ -2456,7 +2456,7 @@ TEST_CASE("table focus: the arrows, pages, home and end move the focused cell an
 
 // Mutations: a removal before the row not moving it up; an insertion at or before the row not moving it down; a move
 // across the row moving it the wrong way; a removal of the row leaving the mark.
-TEST_CASE("table highlight: the marked row follows the operations of a view change", "[ui][mount]") {
+TEST_CASE("table highlight: the marked row follows the operations of a view change", "[r2][ui][mount]") {
     using Kind = table::ViewOp::Kind;
     struct Case {
         std::vector<table::ViewOp> ops;
@@ -2513,7 +2513,7 @@ std::vector<std::string> labelsOfEntries(std::vector<ui::MenuEntry> const& entri
 // Mutations: a leading, doubled or trailing separator kept; a hidden entry shown; a submenu's entry reported for its
 // parent.
 TEST_CASE("table menus: a cell menu drops leading, doubled and trailing separators and hidden entries",
-          "[ui][mount]") {
+          "[r2][ui][mount]") {
     std::vector<std::string> chosen;
     WindowFixture f{3, 3, {.tune = [&chosen](ui::TableOptions& options) {
                         options.cellMenu = [&chosen](Key const&, std::size_t) {
@@ -2548,7 +2548,7 @@ TEST_CASE("table menus: a cell menu drops leading, doubled and trailing separato
 
 // Mutations: the caller's header entries shown for the table's own menu; no separator between the built-in entries
 // and the caller's; a built-in entry routed to the caller's action; a disabled header leaving a built-in entry on.
-TEST_CASE("table menus: a header's menu adds the caller's entries after the built-in ones", "[ui][mount]") {
+TEST_CASE("table menus: a header's menu adds the caller's entries after the built-in ones", "[r2][ui][mount]") {
     std::vector<std::string> chosen;
     std::vector<std::vector<std::size_t>> builtIn;
     bool headerOn = true;

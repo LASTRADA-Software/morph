@@ -209,7 +209,7 @@ TEST_CASE("cov grid keys: the status line's entries undo a deletion and ignore a
 }
 
 TEST_CASE("cov grid walk: tab walks down a column in a column walk and skips cells it may not edit",
-          "[ui][grid][cov]") {
+          "[r2][ui][grid][cov]") {
     GridFixture f{2, ui::GridOptions{.walk = ui::Walk::Columns}};
     CHECK(f.grid->press("Tab") == ui::KeyOutcome::Handled);  // no focus: the first editable cell
     CHECK(f.grid->focus() == at(1, "label"));
@@ -229,20 +229,20 @@ TEST_CASE("cov grid walk: tab walks down a column in a column walk and skips cel
     CHECK(f.grid->press("Shift+Tab") == ui::KeyOutcome::FocusPrevious);  // before the first
 }
 
-TEST_CASE("cov grid walk: shift tab with no focus starts at the last editable cell", "[ui][grid][cov]") {
+TEST_CASE("cov grid walk: shift tab with no focus starts at the last editable cell", "[r2][ui][grid][cov]") {
     GridFixture f{2};
     CHECK(f.grid->press("Shift+Tab") == ui::KeyOutcome::Handled);
     CHECK(f.grid->focus() == at(2, "note"));
 }
 
-TEST_CASE("cov grid walk: a grid with no rows walks nowhere", "[ui][grid][cov]") {
+TEST_CASE("cov grid walk: a grid with no rows walks nowhere", "[r2][ui][grid][cov]") {
     GridFixture f{0};
     CHECK(f.grid->press("Tab") == ui::KeyOutcome::FocusNext);
     CHECK(f.grid->press("Shift+Tab") == ui::KeyOutcome::FocusPrevious);
 }
 
 TEST_CASE("cov grid walk: enter moves right, down or nowhere by the option, over cells it may edit",
-          "[ui][grid][cov]") {
+          "[r2][ui][grid][cov]") {
     {
         GridFixture f{2, ui::GridOptions{.enterMoves = ui::EnterMoves::Right}};
         f.grid->focusCell(at(1, "volume"));

@@ -193,7 +193,7 @@ using PerRow = std::vector<std::function<std::string(forms::RowState const&)>>;
 
 }  // namespace
 
-TEST_CASE("cov form rows: a source is refused what does not match the form's collection", "[ui][grid][cov]") {
+TEST_CASE("cov form rows: a source is refused what does not match the form's collection", "[r2][ui][grid][cov]") {
     using Catch::Matchers::ContainsSubstring;
     GridFixture f = membersFixture(R"({"rows":[{"word":"a"}]})");
     forms::FormSession& form = *f.form;
@@ -218,7 +218,7 @@ TEST_CASE("cov form rows: a source is refused what does not match the form's col
     CHECK(named.columns().size() == 2);
 }
 
-TEST_CASE("cov form rows: a grid is refused a collection it cannot edit or a member it lacks", "[ui][grid][cov]") {
+TEST_CASE("cov form rows: a grid is refused a collection it cannot edit or a member it lacks", "[r2][ui][grid][cov]") {
     using Catch::Matchers::ContainsSubstring;
     GridFixture f = membersFixture(R"({"rows":[{}]})");
     auto const columnOf = [](std::string id, std::string field) {

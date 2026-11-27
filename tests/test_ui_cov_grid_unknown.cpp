@@ -44,7 +44,7 @@ void expectNoSuchCell(ui::GridSource& source, ui::Key const& key, std::string co
 }  // namespace
 
 TEST_CASE("cov unknown: a form grid answers for a row or a column it lacks without changing anything",
-          "[ui][grid][cov]") {
+          "[r2][ui][grid][cov]") {
     GridFixture f{2};
     for (ui::Key const& key : {ui::Key{std::int64_t{99}}, ui::Key{std::string{"zz"}}, ui::Key{std::int64_t{0}},
                                ui::Key{std::int64_t{-3}}}) {
@@ -62,7 +62,7 @@ TEST_CASE("cov unknown: a form grid answers for a row or a column it lacks witho
 }
 
 TEST_CASE("cov unknown: a fixed grid answers for a row or a column it lacks without changing anything",
-          "[ui][grid][fixed][cov]") {
+          "[r2][ui][grid][fixed][cov]") {
     std::vector<std::variant<ui::FixedRow, ui::FixedBlock>> rows;
     rows.emplace_back(ui::FixedRow{.key = "density",
                                    .label = "density",
@@ -84,7 +84,7 @@ TEST_CASE("cov unknown: a fixed grid answers for a row or a column it lacks with
 }
 
 TEST_CASE("cov unknown: a model grid answers for a row or a column it lacks without sending anything",
-          "[ui][grid][cov]") {
+          "[r2][ui][grid][cov]") {
     morph::test::grid::ModelGridFixture f{{1, 2}};
     for (ui::Key const& key : {ui::Key{std::int64_t{99}}, ui::Key{std::string{"zz"}}}) {
         expectNoSuchCell(*f.source, key, "label", true);
