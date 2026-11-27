@@ -846,3 +846,184 @@ TEST_CASE("cov filter menu: group conditions are written to a group filter and r
     m.menu.setOp(0, ConditionOp::IsEmpty);
     CHECK(m.applied.back().groups.front().include.front().isEmpty == true);
 }
+
+namespace {
+
+// A menu whose host reaches the rows and nothing else: it has no filters to read, nowhere to apply, no touch hook, no
+// listing hook and no scheduler.
+struct BareMenu {
+    morph::testing::StepExecutor owner;
+    morph::reactive::Runtime runtime{owner};
+    ScriptedRows rows{owner};
+    ui::FilterMenu menu{runtime};
+    BareMenu() {
+        ui::FilterMenuHost host;
+        host.rows = [this] { return &rows; };
+        host.format = morph::ui::testing::formatFor("en");
+        menu.setHost(host);
+    }
+    void open(std::string column, ColumnKind kind = ColumnKind::Text) {
+        ui::FilterTarget target;
+        target.column = column;
+        target.shown = table::TableColumn{.info = {.id = column, .kind = kind}, .label = column};
+        menu.open(std::move(target));
+        owner.runAll();
+    }
+};
+}  // namespace
+
+TEST_CASE("cov filter menu: a menu that is not open lists nothing and a host without hooks is not needed",
+          "[ui][table][filter_menu][cov]") {
+    BareMenu m;
+    CHECK(m.menu.rows().empty());
+    CHECK_FALSE(m.menu.allTicked());
+    m.menu.close();  // nothing to close
+    m.rows.answer = pagesOf(letters(3), 1);
+    m.open("c");
+    CHECK(m.menu.rows().size() == 3);
+    m.menu.tick(0, false);
+    m.menu.tick(99, true);  // past the list: ignored
+    m.menu.apply();
+    m.owner.runAll();
+    CHECK(m.menu.state().open);  // nowhere to apply: the menu stays
+    m.menu.clearFilter();
+    CHECK(m.menu.state().ticks.ticked);
+    m.menu.setOp(0, ui::ConditionOp::Contains);
+    m.menu.setOperand(0, "a");
+    CHECK(m.menu.state().open);
+    m.menu.apply();  // conditions that cannot be applied leave the menu open
+    CHECK(m.menu.state().open);
+}
+
+TEST_CASE("cov filter menu: a reply for a menu that closed or reopened is not shown",
+          "[ui][table][filter_menu][cov]") {
+    Menu m;
+    m.rows.answer = pagesOf(letters(3));
+    m.open("c");
+    m.menu.search("a");
+    m.settle();
+    m.menu.tickAll(false);
+    m.menu.apply();  // names the values the search reaches: a question to the rows
+    m.menu.close();
+    m.settle();
+    CHECK(m.applied.empty());  // the answer came to a menu that is no longer the one that asked
+    // A search whose reply arrives after the menu closes changes nothing.
+    m.open("c");
+    m.menu.search("a");
+    m.menu.close();
+    m.settle();
+    CHECK(m.state().list.empty());
+}
+
+TEST_CASE("cov filter menu: a failed list that is not unavailable keeps the list on offer",
+          "[ui][table][filter_menu][cov]") {
+    Menu m;
+    m.rows.answer = [](table::DistinctRequest const&) -> DistinctReply {
+        return std::unexpected(
+            table::TableError{.code = table::TableErrorCode::InvalidSpec, .column = {}, .message = "bad"});
+    };
+    m.open("c");
+    CHECK(m.state().target.listed);
+    CHECK(m.state().list.empty());
+    CHECK(m.state().listedOnce);
+}
+
+TEST_CASE("cov filter menu: a group's ticked values are paged to be named and bounded",
+          "[ui][table][filter_menu][cov]") {
+    Menu m;
+    m.rows.answer = pagesOf(letters(4));
+    m.openGroup("g1", {"a", "b", "c", "d"});
+    m.menu.tickAll(true);
+    m.menu.tick(1, false);
+    m.menu.apply();
+    m.settle();
+    REQUIRE(m.applied.size() == 1);
+    CHECK(m.applied.back().groups.front().include.front().oneOf == std::vector<std::string>{"a", "c", "d"});
+    // Too many to name.
+    Menu bounded;
+    bounded.host.maxSetValues = 2;
+    bounded.menu.setHost(bounded.host);
+    bounded.rows.answer = pagesOf(letters(4));
+    bounded.openGroup("g1", {"a", "b", "c", "d"});
+    bounded.menu.tickAll(true);
+    bounded.menu.apply();
+    bounded.settle();
+    CHECK(bounded.applied.empty());
+    CHECK(bounded.menu.note() == ui::tableText::tooManyValues());
+    // Values that cannot be paged are the note.
+    Menu failing;
+    failing.rows.answer = pagesOf(letters(4));
+    failing.openGroup("g1", {"a", "b"});
+    failing.menu.tickAll(true);
+    failing.rows.answer = [](table::DistinctRequest const&) -> DistinctReply {
+        return std::unexpected(
+            table::TableError{.code = table::TableErrorCode::InvalidSpec, .column = {}, .message = "gone"});
+    };
+    failing.menu.apply();
+    failing.settle();
+    CHECK(failing.menu.note() == "gone");
+}
+
+TEST_CASE("cov filter menu: years open into months and days, collapse together, and a day does not open",
+          "[ui][table][filter_menu][cov]") {
+    Menu m;
+    m.rows.answer = [](table::DistinctRequest const& request) -> DistinctReply {
+        table::DistinctValues out;
+        if (request.bucket == table::DateBucket::Year) {
+            out.values = {valueOf("2024", "2024-01-01..2024-12-31", 3)};
+        } else if (request.bucket == table::DateBucket::Month) {
+            out.values = {valueOf("2024-01", "2024-01-01..2024-01-31", 2)};
+        } else {
+            out.values = {valueOf("2024-01-05", "2024-01-05..2024-01-05", 1)};
+        }
+        out.distinct = static_cast<std::int64_t>(out.values.size());
+        return out;
+    };
+    m.open("d", ColumnKind::Date);
+    m.menu.openBucket(0);  // the year
+    m.settle();
+    m.menu.openBucket(1);  // its month
+    m.settle();
+    REQUIRE(m.state().list.size() == 3);
+    CHECK(m.state().list.at(2).depth == 2);
+    m.menu.openBucket(2);  // a day: nothing to open
+    m.settle();
+    CHECK(m.state().list.size() == 3);
+    m.menu.openBucket(0);  // collapsing the year takes its months and their days
+    CHECK(m.state().list.size() == 1);
+    m.menu.openBucket(0);
+    m.settle();
+    CHECK(m.state().list.size() == 2);
+    m.menu.close();
+    m.menu.openBucket(0);  // closed: the list is empty
+    CHECK(m.state().list.empty());
+}
+
+TEST_CASE("cov filter menu: a measure condition starts in the first unit and ticked blanks alone are a date filter",
+          "[ui][table][filter_menu][cov]") {
+    Menu m;
+    m.rows.answer = pagesOf({}, 2);
+    table::FilterEntry gt;
+    gt.gt = "5 kg";
+    m.spec.columns["w"] = table::ColumnFilter{.combine = table::Combine::Any, .include = {gt}, .exclude = {}};
+    ui::FilterTarget target;
+    target.column = "w";
+    target.shown = table::TableColumn{.info = {.id = "w", .kind = ColumnKind::Measure}};
+    target.unitChoices = {"kg", "g"};
+    target.unitList = {table::UnitInfo{
+        .id = "kg", .symbol = "kg", .dimension = "mass", .toBase = *table::parseDecimal("1"), .decimals = 3}};
+    m.menu.open(std::move(target));
+    m.settle();
+    CHECK(m.state().conditions.at(0).op == ui::ConditionOp::Greater);
+    CHECK(m.state().conditions.at(0).unit == "kg");
+    CHECK(m.state().conditions.at(1).unit == "kg");
+
+    Menu blanks;
+    blanks.rows.answer = pagesOf({}, 2);
+    blanks.open("d", ColumnKind::Date);
+    blanks.menu.tickBlanks(true);
+    blanks.menu.apply();
+    blanks.settle();
+    REQUIRE(blanks.applied.size() == 1);
+    CHECK(blanks.applied.back().columns.at("d").include.front().isEmpty == true);
+}
