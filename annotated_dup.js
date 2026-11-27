@@ -82,6 +82,7 @@ var annotated_dup =
         [ "IoLoop", "dd/d10/classmorph_1_1exec_1_1IoLoop.html", "dd/d10/classmorph_1_1exec_1_1IoLoop" ],
         [ "MainThreadExecutor", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor" ],
         [ "OwnerStrand", "dc/db1/classmorph_1_1exec_1_1OwnerStrand.html", "dc/db1/classmorph_1_1exec_1_1OwnerStrand" ],
+        [ "PoolOptions", "df/da3/structmorph_1_1exec_1_1PoolOptions.html", "df/da3/structmorph_1_1exec_1_1PoolOptions" ],
         [ "ThreadPoolExecutor", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor" ]
       ] ],
       [ "flows", null, [

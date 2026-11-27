@@ -1,5 +1,6 @@
 var NAVTREEINDEX34 =
 {
+"db/d76/structmorph_1_1ui_1_1testing_1_1detail_1_1Entry.html#ae8c0cad93645a8d5b117b1773ff48885":[3,0,0,28,3,0,2,1],
 "db/d77/structmorph_1_1table_1_1ConformanceOptions.html":[3,0,0,24,11],
 "db/d77/structmorph_1_1table_1_1ConformanceOptions.html#a0617465796aa096b507264989e308cc4":[3,0,0,24,11,2],
 "db/d77/structmorph_1_1table_1_1ConformanceOptions.html#a061843423a615225dc6ac90dac03215a":[3,0,0,24,11,3],
@@ -248,6 +249,5 @@ var NAVTREEINDEX34 =
 "db/de0/classmorph_1_1ui_1_1TourShell.html#ac199e5bbd73575fbe85abde99499f6fc":[3,0,0,28,358,3],
 "db/de0/classmorph_1_1ui_1_1TourShell.html#ae3954618b9c6c1ed442f55d6dca2b0d5":[1,0,0,1,356,2],
 "db/de0/classmorph_1_1ui_1_1TourShell.html#ae3954618b9c6c1ed442f55d6dca2b0d5":[3,0,0,28,358,2],
-"db/de0/classmorph_1_1ui_1_1chat_1_1IDictationRecorder.html":[3,0,0,28,1,18],
-"db/de0/classmorph_1_1ui_1_1chat_1_1IDictationRecorder.html#a4bba53631acb85cc16ad91be9147c489":[3,0,0,28,1,18,2]
+"db/de0/classmorph_1_1ui_1_1chat_1_1IDictationRecorder.html":[3,0,0,28,1,18]
 };

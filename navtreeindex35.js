@@ -1,5 +1,6 @@
 var NAVTREEINDEX35 =
 {
+"db/de0/classmorph_1_1ui_1_1chat_1_1IDictationRecorder.html#a4bba53631acb85cc16ad91be9147c489":[3,0,0,28,1,18,2],
 "db/de0/classmorph_1_1ui_1_1chat_1_1IDictationRecorder.html#a502ba3f1c7229bd57c9c9b32011b7178":[3,0,0,28,1,18,0],
 "db/de0/classmorph_1_1ui_1_1chat_1_1IDictationRecorder.html#a96dc52e0216e74c66fda72765da836fd":[3,0,0,28,1,18,4],
 "db/de0/classmorph_1_1ui_1_1chat_1_1IDictationRecorder.html#ac93ea842505d291a4d3c11d6bd76d7ab":[3,0,0,28,1,18,3],
@@ -248,6 +249,5 @@ var NAVTREEINDEX35 =
 "dc/d53/structmorph_1_1forms_1_1CollectionViewOptions.html#a31b9bb9b757fbdf8ed3f59f82dfca132":[3,0,0,10,12,2],
 "dc/d53/structmorph_1_1forms_1_1CollectionViewOptions.html#a5221ca77595968e89aae4021f5f6168a":[3,0,0,10,12,5],
 "dc/d53/structmorph_1_1forms_1_1CollectionViewOptions.html#a692abd65c4dafd36b0725288861a811a":[3,0,0,10,12,1],
-"dc/d53/structmorph_1_1forms_1_1CollectionViewOptions.html#a83623c29709d4091804d44f77c366fae":[3,0,0,10,12,6],
-"dc/d53/structmorph_1_1forms_1_1CollectionViewOptions.html#a8cd295f6692f0ea712beb2c8be6de66d":[3,0,0,10,12,0]
+"dc/d53/structmorph_1_1forms_1_1CollectionViewOptions.html#a83623c29709d4091804d44f77c366fae":[3,0,0,10,12,6]
 };

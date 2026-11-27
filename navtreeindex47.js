@@ -1,5 +1,6 @@
 var NAVTREEINDEX47 =
 {
+"df/d3b/structmorph_1_1ui_1_1detail_1_1KindSpec.html":[3,0,0,28,2,26],
 "df/d3b/structmorph_1_1ui_1_1detail_1_1KindSpec.html#a2298fdd33450c83d53f1b844a8c84901":[1,0,0,1,0,25,1],
 "df/d3b/structmorph_1_1ui_1_1detail_1_1KindSpec.html#a2298fdd33450c83d53f1b844a8c84901":[3,0,0,28,2,26,1],
 "df/d3b/structmorph_1_1ui_1_1detail_1_1KindSpec.html#a53fa2cc36548e3f717430e8d459a8942":[1,0,0,1,0,25,0],
@@ -173,6 +174,10 @@ var NAVTREEINDEX47 =
 "df/d9e/structmorph_1_1ui_1_1detail_1_1HeadMenuModel.html#ac9fafbf1425f4efaeea908f602bd9242":[3,0,0,28,2,18,3],
 "df/d9e/structmorph_1_1ui_1_1detail_1_1HeadMenuModel.html#ae708c6e6176ee91b8ee3fbeca0695e09":[1,0,0,1,0,17,0],
 "df/d9e/structmorph_1_1ui_1_1detail_1_1HeadMenuModel.html#ae708c6e6176ee91b8ee3fbeca0695e09":[3,0,0,28,2,18,0],
+"df/da3/structmorph_1_1exec_1_1PoolOptions.html":[3,0,0,8,4],
+"df/da3/structmorph_1_1exec_1_1PoolOptions.html#a13740c7d372cf815c5aa640e76c723de":[3,0,0,8,4,1],
+"df/da3/structmorph_1_1exec_1_1PoolOptions.html#a65ee2c074999ab0e90967c24248df1ab":[3,0,0,8,4,2],
+"df/da3/structmorph_1_1exec_1_1PoolOptions.html#af0bfcbfd82d3c9b23f8b718f369ed406":[3,0,0,8,4,0],
 "df/da7/conceptmorph_1_1model_1_1DeclaresGuard.html":[2,0,1,0],
 "df/dae/classmorph_1_1ui_1_1IViewBackend.html":[1,0,0,1,168],
 "df/dae/classmorph_1_1ui_1_1IViewBackend.html":[3,0,0,28,170],
@@ -244,10 +249,5 @@ var NAVTREEINDEX47 =
 "df/dae/classmorph_1_1ui_1_1IViewBackend.html#ac15b728240fb0da4bfdc8974582d8522":[3,0,0,28,170,7],
 "df/dae/classmorph_1_1ui_1_1IViewBackend.html#adb0d4528494cfbf9a2b53f49c295d93c":[1,0,0,1,168,32],
 "df/dae/classmorph_1_1ui_1_1IViewBackend.html#adb0d4528494cfbf9a2b53f49c295d93c":[3,0,0,28,170,32],
-"df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae1f5f47ee1222e4e282b991b98b5c3ab":[1,0,0,1,168,13],
-"df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae1f5f47ee1222e4e282b991b98b5c3ab":[3,0,0,28,170,13],
-"df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae445beefd4cf40ede51fa368457674aa":[1,0,0,1,168,26],
-"df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae445beefd4cf40ede51fa368457674aa":[3,0,0,28,170,26],
-"df/dae/classmorph_1_1ui_1_1IViewBackend.html#aedf885ee29b5c6b7aec86608b0db1028":[1,0,0,1,168,2],
-"df/dae/classmorph_1_1ui_1_1IViewBackend.html#aedf885ee29b5c6b7aec86608b0db1028":[3,0,0,28,170,2]
+"df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae1f5f47ee1222e4e282b991b98b5c3ab":[1,0,0,1,168,13]
 };

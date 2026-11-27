@@ -71,6 +71,7 @@ var hierarchy =
     ] ],
     [ "morph::exec::IoLoop", "dd/d10/classmorph_1_1exec_1_1IoLoop.html", null ],
     [ "morph::exec::IoLoop::Weak", "d2/d75/classmorph_1_1exec_1_1IoLoop_1_1Weak.html", null ],
+    [ "morph::exec::PoolOptions", "df/da3/structmorph_1_1exec_1_1PoolOptions.html", null ],
     [ "morph::flows::FlowSession&lt; Model, Steps &gt;", "d1/d5c/classmorph_1_1flows_1_1FlowSession.html", null ],
     [ "morph::flows::Wizard&lt; Title, Steps &gt;", "d6/d94/structmorph_1_1flows_1_1Wizard.html", null ],
     [ "morph::flows::WizardStep&lt; Action, Title, Binds &gt;", "d8/d94/structmorph_1_1flows_1_1WizardStep.html", null ],

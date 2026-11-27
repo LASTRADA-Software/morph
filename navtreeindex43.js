@@ -1,5 +1,6 @@
 var NAVTREEINDEX43 =
 {
+"de/d29/structmorph_1_1table_1_1QueryLimits.html#a517e339987ab4f12853c0d5c5e2dfe7e":[3,0,0,24,37,1],
 "de/d29/structmorph_1_1table_1_1QueryLimits.html#a860371116f56559f13ebc2668d5c0939":[3,0,0,24,37,8],
 "de/d29/structmorph_1_1table_1_1QueryLimits.html#aa5440d3bd352d1e335d15eb3e92aabfe":[3,0,0,24,37,3],
 "de/d29/structmorph_1_1table_1_1QueryLimits.html#aacd45f933b0716e4e74d3b641bcaffa7":[3,0,0,24,37,4],
@@ -248,6 +249,5 @@ var NAVTREEINDEX43 =
 "de/d86/classmorph_1_1ui_1_1TabsWidget.html#a8c4c5bd6b67a1f840319555f33b7ad8e":[1,0,0,1,335,6],
 "de/d86/classmorph_1_1ui_1_1TabsWidget.html#a8c4c5bd6b67a1f840319555f33b7ad8e":[3,0,0,28,337,6],
 "de/d86/classmorph_1_1ui_1_1TabsWidget.html#a8d7f6c03c2a0dc2c816e4a37e024ebb1":[1,0,0,1,335,7],
-"de/d86/classmorph_1_1ui_1_1TabsWidget.html#a8d7f6c03c2a0dc2c816e4a37e024ebb1":[3,0,0,28,337,7],
-"de/d86/classmorph_1_1ui_1_1TabsWidget.html#ab26a51b8e9603780798c5dc4c90f027a":[1,0,0,1,335,2]
+"de/d86/classmorph_1_1ui_1_1TabsWidget.html#a8d7f6c03c2a0dc2c816e4a37e024ebb1":[3,0,0,28,337,7]
 };

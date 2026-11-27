@@ -1,5 +1,6 @@
 var NAVTREEINDEX46 =
 {
+"df/d0e/structmorph_1_1ui_1_1DocNode.html#a9f9b0d398fcec0f2bc64e5c4e495c9ea":[3,0,0,28,105,15],
 "df/d0e/structmorph_1_1ui_1_1DocNode.html#aac56627b4d74e53c720a57ab349272a0":[1,0,0,1,103,10],
 "df/d0e/structmorph_1_1ui_1_1DocNode.html#aac56627b4d74e53c720a57ab349272a0":[3,0,0,28,105,10],
 "df/d0e/structmorph_1_1ui_1_1DocNode.html#ae34a1ac1ff941576faaf5a668c79f3e9":[1,0,0,1,103,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX46 =
 "df/d39/classmorph_1_1table_1_1ChunkedMergeSort.html#a908647614a4ade14004af972ce8b901d":[3,0,0,24,4,3],
 "df/d39/classmorph_1_1table_1_1ChunkedMergeSort.html#ab398955c4681b1c6997669fe301c91fd":[3,0,0,24,4,2],
 "df/d39/classmorph_1_1table_1_1ChunkedMergeSort.html#ae90d467053818f0a73bed518fa34ab69":[3,0,0,24,4,1],
-"df/d3b/structmorph_1_1ui_1_1detail_1_1KindSpec.html":[1,0,0,1,0,25],
-"df/d3b/structmorph_1_1ui_1_1detail_1_1KindSpec.html":[3,0,0,28,2,26]
+"df/d3b/structmorph_1_1ui_1_1detail_1_1KindSpec.html":[1,0,0,1,0,25]
 };

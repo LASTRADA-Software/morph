@@ -1,5 +1,6 @@
 var NAVTREEINDEX31 =
 {
+"da/d97/classmorph_1_1ui_1_1Screen.html#a1ef8a5c1d91a9e5f84b921bae9644f3d":[3,0,0,28,271,25],
 "da/d97/classmorph_1_1ui_1_1Screen.html#a2b63635b425345b8ee2a0893d3d4d5d2":[1,0,0,1,269,22],
 "da/d97/classmorph_1_1ui_1_1Screen.html#a2b63635b425345b8ee2a0893d3d4d5d2":[3,0,0,28,271,22],
 "da/d97/classmorph_1_1ui_1_1Screen.html#a358ee252db4282b6200239b61bbf2258":[1,0,0,1,269,36],
@@ -248,6 +249,5 @@ var NAVTREEINDEX31 =
 "da/de8/classmorph_1_1ui_1_1ScreenHandle.html#a08079c795abec25606caa780c997fb76":[1,0,0,1,270,7],
 "da/de8/classmorph_1_1ui_1_1ScreenHandle.html#a08079c795abec25606caa780c997fb76":[3,0,0,28,272,7],
 "da/de8/classmorph_1_1ui_1_1ScreenHandle.html#a44f3b643199b14dd61cebb6aabf73eba":[1,0,0,1,270,1],
-"da/de8/classmorph_1_1ui_1_1ScreenHandle.html#a44f3b643199b14dd61cebb6aabf73eba":[3,0,0,28,272,1],
-"da/de8/classmorph_1_1ui_1_1ScreenHandle.html#a4507a03f4764776353ef644c71024266":[1,0,0,1,270,6]
+"da/de8/classmorph_1_1ui_1_1ScreenHandle.html#a44f3b643199b14dd61cebb6aabf73eba":[3,0,0,28,272,1]
 };

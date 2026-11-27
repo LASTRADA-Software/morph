@@ -137,14 +137,16 @@ Inheritance diagram for morph::exec::ThreadPoolExecutor:</div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:ab3b2f3ea1e73b4cc34cc07c0d98dbf09" id="r_ab3b2f3ea1e73b4cc34cc07c0d98dbf09"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#ab3b2f3ea1e73b4cc34cc07c0d98dbf09">ThreadPoolExecutor</a> (std::size_t n)</td></tr>
-<tr class="memdesc:ab3b2f3ea1e73b4cc34cc07c0d98dbf09"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the pool with <code class="param">n</code> worker threads.  <br /></td></tr>
+<tr class="memitem:a1ac05e26d9d7b3e629e2b4fe1ed76ac6" id="r_a1ac05e26d9d7b3e629e2b4fe1ed76ac6"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a1ac05e26d9d7b3e629e2b4fe1ed76ac6">ThreadPoolExecutor</a> (std::size_t n, <a class="el" href="../../df/da3/structmorph_1_1exec_1_1PoolOptions.html">PoolOptions</a> options={})</td></tr>
+<tr class="memdesc:a1ac05e26d9d7b3e629e2b4fe1ed76ac6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the pool with <code class="param">n</code> worker threads.  <br /></td></tr>
 <tr class="memitem:a066c0eb2310d4519dce22b2db5c46057" id="r_a066c0eb2310d4519dce22b2db5c46057"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a066c0eb2310d4519dce22b2db5c46057">~ThreadPoolExecutor</a> () override</td></tr>
 <tr class="memdesc:a066c0eb2310d4519dce22b2db5c46057"><td class="mdescLeft">&#160;</td><td class="mdescRight">Signals all workers to stop and joins them.  <br /></td></tr>
 <tr class="memitem:afead0a3262f89b24d880c22c416911d6" id="r_afead0a3262f89b24d880c22c416911d6"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#afead0a3262f89b24d880c22c416911d6">post</a> (std::function&lt; void()&gt; task) override</td></tr>
 <tr class="memdesc:afead0a3262f89b24d880c22c416911d6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enqueues <code class="param">task</code> for execution on one of the pool threads.  <br /></td></tr>
 <tr class="memitem:a8cc0d37645e4c7e0e7a3f0d2725cc351" id="r_a8cc0d37645e4c7e0e7a3f0d2725cc351"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a8cc0d37645e4c7e0e7a3f0d2725cc351">isSerial</a> () const noexcept override</td></tr>
 <tr class="memdesc:a8cc0d37645e4c7e0e7a3f0d2725cc351"><td class="mdescLeft">&#160;</td><td class="mdescRight">Not serial: the workers run tasks at once.  <br /></td></tr>
+<tr class="memitem:a2a93d807c4e437d4fc6a5bf8c78dde88" id="r_a2a93d807c4e437d4fc6a5bf8c78dde88"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a2a93d807c4e437d4fc6a5bf8c78dde88">sleepingWorkers</a> () const</td></tr>
+<tr class="memdesc:a2a93d807c4e437d4fc6a5bf8c78dde88"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many workers are asleep on the condition variable.  <br /></td></tr>
 <tr class="inherit_header pub_methods_structmorph_1_1exec_1_1IExecutor"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">morph::exec::IExecutor</a></td></tr>
 <tr class="memitem:adc818de0e03052746bc854faaa32e826 pub_methods_structmorph_1_1exec_1_1IExecutor" id="r_adc818de0e03052746bc854faaa32e826"><td class="memItemLeft">
 &#160;</td><td class="memItemRight"><b>IExecutor</b> (const IExecutor &amp;)=delete</td></tr>
@@ -159,12 +161,13 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Multi-threaded executor backed by a fixed-size thread pool. </p>
-<p>Tasks are placed in a FIFO queue and consumed by worker threads. Exceptions thrown by tasks are caught and logged via <span class="tt">morph::log</span> (they do not propagate out of the worker or abort sibling tasks). The destructor blocks until all worker threads have exited. </p>
+<p>Tasks are placed in a FIFO queue and consumed by worker threads. Exceptions thrown by tasks are caught and logged via <span class="tt">morph::log</span> (they do not propagate out of the worker or abort sibling tasks). The destructor blocks until all worker threads have exited.</p>
+<p>An idle worker spins briefly before it sleeps (see <span class="tt"><a class="el" href="../../df/da3/structmorph_1_1exec_1_1PoolOptions.html" title="How a ThreadPoolExecutor&#39;s idle workers wait for work.">PoolOptions</a></span>), and <span class="tt"><a class="el" href="#afead0a3262f89b24d880c22c416911d6" title="Enqueues task for execution on one of the pool threads.">post()</a></span> wakes a sleeping worker only when no spinning worker will take the task. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00160">160</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00222">222</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="ab3b2f3ea1e73b4cc34cc07c0d98dbf09" name="ab3b2f3ea1e73b4cc34cc07c0d98dbf09"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ab3b2f3ea1e73b4cc34cc07c0d98dbf09">&#9670;&#160;</a></span>ThreadPoolExecutor()</h2>
+<a id="a1ac05e26d9d7b3e629e2b4fe1ed76ac6" name="a1ac05e26d9d7b3e629e2b4fe1ed76ac6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1ac05e26d9d7b3e629e2b4fe1ed76ac6">&#9670;&#160;</a></span>ThreadPoolExecutor()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -175,8 +178,12 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
         <tr>
           <td class="memname">morph::exec::ThreadPoolExecutor::ThreadPoolExecutor </td>
           <td>(</td>
-          <td class="paramtype">std::size_t</td>          <td class="paramname"><span class="paramname"><em>n</em></span></td><td>)</td>
+          <td class="paramtype">std::size_t</td>          <td class="paramname"><span class="paramname"><em>n</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
           <td></td>
+          <td class="paramtype"><a class="el" href="../../df/da3/structmorph_1_1exec_1_1PoolOptions.html">PoolOptions</a></td>          <td class="paramname"><span class="paramname"><em>options</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -190,11 +197,12 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 <p><code class="param">n</code> is clamped to a minimum of 1: a pool with zero workers would accept posted tasks that could never run (every <span class="tt"><a class="el" href="#afead0a3262f89b24d880c22c416911d6" title="Enqueues task for execution on one of the pool threads.">post()</a></span> would hang forever), so <span class="tt">ThreadPoolExecutor(0)</span> yields a usable single-worker pool rather than a silently dead one. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">n</td><td>Number of threads to spawn. Values below 1 are clamped to 1. </td></tr>
+    <tr><td class="paramname">options</td><td>How idle workers wait; see <span class="tt"><a class="el" href="../../df/da3/structmorph_1_1exec_1_1PoolOptions.html" title="How a ThreadPoolExecutor&#39;s idle workers wait for work.">PoolOptions</a></span>. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00232">232</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -222,9 +230,9 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 </div><div class="memdoc">
 
 <p>Signals all workers to stop and joins them. </p>
-<p>Workers drain the queue before exiting: after <span class="tt">_stop</span> is set they keep popping and running already-queued tasks and only return once the queue is empty, so the join blocks until every task queued before destruction has run. Tasks <span class="tt"><a class="el" href="#afead0a3262f89b24d880c22c416911d6" title="Enqueues task for execution on one of the pool threads.">post()</a></span>ed concurrently with or after destruction race this and may be silently lost. </p>
+<p>Workers drain the queue before exiting: after <span class="tt">_stop</span> is set they keep popping and running already-queued tasks and only return once the queue is empty, so the join blocks until every task queued before destruction has run. A spinning worker sees the stop flag within one spin check, so the join waits at most one spin period beyond the drain. Tasks <span class="tt"><a class="el" href="#afead0a3262f89b24d880c22c416911d6" title="Enqueues task for execution on one of the pool threads.">post()</a></span>ed concurrently with or after destruction race this and may be silently lost. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00183">183</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -253,7 +261,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 </div><div class="memdoc">
 
 <p>Enqueues <code class="param">task</code> for execution on one of the pool threads. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>Notifies a worker only when one is asleep and more tasks are queued than there are spinning workers to take them. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">task</td><td>Callable to execute. Thread-safe. </td></tr>
   </table>
@@ -262,7 +270,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 
 <p>Implements <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5">morph::exec::IExecutor</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00203">203</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00271">271</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -294,7 +302,37 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 
 <p>Reimplemented from <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html#a40e82378c8523f0274f810f3800ce5ce">morph::exec::IExecutor</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00280">280</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2a93d807c4e437d4fc6a5bf8c78dde88" name="a2a93d807c4e437d4fc6a5bf8c78dde88"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2a93d807c4e437d4fc6a5bf8c78dde88">&#9670;&#160;</a></span>sleepingWorkers()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::exec::ThreadPoolExecutor::sleepingWorkers </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>How many workers are asleep on the condition variable. </p>
+<p>A worker counts from just before it waits until it has woken, so a worker that was notified and has not yet run still counts. Meant for tests. </p><dl class="section return"><dt>Returns</dt><dd>The number of sleeping workers at the moment of the call. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00287">287</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>

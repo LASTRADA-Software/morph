@@ -1,5 +1,6 @@
 var NAVTREEINDEX44 =
 {
+"de/d86/classmorph_1_1ui_1_1TabsWidget.html#ab26a51b8e9603780798c5dc4c90f027a":[1,0,0,1,335,2],
 "de/d86/classmorph_1_1ui_1_1TabsWidget.html#ab26a51b8e9603780798c5dc4c90f027a":[3,0,0,28,337,2],
 "de/d88/structmorph_1_1ui_1_1ChartLine.html":[1,0,0,1,39],
 "de/d88/structmorph_1_1ui_1_1ChartLine.html":[3,0,0,28,41],
@@ -248,6 +249,5 @@ var NAVTREEINDEX44 =
 "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#aabd195158398d5135586411ac4e97d22":[3,0,0,28,2,43,2],
 "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#ab5c26cfa3c7de2b11753827424adb665":[1,0,0,1,0,42,23],
 "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#ab5c26cfa3c7de2b11753827424adb665":[3,0,0,28,2,43,23],
-"de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#aba0671b6c9ea4651eaa338c68d9fabe8":[1,0,0,1,0,42,26],
-"de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#aba0671b6c9ea4651eaa338c68d9fabe8":[3,0,0,28,2,43,26]
+"de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#aba0671b6c9ea4651eaa338c68d9fabe8":[1,0,0,1,0,42,26]
 };

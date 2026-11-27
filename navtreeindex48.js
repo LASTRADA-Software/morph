@@ -1,5 +1,10 @@
 var NAVTREEINDEX48 =
 {
+"df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae1f5f47ee1222e4e282b991b98b5c3ab":[3,0,0,28,170,13],
+"df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae445beefd4cf40ede51fa368457674aa":[1,0,0,1,168,26],
+"df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae445beefd4cf40ede51fa368457674aa":[3,0,0,28,170,26],
+"df/dae/classmorph_1_1ui_1_1IViewBackend.html#aedf885ee29b5c6b7aec86608b0db1028":[1,0,0,1,168,2],
+"df/dae/classmorph_1_1ui_1_1IViewBackend.html#aedf885ee29b5c6b7aec86608b0db1028":[3,0,0,28,170,2],
 "df/dae/classmorph_1_1ui_1_1IViewBackend.html#affad9f61a9557aaae36d7cb7215c0360":[1,0,0,1,168,5],
 "df/dae/classmorph_1_1ui_1_1IViewBackend.html#affad9f61a9557aaae36d7cb7215c0360":[3,0,0,28,170,5],
 "df/db0/preference__sync_8hpp.html":[4,0,0,15,42],
@@ -244,10 +249,5 @@ var NAVTREEINDEX48 =
 "functions_func_g.html":[3,3,1,6],
 "functions_func_h.html":[3,3,1,7],
 "functions_func_i.html":[3,3,1,8],
-"functions_func_j.html":[3,3,1,9],
-"functions_func_k.html":[3,3,1,10],
-"functions_func_l.html":[3,3,1,11],
-"functions_func_m.html":[3,3,1,12],
-"functions_func_n.html":[3,3,1,13],
-"functions_func_o.html":[3,3,1,14]
+"functions_func_j.html":[3,3,1,9]
 };

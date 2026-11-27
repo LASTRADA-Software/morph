@@ -1,5 +1,6 @@
 var NAVTREEINDEX42 =
 {
+"dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html":[1,0,0,1,382],
 "dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html":[3,0,0,28,384],
 "dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html#a2bb42fbccc5e03a9a9a46fbd8b3c092f":[1,0,0,1,382,0],
 "dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html#a2bb42fbccc5e03a9a9a46fbd8b3c092f":[3,0,0,28,384,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX42 =
 "de/d29/structmorph_1_1table_1_1QueryLimits.html#a08aee71234504ffbc30b30ce6be4abc0":[3,0,0,24,37,5],
 "de/d29/structmorph_1_1table_1_1QueryLimits.html#a09c15068d690605edf4297852c26728c":[3,0,0,24,37,2],
 "de/d29/structmorph_1_1table_1_1QueryLimits.html#a37c2daa8db93f49178482265c33f432b":[3,0,0,24,37,6],
-"de/d29/structmorph_1_1table_1_1QueryLimits.html#a46ab03a6fd374f5ef6d7ac5197dd6861":[3,0,0,24,37,7],
-"de/d29/structmorph_1_1table_1_1QueryLimits.html#a517e339987ab4f12853c0d5c5e2dfe7e":[3,0,0,24,37,1]
+"de/d29/structmorph_1_1table_1_1QueryLimits.html#a46ab03a6fd374f5ef6d7ac5197dd6861":[3,0,0,24,37,7]
 };
