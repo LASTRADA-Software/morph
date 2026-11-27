@@ -207,7 +207,7 @@ TEST_CASE("qt quick baseline: F2 to F5 on a rows table of 2,000 x 300", "[.bench
 
     detail::ItemBase const* const table = detail::findWidget(QStringLiteral("wide"));
     REQUIRE(table != nullptr);
-    QQuickItem* const tableItem = table->item();
+    QQuickItem const* const tableItem = table->item();
     REQUIRE(tableItem != nullptr);
     auto* const flick = tableItem->findChild<QQuickItem*>(QStringLiteral("flick"));
     auto* const hflick = tableItem->findChild<QQuickItem*>(QStringLiteral("hflick"));

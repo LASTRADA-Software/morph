@@ -2689,7 +2689,7 @@ TEST_CASE("qt_quick table: a windowed fixed column is as wide as an unwindowed o
 TEST_CASE("qt_quick table window: a tap keeps the focus on the table, and the status line is announced",
           "[qt_quick]") {
     QuickWindowFixture f{100'000, 30};
-    QQuickItem* const row = f.item()->property("rowsHolder").value<QQuickItem*>()->childItems().value(3);
+    QQuickItem const* const row = f.item()->property("rowsHolder").value<QQuickItem*>()->childItems().value(3);
     REQUIRE(row != nullptr);
     f.scene.click(*row);
     CHECK(f.item()->hasActiveFocus());
@@ -2839,8 +2839,8 @@ TEST_CASE("qt_quick table: a header menu shows a checked entry's mark, its chord
     CHECK(texts.contains(QStringLiteral("Long text wraps")));
     bool const wasActive = QAccessible::isActive();
     QAccessible::setActive(true);
-    QAccessibleInterface* const wrapNode = QAccessible::queryAccessibleInterface(wrap);
-    QAccessibleInterface* const pinNode = QAccessible::queryAccessibleInterface(pin);
+    QAccessibleInterface const* const wrapNode = QAccessible::queryAccessibleInterface(wrap);
+    QAccessibleInterface const* const pinNode = QAccessible::queryAccessibleInterface(pin);
     REQUIRE(wrapNode != nullptr);
     REQUIRE(pinNode != nullptr);
     CHECK(wrapNode->role() == QAccessible::MenuItem);
@@ -3204,7 +3204,7 @@ TEST_CASE("qt_quick grid: a header click sorts, a Shift-click adds, a Ctrl-click
     scene.settle();
     QQuickItem* const table = itemNamed(*scene.window().contentItem(), QStringLiteral("grid"));
     REQUIRE(table != nullptr);
-    QQuickItem* const header = itemNamed(*table, QStringLiteral("header1"));  // mass
+    QQuickItem const* const header = itemNamed(*table, QStringLiteral("header1"));  // mass
     REQUIRE(header != nullptr);
     scene.click(*header);
     REQUIRE(sorts.size() == 1);
