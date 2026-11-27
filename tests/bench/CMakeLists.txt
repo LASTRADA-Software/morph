@@ -234,3 +234,22 @@ if(NOT MORPH_TEARDOWN_MAX_RATIO EQUAL 0)
              COMMAND morph_bench_teardown "--max-ratio=${MORPH_TEARDOWN_MAX_RATIO}")
     set_tests_properties(bench.teardown_scaling PROPERTIES TIMEOUT 300 LABELS "bench")
 endif()
+
+# ── Multi-model scaling (report only) ────────────────────────────────────────
+#
+# `ModelStrands::post` throughput over 1, 2, 4 and 8 threads and 1024 keys,
+# against the bare pool, for empty, ~1 us and ~5 us task bodies. Deliberately
+# NOT a budget and not a ctest case: wall-clock scaling depends on the core
+# count, the scheduler and whatever else shares the machine, so no ceiling
+# would hold from one runner to the next, and a ceiling loose enough to hold
+# would catch nothing. Run it by hand and read the table:
+#   ./build/tests/bench/morph_bench_scaling
+# It exits non-zero on a gross fault (a task lost or run twice), which is
+# machine-independent.
+add_executable(morph_bench_scaling bench_model_scaling.cpp)
+target_link_libraries(morph_bench_scaling PRIVATE morph::morph)
+morph_suppress_test_dialogs(morph_bench_scaling)
+apply_warnings(morph_bench_scaling)
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_bench_scaling ${AF_SANITIZER})
+endif()

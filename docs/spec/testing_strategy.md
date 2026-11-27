@@ -483,6 +483,29 @@ longer fit in cache. With the scan, it is 9.5–12.6 in Release and about 20 in
 Debug. The case therefore fails while `Bridge::deregisterHandler` scans every
 live handler, and passes once it does not.
 
+### Multi-model scaling (`bench_model_scaling.cpp`, target `morph_bench_scaling`)
+
+Throughput of `ModelStrands::post` over a `ThreadPoolExecutor`, with T producer
+threads posting round-robin to 1024 keys and T workers, for T in 1, 2, 4 and 8
+and three task bodies: empty, about 1 µs and about 5 µs of spinning on
+`steady_clock`. The bare pool runs the same bodies, so the strand layer's cost
+can be told from the pool's. It prints, per T, the rate in tasks per second and
+the efficiency against T times the one-thread rate:
+
+```
+./build/tests/bench/morph_bench_scaling
+```
+
+**It is a measurement, not a gate, and has no ctest case.** Wall-clock scaling
+depends on the core count, the scheduler and whatever else shares the machine,
+so no ceiling holds from one runner to the next, and a ceiling loose enough to
+hold would catch nothing. It exits non-zero only on a gross fault, which is
+machine-independent: every posted task must complete exactly once, counted, and
+within two minutes. Empty bodies measure contention on the pool's queue and the
+strand's bookkeeping, not parallel work, so their rate falling as threads are
+added is expected; the 1 µs and 5 µs rows show how much work per task the
+strand layer needs before threads pay.
+
 ## Concurrent-user benchmark (`scripts/scenario/bench_bookmarks.py`)
 
 `morph_bench` measures one dispatch inside one process. This benchmark measures
