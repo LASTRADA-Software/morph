@@ -493,6 +493,18 @@ add_library(morph ${_morph_library_type}
     src/ui/document.cpp
     src/ui/expression.cpp
     src/ui/interpreter.cpp
+    src/ui/interpreter_elements.cpp
+    src/ui/interpreter_components.cpp
+    src/ui/interpreter_lowering.cpp
+    src/ui/interpreter_forms.cpp
+    src/ui/interpreter_fixed_grid.cpp
+    src/ui/interpreter_collections.cpp
+    src/ui/interpreter_rows.cpp
+    src/ui/interpreter_table_actions.cpp
+    src/ui/interpreter_table_layout.cpp
+    src/ui/interpreter_table_model.cpp
+    src/ui/interpreter_charts.cpp
+    src/ui/interpreter_mount.cpp
     src/ui/library.cpp
     src/ui/service.cpp
     src/ui/tour_checks.cpp
