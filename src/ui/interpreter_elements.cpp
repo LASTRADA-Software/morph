@@ -513,6 +513,15 @@ void ScreenCore::wireElement(ElementState& element) {
             });
         }
     }
+    // A bound sort is controlled as a bound selection is: any expression but a literal `null` binds it. A form grid
+    // binds its sort as a rows table does.
+    bool const formGrid = kind == "table" && !node.name("form").empty();
+    if (formGrid || (kind == "table" && node.prop("rows"))) {
+        ExprPtr const sort = node.prop("sort");
+        if (sort && (sort->kind != ExprKind::Literal || !sort->literal.isNull())) {
+            element.sortBound = &scope.nodes.computed([&scope, sort] { return evalIn(scope, nullptr, sort); });
+        }
+    }
     if (kind == "table" && node.prop("rows")) {
         element.rows =
             &scope.nodes.computed([&scope, expr = node.prop("rows")] { return evalIn(scope, nullptr, expr); });
@@ -520,11 +529,6 @@ void ScreenCore::wireElement(ElementState& element) {
         ExprPtr const selection = node.prop("selection");
         if (selection && (selection->kind != ExprKind::Literal || !selection->literal.isNull())) {
             element.bound = &scope.nodes.computed([&scope, selection] { return evalIn(scope, nullptr, selection); });
-        }
-        // A bound sort is controlled as the selection is.
-        ExprPtr const sort = node.prop("sort");
-        if (sort && (sort->kind != ExprKind::Literal || !sort->literal.isNull())) {
-            element.sortBound = &scope.nodes.computed([&scope, sort] { return evalIn(scope, nullptr, sort); });
         }
         element.rowsTable = makeRowsTable(element, nullptr, true);
         element.view = element.rowsTable->view.get();

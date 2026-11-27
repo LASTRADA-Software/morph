@@ -114,3 +114,42 @@ TEST_CASE("covd bound grid: the table menu offers the focused row's entries, whi
     m.h.settle();
     CHECK(m.order().size() == 4);
 }
+
+namespace {
+
+// The sort is bound from the start but set only once the form holds its rows: rows a form takes in while the
+// grid is ordered stay where they arrive until the next sort.
+constexpr std::string_view kSortedGrid = R"({"vocab":"ui/1","id":"specimens",
+  "models":{"sample":{"type":"Lims_SampleModel"}},
+  "state":{"srt":{"init":null}},
+  "view":{"kind":"column","children":[
+    {"kind":"form","id":"rec","model":"sample","action":"Lims_RecordSpecimens","submit":"explicit"},
+    {"kind":"table","id":"grid","testId":"grid","form":"rec","field":"specimens","selectionMode":"cells",
+     "layout":{"lit":null},"sort":{"ref":"srt"},
+     "columns":[{"id":"mass","field":"mass","sortable":true},{"id":"note","field":"note","sortable":true}]},
+    {"kind":"button","testId":"desc","label":"desc",
+     "onClick":[{"set":"srt","value":{"lit":[{"column":"note","direction":"desc"}]}}]},
+    {"kind":"button","testId":"asc","label":"asc",
+     "onClick":[{"set":"srt","value":{"lit":[{"column":"note","direction":"asc"}]}}]}]}})";
+
+}  // namespace
+
+TEST_CASE("covd bound grid: a sort the document binds orders a form grid's rows and follows the state",
+          "[ui][grid][interpreter][covd]") {
+    using Order = std::vector<std::string>;
+    ui::testing::TableHarness h;
+    ui::testing::addAction(h, "Lims_RecordSpecimens", std::string{morph::test::grid::kSpecimens},
+                           ui::ActionInfo{.modelType = "Lims_SampleModel"});
+    std::unique_ptr<ui::Screen> const screen = h.mount(kSortedGrid);
+    ui::testing::elementOf(*screen, "rec")
+        .form->prefill(R"({"sampleId":4,"specimens":[{"note":"b"},{"note":"c"},{"note":"a"}]})");
+    h.settle();
+    int const table = h.byTestId("Table", "grid");
+    CHECK(ui::testing::rowKeys(h, table) == Order{"1", "2", "3"});
+    h.backend.click(h.byTestId("Button", "desc"));
+    h.settle();
+    CHECK(ui::testing::rowKeys(h, table) == Order{"2", "1", "3"});
+    h.backend.click(h.byTestId("Button", "asc"));
+    h.settle();
+    CHECK(ui::testing::rowKeys(h, table) == Order{"3", "1", "2"});
+}
