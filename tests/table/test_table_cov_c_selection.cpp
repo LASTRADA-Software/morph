@@ -26,7 +26,8 @@ TEST_CASE("a filter's compact text leaves out what is empty and what is the defa
     FilterSpec filters;
     filters.columns["a"] = ColumnFilter{
         .combine = Combine::Any, .include = {FilterEntry{.eq = "x", .oneOf = std::nullopt}}, .exclude = {}};
-    filters.columns["b"] = ColumnFilter{.combine = Combine::All, .include = {FilterEntry{.contains = "y"}}, .exclude = {}};
+    filters.columns["b"] =
+        ColumnFilter{.combine = Combine::All, .include = {FilterEntry{.contains = "y"}}, .exclude = {}};
     filters.groups = {GroupFilter{.columns = {"a", "b"}, .include = {FilterEntry{.eq = ""}}}};
     auto const text = detail::compactFilterJson(filters);
     CHECK(text.find("\"eq\":\"x\"") != std::string::npos);
@@ -51,8 +52,8 @@ std::shared_ptr<VectorSource> numbered() {
     for (std::int64_t at = 0; at < 6; ++at) {
         rows.push_back({Cell{at}, Cell{std::string{at % 2 == 0 ? "even" : "odd"}}});
     }
-    return tabletest::makeSource({tabletest::col("n", ColumnKind::Integer), tabletest::col("parity", ColumnKind::Text)},
-                                 std::move(rows));
+    return tabletest::makeSource(
+        {tabletest::col("n", ColumnKind::Integer), tabletest::col("parity", ColumnKind::Text)}, std::move(rows));
 }
 
 RowId key(std::int64_t value) { return RowId{value}; }
@@ -63,7 +64,8 @@ TEST_CASE("a selection by keys keeps the rows that exist and counts the rest as 
     auto const source = numbered();
     PlainSelection selection;
     selection.keys = {key(4), key(1), key(99), key(1)};
-    auto const resolved = detail::resolveSelection(served(source), selection, SelectionPolicy::Exact, nullptr, {}, false);
+    auto const resolved =
+        detail::resolveSelection(served(source), selection, SelectionPolicy::Exact, nullptr, {}, false);
     REQUIRE(resolved);
     CHECK(resolved->keys == std::vector<RowId>{key(1), key(4)});
     CHECK(resolved->dropped == 1);
@@ -77,10 +79,12 @@ TEST_CASE("a selection by keys keeps the rows that exist and counts the rest as 
 
 TEST_CASE("a selection is refused for a table that cannot serve it", "[covc][table][selection]") {
     PlainSelection selection;
-    auto const noScope = detail::resolveSelection(served(numbered()), selection, SelectionPolicy::Exact, nullptr, {}, true);
+    auto const noScope =
+        detail::resolveSelection(served(numbered()), selection, SelectionPolicy::Exact, nullptr, {}, true);
     REQUIRE_FALSE(noScope);
     CHECK(noScope.error().code == TableErrorCode::SourceContract);
-    auto const noSource = detail::resolveSelection(ServedTable{}, selection, SelectionPolicy::Exact, nullptr, {}, false);
+    auto const noSource =
+        detail::resolveSelection(ServedTable{}, selection, SelectionPolicy::Exact, nullptr, {}, false);
     REQUIRE_FALSE(noSource);
     CHECK(noSource.error().code == TableErrorCode::Unavailable);
     auto const noMembers = detail::membership(ServedTable{}, FilterSpec{}, {}, nullptr, {});

@@ -500,3 +500,43 @@ TEST_CASE("a measure column reads an integer, a rational and a text with its uni
     CHECK(result->blanks == 1);
     CHECK(result->invalid >= 2);
 }
+
+TEST_CASE("a row key is read from its JSON text, number or string, or refused", "[covc][table][query]") {
+    auto const read = [](std::string text) { return rowIdOf(glz::raw_json{std::move(text)}); };
+    CHECK(read("42") == RowId{std::int64_t{42}});
+    CHECK(read("  -7\n") == RowId{std::int64_t{-7}});
+    CHECK(read("\"abc\"") == RowId{std::string{"abc"}});
+    CHECK(read(" \"a b\" ") == RowId{std::string{"a b"}});
+    CHECK_FALSE(read(""));
+    CHECK_FALSE(read("   "));
+    CHECK_FALSE(read("\"open"));
+    CHECK_FALSE(read("4.5"));
+    CHECK_FALSE(read("x"));
+    CHECK_FALSE(read("99999999999999999999"));
+}
+
+TEST_CASE("row keys are written as JSON and read back", "[covc][table][query]") {
+    std::vector<RowId> const keys{RowId{std::int64_t{3}}, RowId{std::string{"q\"x"}}};
+    auto const written = changeKeys(keys);
+    REQUIRE(written.size() == 2);
+    CHECK(written[0].str == "3");
+    CHECK(written[1].str == "\"q\\\"x\"");
+    CHECK(rowIdOf(written[0]) == keys[0]);
+    CHECK(rowIdOf(written[1]) == keys[1]);
+}
+
+TEST_CASE("a measure's decimal places come from a power-of-ten denominator", "[covc][table][query]") {
+    auto const read = [](std::int64_t num, std::int64_t den) {
+        MeasureValue value;
+        value.setWire(MeasureValue::Wire{.num = num, .den = den, .unit = "kg"});
+        return value;
+    };
+    CHECK(read(12, 1).amount.decimalPlaces.value == 0);
+    CHECK(read(125, 100).amount.decimalPlaces.value == 2);
+    CHECK(read(1, 1'000'000'000'000'000'000LL).amount.decimalPlaces.value == 18);
+    CHECK(read(1, 3).amount.decimalPlaces.value == morph::math::kMaxDecimalPlaces);
+    CHECK(read(1, 7).amount.denominator == 7);
+    CHECK(read(5, 0).amount == morph::math::Rational{});
+    CHECK(read(5, -2).amount == morph::math::Rational{});
+    CHECK(read(5, 10).unit == "kg");
+}

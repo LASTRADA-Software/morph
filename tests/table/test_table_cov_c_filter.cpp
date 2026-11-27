@@ -10,12 +10,12 @@
 #include <functional>
 #include <limits>
 #include <map>
-#include <set>
 #include <memory>
 #include <morph/table/data_source.hpp>
 #include <morph/table/filter.hpp>
 #include <morph/table/query.hpp>
 #include <morph/table/sort.hpp>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -212,7 +212,8 @@ TEST_CASE("every comparison selects its rows in every kind, on a column and on a
 }
 
 TEST_CASE("a text column answers contains, startsWith and endsWith", "[covc][table][filter]") {
-    auto const source = tabletest::column(ColumnKind::Text, {std::string{"Alpha"}, std::string{"beta"}, std::string{"ALPS"}, Cell{}});
+    auto const source =
+        tabletest::column(ColumnKind::Text, {std::string{"Alpha"}, std::string{"beta"}, std::string{"ALPS"}, Cell{}});
     auto const rowsFor = [&](FilterEntry entry) {
         TableQuery query;
         query.filters.columns["c"].include = {std::move(entry)};
@@ -242,8 +243,8 @@ TEST_CASE("a column count reads and writes its quantifier", "[covc][table][filte
     CHECK(read(std::map<std::string, std::int64_t>{{"between", 2}}).n == -1);
     CHECK(read(std::map<std::string, std::int64_t>{}).n == -1);
     CHECK(read(std::map<std::string, std::int64_t>{{"atLeast", 1}, {"exactly", 1}}).n == -1);
-    for (auto const kind : {ColumnCount::Kind::Any, ColumnCount::Kind::All, ColumnCount::Kind::AtLeast,
-                            ColumnCount::Kind::Exactly}) {
+    for (auto const kind :
+         {ColumnCount::Kind::Any, ColumnCount::Kind::All, ColumnCount::Kind::AtLeast, ColumnCount::Kind::Exactly}) {
         ColumnCount const count{.kind = kind, .n = 4};
         ColumnCount again;
         again.setWire(count.getWire());

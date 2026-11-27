@@ -93,6 +93,7 @@ add_executable(morph_tests
     test_cov_c_effects.cpp
     test_cov_c_forms_values.cpp
     test_cov_c_forms_session.cpp
+    test_cov_c_observability.cpp
     test_cov_c_ui_document_mutations.cpp
     test_push_watch_table.cpp
     test_push_catalog.cpp

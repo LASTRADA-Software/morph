@@ -8,9 +8,9 @@
 #include <cstdint>
 #include <morph/forms/forms.hpp>
 #include <morph/table/description.hpp>
+#include <morph/table/edits.hpp>
 #include <optional>
 #include <string>
-#include <morph/table/edits.hpp>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -66,13 +66,14 @@ TEST_CASE("every field kind prints its own name, and an unknown one prints as te
 
 namespace {
 
-morph::table::TableDescription editedTable(morph::table::EditInfo edit,
-                                           ColumnKind kind = ColumnKind::Integer) {
+morph::table::TableDescription editedTable(morph::table::EditInfo edit, ColumnKind kind = ColumnKind::Integer) {
     using morph::table::TableColumn;
-    TableColumn edited{
-        .info = {.id = "count", .kind = kind, .comparator = {}, .format = {}, .level = {}}, .label = "count", .group = {}};
+    TableColumn edited{.info = {.id = "count", .kind = kind, .comparator = {}, .format = {}, .level = {}},
+                       .label = "count",
+                       .group = {}};
     edited.edit = std::move(edit);
-    return morph::table::describe(morph::table::TableDescription{.id = "t", .label = "T", .columns = {edited}, .key = "count"});
+    return morph::table::describe(
+        morph::table::TableDescription{.id = "t", .label = "T", .columns = {edited}, .key = "count"});
 }
 
 }  // namespace
@@ -112,5 +113,6 @@ TEST_CASE("an edit is checked against the action's input schema, one refusal for
     CHECK(morph::table::checkEdits(editedTable({.action = "Edit"}), schemas(kValue)));
     CHECK(morph::table::checkEdits(editedTable({.action = "Edit", .member = "count"}), schemas(kValues)));
     CHECK(morph::table::checkEdits(editedTable({.action = "Edit"}), {}).has_value() == false);
-    CHECK(morph::table::checkEdits(morph::table::describe(morph::table::TableDescription{.id = "t", .label = "T"}), {}));
+    CHECK(
+        morph::table::checkEdits(morph::table::describe(morph::table::TableDescription{.id = "t", .label = "T"}), {}));
 }

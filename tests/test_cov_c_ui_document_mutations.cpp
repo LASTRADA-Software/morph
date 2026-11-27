@@ -142,8 +142,7 @@ TEST_CASE("a corrupted document loads or is refused with a pointer, a reason and
           "[covc][ui][document]") {
     LoadOptions const options = catalogOptions();
     std::vector<Json> replacements;
-    for (std::string_view const text :
-         {"null", "-1", "2.5", "\"zz\"", "[]", "{}"}) {
+    for (std::string_view const text : {"null", "-1", "2.5", "\"zz\"", "[]", "{}"}) {
         auto parsed = morph::ui::parseJson(text);
         REQUIRE(parsed.has_value());
         replacements.push_back(*std::move(parsed));

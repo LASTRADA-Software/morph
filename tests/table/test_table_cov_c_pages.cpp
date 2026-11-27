@@ -24,11 +24,8 @@ TableColumn columnOfKind(std::string const& id, ColumnKind kind) {
 }
 
 UnitInfo kilogram() {
-    return UnitInfo{.id = "kg",
-                    .symbol = "kg",
-                    .dimension = "mass",
-                    .toBase = Rational{1, DecimalPlaces{0}},
-                    .decimals = 3};
+    return UnitInfo{
+        .id = "kg", .symbol = "kg", .dimension = "mass", .toBase = Rational{1, DecimalPlaces{0}}, .decimals = 3};
 }
 
 TableDescription described(std::vector<TableColumn> columns, std::vector<UnitInfo> units = {}) {
