@@ -66,6 +66,7 @@ set(MORPH_TABLE_TEST_SOURCES
     table/test_table_cov_c_pages.cpp
     table/test_table_cov_f_window.cpp
     table/test_table_cov_f_levels.cpp
+    table/test_table_cov_f_description.cpp
     table/test_table_state.cpp
     table/test_table_measure.cpp
     table/test_wide_table.cpp
