@@ -102,6 +102,8 @@ add_executable(morph_tests
     test_ui_grid.cpp
     test_ui_cov_grid_form_rows.cpp
     test_ui_cov_grid_keys.cpp
+    test_ui_cov_grid_paste.cpp
+    test_ui_cov_grid_rows.cpp
     test_ui_cov_interp_rows.cpp
     test_ui_cov_grid_model.cpp
     test_ui_cov_grid_fixed.cpp

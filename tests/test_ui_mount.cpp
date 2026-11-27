@@ -2411,3 +2411,40 @@ TEST_CASE("summary: a data row that enters as a summary row leaves is drawn as a
     owner.runAll();
     CHECK(activated == std::vector<Key>{Key{std::int64_t{125}}});
 }
+
+// Mutations: Left or Right moving by two places; Home and End swapped; PageUp stepping a different distance than
+// PageDown; Up not stopping at row 0.
+TEST_CASE("table focus: the arrows, pages, home and end move the focused cell and stop at the edges", "[ui][mount]") {
+    WindowFixture f{200, 6, {.pinned = 0}};
+    f.focus.set(CellRef{.key = Key{std::int64_t{10}}, .column = "c2"});
+    f.settle();
+    auto const cell = [&f] { return f.backend.focusCell(f.table); };
+    REQUIRE(cell() == std::pair{std::size_t{10}, std::size_t{2}});
+    f.backend.focusMove(f.table, FocusMove::Left);
+    CHECK(cell() == std::pair{std::size_t{10}, std::size_t{1}});
+    f.backend.focusMove(f.table, FocusMove::Home);
+    CHECK(cell() == std::pair{std::size_t{10}, std::size_t{0}});
+    f.backend.focusMove(f.table, FocusMove::Left);  // stays at the first column
+    CHECK(cell() == std::pair{std::size_t{10}, std::size_t{0}});
+    f.backend.focusMove(f.table, FocusMove::Right);
+    CHECK(cell() == std::pair{std::size_t{10}, std::size_t{1}});
+    f.backend.focusMove(f.table, FocusMove::End);
+    CHECK(cell() == std::pair{std::size_t{10}, std::size_t{5}});
+    f.backend.focusMove(f.table, FocusMove::Right);  // stays at the last column
+    CHECK(cell() == std::pair{std::size_t{10}, std::size_t{5}});
+    f.backend.focusMove(f.table, FocusMove::PageDown);
+    std::size_t const paged = cell().first;
+    CHECK(paged > 11);
+    f.backend.focusMove(f.table, FocusMove::PageUp);
+    CHECK(cell().first == 10);
+    f.backend.focusMove(f.table, FocusMove::First);
+    CHECK(cell().first == 0);
+    f.backend.focusMove(f.table, FocusMove::Up);  // stays at the first row
+    CHECK(cell().first == 0);
+    f.backend.focusMove(f.table, FocusMove::PageUp);
+    CHECK(cell().first == 0);
+    f.backend.focusMove(f.table, FocusMove::Last);
+    CHECK(cell().first == 199);
+    f.backend.focusMove(f.table, FocusMove::PageDown);  // stays at the last row
+    CHECK(cell().first == 199);
+}
