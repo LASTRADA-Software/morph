@@ -278,7 +278,7 @@ TEST_CASE("morph::offline::OfflineQueueFullError: carries maxDepth and currentSi
     REQUIRE(what.find("5") != std::string::npos);
 }
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue at maxDepth emits queueOverflow metric",
           "[queue][overflow][observability]") {
     morph::observe::ScopedObserveOverride guard;

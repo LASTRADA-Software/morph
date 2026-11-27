@@ -86,7 +86,7 @@ struct TraceSink {
     std::function<void(SpanId spanId, bool ok)> endSpan;
 };
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 
 namespace detail {
 
@@ -250,7 +250,7 @@ inline void endSpan(SpanId /*id*/, bool /*ok*/) noexcept {}
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 
 /// @brief Installs the process-wide metric sink.
 ///
@@ -291,7 +291,7 @@ void setMetricSink(Sink /*sink*/) {
 
 #endif  // MORPH_OBSERVABILITY_DISABLED
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 
 /// @brief Installs the process-wide trace sink.
 ///

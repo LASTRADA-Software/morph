@@ -116,7 +116,7 @@ LogState& logState() {
 
 }  // namespace morph::log::detail
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 namespace morph::observe::detail {
 
 ObserveState& observeState() {

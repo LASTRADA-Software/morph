@@ -507,7 +507,7 @@ TEST_CASE(
 
 // ── morph::backend::RemoteServer: observability (metrics + tracing) ──────────
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::RemoteServer: execute emits executeLatencyMs and toggles executeInFlight",
           "[remote][observability]") {
     morph::observe::ScopedObserveOverride guard;
@@ -552,7 +552,7 @@ TEST_CASE("morph::backend::RemoteServer: execute emits executeLatencyMs and togg
 }
 #endif  // MORPH_OBSERVABILITY_DISABLED
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::RemoteServer: executeLatencyMs measures the handler's run time",
           "[remote][observability]") {
     morph::observe::ScopedObserveOverride const guard;
@@ -595,7 +595,7 @@ TEST_CASE("morph::backend::RemoteServer: executeLatencyMs measures the handler's
 }
 #endif  // MORPH_OBSERVABILITY_DISABLED
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::RemoteServer: an erroring execute emits executeErrors", "[remote][observability]") {
     morph::observe::ScopedObserveOverride guard;
     morph::exec::ThreadPoolExecutor pool{2};
@@ -627,7 +627,7 @@ TEST_CASE("morph::backend::RemoteServer: an erroring execute emits executeErrors
 }
 #endif  // MORPH_OBSERVABILITY_DISABLED
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::RemoteServer: register/deregister emit their counters", "[remote][observability]") {
     morph::observe::ScopedObserveOverride guard;
     morph::exec::ThreadPoolExecutor pool{2};
@@ -656,7 +656,7 @@ TEST_CASE("morph::backend::RemoteServer: register/deregister emit their counters
 }
 #endif  // MORPH_OBSERVABILITY_DISABLED
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::RemoteServer: with no sink installed, register still works and metrics stay disabled",
           "[remote][observability]") {
     morph::observe::ScopedObserveOverride guard;
@@ -673,7 +673,7 @@ TEST_CASE("morph::backend::RemoteServer: with no sink installed, register still 
 }
 #endif  // MORPH_OBSERVABILITY_DISABLED
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE(
     "morph::backend::RemoteServer: one execute produces exactly one beginSpan/endSpan pair with the caller's "
     "requestId",
@@ -723,7 +723,7 @@ TEST_CASE(
 }
 #endif  // MORPH_OBSERVABILITY_DISABLED
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::RemoteServer: endSpan reports ok=false for a failing execute", "[remote][observability]") {
     morph::observe::ScopedObserveOverride guard;
     morph::exec::ThreadPoolExecutor pool{2};

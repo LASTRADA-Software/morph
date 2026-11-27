@@ -171,7 +171,7 @@ TEST_CASE("morph::bridge::BridgeHandler destructor deregisters model cleanly", "
 
 // ── morph::backend::LocalBackend: observability (metrics + tracing) ─────────
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::LocalBackend: execute emits executeLatencyMs and toggles executeInFlight",
           "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride guard;
@@ -213,7 +213,7 @@ TEST_CASE("morph::backend::LocalBackend: execute emits executeLatencyMs and togg
 }
 #endif  // MORPH_OBSERVABILITY_DISABLED
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::LocalBackend: an erroring action emits executeErrors", "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride guard;
     morph::exec::ThreadPoolExecutor pool{2};
@@ -246,7 +246,7 @@ TEST_CASE("morph::backend::LocalBackend: an erroring action emits executeErrors"
 }
 #endif  // MORPH_OBSERVABILITY_DISABLED
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::LocalBackend: registerModel/deregisterModel emit their counters",
           "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride guard;
@@ -271,7 +271,7 @@ TEST_CASE("morph::backend::LocalBackend: registerModel/deregisterModel emit thei
 }
 #endif  // MORPH_OBSERVABILITY_DISABLED
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::LocalBackend: one execute produces exactly one beginSpan/endSpan pair",
           "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride guard;
@@ -473,7 +473,7 @@ TEST_CASE("morph::backend::LocalBackend: trackedPendingCount counts every call s
     REQUIRE(morph::testing::waitUntil([&] { return ran.load() == 3; }));
 }
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::LocalBackend: executeLatencyMs covers the time the handler ran",
           "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride const guard;
@@ -504,7 +504,7 @@ TEST_CASE("morph::backend::LocalBackend: executeLatencyMs covers the time the ha
 }
 #endif  // MORPH_OBSERVABILITY_DISABLED
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::LocalBackend: a call that started with no metric sink emits no latency sample",
           "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride const guard;
@@ -592,7 +592,7 @@ TEST_CASE("morph::backend::LocalBackend: destruction requests stop on a Task han
     slot->finish(std::make_exception_ptr(std::runtime_error{"stopped"}));
 }
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::backend::LocalBackend: a call cancelled while it waited behind a Task handler finishes as a failure",
           "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride const guard;

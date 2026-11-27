@@ -355,7 +355,7 @@ TEST_CASE(
     REQUIRE(queue.drain().size() == 1);
 }
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::offline::SyncWorker: run() emits queueDepth with the pending count at drain",
           "[sync][observability]") {
     morph::observe::ScopedObserveOverride guard;

@@ -71,7 +71,7 @@ struct Result {
 // Posts `body.total` tasks from `threads` producers via @p post(key, task) and
 // waits for them all.
 template <typename PostFn>
-Result measure(std::size_t threads, Body const& body, PostFn&& post) {
+Result measure(std::size_t threads, Body const& body, PostFn post) {
     std::atomic<std::size_t> done{0};
     std::atomic<std::size_t> ready{0};
     std::atomic<bool> go{false};
@@ -85,7 +85,7 @@ Result measure(std::size_t threads, Body const& body, PostFn&& post) {
                 std::this_thread::yield();
             }
             for (std::size_t i = 0; i < perProducer; ++i) {
-                std::uint64_t const key = ((p * perProducer + i) % kKeys) + 1;
+                std::uint64_t const key = (((p * perProducer) + i) % kKeys) + 1;
                 post(key, [&done, spin = body.spin] {
                     spinFor(spin);
                     done.fetch_add(1, std::memory_order_relaxed);

@@ -15,7 +15,7 @@
 
 // Every case here installs a sink or reads the process-wide state, which a build
 // with MORPH_ENABLE_OBSERVABILITY=OFF does not have.
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 
 using ObserveGuard = morph::observe::ScopedObserveOverride;
 

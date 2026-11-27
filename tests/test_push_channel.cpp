@@ -304,7 +304,7 @@ TEST_CASE("a_watch_whose_body_does_not_parse_is_refused", "[push][channel]") {
     CHECK(reply.callId == 3);
 }
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("post_above_envelope_cap_is_dropped_and_counted", "[push][channel]") {
     ::morph::observe::ScopedObserveOverride const restore;
     std::atomic<int> oversize{0};

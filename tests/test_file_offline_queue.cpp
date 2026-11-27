@@ -772,7 +772,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: size() reflects live pending count"
     std::filesystem::remove(path);
 }
 
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
 TEST_CASE("morph::offline::FileOfflineQueue: enqueue at maxDepth emits queueOverflow metric",
           "[file_queue][overflow][observability]") {
     morph::observe::ScopedObserveOverride guard;

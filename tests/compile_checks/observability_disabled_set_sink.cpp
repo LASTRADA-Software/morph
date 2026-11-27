@@ -9,7 +9,7 @@
 #include <morph/core/observability.hpp>
 
 void installSink() {
-#if defined(PROBE_TRACE_SINK)
+#ifdef PROBE_TRACE_SINK
     morph::observe::setTraceSink(morph::observe::TraceSink{});
 #elif defined(PROBE_SCOPED_OVERRIDE)
     morph::observe::ScopedObserveOverride const guard;

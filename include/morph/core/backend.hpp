@@ -1376,7 +1376,7 @@ public:
         run.shared = _shared;
         run.admittedEpoch = admittedEpoch;
         run.mid = mid;
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
         auto const inFlightAfterInc = run.shared->inFlight.fetch_add(1, std::memory_order_relaxed) + 1;
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
                                              static_cast<double>(inFlightAfterInc));
@@ -1598,7 +1598,7 @@ private:
     /// disconnect.
     class RunShared {
     public:
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
         /// Concurrent in-flight executes, for the `executeInFlight` metric:
         /// incremented when a run is admitted, decremented when it finishes.
         /// Absent when observability is compiled out, as nothing else reads it.
@@ -1654,7 +1654,7 @@ private:
         ::morph::exec::detail::ModelId mid{};
         // Stamped by `admitLocal` only when a metric sink was installed then;
         // `timed` says whether `start` holds a reading.
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
         std::chrono::steady_clock::time_point start;
         bool timed = false;
 #endif
@@ -1668,7 +1668,7 @@ private:
         // The clock is read only for a latency sample, so only when something
         // will receive it. A sink installed after this point gets no sample for
         // this run.
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
         run.timed = ::morph::observe::metricsEnabled();
         if (run.timed) {
             run.start = std::chrono::steady_clock::now();
@@ -1777,7 +1777,7 @@ private:
             run.hydration->settle(succeeded);
         }
         ::morph::observe::detail::endSpan(run.spanId, succeeded);
-#if !defined(MORPH_OBSERVABILITY_DISABLED)
+#ifndef MORPH_OBSERVABILITY_DISABLED
         std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
             {{"modelType", run.modelTypeId}, {"actionType", run.actionTypeId}}};
         if (run.timed) {

@@ -71,7 +71,7 @@
 #include <thread>
 #include <utility>
 
-#if defined(__linux__)
+#ifdef __linux__
     #include <linux/perf_event.h>
     #include <sys/ioctl.h>
     #include <sys/syscall.h>
@@ -109,7 +109,7 @@ constexpr int kWarmup = 200;
 constexpr int kCalls = 2000;
 constexpr std::size_t kPoolThreads = 4;
 
-#if defined(__linux__)
+#ifdef __linux__
 
 /// A user-space retired-instruction counter that follows threads created after
 /// it is opened.
