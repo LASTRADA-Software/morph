@@ -55,6 +55,14 @@ enum class Distort : std::uint8_t {
     MenuEmpty,        // a header's menu has no entries
     ClipboardEmpty,   // the clipboard reads empty
     DescriptionNone,  // no description is read
+    NullSecond,       // a container hands out null for its second child
+    NullThird,        // a container hands out null for its third child
+    NullFourth,       // a container hands out null for its fourth child
+    NullFirst,        // a container hands out null for its first child
+    MenuRelabelled,   // a header menu's first entry carries another label
+    MenuNoSeparator,  // a header menu's second entry is no separator
+    MenuLastRelabelled,  // a header menu's last entry carries another label
+    TargetOther,      // a spotlight rings a widget other than its target
 };
 
 constexpr std::size_t kAll = static_cast<std::size_t>(-1);
@@ -103,6 +111,13 @@ public:
     }
     [[nodiscard]] ui::Widget* childAt(ui::ContainerWidget const& container, std::size_t index) override {
         if (_mode == Distort::NullChildren && hit()) {
+            return nullptr;
+        }
+        bool const first = _mode == Distort::NullFirst && index == 0;
+        bool const second = _mode == Distort::NullSecond && index == 1;
+        bool const third = _mode == Distort::NullThird && index == 2;
+        bool const fourth = _mode == Distort::NullFourth && index == 3;
+        if ((first || second || third || fourth) && hit()) {
             return nullptr;
         }
         return _inner.childAt(container, index);
@@ -257,14 +272,30 @@ public:
         return extent;
     }
     [[nodiscard]] ui::Widget const* targetOf(ui::SpotlightWidget const& spotlight) override {
-        return _mode == Distort::TargetNowhere && hit() ? nullptr : _inner.targetOf(spotlight);
+        if (_mode == Distort::TargetNowhere && hit()) {
+            return nullptr;
+        }
+        if (_mode == Distort::TargetOther && hit()) {
+            return &spotlight;
+        }
+        return _inner.targetOf(spotlight);
     }
     [[nodiscard]] std::vector<ui::MenuEntry> headerMenu(ui::Widget& table,
                                                         std::optional<std::size_t> column) override {
         if (_mode == Distort::MenuEmpty && hit()) {
             return {};
         }
-        return _inner.headerMenu(table, column);
+        std::vector<ui::MenuEntry> entries = _inner.headerMenu(table, column);
+        if (entries.size() >= 2 && _mode == Distort::MenuRelabelled && hit()) {
+            entries.front().label += "!";
+        }
+        if (entries.size() >= 2 && _mode == Distort::MenuNoSeparator && hit()) {
+            entries.at(1).separator = !entries.at(1).separator;
+        }
+        if (entries.size() >= 2 && _mode == Distort::MenuLastRelabelled && hit()) {
+            entries.back().label += "!";
+        }
+        return entries;
     }
     void chooseHeaderMenuEntry(ui::Widget& table, std::optional<std::size_t> column,
                                std::vector<std::size_t> const& path) override {
@@ -433,7 +464,7 @@ TEST_CASE("cove: the layout cases that a degenerate layout still passes are the 
 TEST_CASE("cove: a single distorted call is reported with a message, in every family the suite reads",
           "[ui][conformance][cove]") {
     auto const cases = allCases();
-    for (Distort m = Distort::ZeroCounts; m <= Distort::DescriptionNone;
+    for (Distort m = Distort::ZeroCounts; m <= Distort::TargetOther;
          m = static_cast<Distort>(static_cast<int>(m) + 1)) {
         std::size_t caught = 0;
         std::size_t read = 0;
@@ -441,29 +472,19 @@ TEST_CASE("cove: a single distorted call is reported with a message, in every fa
             Run const whole = run(testCase, m, 0, kAll);
             read += whole.seen;
             for (std::size_t call = 0; call < std::min<std::size_t>(whole.seen, 40); ++call) {
-                Run const one = run(testCase, m, call, 1);
-                if (one.failure.has_value()) {
-                    ++caught;
-                    INFO(std::string{testCase.name} + " / " + std::to_string(static_cast<int>(m)) + " / " +
-                         std::to_string(call));
-                    CHECK_FALSE(one.failure->empty());
+                for (std::size_t const count : {std::size_t{1}, kAll}) {
+                    Run const one = run(testCase, m, call, count);
+                    if (one.failure.has_value()) {
+                        ++caught;
+                        INFO(std::string{testCase.name} + " / " + std::to_string(static_cast<int>(m)) + " / " +
+                             std::to_string(call));
+                        CHECK_FALSE(one.failure->empty());
+                    }
                 }
             }
         }
         INFO(static_cast<int>(m));
         CHECK(read > 0);
         CHECK(caught > 0);
-    }
-}
-
-// Diagnostic: what each distortion does to each case.
-TEST_CASE("cove diag: distortion matrix", "[.cove-diag]") {
-    auto const cases = allCases();
-    for (Distort m = Distort::ZeroCounts; m <= Distort::DescriptionNone; m = static_cast<Distort>(static_cast<int>(m) + 1)) {
-        std::string line = "mode " + std::to_string(static_cast<int>(m)) + ":";
-        for (std::string const& name : passing(cases, m)) {
-            line += "\n    " + name;
-        }
-        WARN(line);
     }
 }

@@ -188,3 +188,48 @@ TEST_CASE("cove: a query waits for its condition, debounces a changed key and re
     h.advance(std::chrono::milliseconds{5000});
     CHECK(h.dispatcher.count("Lims_ClientList") == 3);
 }
+
+namespace {
+
+constexpr char const* kReady = R"({
+  "vocab": "ui/1", "id": "ready", "state": { "fine": { "init": false } },
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "open", "label": "open", "onClick": { "open": "dlg" } },
+    { "kind": "button", "testId": "fine", "label": "fine", "onClick": { "set": "fine", "value": true } },
+    { "kind": "text", "testId": "ready", "text": { "fn": "format", "args": [ "{0}", { "ref": "dlg.ready" } ] } },
+    { "kind": "dialog", "id": "dlg", "title": "Capture",
+      "scope": { "checks": [
+        { "id": "soft", "assert": { "fn": "eq", "args": [ 1, 2 ] }, "message": "advice", "blocking": false },
+        { "id": "hard", "assert": { "ref": "fine" }, "message": "not yet", "blocking": true } ] },
+      "children": [
+        { "kind": "slider", "id": "amount", "testId": "amount", "required": true, "min": 0, "max": 10 },
+        { "kind": "textInput", "id": "hidden", "testId": "hidden", "required": true, "visible": false } ] } ] } })";
+
+}  // namespace
+
+// Mutation: count a hidden element's errors, or a check that is not blocking, against `ready`.
+TEST_CASE("cove: a dialog is ready past a hidden element's errors and a failing check that is not blocking",
+          "[ui][interpreter][cove]") {
+    Harness h;
+    auto const screen = h.mount(kReady);
+    h.backend.click(h.byTestId("Button", "open"));
+    h.settle();
+    CHECK(h.text("ready") == "false");  // the visible required slider holds no value
+    h.backend.slide(h.byTestId("Slider", "amount"), 4);
+    h.settle();
+    CHECK(h.backend.prop(h.byTestId("Slider", "amount"), "errors") == "[]");
+    CHECK(h.text("ready") == "false");  // the blocking check fails
+    h.backend.click(h.byTestId("Button", "fine"));
+    h.settle();
+    CHECK(h.text("ready") == "true");
+}
+
+// Mutation: leave a unit-bearing reading as bare JSON, or read an `app.` name with no app document.
+TEST_CASE("cove: a reference to the app that is not there reads as null", "[ui][interpreter][cove]") {
+    Harness h;
+    auto const screen = h.mount(R"({ "vocab": "ui/1", "id": "refs", "view": { "kind": "column", "children": [
+      { "kind": "text", "testId": "app", "text": { "fn": "coalesce", "args": [ { "ref": "app" }, "none" ] } },
+      { "kind": "text", "testId": "app2", "text": { "fn": "coalesce", "args": [ { "ref": "app.name" }, "none" ] } } ] } })");
+    CHECK(h.text("app") == "none");
+    CHECK(h.text("app2") == "none");
+}
