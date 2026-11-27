@@ -98,6 +98,7 @@ add_executable(morph_tests
     test_security_fixes.cpp
     test_bridge_lifetime.cpp
     test_bridge_bind_paths.cpp
+    test_bridge_tracking.cpp
     test_bridge_owner.cpp
     test_core_branch_gaps.cpp
     test_client_execute_deadline.cpp
