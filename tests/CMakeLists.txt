@@ -291,6 +291,7 @@ add_executable(morph_tests
     test_ui_cov_table_state.cpp
     test_ui_cov_table_engine_rows.cpp
     test_ui_cov_table_window_rows.cpp
+    test_ui_cov_table_views_menu.cpp
     test_ui_table_config.cpp
     bench_interpreter.cpp
     bench_mount.cpp
