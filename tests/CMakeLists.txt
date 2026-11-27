@@ -166,6 +166,8 @@ add_executable(morph_tests
     test_ui_cov_d_chat_tools.cpp
     test_ui_cov_d_workspace.cpp
     test_ui_cov_d_rows_bound.cpp
+    test_ui_cov_g_action_table_view.cpp
+    test_ui_cov_g_document_loader.cpp
     test_ui_cov_d_rows_state.cpp
     test_ui_cov_d_chart.cpp
     test_ui_cov_d_grid_groups.cpp
