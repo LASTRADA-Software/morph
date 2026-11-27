@@ -18,11 +18,15 @@
 #include <thread>
 #include <vector>
 
+// `#elifdef` is C++23 preprocessor syntax that nothing else in the tree relies on, so these chains keep `#elif
+// defined`.
+// NOLINTBEGIN(readability-use-concise-preprocessor-directives)
 #if defined(_M_X64) || defined(_M_IX86) || defined(__x86_64__) || defined(__i386__)
 #include <immintrin.h>
 #elif defined(_M_ARM64)
 #include <intrin.h>
 #endif
+// NOLINTEND(readability-use-concise-preprocessor-directives)
 
 #include "../attributes.hpp"
 #include "logger.hpp"
@@ -44,6 +48,7 @@ namespace detail {
 /// so the hint's cost (about 10 cycles on some CPUs, 140 on others) changes how
 /// often the clock is read and not how long the loop runs.
 inline void cpuRelax() noexcept {
+// NOLINTBEGIN(readability-use-concise-preprocessor-directives): see the include chain above.
 #if defined(_M_X64) || defined(_M_IX86) || defined(__x86_64__) || defined(__i386__)
     _mm_pause();
 #elif defined(_M_ARM64)
@@ -51,6 +56,7 @@ inline void cpuRelax() noexcept {
 #elif defined(__aarch64__)
     asm volatile("yield" ::: "memory");
 #endif
+    // NOLINTEND(readability-use-concise-preprocessor-directives)
 }
 
 /// @brief A `core::async::IExecutor` over a morph executor: how a core-cpp
@@ -296,14 +302,17 @@ private:
     // atomics only: the lock is not held and is not taken.
     void spin() const {
         auto const deadline = std::chrono::steady_clock::now() + _options.spinBeforeSleep;
-        do {
+        for (;;) {
             for (int i = 0; i < 16; ++i) {
                 if (_queued.load(std::memory_order_acquire) != 0 || _stop.load(std::memory_order_acquire)) {
                     return;
                 }
                 detail::cpuRelax();
             }
-        } while (std::chrono::steady_clock::now() < deadline);
+            if (std::chrono::steady_clock::now() >= deadline) {
+                return;
+            }
+        }
     }
 
     // Blocks until a task can be taken or the pool is stopping and drained.

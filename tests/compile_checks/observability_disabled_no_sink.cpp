@@ -7,7 +7,6 @@
 // changes for a caller.
 
 #include <morph/core/observability.hpp>
-
 #include <string_view>
 
 bool emitEverything() {

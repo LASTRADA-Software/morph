@@ -72,12 +72,12 @@
 #include <utility>
 
 #ifdef __linux__
-    #include <linux/perf_event.h>
-    #include <sys/ioctl.h>
-    #include <sys/syscall.h>
-    #include <unistd.h>
+#include <linux/perf_event.h>
+#include <sys/ioctl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
-    #include <cerrno>
+#include <cerrno>
 #endif
 
 // External linkage so glaze's reflection can mangle the type names.
@@ -128,6 +128,7 @@ public:
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
         long const fd = ::syscall(SYS_perf_event_open, &attr, 0, -1, -1, 0);
         if (fd < 0) {
+            // NOLINTNEXTLINE(concurrency-mt-unsafe): called before the benchmark starts any thread.
             why = std::format("perf_event_open(PERF_COUNT_HW_INSTRUCTIONS) failed: {}", std::strerror(errno));
             return std::nullopt;
         }
@@ -275,8 +276,8 @@ int run(bool baseline, double budget) {
         return kExitSkipped;
     }
 
-    ::morph::exec::ThreadPoolExecutor pool{kPoolThreads,
-                                           ::morph::exec::PoolOptions{.spinBeforeSleep = std::chrono::microseconds{0}}};
+    ::morph::exec::ThreadPoolExecutor pool{
+        kPoolThreads, ::morph::exec::PoolOptions{.spinBeforeSleep = std::chrono::microseconds{0}}};
     SleepingOwner owner;
     double perCall = 0.0;
     {

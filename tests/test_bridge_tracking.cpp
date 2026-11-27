@@ -95,8 +95,7 @@ struct Rig {
 
 }  // namespace
 
-TEST_CASE("Bridge tracking keeps survivors after removing the first, last and middle handler",
-          "[bridge][tracking]") {
+TEST_CASE("Bridge tracking keeps survivors after removing the first, last and middle handler", "[bridge][tracking]") {
     Rig rig{7};
     rig.destroy(0);
     rig.destroy(rig.bindings.size() - 1);
@@ -128,7 +127,8 @@ TEST_CASE("Bridge tracking removes handlers correctly after a backend switch", "
 
 TEST_CASE("Bridge tracking survives removing every handler in a random order", "[bridge][tracking]") {
     Rig rig{40};
-    std::mt19937 gen{12345};
+    // A fixed seed, so a failing order can be replayed.
+    std::mt19937 gen{12345};  // NOLINT(bugprone-random-generator-seed,cert-msc32-c,cert-msc51-cpp)
     while (rig.bindings.size() > 1) {
         rig.destroy(std::uniform_int_distribution<std::size_t>{0, rig.bindings.size() - 1}(gen));
         if (rig.bindings.size() % 7 == 0) {

@@ -1602,6 +1602,7 @@ private:
         /// Concurrent in-flight executes, for the `executeInFlight` metric:
         /// incremented when a run is admitted, decremented when it finishes.
         /// Absent when observability is compiled out, as nothing else reads it.
+        // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): runs bump it directly.
         std::atomic<std::size_t> inFlight{0};
 #endif
 

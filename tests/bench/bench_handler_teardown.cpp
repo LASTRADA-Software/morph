@@ -138,9 +138,10 @@ double destroyMicrosPerHandler(std::size_t count) {
     return std::chrono::duration<double, std::micro>(end - begin).count() / static_cast<double>(count);
 }
 
-double bestOf(int trials, std::size_t count) {
+template <int Trials>
+double bestOf(std::size_t count) {
     double best = 0.0;
-    for (int i = 0; i < trials; ++i) {
+    for (int i = 0; i < Trials; ++i) {
         double const micros = destroyMicrosPerHandler(count);
         best = (i == 0) ? micros : std::min(best, micros);
     }
@@ -148,8 +149,8 @@ double bestOf(int trials, std::size_t count) {
 }
 
 int run(double maxRatio) {
-    double const small = bestOf(kSmallTrials, kSmall);
-    double const large = bestOf(kLargeTrials, kLarge);
+    double const small = bestOf<kSmallTrials>(kSmall);
+    double const large = bestOf<kLargeTrials>(kLarge);
     double const ratio = large / small;
     std::cout << std::format("destroy, {:>6} live handlers : {:8.2f} us per handler (best of {})\n", kSmall, small,
                              kSmallTrials)
@@ -159,9 +160,10 @@ int run(double maxRatio) {
                              ratio, static_cast<double>(kLarge) / static_cast<double>(kSmall));
     if (maxRatio > 0.0) {
         if (ratio > maxRatio) {
-            std::cout << std::format("FAIL: per-handler destroy cost grows {:.2f}x from {} to {} handlers, exceeds "
-                                     "--max-ratio={:.2f}\n",
-                                     ratio, kSmall, kLarge, maxRatio);
+            std::cout << std::format(
+                "FAIL: per-handler destroy cost grows {:.2f}x from {} to {} handlers, exceeds "
+                "--max-ratio={:.2f}\n",
+                ratio, kSmall, kLarge, maxRatio);
             return 1;
         }
         std::cout << std::format("ok: ratio {:.2f} within --max-ratio={:.2f}\n", ratio, maxRatio);

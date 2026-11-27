@@ -76,6 +76,7 @@ Result measure(std::size_t threads, Body const& body, PostFn post) {
     std::atomic<std::size_t> ready{0};
     std::atomic<bool> go{false};
     std::vector<std::thread> producers;
+    producers.reserve(threads);
     std::size_t const perProducer = body.total / threads;
     std::size_t const expected = perProducer * threads;
     for (std::size_t p = 0; p < threads; ++p) {
@@ -145,14 +146,14 @@ int run() {
                 strandBase = strand.rate;
                 poolBase = bare.rate;
             }
-            double const width = static_cast<double>(threads);
+            auto const width = static_cast<double>(threads);
             std::cout << std::format("  {}   {:>14.0f}  {:5.1f}%   {:>14.0f}  {:5.1f}%\n", threads, strand.rate,
                                      100.0 * strand.rate / (width * strandBase), bare.rate,
                                      100.0 * bare.rate / (width * poolBase));
             if (!strand.exact || !bare.exact) {
-                std::cout << std::format("FAIL: T={} body {}: a task was lost, doubled or late (strands {}, pool {})\n",
-                                         threads, body.name, strand.exact ? "exact" : "WRONG",
-                                         bare.exact ? "exact" : "WRONG");
+                std::cout << std::format(
+                    "FAIL: T={} body {}: a task was lost, doubled or late (strands {}, pool {})\n", threads, body.name,
+                    strand.exact ? "exact" : "WRONG", bare.exact ? "exact" : "WRONG");
                 ok = false;
             }
         }

@@ -61,7 +61,7 @@ TEST_CASE("morph::exec::ThreadPoolExecutor loses no task to a post racing a work
             ++posted;
         }
         REQUIRE(waitFor([&] { return ran.load() == posted; }));
-        std::this_thread::sleep_for(std::chrono::microseconds{20 + (burst % 7) * 40});
+        std::this_thread::sleep_for(std::chrono::microseconds{20 + ((burst % 7) * 40)});
     }
 }
 
@@ -123,8 +123,10 @@ TEST_CASE("morph::exec::ThreadPoolExecutor with a spin runs blocking tasks poste
     options.spinBeforeSleep = 20000us;
     morph::exec::ThreadPoolExecutor pool{2, options};
     for (int round = 0; round < 10; ++round) {
-        // One worker spins and the other sleeps.
-        REQUIRE(waitFor([&] { return pool.sleepingWorkers() == 1; }));
+        // At least one worker sleeps; the other spins or, once its spin has run
+        // out, sleeps too. Waiting for exactly one would race the end of the
+        // spin, and a coarse sleep clock (Windows) can step over that window.
+        REQUIRE(waitFor([&] { return pool.sleepingWorkers() >= 1; }));
         std::atomic<int> arrived{0};
         std::atomic<int> met{0};
         auto const task = [&] {

@@ -2563,13 +2563,13 @@ private:
         if (slot >= _handlers.size()) {
             return;
         }
-        auto const& entry = _handlers[slot];
-        if (entry.owner_before(binding) || binding.owner_before(entry)) {
+        auto const entry = std::next(_handlers.begin(), static_cast<std::ptrdiff_t>(slot));
+        if (entry->owner_before(binding) || binding.owner_before(*entry)) {
             return;
         }
         if (slot + 1 != _handlers.size()) {
-            _handlers[slot] = std::move(_handlers.back());
-            if (auto const moved = _handlers[slot].lock()) {
+            *entry = std::move(_handlers.back());
+            if (auto const moved = entry->lock()) {
                 moved->trackedSlot = slot;
             }
         }
@@ -2578,10 +2578,12 @@ private:
 
     /// @brief Rewrites every live binding's `trackedSlot` to its position in the list.
     void reindexHandlers() {
-        for (std::size_t slot = 0; slot < _handlers.size(); ++slot) {
-            if (auto const binding = _handlers[slot].lock()) {
+        std::size_t slot = 0;
+        for (auto const& weak : _handlers) {
+            if (auto const binding = weak.lock()) {
                 binding->trackedSlot = slot;
             }
+            ++slot;
         }
     }
 
