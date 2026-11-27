@@ -105,3 +105,163 @@ TEST_CASE("cove: a cell's load and accent are read only for a key a row has", "[
     CHECK_THROWS_WITH(backend.cellLoad(1, intKey(9), 0), Catch::Matchers::ContainsSubstring("has no row for"));
     CHECK_THROWS_WITH(backend.cellAccent(1, intKey(9), 0), Catch::Matchers::ContainsSubstring("has no row for"));
 }
+
+namespace {
+
+// A table with two columns (the first sortable, the second filterable), a group over both, two data rows and every
+// handler a driver can reach; `calls` counts how often any of them ran.
+struct DrivenTable {
+    RecordingBackend backend;
+    std::unique_ptr<ui::TableWidget> table = backend.createTable(nullptr);
+    std::unique_ptr<ui::ContainerWidget> rowA;
+    std::unique_ptr<ui::ContainerWidget> rowB;
+    int calls = 0;
+    static constexpr int kTable = 1;
+
+    DrivenTable() {
+        table->setColumns({{.label = "A", .sortable = true}, {.label = "B", .filterable = true}});
+        table->setColumnGroups({{.label = "G", .first = 0, .count = 2}});
+        table->setSelectionMode(ui::SelectionMode::Multiple);
+        rowA = backend.createStack(table.get(), ui::Axis::Horizontal);
+        rowB = backend.createStack(table.get(), ui::Axis::Horizontal);
+        table->setRowKey(*rowA, intKey(1));
+        table->setRowKey(*rowB, intKey(2));
+        table->setStatus({.entries = {{.id = "more", .label = "More"}}});
+        table->setOnSort([this](std::size_t, ui::HeaderClick) { ++calls; });
+        table->setOnColumnMove([this](std::size_t, std::size_t) { ++calls; });
+        table->setOnColumnResize([this](std::size_t, std::optional<int>) { ++calls; });
+        table->setOnFilter([this](std::size_t) { ++calls; });
+        table->setOnGroupFilter([this](std::size_t) { ++calls; });
+        table->setOnCopy([this] { ++calls; });
+        table->setOnSelectAll([this] { ++calls; });
+        table->setOnStatusEntry([this](std::string) { ++calls; });
+        table->setOnRetry([this] { ++calls; });
+        table->setOnText([this](std::string) { ++calls; });
+        table->setOnCellClick([this](std::size_t, std::size_t, bool) { ++calls; });
+        table->setOnSelectionChange([this](std::vector<ui::Key>, ui::SelectionChange) { ++calls; });
+    }
+};
+
+struct Driver {
+    std::string name;
+    std::function<void(RecordingBackend&)> drive;
+};
+
+std::vector<Driver> tableDrivers() {
+    constexpr int table = DrivenTable::kTable;
+    return {
+        {"clickHeader", [](RecordingBackend& b) { b.clickHeader(table, 0, ui::HeaderClick::Plain); }},
+        {"moveColumn", [](RecordingBackend& b) { b.moveColumn(table, 0, 1); }},
+        {"resizeColumn", [](RecordingBackend& b) { b.resizeColumn(table, 0, 12); }},
+        {"clickFilter", [](RecordingBackend& b) { b.clickFilter(table, 1); }},
+        {"clickGroupFilter", [](RecordingBackend& b) { b.clickGroupFilter(table, 0); }},
+        {"pressCopy", [](RecordingBackend& b) { b.pressCopy(table); }},
+        {"selectAll", [](RecordingBackend& b) { b.selectAll(table); }},
+        {"chooseStatusEntry", [](RecordingBackend& b) { b.chooseStatusEntry(table, "more"); }},
+        {"retryTable", [](RecordingBackend& b) { b.retryTable(table); }},
+        {"typeInto", [](RecordingBackend& b) { b.typeInto(table, "x"); }},
+        {"clickCell", [](RecordingBackend& b) { b.clickCell(table, 0, 0); }},
+        {"selectRows", [](RecordingBackend& b) { b.selectRows(table, {intKey(1)}); }},
+        {"clickRow", [](RecordingBackend& b) { b.clickRow(table, intKey(1), ui::RowClick::Only); }},
+    };
+}
+
+}  // namespace
+
+// Mutation: drop the reachability check of one driver (it then reaches a table a user cannot see).
+TEST_CASE("cove: every table driver reaches a visible table and none reaches a hidden one", "[ui][cove]") {
+    for (Driver const& driver : tableDrivers()) {
+        INFO(driver.name);
+        DrivenTable shown;
+        driver.drive(shown.backend);
+        CHECK(shown.calls == 1);
+        DrivenTable hidden;
+        hidden.table->setVisible(false);
+        driver.drive(hidden.backend);
+        CHECK(hidden.calls == 0);
+    }
+}
+
+// Mutation: drop one of the checks that make a driver refuse what no user could do.
+TEST_CASE("cove: a table driver refuses what no user could do", "[ui][cove]") {
+    DrivenTable fixture;
+    RecordingBackend& backend = fixture.backend;
+    CHECK_THROWS_AS(backend.selectRows(1, {intKey(9)}), std::logic_error);
+    CHECK_THROWS_AS(backend.selectRows(1, {intKey(1), intKey(1)}), std::logic_error);
+    CHECK_THROWS_AS(backend.clickRow(1, intKey(9), ui::RowClick::Only), std::logic_error);
+    CHECK_THROWS_AS(backend.activateRow(1, intKey(9)), std::logic_error);
+    CHECK_THROWS_AS(backend.chooseStatusEntry(1, "absent"), std::logic_error);
+    CHECK_THROWS_AS(backend.clickGroupFilter(1, 3), std::logic_error);
+    CHECK_THROWS_AS(backend.clickHeader(1, 7), std::logic_error);
+    fixture.table->setSelectionMode(ui::SelectionMode::None);
+    CHECK_THROWS_AS(backend.selectRows(1, {intKey(1)}), std::logic_error);
+    CHECK_THROWS_AS(backend.clickRow(1, intKey(1), ui::RowClick::Only), std::logic_error);
+    fixture.table->setSelectionMode(ui::SelectionMode::Single);
+    CHECK_THROWS_AS(backend.selectRows(1, {intKey(1), intKey(2)}), std::logic_error);
+    CHECK(fixture.calls == 0);
+}
+
+// Mutation: make `clickHeader` report an unsortable column.
+TEST_CASE("cove: a click on a header that is not sortable reports nothing", "[ui][cove]") {
+    DrivenTable fixture;
+    fixture.backend.clickHeader(1, 1, ui::HeaderClick::Plain);
+    fixture.backend.clickFilter(1, 0);
+    CHECK(fixture.calls == 0);
+}
+
+// Mutation: swap the two outcomes of one of the formatters, or drop its fallback.
+TEST_CASE("cove: the recording backend names each setting's value, a value outside the enumeration by its fallback",
+          "[ui][cove]") {
+    RecordingBackend backend;
+    auto stack = backend.createStack(nullptr, ui::Axis::Vertical);
+    stack->setAlign(static_cast<ui::Align>(99));
+    stack->setJustify(ui::Justify::Center);
+    CHECK(backend.prop(1, "align") == "stretch");
+    CHECK(backend.prop(1, "justify") == "center");
+    stack->setJustify(static_cast<ui::Justify>(99));
+    CHECK(backend.prop(1, "justify") == "start");
+    stack->setWrap(false);
+    stack->setDivided(false);
+    stack->setPassesBleed(false);
+    CHECK(backend.prop(1, "wrap") == "false");
+    CHECK(backend.prop(1, "divided") == "false");
+    CHECK(backend.prop(1, "passesBleed") == "false");
+    stack->setWrap(true);
+    CHECK(backend.prop(1, "wrap") == "true");
+
+    auto button = backend.createButton(nullptr);
+    button->setStyle(ui::ButtonStyle::Push);
+    button->setEmphasis(static_cast<ui::ButtonEmphasis>(99));
+    CHECK(backend.prop(2, "style") == "Push");
+    CHECK(backend.prop(2, "emphasis") == "Normal");
+
+    auto text = backend.createText(nullptr);
+    text->setRole(ui::TextRole::Small);
+    CHECK(backend.prop(3, "role") == "Small");
+    text->setSpans({{.text = "go", .action = true}});
+    CHECK(backend.prop(3, "spans").contains(";action"));
+
+    auto field = backend.createTextInput(nullptr, ui::TextInputMode::SingleLine);
+    field->setAlign(ui::Align::Center);
+    field->setEmphasis(ui::InputEmphasis::Prominent);
+    CHECK(backend.prop(4, "align") == "center");
+    CHECK(backend.prop(4, "emphasis") == "Prominent");
+    field->setAlign(ui::Align::End);
+    CHECK(backend.prop(4, "align") == "end");
+
+    auto badge = backend.createBadge(nullptr);
+    badge->setStyle(ui::BadgeStyle::Quiet);
+    CHECK(backend.prop(5, "style") == "Quiet");
+
+    auto steps = backend.createSteps(nullptr);
+    steps->setLabelled(false);
+    CHECK(backend.prop(6, "labelled") == "false");
+
+    auto pairs = backend.createKeyValue(nullptr);
+    pairs->setCaptionPlacement(ui::CaptionPlacement::Above);
+    CHECK(backend.prop(7, "captions") == "Above");
+
+    auto slot = backend.createSlot(nullptr);
+    slot->setScrollable(false);
+    CHECK(backend.prop(8, "scrollable") == "false");
+}
