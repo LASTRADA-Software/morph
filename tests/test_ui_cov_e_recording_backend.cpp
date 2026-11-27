@@ -265,3 +265,145 @@ TEST_CASE("cove: the recording backend names each setting's value, a value outsi
     slot->setScrollable(false);
     CHECK(backend.prop(8, "scrollable") == "false");
 }
+
+// Mutation: make `invoke` call an empty handler, or one driver throw for a table that has no handler of its kind.
+TEST_CASE("cove: a table with no handlers takes every driver without reporting anything", "[ui][cove]") {
+    RecordingBackend backend;
+    auto table = backend.createTable(nullptr);
+    table->setColumns({{.label = "A", .sortable = true}, {.label = "B", .filterable = true}});
+    table->setColumnGroups({{.label = "G", .first = 0, .count = 2}});
+    table->setSelectionMode(ui::SelectionMode::Multiple);
+    auto row = backend.createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, intKey(1));
+    CHECK_NOTHROW(backend.clickHeader(1, 0, ui::HeaderClick::Shift));
+    CHECK_NOTHROW(backend.moveColumn(1, 0, 1));
+    CHECK_NOTHROW(backend.resizeColumn(1, 0, std::nullopt));
+    CHECK_NOTHROW(backend.clickFilter(1, 1));
+    CHECK_NOTHROW(backend.clickGroupFilter(1, 0));
+    CHECK_NOTHROW(backend.pressCopy(1));
+    CHECK_NOTHROW(backend.retryTable(1));
+    CHECK_NOTHROW(backend.typeInto(1, "x"));
+    CHECK_NOTHROW(backend.clickCell(1, 0, 0, true));
+    CHECK_NOTHROW(backend.selectRows(1, {intKey(1)}));
+    CHECK_NOTHROW(backend.clickRow(1, intKey(1), ui::RowClick::Toggle));
+    CHECK_NOTHROW(backend.activateRow(1, intKey(1)));
+    CHECK_THROWS_AS(backend.selectAll(1), std::logic_error);
+    CHECK_THROWS_AS(backend.chooseStatusEntry(1, "x"), std::logic_error);
+    CHECK_FALSE(backend.press(1, "Ctrl+C"));
+}
+
+// Mutation: let Ctrl+A select in a table that is not `Multiple`, or let Enter activate a row nothing marks.
+TEST_CASE("cove: a focused table takes Ctrl+A only when it selects many, and Enter only for a marked row",
+          "[ui][cove]") {
+    DrivenTable fixture;
+    RecordingBackend& backend = fixture.backend;
+    fixture.table->setOnActivate([&fixture](ui::Key) { fixture.calls += 100; });
+    CHECK(backend.press(1, "Enter"));
+    CHECK(fixture.calls == 0);
+    backend.selectRows(1, {intKey(2)});
+    CHECK(fixture.calls == 1);
+    CHECK(backend.press(1, "Enter"));
+    CHECK(fixture.calls == 101);
+    CHECK(backend.press(1, "Ctrl+A"));
+    CHECK(fixture.calls == 102);
+    CHECK(backend.press(1, "Ctrl+C"));
+    CHECK(fixture.calls == 103);
+    fixture.table->setSelectionMode(ui::SelectionMode::Single);
+    CHECK_FALSE(backend.press(1, "Ctrl+A"));
+    CHECK(fixture.calls == 103);
+    CHECK_FALSE(backend.press(1, "F9"));
+}
+
+namespace {
+
+// A table whose cell menu has an enabled entry with a chord, a disabled one, a separator and a submenu.
+struct CellMenuTable {
+    RecordingBackend backend;
+    std::unique_ptr<ui::TableWidget> table = backend.createTable(nullptr);
+    std::unique_ptr<ui::ContainerWidget> row;
+    std::vector<std::string> chosen;
+
+    CellMenuTable() {
+        table->setColumns({{.label = "A"}});
+        table->setSelectionMode(ui::SelectionMode::Multiple);
+        row = backend.createStack(table.get(), ui::Axis::Horizontal);
+        table->setRowKey(*row, intKey(1));
+        table->setRowIndex(*row, 0);
+        table->setCellMenuKeys({"Ctrl+K", "Ctrl+Q"});
+        table->setCellMenu(
+            [](ui::Key const&, std::size_t) {
+                return std::vector<ui::MenuEntry>{
+                    {.label = "Off", .keys = "Ctrl+K", .enabled = false},
+                    {.separator = true},
+                    {.label = "More",
+                     .items = {{.label = "Sub", .keys = "Ctrl+K"}, {.label = "Locked", .enabled = false}}},
+                    {.label = "Plain", .keys = "Ctrl+Z"}};
+            },
+            [this](ui::Key const&, std::size_t, std::vector<std::size_t> const& path) {
+                std::string text;
+                for (std::size_t const index : path) {
+                    text += std::to_string(index);
+                }
+                chosen.push_back(text);
+            });
+    }
+};
+
+}  // namespace
+
+// Mutation: run a disabled entry's chord, or an entry of a submenu before its parent's turn.
+TEST_CASE("cove: a cell menu chord runs the first enabled entry that declares it, a submenu's after its parent",
+          "[ui][cove]") {
+    CellMenuTable fixture;
+    CHECK_FALSE(fixture.backend.press(1, "Ctrl+K"));  // no focused cell yet
+    fixture.table->setFocusCell(0, 0);
+    CHECK(fixture.backend.press(1, "Ctrl+K"));
+    CHECK(fixture.chosen == std::vector<std::string>{"20"});
+    CHECK_FALSE(fixture.backend.press(1, "Ctrl+Q"));  // a chord of the table's keys no entry declares
+    CHECK_FALSE(fixture.backend.press(1, "Ctrl+Z"));  // a chord no table key asks for
+}
+
+// Mutation: report a chosen entry that is disabled, inside a disabled one, or opens a submenu.
+TEST_CASE("cove: a cell menu reports only an enabled entry without a submenu, and refuses a label it does not have",
+          "[ui][cove]") {
+    CellMenuTable fixture;
+    auto const key = intKey(1);
+    fixture.backend.chooseCellMenu(1, key, 0, {"Plain"});
+    fixture.backend.chooseCellMenu(1, key, 0, {"More", "Sub"});
+    CHECK(fixture.chosen == std::vector<std::string>{"3", "20"});
+    fixture.backend.chooseCellMenu(1, key, 0, {"Off"});
+    fixture.backend.chooseCellMenu(1, key, 0, {"More"});
+    fixture.backend.chooseCellMenu(1, key, 0, {"More", "Locked"});
+    CHECK(fixture.chosen.size() == 2);
+    CHECK_THROWS_AS(fixture.backend.chooseCellMenu(1, key, 0, {"Absent"}), std::logic_error);
+    CHECK_THROWS_AS(fixture.backend.rightClickCell(1, intKey(9), 0), std::logic_error);
+    fixture.table->setVisible(false);
+    CHECK(fixture.backend.rightClickCell(1, key, 0).empty());
+    fixture.backend.chooseCellMenu(1, key, 0, {"Plain"});
+    CHECK(fixture.chosen.size() == 2);
+}
+
+// Mutation: let a menu choose a separator, an entry past the end, or an entry under a disabled one.
+TEST_CASE("cove: a menu runs only an enabled entry without a submenu", "[ui][cove]") {
+    RecordingBackend backend;
+    auto menu = backend.createMenu(nullptr, ui::MenuStyle::Button);
+    std::vector<std::vector<std::size_t>> paths;
+    menu->setItems({{.label = "Go"},
+                    {.separator = true},
+                    {.label = "Off", .enabled = false},
+                    {.label = "More", .items = {{.label = "Deep"}}}});
+    menu->setOnActivate([&paths](std::vector<std::size_t> path) { paths.push_back(std::move(path)); });
+    backend.chooseMenuEntry(1, {0});
+    backend.chooseMenuEntry(1, {1});
+    backend.chooseMenuEntry(1, {2});
+    backend.chooseMenuEntry(1, {3});
+    backend.chooseMenuEntry(1, {9});
+    backend.chooseMenuEntry(1, {3, 0});
+    backend.chooseMenuEntry(1, {3, 4});
+    backend.chooseMenuEntry(1, {0, 0});
+    backend.chooseMenuEntry(1, {});
+    CHECK(paths == std::vector<std::vector<std::size_t>>{{0}, {3, 0}});
+    menu->setVisible(false);
+    backend.chooseMenuEntry(1, {0});
+    CHECK(paths.size() == 2);
+}
