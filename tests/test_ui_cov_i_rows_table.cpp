@@ -189,3 +189,18 @@ TEST_CASE("covi rows table: a bound sort with entries that name no column or dir
     CHECK(std::ranges::contains(labels, std::string{"Remove from sort"}));
     CHECK_FALSE(morph::ui::testing::reportsOf(h).empty());
 }
+
+TEST_CASE("covi rows table: a table in a template over names its own rows and keeps no state", "[covi][ui][table]") {
+    auto const store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
+    TableHarness h{store};
+    auto const screen = h.mount(
+        R"({"vocab":"ui/1","id":"fe","view":{"kind":"forEach","rows":{"lit":[{"name":"one","rows":)"
+        R"([{"id":"a","v":2},{"id":"b","v":1}]}]},"key":{"row":"name"},"children":[{"kind":"table","id":"t",)"
+        R"("testId":"t","rows":{"row":"rows"},"key":{"row":"id"},"columns":[{"id":"id","label":"Id","sortable":true},)"
+        R"({"id":"v","label":"V","sortable":true}]}]}})");
+    int const table = h.byTestId("Table", "t");
+    h.backend.clickHeader(table, 1);
+    h.advance(500ms);
+    CHECK(rowKeys(h, table) == std::vector<std::string>{"b", "a"});
+    CHECK(store->saves() == 0);
+}

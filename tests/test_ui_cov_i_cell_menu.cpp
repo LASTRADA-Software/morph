@@ -339,3 +339,40 @@ TEST_CASE("covi cell menu: a level that failed is named by its first letter capi
         CHECK(statusOf(h, h.byTestId("Table", "t")).state == item.state);
     }
 }
+
+TEST_CASE("covi cell menu: a field a cell reads only through the whole row is fetched once it is read",
+          "[covi][ui][table]") {
+    TableHarness h;
+    auto const screen = h.mount(cellDoc(
+        R"("columns":[{"id":"id"},{"id":"mass","tooltip":{"get":{"row":""},"path":"companyA"}}])"));
+    replyDescribe(h, describeJson(cellDescription()));
+    std::vector<std::string> const first = lastQuery(h).columns.value_or(std::vector<std::string>{});
+    CHECK_FALSE(std::ranges::contains(first, std::string{"companyA"}));
+    replyPage(h, cellPageOf(first));
+    h.settle();
+    std::size_t const asked = h.dispatcher.count("Table.samples");
+    REQUIRE(openCalls(h, "Table.samples") >= 1);
+    std::vector<std::string> const then = lastQuery(h).columns.value_or(std::vector<std::string>{});
+    CHECK(std::ranges::contains(then, std::string{"companyA"}));
+    answerAll(h);
+    CHECK(h.dispatcher.count("Table.samples") == asked);  // the field arrived: nothing is asked again
+}
+
+TEST_CASE("covi cell menu: a field the rows still lack after it was asked for is not asked for twice",
+          "[covi][ui][table]") {
+    TableHarness h;
+    auto const screen = h.mount(cellDoc(
+        R"("columns":[{"id":"id"},{"id":"mass","tooltip":{"get":{"row":""},"path":"companyA"}}])"));
+    replyDescribe(h, describeJson(cellDescription()));
+    std::vector<std::string> const first = lastQuery(h).columns.value_or(std::vector<std::string>{});
+    replyPage(h, cellPageOf(first));
+    h.settle();
+    REQUIRE(openCalls(h, "Table.samples") >= 1);
+    std::size_t const asked = h.dispatcher.count("Table.samples");
+    // The reply leaves the field out again: reading it still finds nothing.
+    replyPage(h, cellPageOf(first));
+    h.settle();
+    std::vector<std::string> const named = lastQuery(h).columns.value_or(std::vector<std::string>{});
+    CHECK(std::ranges::count(named, std::string{"companyA"}) == 1);
+    CHECK(h.dispatcher.count("Table.samples") <= asked + 1);
+}
