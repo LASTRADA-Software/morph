@@ -37,6 +37,22 @@ std::string rowsTable(std::string_view extra, std::string_view columns = "") {
         std::string{columns} + "]" + (extra.empty() ? "" : ", " + std::string{extra}) + "}");
 }
 
+std::string fixedGrid(std::string_view keys,
+                      std::string_view columns = R"({"id":"a","label":"A"},{"id":"b","label":"B"})",
+                      std::string_view top = "") {
+    return R"({"vocab":"ui/1","id":"sheet",)" + std::string{top} +
+           R"("state":{"n":{"init":3}},"view":{"kind":"table","id":"grid",)" + std::string{keys} + R"("columns":[)" +
+           std::string{columns} +
+           R"(],"layoutRows":[{"key":"first","cells":{"a":{"text":"one"},"b":{"text":"two"}}}]}})";
+}
+
+std::string formGrid(std::string_view keys) {
+    return R"({"vocab":"ui/1","id":"rows","models":{"sample":{"type":"Lims_SampleModel"}},"view":{"kind":"column","children":[)"
+           R"({"kind":"form","id":"rec","model":"sample","action":"Lims_RecordRows","submit":"explicit"},)"
+           R"({"kind":"table","id":"grid","form":"rec","field":"rows",)" +
+           std::string{keys} + R"("columns":[{"id":"mass","field":"mass"}]}]}})";
+}
+
 std::string seventeen() {
     std::string columns;
     std::string ids;
@@ -201,6 +217,69 @@ TEST_CASE("covg document loader: a literal that is the wrong shape is refused wh
          document(R"({"kind": "table", "model": "sample", "action": "Lims_ListResults", "filters": {}})",
                   R"("models": {"sample": {"type": "Lims_SampleModel"}},)"),
          "/view/filters: an empty object is not an expression; a constant record is {\"lit\": {}}"},
+        {"a fixed grid that names a model",
+         fixedGrid(R"("model": "m", "table": "t",)", R"({"id":"a","label":"A"},{"id":"b","label":"B"})",
+                   R"("models": {"m": {"type": "Lims_SampleModel"}},)"),
+         "/view/layoutRows: a fixed grid's rows are its `layoutRows`; a model's table takes none"},
+        {"a fixed grid whose column names a field",
+         fixedGrid("", R"({"id":"a","label":"A","field":"x"},{"id":"b","label":"B"})"),
+         "/view/columns/0: a fixed grid's cells name their fields and values; its columns name neither"},
+        {"a fixed grid whose column names a field by expression",
+         fixedGrid("", R"({"id":"a","label":"A","field":{"ref":"n"}},{"id":"b","label":"B"})"),
+         "/view/columns/0/field: `field` as an expression is a grid column's, read per row; this table is not a grid "
+         "of a form"},
+        {"a fixed grid whose column gives a value",
+         fixedGrid("", R"({"id":"a","label":"A","value":{"lit":1}},{"id":"b","label":"B"})"),
+         "/view/columns/0: a fixed grid's cells name their fields and values; its columns name neither"},
+        {"a fixed grid with columns as an expression", fixedGrid(R"("columns": {"lit": []},)", ""),
+         "/view/layoutRows/0/cells/a: a fixed grid's cells are named by the table's column ids; `a` is not one"},
+        {"a fixed grid with summaries", fixedGrid(R"("summaries": [{"key": "s"}],)"),
+         "/view/summaries: a fixed grid's rows are fixed, in the order of its `layoutRows`, and its spans are its "
+         "cells'; it takes no `summaries`"},
+        {"a fixed grid with a sort", fixedGrid(R"("sort": {"lit": []},)"),
+         "/view/sort: a fixed grid's rows are fixed, in the order of its `layoutRows`, and its spans are its cells'; "
+         "it takes no `sort`"},
+        {"a fixed grid with a key", fixedGrid(R"("key": {"row": "id"},)"),
+         "/view/key: a fixed grid's rows are fixed, in the order of its `layoutRows`, and its spans are its cells'; "
+         "it takes no `key`"},
+        {"a table over a form that is none",
+         document(
+             R"({"kind": "table", "id": "g", "form": "nosuch", "field": "rows", "columns": [{"id": "a", "field": "a"}]})"),
+         "/view/form: `nosuch` is not a form of this document"},
+        {"a table over a form with no field",
+         document(R"({"kind": "table", "id": "g", "form": "nosuch", "columns": [{"id": "a", "field": "a"}]})"),
+         "/view: a table over a `form` names its `field`, the form's collection"},
+        {"a grid that enters downward", formGrid(R"("enterMoves": "down",)"), "loads"},
+        {"a grid that enters nowhere", formGrid(R"("enterMoves": "none",)"), "loads"},
+        {"a grid that enters sideways", formGrid(R"("enterMoves": "sideways",)"),
+         "/view/children/1/enterMoves: `enterMoves` is `down`, `right` or `none`"},
+        {"a grid that walks its rows", formGrid(R"("walk": "rows",)"), "loads"},
+        {"a grid that walks its columns", formGrid(R"("walk": "columns",)"), "loads"},
+        {"a grid that walks diagonally", formGrid(R"("walk": "diagonal",)"),
+         "/view/children/1/walk: `walk` is `rows` or `columns`"},
+        {"a grid that adds rows and fixes them", formGrid(R"("appendRows": true, "rowsFixed": true,)"),
+         "/view/children/1/appendRows: a grid with `rowsFixed` adds no rows; drop `appendRows`"},
+        {"a table over an element that is no form",
+         document(
+             R"({"kind": "column", "children": [{"kind": "textInput", "id": "other"}, {"kind": "table", "id": "g", "form": "other", "field": "rows", "columns": [{"id": "a", "field": "a"}]}]})"),
+         "/view/children/1/form: `other` is not a form of this document"},
+        {"a fixed grid over an element that is no form",
+         document(
+             R"({"kind": "column", "children": [{"kind": "textInput", "id": "other"}, {"kind": "table", "id": "g", "form": "other", "columns": [{"id": "a", "label": "A"}], "layoutRows": [{"key": "first", "cells": {"a": {"text": "one"}}}]}]})"),
+         "/view/children/1/form: `other` is not a form of this document"},
+        {"a locale scope with a test id",
+         document(R"({"kind": "localeScope", "locale": "de", "testId": "x", "children": []})"),
+         "/view/testId: `testId` is refused on a locale scope: it is not a widget; wrap it in a node that has one"},
+        {"a locale scope with keys",
+         document(R"({"kind": "localeScope", "locale": "de", "keys": {"Ctrl+J": [{"notify": "x"}]}, "children": []})"),
+         "/view/keys: `keys` is refused on a locale scope: it is not a widget; wrap it in a node that has one"},
+        {"a chart whose lower end is fixed and upper end computed",
+         document(
+             R"({"kind": "chart", "summary": "s", "series": [{"points": {"lit": []}, "y": {"row": "v"}}], "lines": [], "yMin": 5, "yMax": {"fn": "coalesce", "args": [10]}})"),
+         "loads"},
+        {"a field drawn by a component that is no name",
+         R"({"vocab":"ui/1","id":"rows","models":{"sample":{"type":"Lims_SampleModel"}},"view":{"kind":"form","id":"rec","model":"sample","action":"Lims_RecordRows","submit":"explicit","fields":{"mass":{"component":"not a name"}}}})",
+         "/view/fields/mass/component: `component` is a name"},
     }));
     CAPTURE(c.name);
     CHECK(refusal(c.text) == c.expected);
