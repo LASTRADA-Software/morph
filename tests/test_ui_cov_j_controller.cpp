@@ -707,3 +707,30 @@ TEST_CASE("covj custom controller: a save that answers after a newer draft repla
     CHECK(rig.harness.text("heading") == "Second");
     CHECK_FALSE(rig.controller->saving(tab));
 }
+
+TEST_CASE(
+    "covj custom controller: Open as and the navigator list nothing for a base they cannot read, or when not offered",
+    "[covj][ui][custom-screens][controller]") {
+    ControllerRig rig;
+    StoredScreen const stored{rig};
+    SECTION("a screen whose base is not an application screen") {
+        CHECK(rig.controller->openAsChoices("custom:nobody").empty());
+        CHECK(rig.controller->openAsChoices("nowhere").empty());
+    }
+    SECTION("a base that opens with no params is the navigator's, not Open as's") {
+        CHECK(rig.controller->openAsChoices("notes.home").empty());
+    }
+    SECTION("a base with params lists itself and the screens saved on it") {
+        std::vector<morph::ui::CustomScreenChoice> const choices = rig.controller->openAsChoices(stored.id);
+        REQUIRE(choices.size() == 2);
+        CHECK(choices.front().id == "notes.edit");
+        CHECK_FALSE(choices.front().current);
+        CHECK(choices.back().id == stored.id);
+        CHECK(choices.back().current);
+    }
+    SECTION("nothing is offered when the server stores no custom screens") {
+        rig.controller->setOffered(false);
+        CHECK(rig.controller->openAsChoices(stored.id).empty());
+        CHECK(rig.controller->navigatorEntries().empty());
+    }
+}
