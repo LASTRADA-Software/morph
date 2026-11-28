@@ -458,5 +458,4 @@ private:
     morph::reactive::Runtime _rt{_owner};
 };
 
-
 }  // namespace morph::testing::conformance_probe

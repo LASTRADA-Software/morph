@@ -108,7 +108,8 @@ constexpr char const* kHead = R"({
 }  // namespace
 
 // Mutation: run a head action that is hidden or disabled, or report the wrong reason for it.
-TEST_CASE("cove: a head action runs only when it is shown and enabled, and the refusal says which", "[ui][interpreter][cove]") {
+TEST_CASE("cove: a head action runs only when it is shown and enabled, and the refusal says which",
+          "[ui][interpreter][cove]") {
     Harness h;
     auto const screen = h.mount(kHead);
     CHECK_FALSE(screen->runAction("nothing"));
