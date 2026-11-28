@@ -194,7 +194,7 @@ TEST_CASE("cov window state: a selection of the view counts what it excepts and 
     CHECK(rows->selectedCount(keys).rows == 2);
     CHECK(rows->selectedCount(keys).kind == ui::CountKind::Exact);
     ui::TableSelection whole;
-    whole.view = ui::ViewSelection{.filters = {}, .retained = {}, .revision = "r"};
+    whole.view.emplace().revision = "r";
     whole.except = {id(1)};  // held: one fewer, and exact once nothing is owed
     CHECK(rows->selectedCount(whole).rows == 499);
     whole.except = {id(4000)};  // not held: it may or may not be in the view

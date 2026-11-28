@@ -312,7 +312,7 @@ class MORPH_API FilterMenu {
 public:
     /// @brief A closed menu.
     /// @param runtime The runtime its state belongs to.
-    explicit FilterMenu(reactive::Runtime& runtime) : _state{runtime, FilterMenuState{}} {}
+    explicit FilterMenu(reactive::Runtime& runtime) : _state{runtime} {}
 
     FilterMenu(FilterMenu const&) = delete;
     FilterMenu& operator=(FilterMenu const&) = delete;

@@ -120,7 +120,8 @@ TEST_CASE(
     REQUIRE(found.size() == 2);
     CHECK(found.front() == 4);
     CHECK_FALSE(found.back().has_value());
-    ::core::async::StopSource const source;
+    // NOLINTNEXTLINE(misc-const-correctness): request_stop is not const in every standard library.
+    ::core::async::StopSource source;
     f.rows->locateRow(id(4), source.get_token(), [&found](ui::RowLocation const&) { found.emplace_back(0); });
     source.request_stop();
     f.h.settle();

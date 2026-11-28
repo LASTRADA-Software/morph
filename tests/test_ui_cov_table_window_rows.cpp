@@ -173,7 +173,8 @@ TEST_CASE("cov window rows: locating a row by a failed, empty or index-less repl
     REQUIRE(answers.size() == 4);
     CHECK_FALSE(answers.back().has_value());  // the row came without its index
     // A stopped read answers nothing.
-    ::core::async::StopSource const stop;
+    // NOLINTNEXTLINE(misc-const-correctness): request_stop is not const in every standard library.
+    ::core::async::StopSource stop;
     rows->locateRow(id(9), stop.get_token(),
                     [&answers](ui::RowLocation const&) { answers.emplace_back(std::nullopt); });
     h.settle();
