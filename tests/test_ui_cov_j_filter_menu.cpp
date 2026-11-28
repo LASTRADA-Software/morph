@@ -314,3 +314,53 @@ TEST_CASE("covj filter menu: a select-all under a search may tick values past th
         CHECK(m.menu.canApply());
     }
 }
+
+TEST_CASE("covj filter menu: matching case applies to a text condition and to nothing else",
+          "[covj][ui][table][filter_menu]") {
+    auto const [kind, expected] = GENERATE(std::pair{ColumnKind::Text, std::optional<bool>{true}},
+                                           std::pair{ColumnKind::Integer, std::optional<bool>{}});
+    Menu m;
+    m.rows.answer = pagesOf(letters(3));
+    m.open("x", kind);
+    m.menu.setOp(0, ui::ConditionOp::Equals);
+    m.menu.setMatchCase(true);
+    m.menu.setOperand(0, "5");
+    m.settle();
+    REQUIRE(m.applied.size() == 1);
+    CHECK(m.applied.back().columns.at("x").include.front().caseSensitive == expected);
+}
+
+TEST_CASE("covj filter menu: unticking a month keeps the ranges that do not hold it, and the days after it",
+          "[covj][ui][table][filter_menu]") {
+    Menu m;
+    m.rows.answer = [](table::DistinctRequest const& request) -> DistinctReply {
+        table::DistinctValues out;
+        if (request.bucket == table::DateBucket::Year) {
+            out.values = {valueOf("2024", "2024-01-01..2024-12-31", 3), valueOf("2025", "2025-01-01..2025-12-31", 1)};
+        } else {
+            out.values = {valueOf("2024-01", "2024-01-01..2024-01-31", 2),
+                          valueOf("2024-02", "2024-02-01..2024-02-29", 1)};
+        }
+        out.distinct = static_cast<std::int64_t>(out.values.size());
+        return out;
+    };
+    m.open("d", ColumnKind::Date);
+    m.menu.openBucket(0);
+    m.settle();
+    REQUIRE(m.state().list.size() == 4);  // 2024, its two months, 2025
+    SECTION("a range elsewhere stays") {
+        m.menu.tick(3, true);
+        m.menu.tick(1, false);
+        CHECK(m.state().dates == std::vector<std::string>{"2025-01-01..2025-12-31"});
+    }
+    SECTION("the first month of a ticked year leaves the days after it") {
+        m.menu.tick(0, true);
+        m.menu.tick(1, false);
+        CHECK(m.state().dates == std::vector<std::string>{"2024-02-01..2024-12-31"});
+    }
+    SECTION("the second month of a ticked year splits its range around it") {
+        m.menu.tick(0, true);
+        m.menu.tick(2, false);
+        CHECK(m.state().dates == std::vector<std::string>{"2024-01-01..2024-01-31", "2024-03-01..2024-12-31"});
+    }
+}
