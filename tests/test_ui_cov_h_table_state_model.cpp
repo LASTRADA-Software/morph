@@ -369,3 +369,18 @@ TEST_CASE(
         CHECK(reply.message.contains("ended before its size"));
     }
 }
+
+TEST_CASE("cov h state model: with no verified principal a read answers nothing and a save is refused",
+          "[covh][ui][state]") {
+    Harness h;
+    auto const key = keyOfPart("state");
+    std::string const doc = R"({"version":1,"view":"abc"})";
+    auto const revision = savedRevision(h.call("save", saveBody(key, doc)));
+    auto const read = h.call("read", readBody(key, revision, 0), "");
+    REQUIRE(read.kind == "ok");
+    ui::TableStateChunk const chunk = morph::model::ActionTraits<ui::TableStateRead>::resultFromJson(read.body);
+    CHECK(chunk.revision.empty());
+    CHECK(chunk.text.empty());
+    CHECK(h.call("save", saveBody(key, doc), "").kind != "ok");
+    CHECK(h.call("remove", removeBody(key), "").kind != "ok");
+}

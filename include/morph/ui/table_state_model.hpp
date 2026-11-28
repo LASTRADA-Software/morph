@@ -399,7 +399,8 @@ struct TableStateShared {
 ///        a document of any size in entries of at most `segmentBytes`.
 ///
 /// The person is the principal of the verified session, as for the preferences model: no request names one. With no
-/// verified principal, `load` answers nothing found for every key and `read`, `save` and `remove` are refused.
+/// verified principal, `load` answers nothing found for every key, `read` answers no revision and no text, and
+/// `save` and `remove` are refused.
 ///
 /// The `shared` part is the exception: it is the views published for everyone, so its entries are kept with no
 /// person, and every verified caller's `load` and `read` reach the same document. It is written only by `publish`,
