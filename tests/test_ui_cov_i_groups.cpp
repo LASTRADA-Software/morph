@@ -88,3 +88,41 @@ TEST_CASE("covi groups: removing a group that has no filter leaves the filters a
     CHECK(readJson(*screen, R"({"ref":"t.filters.groups"})") == "[]");
     CHECK(h.backend.prop(table, "columnGroups") == "[]");
 }
+
+TEST_CASE("covi groups: removing one group leaves another's filter and its open dialog alone", "[covi][ui][table][config]") {
+    TableHarness h;
+    auto const screen = h.mount(R"({
+  "vocab": "ui/1", "id": "grouped",
+  "state": { "items": { "init": { "lit": [ { "id": 1, "a": "x", "b": "y", "c": "z", "d": "w" } ] } } },
+  "view": { "kind": "table", "id": "t", "testId": "t", "rows": { "ref": "items" }, "key": { "row": "id" },
+            "columns": [ { "id": "a", "label": "A" }, { "id": "b", "label": "B" },
+                         { "id": "c", "label": "C" }, { "id": "d", "label": "D" } ] } })");
+    int const table = h.byTestId("Table", "t");
+    chooseMenu(h, table, std::nullopt, {"Columns…"});
+    press(h, "table_columns_group");
+    toggleBox(h, "table_group_column_a");
+    toggleBox(h, "table_group_column_b");
+    typeInto(h, "table_group_label", "First");
+    press(h, "table_group_create");
+    press(h, "table_columns_group");
+    toggleBox(h, "table_group_column_c");
+    toggleBox(h, "table_group_column_d");
+    typeInto(h, "table_group_label", "Second");
+    press(h, "table_group_create");
+    press(h, "table_columns_done");
+    REQUIRE(h.backend.prop(table, "columnGroups") == "[First:0+2,Second:2+2]");
+    for (std::size_t group = 0; group < 2; ++group) {
+        clickGroupFilter(h, table, group);
+        chooseOption(h, "table_filter_op_1", "equals");
+        typeInto(h, "table_filter_operand_1", group == 0 ? "x" : "z");
+        h.advance(250ms);
+    }
+    REQUIRE(readJson(*screen, R"({"ref":"t.filters.groups"})").contains(R"("columns":["c","d"])"));
+    // The second group's filter is open; removing the first leaves it, and the second's own filter, in place.
+    chooseMenu(h, table, std::nullopt, {"Columns…"});
+    press(h, "table_group_remove_g1");
+    std::string const left = readJson(*screen, R"({"ref":"t.filters.groups"})");
+    CHECK(left.contains(R"("columns":["c","d"])"));
+    CHECK_FALSE(left.contains(R"("columns":["a","b"])"));
+    CHECK(propOf(h, "Dialog", "table_filter", "open") == "true");
+}

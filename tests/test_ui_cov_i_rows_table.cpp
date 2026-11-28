@@ -3,6 +3,7 @@
 // A table over `rows` and the properties that shape its arrangement: where its state is kept, how long its sort may
 // be, its column groups, a bound layout, and what a copy and a cell's menu do at their edges.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <memory>
@@ -173,4 +174,18 @@ TEST_CASE("covi rows table: a click, a range and select all select rows by their
     h.backend.selectAll(table);
     h.settle();
     CHECK(elementValue(*screen, "list", "selection") == R"(["a","b","c"])");
+}
+
+TEST_CASE("covi rows table: a bound sort with entries that name no column or direction still marks the keys it can",
+          "[covi][ui][table]") {
+    TableHarness h;
+    std::string doc = rowsDoc(kThree, R"(,"sort":{"ref":"s"})");
+    doc.insert(doc.find(R"("state":{)") + 9,
+               R"("s":{"init":{"lit":[{"column":"name"},{"column":5,"direction":"asc"},)"
+               R"({"column":"id","direction":7}]}},)");
+    auto const screen = h.mount(doc);
+    int const table = tableOf(h);
+    std::vector<std::string> const labels = labelsOf(morph::ui::testing::menuOf(h, table, 1));
+    CHECK(std::ranges::contains(labels, std::string{"Remove from sort"}));
+    CHECK_FALSE(morph::ui::testing::reportsOf(h).empty());
 }

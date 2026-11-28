@@ -319,3 +319,23 @@ TEST_CASE("covi cell menu: a bound filter is the document's, the gesture only te
     CHECK(readJson(*screen, R"({"ref":"seen"})").contains(R"("mass")"));
     CHECK(readJson(*screen, R"({"ref":"f"})") == R"({"columns":{}})");
 }
+
+TEST_CASE("covi cell menu: a level that failed is named by its first letter capitalised", "[covi][ui][table]") {
+    struct Case {
+        char const* level;
+        char const* state;
+    };
+    for (Case const& item : std::vector<Case>{{"recipe", "Recipe data could not be loaded."},
+                                              {"Assay", "Assay data could not be loaded."},
+                                              {"~raw", "~raw data could not be loaded."}}) {
+        INFO(item.level);
+        TableHarness h;
+        auto const screen = h.mount(R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
+                                    R"("view":{"kind":"table","id":"t","testId":"t","model":"sample","table":"samples"}})");
+        replyDescribe(h, morph::ui::testing::withLevel(morph::ui::testing::samplesDescription(3), "c3", item.level));
+        replyPage(h, morph::ui::testing::pageJsonUnloaded(
+                         h.described.revision, 0, 20, 20, h.columns,
+                         {{.index = 1, .levels = {item.level}, .failed = {item.level}}}, {item.level}));
+        CHECK(statusOf(h, h.byTestId("Table", "t")).state == item.state);
+    }
+}
