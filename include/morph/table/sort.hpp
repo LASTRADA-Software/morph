@@ -13,7 +13,8 @@
 /// only a `Number` column holds a double.
 ///
 /// Ordering rules, normative for every client and server (spec 7 §5):
-/// - an empty or invalid cell sorts after every valid one, in either direction;
+/// - an empty or invalid cell sorts after every valid one, and an unloaded cell
+///   after every empty or invalid one, in either direction;
 /// - each key of a chain has its own direction;
 /// - ties break by source row, so the sort is stable.
 ///
@@ -30,6 +31,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <ios>
+#include <limits>
 #include <locale>
 #include <memory>
 #include <morph/table/data_source.hpp>
@@ -51,7 +53,7 @@ namespace morph::table {
 /// @brief A sort key's direction.
 enum class SortDirection : std::uint8_t {
     Ascending,   ///< Smallest first.
-    Descending,  ///< Largest first. Invalid cells still come last.
+    Descending,  ///< Largest first. Empty, invalid and unloaded cells still come last.
 };
 
 /// @brief One key of a sort chain.
@@ -72,9 +74,10 @@ using SortChain = std::vector<SortKey>;
 
 /// @brief Whether a cell has a key.
 enum class CellState : std::uint8_t {
-    Valid,    ///< The cell has a key.
-    Empty,    ///< The cell is empty; it sorts with invalid cells.
-    Invalid,  ///< The cell could not be read for its column's kind.
+    Valid,     ///< The cell has a key.
+    Empty,     ///< The cell is empty; it sorts with invalid cells.
+    Invalid,   ///< The cell could not be read for its column's kind.
+    Unloaded,  ///< The cell's value is not loaded yet; it has no key and sorts after every other state.
 };
 
 /// @brief A deadline for one step of work; `kNoDeadline` runs to completion.
@@ -130,12 +133,25 @@ inline constexpr std::size_t kCheckEvery = 2048;
 ///        `parseReal` for a standard library without floating-point `from_chars`.
 ///
 /// The classic locale, not the global one: a filter value is the wire's text, so its decimal point is `.` whatever
-/// locale the process runs in.
+/// locale the process runs in. Infinity is read as `from_chars` reads it, `inf` or `infinity` in any case with an
+/// optional `-`, which a stream does not do itself; so a filter means the same with either reader.
 /// @param text The text.
 /// @return The value, or nothing when @p text is not exactly a number or is NaN.
 [[nodiscard]] inline std::optional<double> parseRealClassic(std::string_view text) {
     if (text.empty() || text.front() == '+' || std::isspace(static_cast<unsigned char>(text.front())) != 0) {
         return std::nullopt;
+    }
+    {
+        bool const negative = text.front() == '-';
+        std::string_view const magnitude = negative ? text.substr(1) : text;
+        auto const spells = [magnitude](std::string_view word) {
+            return std::ranges::equal(magnitude, word, [](char got, char want) {
+                return std::tolower(static_cast<unsigned char>(got)) == want;
+            });
+        };
+        if (spells("inf") || spells("infinity")) {
+            return negative ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
+        }
     }
     std::istringstream stream{std::string{text}};
     stream.imbue(std::locale::classic());
@@ -166,6 +182,43 @@ inline constexpr std::size_t kCheckEvery = 2048;
 #endif
 }
 
+/// @brief Splits a measure operand: a decimal, or a decimal, one space and a unit id.
+///
+/// The form a filter operand on a `Measure` column has on the wire, whatever the user's locale: `"250 g"`,
+/// `"0.3 kg"`; a decimal with no unit names the ratio's unit `""`. The decimal is read by `parseDecimal`.
+/// @param text The operand.
+/// @return The amount and the unit's id, or nothing when @p text has another form.
+[[nodiscard]] inline std::optional<std::pair<math::Rational, std::string_view>> splitMeasureOperand(
+    std::string_view text) {
+    auto const space = text.find(' ');
+    auto const amount = parseDecimal(text.substr(0, space));
+    if (!amount) {
+        return std::nullopt;
+    }
+    if (space == std::string_view::npos) {
+        return std::pair{*amount, std::string_view{}};
+    }
+    auto const unit = text.substr(space + 1);
+    if (unit.empty() || unit.contains(' ')) {
+        return std::nullopt;
+    }
+    return std::pair{*amount, unit};
+}
+
+/// @brief The place of a dimension in a `Measure` column: the index its group sorts at.
+/// @param info      The column.
+/// @param registry  The registry.
+/// @param dimension The dimension's name.
+/// @return Its index in `info.dimensions`, or in `registry.dimensions()` when the column names none; -1 when the
+///         column does not allow it.
+[[nodiscard]] inline std::int32_t dimensionPlace(ColumnInfo const& info, UnitRegistry const& registry,
+                                                 std::string_view dimension) {
+    std::span<std::string const> const order =
+        info.dimensions.empty() ? registry.dimensions() : std::span<std::string const>{info.dimensions};
+    auto const found = std::ranges::find(order, dimension);
+    return found == order.end() ? -1 : static_cast<std::int32_t>(found - order.begin());
+}
+
 }  // namespace detail
 
 /// @brief One column's keys, built once and shared, immutable, between jobs.
@@ -174,7 +227,9 @@ inline constexpr std::size_t kCheckEvery = 2048;
 /// `ints` for `Integer`, `Key`, `Date`, `DateTime` and `Bool`; `exact` for
 /// `Decimal` and `Quantity`; `reals` for `Number`; `text`, `folded` and `raw`
 /// for `Text`; `cells` for a `Custom` column with a known comparator, and
-/// `text` for one without (ordered by display text).
+/// `text` for one without (ordered by display text); `exact` and `places` for
+/// `Measure`, whose key is the pair of its dimension's place and its amount in
+/// the dimension's base unit.
 struct KeyColumn {
     /// @brief The column's kind.
     ColumnKind kind = ColumnKind::Text;
@@ -182,8 +237,15 @@ struct KeyColumn {
     std::vector<CellState> states;
     /// @brief Integer keys.
     std::vector<std::int64_t> ints;
-    /// @brief Exact keys.
+    /// @brief Exact keys; a measure's amount in its dimension's base unit.
     std::vector<math::Rational> exact;
+    /// @brief A `Measure` column's places: each row's dimension, as its index among the column's dimensions.
+    std::vector<std::uint32_t> places;
+    /// @brief A `Measure` column's dimension place of each unit, by unit number: -1 for a tombstone or a dimension
+    ///        the column does not allow. Built once from the registry, so a cell's unit is read by its number.
+    std::vector<std::int32_t> unitPlaces;
+    /// @brief A `Measure` column's factor of each unit to its dimension's base, by unit number.
+    std::vector<math::Rational> unitFactors;
     /// @brief Floating-point keys.
     std::vector<double> reals;
     /// @brief Collation keys.
@@ -239,6 +301,22 @@ struct KeyColumn {
                     out.text.resize(rows);
                 }
                 break;
+            case ColumnKind::Measure:
+                out.exact.assign(rows, math::Rational{});
+                out.places.assign(rows, 0);
+                if (services.units != nullptr) {
+                    auto const& registry = *services.units;
+                    out.unitPlaces.assign(registry.size(), -1);
+                    out.unitFactors.assign(registry.size(), math::Rational{});
+                    for (UnitId unit = 0; unit < registry.size(); ++unit) {
+                        if (registry.contains(unit)) {
+                            auto const& known = registry.info(unit);
+                            out.unitPlaces[unit] = detail::dimensionPlace(info, registry, known.dimension);
+                            out.unitFactors[unit] = known.toBase;
+                        }
+                    }
+                }
+                break;
             default:
                 break;
         }
@@ -256,6 +334,10 @@ struct KeyColumn {
 
 private:
     [[nodiscard]] CellState read(std::size_t row, Cell const& cell, ColumnInfo const& info, Services const& services) {
+        // Before the kind: every kind treats an unloaded cell alike, and none stores a key for it.
+        if (std::holds_alternative<Unloaded>(cell)) {
+            return CellState::Unloaded;
+        }
         if (std::holds_alternative<std::monostate>(cell)) {
             return CellState::Empty;
         }
@@ -292,10 +374,49 @@ private:
                     text[row] = detail::collatorOf(services).sortKey(displayText(cell));
                 }
                 return CellState::Valid;
+            case ColumnKind::Measure:
+                return readMeasure(row, cell, services);
             default:
                 break;
         }
         return CellState::Invalid;
+    }
+
+    // A measure, a plain number (the ratio's unit, number 0) or an operand's text. A measure's unit is read by its
+    // number through the tables `forColumn` built, so building keys looks no unit up by its id.
+    [[nodiscard]] CellState readMeasure(std::size_t row, Cell const& cell, Services const& services) {
+        math::Rational amount;
+        UnitId unit = 0;
+        if (auto const* const value = std::get_if<Measure>(&cell)) {
+            amount = value->amount;
+            unit = value->unit;
+        } else if (auto const* const exactValue = std::get_if<math::Rational>(&cell)) {
+            amount = *exactValue;
+        } else if (auto const* const integer = std::get_if<std::int64_t>(&cell)) {
+            amount = math::Rational{*integer, math::DecimalPlaces{0}};
+        } else if (auto const* const textValue = std::get_if<std::string>(&cell)) {
+            auto const operand = detail::splitMeasureOperand(*textValue);
+            auto const found =
+                operand && services.units != nullptr ? services.units->find(operand->second) : std::nullopt;
+            if (!found) {
+                return CellState::Invalid;
+            }
+            amount = operand->first;
+            unit = *found;
+        } else {
+            return CellState::Invalid;
+        }
+        if (unit >= unitPlaces.size() || unitPlaces[unit] < 0) {
+            return CellState::Invalid;
+        }
+        // Checked: a product that does not fit is an invalid cell, as for a quantity.
+        auto const base = math::checkedMul(amount, unitFactors[unit]);
+        if (!base) {
+            return CellState::Invalid;
+        }
+        exact[row] = *base;
+        places[row] = static_cast<std::uint32_t>(unitPlaces[unit]);
+        return CellState::Valid;
     }
 
     [[nodiscard]] CellState readInteger(std::size_t row, Cell const& cell) {
@@ -424,21 +545,35 @@ inline void buildKeys(RowSnapshot const& snapshot, std::size_t column, ColumnInf
     snapshot.readColumn(column, sink, first, last);
 }
 
-/// @brief Compares two rows' keys in one column, valid before invalid in
-///        either direction.
+/// @brief Compares two rows' keys in one column: valid cells first, then empty
+///        and invalid ones, then unloaded ones, in either direction.
 /// @param keys The column's keys.
 /// @param left  One row.
 /// @param right Another row.
-/// @param dir   The key's direction; it does not move invalid cells.
+/// @param dir   The key's direction; it does not move empty, invalid or unloaded cells.
 /// @return Negative, zero or positive as row @p left orders before, with, or after @p right.
 [[nodiscard]] inline int compareKeys(KeyColumn const& keys, std::uint32_t left, std::uint32_t right,
                                      SortDirection dir) {
-    bool const validA = keys.states[left] == CellState::Valid;
-    bool const validB = keys.states[right] == CellState::Valid;
-    if (validA != validB) {
-        return validA ? -1 : 1;
+    // Valid 0; Empty and Invalid 1 (they tie); Unloaded 2 (they tie). Ranks never flip with the direction, so an
+    // unloaded cell is never placed among the empties it might not belong to.
+    auto const rank = [](CellState state) {
+        switch (state) {
+            case CellState::Valid:
+                return 0;
+            case CellState::Unloaded:
+                return 2;
+            case CellState::Empty:
+            case CellState::Invalid:
+            default:
+                return 1;
+        }
+    };
+    int const rankA = rank(keys.states[left]);
+    int const rankB = rank(keys.states[right]);
+    if (rankA != rankB) {
+        return rankA < rankB ? -1 : 1;
     }
-    if (!validA) {
+    if (rankA != 0) {
         return 0;
     }
     auto const sign = [](auto ordering) -> int {
@@ -469,6 +604,14 @@ inline void buildKeys(RowSnapshot const& snapshot, std::size_t column, ColumnInf
         case ColumnKind::Custom:
             result = keys.usesComparator() ? sign(keys.comparator(keys.cells[left], keys.cells[right]))
                                            : sign(keys.text[left].compare(keys.text[right]) <=> 0);
+            break;
+        case ColumnKind::Measure:
+            // Dimensions keep their declared order in either direction: comparing kilograms with percent means
+            // nothing, so there is nothing to reverse between them.
+            if (keys.places[left] != keys.places[right]) {
+                return keys.places[left] < keys.places[right] ? -1 : 1;
+            }
+            result = sign(keys.exact[left] <=> keys.exact[right]);
             break;
         default:
             break;

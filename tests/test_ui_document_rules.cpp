@@ -133,6 +133,45 @@ TEST_CASE("ui document rules: a model-backed table's engine sorts, groups, pages
               .starts_with("/view/selection: a model-backed table's engine owns its selection"));
 }
 
+// Mutation: accept any maxSortKeys (33 loads).
+TEST_CASE("ui document rules: table: maxSortKeys is a rows table's literal from 1 to 32", "[ui][document][table]") {
+    CHECK(refusal(rowsTable(R"(, "maxSortKeys": 1)")) == "loads");
+    CHECK(refusal(rowsTable(R"(, "maxSortKeys": 32)")) == "loads");
+    CHECK(refusal(rowsTable(R"(, "maxSortKeys": 33)")) == "/view/maxSortKeys: `maxSortKeys` is 1 to 32");
+    CHECK(refusal(rowsTable(R"(, "maxSortKeys": 0)")) == "/view/maxSortKeys: `maxSortKeys` is 1 to 32");
+    CHECK(refusal(rowsTable(R"(, "maxSortKeys": {"ref": "n"})", R"("state": {"n": {"init": 12}},)")) ==
+          "/view/maxSortKeys: `maxSortKeys` is 1 to 32");
+    CHECK(
+        refusal(modelTable(R"(, "maxSortKeys": 12)")) ==
+        "/view/maxSortKeys: `maxSortKeys` is a `rows` table's; a model's table carries its bound in its description");
+}
+
+// Mutation: the loader accepting any `configurable` literal.
+TEST_CASE("ui document rules: table: configurable, locked and filterable are literals the loader checks",
+          "[ui][document][table]") {
+    std::string const shape =
+        R"(/view/configurable: `configurable` is a literal `true`, `false`, or a list of "reorder", "hide", "pin" and "resize")";
+    CHECK(refusal(rowsTable(R"(, "configurable": {"lit": ["reorder", "sort"]})")) ==
+          "/view/configurable: `configurable` names `sort`; it lists reorder, hide, pin and resize");
+    CHECK(refusal(rowsTable(R"(, "configurable": {"ref": "x"})", R"("state": {"x": {"init": true}},)")) == shape);
+    CHECK(refusal(rowsTable(R"(, "configurable": "hide")")) == shape);
+    CHECK(refusal(rowsTable(R"(, "configurable": {"lit": [1]})")) == shape);
+    CHECK(refusal(rowsTable(R"(, "configurable": false)")) == "loads");
+    CHECK(refusal(rowsTable(R"(, "configurable": {"lit": ["reorder", "hide", "pin", "resize"]})")) == "loads");
+    CHECK(refusal(modelTable(R"(, "configurable": {"lit": ["hide"]})")) == "loads");
+    auto const columns = [](std::string_view column) {
+        return document(std::string{R"({"kind": "table", "rows": {"lit": []}, "columns": [)"} + std::string{column} +
+                            R"(], "onLayoutChange": [{"set": "x", "value": {"ref": "event"}}],
+                               "onFiltersChange": [{"set": "x", "value": {"ref": "event"}}]})",
+                        R"("state": {"x": {"init": true}},)");
+    };
+    CHECK(refusal(columns(R"({"id": "a", "filterable": {"ref": "x"}})")) ==
+          "/view/columns/0/filterable: `filterable` is a literal `true` or `false`");
+    CHECK(refusal(columns(R"({"id": "a", "locked": {"ref": "x"}})")) ==
+          "/view/columns/0/locked: `locked` is a literal `true` or `false`");
+    CHECK(refusal(columns(R"({"id": "a", "locked": true, "filterable": false})")) == "loads");
+}
+
 // Mutation: accept any literal pageSize (0 loads).
 TEST_CASE("ui document rules: a table's page holds a positive whole number of rows", "[ui][document][table]") {
     CHECK(refusal(rowsTable(R"(, "pageSize": 10, "page": 0)")) == "loads");

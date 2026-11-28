@@ -167,7 +167,8 @@ inline void addInstanceChange(Changes& changes, InstanceChange const& ranOn) {
     }
 }
 
-/// @brief Adds the change an `updates<R>` effect makes: the keys of the `R` rows found in the result.
+/// @brief Adds the change an `updates<R>` effect makes: the keys of the `R` rows found in the result, and the keys
+///        those rows had before, where the record names a member for them.
 ///
 /// A result that does not parse, or a record without a key, cannot name rows: the whole type is reported,
 /// which over-notifies but never misses.
@@ -190,6 +191,9 @@ inline void addUpdatesChange(Resolved const& resolved, std::string_view actionId
         }
         for (auto const& path : held.paths) {
             collectKeysAtPath(*parsed, path, *info->keyField, keys);
+            if (info->previousKeyField) {
+                collectKeysAtPath(*parsed, path, *info->previousKeyField, keys);
+            }
         }
     }
     addRecordChange(changes, record, std::move(keys));

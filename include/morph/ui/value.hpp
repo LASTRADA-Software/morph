@@ -13,6 +13,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <morph/export.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -273,7 +274,9 @@ public:
             return *mine == *other.asList();
         }
         if (ValueRecord const* const mine = asRecord()) {
-            return *mine == *other.asRecord();
+            // One shared record is equal to itself without a walk of its fields: a table's row records are compared
+            // per cell on every pass.
+            return mine == other.asRecord() || *mine == *other.asRecord();
         }
         return _data == other._data;
     }
@@ -567,8 +570,22 @@ namespace detail {
 /// A timestamp has no structural form — it is a string — so it is read through the typed overload.
 /// @param json The JSON value.
 /// @return The value, or the reason it is refused.
-[[nodiscard]] inline std::expected<Value, std::string> valueFromJson(Json const& json) {
+[[nodiscard]] inline std::expected<Value, std::string> valueFromJson(Json const& json);
+
+namespace detail {
+
+/// @brief What a structural read makes of a JSON number with a fraction or an exponent; null refuses it.
+using FractionReader = Value (*)(double number);
+
+/// @brief `valueFromJson` and `tableValueFromJson`, which differ only in @p fraction.
+/// @param json     The JSON value.
+/// @param fraction What a number with a fraction or an exponent becomes; null refuses it, since an exact value is
+///                 never written as a double.
+/// @return The value, or the reason it is refused.
+// NOLINTNEXTLINE(misc-no-recursion): arrays and objects are read element by element.
+[[nodiscard]] inline std::expected<Value, std::string> structuralFromJson(Json const& json, FractionReader fraction) {
     struct Visitor {
+        FractionReader fraction;
         std::expected<Value, std::string> operator()(std::nullptr_t) const { return Value{}; }
         std::expected<Value, std::string> operator()(bool flag) const { return Value{flag}; }
         std::expected<Value, std::string> operator()(std::uint64_t number) const {
@@ -579,16 +596,18 @@ namespace detail {
         }
         std::expected<Value, std::string> operator()(std::int64_t number) const { return Value{number}; }
         std::expected<Value, std::string> operator()(double number) const {
-            static_cast<void>(number);
-            return std::unexpected(
-                std::string{R"(a number with a fraction is not exact; write a decimal as {"num", "den", "dp"})"});
+            if (fraction == nullptr) {
+                return std::unexpected(
+                    std::string{R"(a number with a fraction is not exact; write a decimal as {"num", "den", "dp"})"});
+            }
+            return fraction(number);
         }
         std::expected<Value, std::string> operator()(std::string const& text) const { return Value{text}; }
         std::expected<Value, std::string> operator()(Json::array_t const& array) const {
             ValueList items;
             items.reserve(array.size());
             for (Json const& element : array) {
-                auto item = valueFromJson(element);
+                auto item = structuralFromJson(element, fraction);
                 if (!item) {
                     return item;
                 }
@@ -602,7 +621,7 @@ namespace detail {
             }
             ValueRecord fields;
             for (auto const& [name, member] : object) {
-                auto field = valueFromJson(member);
+                auto field = structuralFromJson(member, fraction);
                 if (!field) {
                     return field;
                 }
@@ -611,7 +630,26 @@ namespace detail {
             return Value{std::move(fields)};
         }
     };
-    return std::visit(Visitor{}, json.data);
+    return std::visit(Visitor{.fraction = fraction}, json.data);
+}
+
+/// @brief Reads a value from its JSON form as `valueFromJson` does, except that a number with a fraction or an
+///        exponent is kept: it becomes the decimal its shortest round-trip text in fixed notation spells
+///        (`std::to_chars` with `std::chars_format::fixed`, read by `table::parseDecimal`), so `0.0001` is the
+///        decimal 0.0001 with 4 places; where no decimal holds it (more than 18 places, a numerator past int64) it
+///        becomes its shortest text, such as `1e+300`.
+///
+/// The reply of a query cache entry that holds a record opaquely, a table's page, is read so: its `Number` cells
+/// are such numbers, and the strict rule would refuse the whole page. Every other reply keeps the strict rule.
+/// Defined in the library, beside the cache that reads it, so this header needs no table header.
+/// @param json The JSON value.
+/// @return The value, or the reason it is refused.
+[[nodiscard]] MORPH_API std::expected<Value, std::string> tableValueFromJson(Json const& json);
+
+}  // namespace detail
+
+inline std::expected<Value, std::string> valueFromJson(Json const& json) {
+    return detail::structuralFromJson(json, nullptr);
 }
 
 /// @brief Reads a value from its JSON form as a value of @p type.

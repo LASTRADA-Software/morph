@@ -552,7 +552,7 @@ ui::Node resultTable(Review const& review) {
          .wrap = false,
          .shrink = true}};
     return ui::table(review.shownResults, {.key = ui::row("key"),
-                                           .columns = columns,
+                                           .columns = layout::unfiltered(columns),
                                            .rowTone = ui::cond(ui::eq(ui::row("tone"), "err"), ui::AnyHandle{"err"},
                                                                ui::AnyHandle{nullptr})})
         .a11y("Results under review")
@@ -619,7 +619,7 @@ ui::Node lotTable(Review const& review) {
     return ui::column(
         {ui::table(ofSelected(review, review.lots),
                    {.key = ui::row("lot"),
-                    .columns = columns,
+                    .columns = layout::unfiltered(columns),
                     .empty = {ui::emptyState({.title = "No lots to compare",
                                               .text = "This product has no earlier lots tested by this method."})}})
              .a11y("Previous lots")

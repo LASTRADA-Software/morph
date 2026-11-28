@@ -192,7 +192,11 @@ built in nor in the theme draws nothing and changes no colour.
 | `tabs.paddingX` (0), `tabs.gap` (0): a tab's inset on each side of its label, which is also how far the active underline runs past the label, and the space between two tabs, drawn as a leading inset on each tab after the first so that it stays clickable; 0 keeps spacing step 3 for the padding and no gap. A negative value is refused by `checkTheme` as `tabs.paddingX: must not be negative`. The terminal reads no dimension | dimension, in px |
 | `table.cellPaddingX` (8), `table.cellPaddingY` (4): the inset of a table cell and of a header label on each axis; a row is as tall as its tallest cell plus twice the vertical inset, and at least `Theme.targetHeight − 8`. The terminal keeps its one-column gap between cells and no vertical padding | dimension, in px |
 | `color.chart.1` … `color.chart.4` (`#0072b2`, `#c25400`, `#00805e`, `#a8508a`): a chart's series colours, in drawing order | colour |
+| `color.table.busy` (`#1565c0`, the info colour): the 3 px bar a table row an action of this session is working on draws just inside the selection's bar. The terminal draws a glyph and reads no colour | colour |
+| `color.table.locked` (`#8e8e9338`, grey at 22 %): the wash over the cells of a table row another user holds; translucent, so the cells read through it. The terminal draws a glyph and reads no colour | colour |
+| `color.table.summary` (`#8e8e931f`, grey at 12 %): the surface a table's summary row is drawn on; translucent, so the row's background reads through it. The terminal draws `Σ` in the row's gutter and reads no colour | colour |
 | `opacity.stale` | number |
+| `opacity.muted` (0.55): the opacity of a table row kept in view although it no longer matches the filter. `opacity.stale` and `opacity.muted` outside 0 to 1 are refused by `checkTheme` as `<path>: must be between 0 and 1`. The terminal draws such a row dim | number |
 | `space.0` … `space.5`, defaults 0, 4, 8, 12, 16, 24 | dimension, in px |
 | `color.background` (`#f2f3f7`) | colour |
 | `radius.control` (6), `radius.card` (10), `radius.badge` (4: a tag, a chip and a select option), `control.height` (32) | dimension, in px |
@@ -244,6 +248,8 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `chart1` … `chart4` | `color.chart.1` … `color.chart.4` |
 | `scrim` | `color.scrim` |
 | `staleOpacity` | `opacity.stale` |
+| `mutedOpacity` | `opacity.muted` |
+| `tableBusy`, `tableLocked`, `tableSummary` | `color.table.busy`, `color.table.locked`, `color.table.summary` |
 | `space` (six px lengths) | `space.0` … `space.5` |
 | `background` | `color.background` |
 | `touchTextSize`, `smallHeight`, `smallTouchHeight` | `control.touchTextSize`, `button.smallHeight`, `button.smallTouchHeight` |

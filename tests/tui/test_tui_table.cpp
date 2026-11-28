@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <libunicode/convert.h>
+
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -8,19 +10,27 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <morph/reactive/runtime.hpp>
+#include <morph/reactive/signal.hpp>
+#include <morph/testing/step_executor.hpp>
+#include <morph/tui/backend.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/mount.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
+#include "grid_test_support.hpp"
 #include "tui/container_widgets.hpp"
 #include "tui/display_widgets.hpp"
 #include "tui/leaf_widgets.hpp"
 #include "tui/table_widget.hpp"
 #include "tui_harness.hpp"
+#include "ui_fake_rows.hpp"
 
 namespace ui = morph::ui;
 using core::tui::EventResult;
@@ -555,6 +565,30 @@ TEST_CASE("tui table: a disabled row is neither selected nor activated", "[tui][
     CHECK(calls == 1);
 }
 
+// Mutation: fit reporting the tables it took without watching them (the second report runs on a destroyed table:
+// a use after free under ASan).
+TEST_CASE("tui table: a range handler may destroy another table waiting to report", "[tui][table][lifetime]") {
+    Harness harness{30, 12};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto first = std::make_unique<Fruit>(harness, ui::SelectionMode::Single, column.get());
+    auto second = std::make_unique<Fruit>(harness, ui::SelectionMode::Single, column.get());
+    int reports = 0;
+    // Each table's first frame asks to report its columns before the next one, so both wait in the same batch; the
+    // first to report destroys the other.
+    first->table->setOnHorizontalRange([&](int /*scrollX*/, int /*viewport*/) {
+        ++reports;
+        second->table.reset();
+    });
+    second->table->setOnHorizontalRange([&](int /*scrollX*/, int /*viewport*/) {
+        ++reports;
+        first->table.reset();
+    });
+    static_cast<void>(harness.draw());  // both tables ask to report
+    static_cast<void>(harness.draw());  // the first report destroys the other table, whose report is skipped
+    CHECK(reports == 1);
+    CHECK((first->table == nullptr) != (second->table == nullptr));
+}
+
 TEST_CASE("tui table: a table handler may destroy its own table", "[tui][table][lifetime]") {
     Harness harness{30, 5};
     auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
@@ -736,6 +770,74 @@ TEST_CASE("tui table: a toned row's cells draw in the tone's style", "[tui][tabl
     CHECK_THROWS_AS(fruit.table->setRowTone(*fruit.cells.at(0), ui::Tone::Ok), std::logic_error);
 }
 
+// Mutation: setRowMarks doing nothing (no row is dim, and every line starts with the selection's gutter).
+TEST_CASE("tui table: a row's marks are drawn", "[tui][table]") {
+    Harness harness{30, 5};
+    Fruit fruit{harness, ui::SelectionMode::Single};
+    fruit.addRow(harness, key(3), "plum", "1");
+    fruit.table->setRowMarks(*fruit.rows.at(0),
+                             ui::RowMarks{.unmatched = true, .tooltip = "This row no longer matches the filter"});
+    fruit.table->setRowMarks(*fruit.rows.at(1), ui::RowMarks{.busy = true});
+    fruit.table->setRowMarks(*fruit.rows.at(2),
+                             ui::RowMarks{.locked = true, .tooltip = "Being edited by another user"});
+    auto const lines = harness.draw();
+    auto const& buffer = harness.screen().renderedBuffer();
+    // Row 0 is the first data line; its first cell starts after the gutter, two cells and the glyph's two.
+    CHECK(buffer.cellAt({.x = 4, .y = 1})->style.dim);
+    CHECK_FALSE(buffer.cellAt({.x = 4, .y = 2})->style.dim);
+    CHECK(lines.at(2).starts_with("  … "));
+    CHECK(lines.at(3).starts_with("  # "));
+    CHECK(lines.at(1).starts_with("    "));
+    for (auto const& row : fruit.rows) {
+        fruit.table->setRowMarks(*row, ui::RowMarks{});
+    }
+    auto const plain = harness.draw();
+    CHECK_FALSE(harness.screen().renderedBuffer().cellAt({.x = 4, .y = 1})->style.dim);
+    CHECK(plain.at(2).starts_with("    "));
+    CHECK(plain.at(3).starts_with("    "));
+    CHECK_THROWS_AS(fruit.table->setRowMarks(*fruit.cells.at(0), ui::RowMarks{}), std::logic_error);
+}
+
+// Mutation: the glyph written over the gutter's first cell, which hides the selection mark `*` of a busy row.
+TEST_CASE("tui table: a busy or locked row's glyph hides no mark", "[tui][table]") {
+    Harness harness{30, 5};
+    Fruit fruit{harness, ui::SelectionMode::Multiple};
+    fruit.addRow(harness, key(3), "plum", "1");
+    fruit.table->setSelection({key(1), key(3)});
+    auto const before = harness.draw();
+    CHECK(before.at(1).starts_with("* apple"));
+    fruit.table->setRowMarks(*fruit.rows.at(0), ui::RowMarks{.busy = true});
+    fruit.table->setRowMarks(*fruit.rows.at(2), ui::RowMarks{.locked = true});
+    auto const lines = harness.draw();
+    // Selection mark, cursor mark, then the glyph and a gap; the cells start two further right.
+    CHECK(lines.at(1).starts_with("* … apple"));
+    CHECK(lines.at(2).starts_with("    kiwi"));
+    CHECK(lines.at(3).starts_with("* # plum"));
+    fruit.table->setRowMarks(*fruit.rows.at(0), ui::RowMarks{});
+    CHECK(harness.draw().at(1).starts_with("*   apple"));
+}
+
+// Mutation: the marks' text written over the row's own tooltip, which leaves the row's hover blank once its marks
+// clear.
+TEST_CASE("tui table: a busy or locked row says why on hover", "[tui][table]") {
+    Harness harness{30, 5};
+    Fruit fruit{harness, ui::SelectionMode::Single};
+    auto& apple = morph::tui::detail::WidgetBase::of(*fruit.rows.at(0));
+    auto const& kiwi = morph::tui::detail::WidgetBase::of(*fruit.rows.at(1));
+    apple.applyTooltip("Fresh today");
+    fruit.table->setRowMarks(*fruit.rows.at(0), ui::RowMarks{.busy = true});
+    fruit.table->setRowMarks(*fruit.rows.at(1),
+                             ui::RowMarks{.locked = true, .tooltip = "Being edited by another user"});
+    CHECK(apple.hoverText() == "Saving this row");
+    CHECK(kiwi.hoverText() == "Being edited by another user");
+    fruit.table->setRowMarks(*fruit.rows.at(1), ui::RowMarks{.locked = true});
+    CHECK(kiwi.hoverText() == "Locked by another user");
+    fruit.table->setRowMarks(*fruit.rows.at(0), ui::RowMarks{});
+    CHECK(apple.hoverText() == "Fresh today");
+    fruit.table->setRowMarks(*fruit.rows.at(1), ui::RowMarks{});
+    CHECK(kiwi.hoverText().empty());
+}
+
 namespace {
 
 /// A table of two fixed columns @p fixed wide and a stretch column headed `Analyte`, with one row.
@@ -904,15 +1006,55 @@ TEST_CASE("tui table: the sorted column's header shows its direction, and a clic
     quantity->setText("3");
     table->setRowKey(*row, key(1));
     std::vector<std::size_t> asked;
-    table->setOnSort([&asked](std::size_t column) { asked.push_back(column); });
+    table->setOnSort([&asked](std::size_t column, ui::HeaderClick) { asked.push_back(column); });
     // A sortable header keeps room for its mark, so the columns stay where they are when the sort comes.
     CHECK(harness.draw() == Rows{"  Name   Qty", "  apple  3"});
-    table->setSort(ui::TableSort{.column = 0, .direction = ui::SortDirection::Descending});
+    table->setSort({ui::TableSort{.column = 0, .direction = ui::SortDirection::Descending}});
     CHECK(harness.draw() == Rows{"  Name ▼ Qty", "  apple  3"});
     CHECK(asked.empty());
     CHECK(harness.click({.x = 3, .y = 0}) == EventResult::Handled);
     CHECK(harness.click({.x = 9, .y = 0}) == EventResult::Handled);
     CHECK(asked == std::vector<std::size_t>{0});
+}
+
+// Control: leave the header unfocusable (Up on the first row then leaves the header unfocused).
+TEST_CASE("tui table: Up on the first row focuses the header; Left, Right, Shift+Enter and Ctrl+Shift+Right act on it",
+          "[tui]") {
+    Harness harness{40, 4};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Name", .sortable = true},
+                       {.label = "Qty", .sortable = true},
+                       {.label = "Site", .sortable = true}});
+    auto const row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    std::vector<std::unique_ptr<TextImpl>> cells;
+    for (std::string const text : {"apple", "3", "north"}) {
+        cells.push_back(harness.make<TextImpl>(row.get()));
+        cells.back()->setText(text);
+    }
+    table->setRowKey(*row, key(1));
+    table->setSelectionMode(ui::SelectionMode::Single);
+    table->setSort({ui::TableSort{.column = 1, .direction = ui::SortDirection::Ascending}});
+    std::vector<std::pair<std::size_t, ui::HeaderClick>> sorts;
+    table->setOnSort([&sorts](std::size_t column, ui::HeaderClick click) { sorts.emplace_back(column, click); });
+    std::vector<std::pair<std::size_t, std::size_t>> moves;
+    table->setOnColumnMove(
+        [&moves](std::size_t column, std::size_t position) { moves.emplace_back(column, position); });
+    static_cast<void>(harness.draw());
+    harness.focus(*table);
+    CHECK(harness.key(KeyCode::Up) == EventResult::Handled);
+    CHECK(table->focusedHeader() == std::optional<std::size_t>{1});
+    CHECK(harness.key(KeyCode::Right) == EventResult::Handled);
+    CHECK(table->focusedHeader() == std::optional<std::size_t>{2});
+    CHECK(harness.key(KeyCode::Enter, core::tui::Modifier::Shift) == EventResult::Handled);
+    CHECK(sorts == std::vector<std::pair<std::size_t, ui::HeaderClick>>{{2, ui::HeaderClick::Shift}});
+    CHECK(harness.key(KeyCode::Left, core::tui::Modifier::Ctrl | core::tui::Modifier::Shift) == EventResult::Handled);
+    CHECK(moves == std::vector<std::pair<std::size_t, std::size_t>>{{2, 1}});
+    CHECK(harness.key(KeyCode::Down) == EventResult::Handled);
+    CHECK(table->focusedHeader() == std::nullopt);
+    // Back on row 0: Space selects it.
+    CHECK(harness.type(" ") == EventResult::Handled);
+    CHECK(table->markedRows() == Positions{0});
+    cells.clear();
 }
 
 namespace {
@@ -1097,7 +1239,7 @@ TEST_CASE("tui table: a table that never had a span plans nothing, and one that 
 TEST_CASE("tui table: lifting a tall spanning cell shrinks the table in the frame that does it",
           "[tui][table][span]") {
     Harness harness{30, 10};
-    auto column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
     Fruit fruit{harness, ui::SelectionMode::Single, column.get()};
     auto foot = harness.make<TextImpl>(column.get());
     foot->setText("foot");
@@ -1198,4 +1340,698 @@ TEST_CASE("tui table: a Ctrl-click keeps every selected key whose row is off scr
     CHECK(harness.click({.x = 3, .y = 1}, core::tui::Modifier::Ctrl) == EventResult::Handled);
     REQUIRE(selections.size() == 2);
     CHECK(selections.back().size() == static_cast<std::size_t>(rowCount));
+}
+
+// ── The column window ───────────────────────────────────────────────────────
+
+namespace {
+
+using morph::testing::FakeRows;
+using morph::tui::detail::ContainerBase;
+using morph::tui::detail::WidgetBase;
+
+struct TuiWindowOptions {
+    struct Level {
+        std::size_t column = 0;
+        std::string level;
+    };
+    std::size_t pinned = 0;
+    std::vector<Level> levels;
+    ui::SelectionMode selection = ui::SelectionMode::None;
+    // Each column's unit, by index; a column past the list has none.
+    std::vector<std::string> units;
+};
+
+// `n` with its thousands grouped by commas.
+std::string grouped(std::int64_t n) {
+    std::string digits = std::to_string(n);
+    for (auto at = static_cast<std::ptrdiff_t>(digits.size()) - 3; at > 0; at -= 3) {
+        digits.insert(static_cast<std::size_t>(at), ",");
+    }
+    return digits;
+}
+
+// The text of a record's field, or nothing.
+std::string fieldOf(ui::Value const& record, std::string const& field) {
+    ui::Value const* const value = record.field(field);
+    return value != nullptr && value->asString() != nullptr ? *value->asString() : std::string{};
+}
+
+// One table over `FakeRows` on the terminal backend, in a terminal of 120 × 32: every column 11 cells and its gap
+// wide with the default text cell, so ten columns and thirty rows are in view under the header and over the status
+// line. Its window has no overscan, so the cells alive are exactly those in view. The ranges the table asks the mount
+// for are kept in `ranges`.
+struct TuiWindowFixture {
+    TuiWindowFixture(std::int64_t rowCount, std::size_t columnCount, TuiWindowOptions const& options = {})
+        : terminal{std::make_unique<core::tui::MockTerminalOutput>(120, 32)},
+          screen{terminal},
+          backend{screen},
+          rows{std::make_shared<FakeRows>(rowCount, columnCount, owner)} {
+        std::vector<ui::TableColumn> columns;
+        for (std::size_t column = 0; column < columnCount; ++column) {
+            // NOLINTNEXTLINE(performance-inefficient-vector-operation): `columns` is a fixture list built once; sizing it first would not change what the case checks
+            columns.push_back(
+                ui::TableColumn{.id = "c" + std::to_string(column),
+                                .label = "C" + std::to_string(column),
+                                .width = ui::Sizing::fixed(11),
+                                .unit = column < options.units.size() ? options.units.at(column) : std::string{}});
+        }
+        ui::TableSource source;
+        source.rows = rows;
+        source.ownCell.assign(columnCount, false);
+        source.levels.assign(columnCount, std::string{});
+        for (TuiWindowOptions::Level const& level : options.levels) {
+            source.levels.at(level.column) = level.level;
+        }
+        source.defaultCellView = [](morph::reactive::Signal<std::size_t> const& column,
+                                    morph::reactive::Signal<ui::Value> const& row) {
+            return ui::text(
+                {.text = [&column, &row] { return fieldOf(row.get(), "c" + std::to_string(column.get())); }});
+        };
+        source.cellView = [](std::size_t column, morph::reactive::Signal<ui::Value> const& row) {
+            return ui::text({.text = [&row, column] { return fieldOf(row.get(), "c" + std::to_string(column)); }});
+        };
+        ui::TableOptions tableOptions;
+        tableOptions.virtualize = ui::Virtualization{.overscan = 0, .columnOverscan = 0};
+        tableOptions.arrangement = ui::TableArrangement{.visible = {}, .pinned = options.pinned, .widths = {}};
+        tableOptions.status = ui::TableStatus{.counts = grouped(rowCount) + " rows", .shown = true};
+        tableOptions.selectionMode = options.selection;
+        tableOptions.onSelectRange = [this](std::size_t anchor, std::size_t focus, ui::SelectionChange change) {
+            ranges.push_back(Range{.anchor = anchor, .focus = focus, .change = change});
+        };
+        view.emplace(runtime, backend, ui::table(std::move(columns), std::move(source), std::move(tableOptions)));
+        table = &dynamic_cast<TableImpl&>(WidgetBase::of(view->root()));
+        settle();
+    }
+    TuiWindowFixture(TuiWindowFixture const&) = delete;
+    TuiWindowFixture& operator=(TuiWindowFixture const&) = delete;
+    TuiWindowFixture(TuiWindowFixture&&) = delete;
+    TuiWindowFixture& operator=(TuiWindowFixture&&) = delete;
+    ~TuiWindowFixture() { view.reset(); }
+
+    // One frame, as the frontend draws it after an event: the owner's work is not run.
+    void draw() {
+        backend.fit();
+        screen.draw();
+    }
+
+    // Frames and the owner's turns until a frame changes nothing and the owner has nothing left to run.
+    void settle() {
+        Rows last;
+        for (int turn = 0; turn < 64; ++turn) {
+            draw();
+            std::size_t const ran = owner.runAll();
+            Rows lines = morph::tui::testing::rowsOf(screen);
+            if (ran == 0 && lines == last) {
+                return;
+            }
+            last = std::move(lines);
+        }
+        FAIL("the table did not settle");
+    }
+
+    void scrollRows(std::size_t first) {
+        static_cast<void>(table->wheel(static_cast<int>(first) - static_cast<int>(firstRow)));
+        firstRow = first;
+        settle();
+    }
+
+    void scrollColumns(int scrollX) {
+        table->scrollColumnsTo(scrollX);
+        settle();
+    }
+
+    [[nodiscard]] std::size_t cellWidgetsAlive() const {
+        std::size_t alive = 0;
+        for (WidgetBase const* const row : table->children()) {
+            alive += dynamic_cast<ContainerBase const&>(*row).children().size();
+        }
+        return alive;
+    }
+
+    [[nodiscard]] std::string screenLine(std::size_t line) const {
+        Rows const lines = morph::tui::testing::rowsOf(screen);
+        return line < lines.size() ? lines.at(line) : std::string{};
+    }
+
+    struct Range {
+        std::size_t anchor = 0;
+        std::size_t focus = 0;
+        ui::SelectionChange change = ui::SelectionChange::Replace;
+        bool operator==(Range const& other) const = default;
+    };
+
+    morph::testing::StepExecutor owner;
+    morph::reactive::Runtime runtime{owner};
+    std::vector<Range> ranges;
+    core::tui::Terminal terminal;
+    core::tui::Screen screen;
+    morph::tui::Backend backend;
+    std::shared_ptr<FakeRows> rows;
+    std::optional<ui::Mounted> view;
+    TableImpl* table = nullptr;
+    std::size_t firstRow = 0;
+};
+
+// The text in the slot of each of the ten columns in view on @p line, trimmed: the header's labels on line 0.
+std::vector<std::string> slotsOf(std::string const& line) {
+    std::vector<std::string> slots;
+    for (std::size_t at = 2; at < 2 + (10 * 12); at += 12) {
+        std::string slot = at < line.size() ? line.substr(at, 11) : std::string{};
+        while (!slot.empty() && slot.back() == ' ') {
+            slot.pop_back();
+        }
+        slots.push_back(std::move(slot));
+    }
+    return slots;
+}
+
+// Whether every cell drawn on lines 1 to 30 is its own row's, under its own column's header, or blank.
+bool cellsUnderTheirHeaders(TuiWindowFixture const& f) {
+    std::vector<std::string> const headers = slotsOf(f.screenLine(0));
+    for (std::size_t line = 1; line <= 30; ++line) {
+        std::vector<std::string> const cells = slotsOf(f.screenLine(line));
+        for (std::size_t at = 0; at < cells.size(); ++at) {
+            std::string const own = "r" + std::to_string(f.firstRow + line - 1) + "c" +
+                                    (headers.at(at).empty() ? std::string{} : headers.at(at).substr(1));
+            if (!cells.at(at).empty() && cells.at(at) != own) {
+                UNSCOPED_INFO("line " << line << ", slot " << at << ": " << cells.at(at) << ", not " << own);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+// Mutation: the terminal table never reporting the columns in view (every column realized: 300 cells a row).
+// Gate U7.
+TEST_CASE("tui table: cell widgets alive are rows in view times columns in view", "[tui]") {
+    TuiWindowFixture f{100'000, 300, {.pinned = 0}};
+    f.scrollRows(5'000);
+    f.scrollColumns(100 * 12);
+    CHECK(f.cellWidgetsAlive() == std::size_t{30} * 10);  // the terminal keeps no overscan
+    CHECK(f.screenLine(31).starts_with("100,000 rows"));  // the status line, last
+}
+
+// Mutation: the terminal table ignoring setCellLoad (the lines show neither mark).
+TEST_CASE("tui table: an unloaded cell draws its placeholder and a failed one its mark", "[tui]") {
+    TuiWindowFixture f{100, 4, {.pinned = 0, .levels = {{.column = 1, .level = "recipe"}}}};
+    f.rows->unload(0, "recipe");
+    f.rows->fail(1, "recipe");
+    f.settle();
+    CHECK(f.screenLine(1).contains("···"));
+    CHECK(f.screenLine(2).contains('!'));
+    CHECK_FALSE(f.screenLine(3).contains("···"));
+}
+
+// Mutations: `unit` ignored (the header reads `C0` alone); `invalid` ignored (the cell's text is drawn and no mark).
+TEST_CASE("tui table: a header with a unit reads Mass [kg]", "[tui][table]") {
+    TuiWindowFixture f{100, 4, {.pinned = 0, .units = {"kg"}}};
+    CHECK(f.screenLine(0).contains("C0 [kg]"));
+    CHECK_FALSE(f.screenLine(0).contains("C1 ["));
+    REQUIRE(f.screenLine(1).contains("r0c1"));
+    auto& row = dynamic_cast<ui::Widget&>(*f.table->children().front());
+    f.table->setCellAccent(row, 1,
+                           ui::CellAccent{.tone = {}, .tooltip = "The value could not be read", .invalid = true});
+    f.settle();
+    CHECK_FALSE(f.screenLine(1).contains("r0c1"));
+    CHECK(f.screenLine(1).contains('!'));
+    CHECK(f.screenLine(1).contains("r0c2"));
+    f.table->setCellAccent(row, 1, ui::CellAccent{});
+    f.settle();
+    CHECK(f.screenLine(1).contains("r0c1"));
+}
+
+// Mutation: the terminal table placing a source table's cells by their order in the row, not by `setCellColumn` (a
+// reused row's parked cells draw the row it showed before, under other columns).
+TEST_CASE("tui table: a reused row shows its own cells under their columns while the frame budget holds some back",
+          "[tui]") {
+    TuiWindowFixture f{100'000, 300, {.pinned = 0}};
+    f.scrollColumns(20 * 12);
+    REQUIRE(cellsUnderTheirHeaders(f));
+    // 300 cells to rebind, over the budget of 240: the rows far from the centre wait a turn with cells parked, and a
+    // parked cell is not drawn. (Their bindings flush after that turn, so the text drawn here is not checked.)
+    static_cast<void>(f.table->wheel(5'000));
+    f.firstRow = 5'000;
+    f.draw();
+    REQUIRE(f.owner.pending() > 0);
+    std::size_t drawn = 0;
+    for (std::size_t line = 1; line <= 30; ++line) {
+        for (std::string const& cell : slotsOf(f.screenLine(line))) {
+            drawn += cell.empty() ? 0U : 1U;
+        }
+    }
+    CHECK(drawn == 240);
+    f.settle();
+    CHECK(cellsUnderTheirHeaders(f));
+    CHECK(slotsOf(f.screenLine(30)).back() == "r5029c29");
+}
+
+// Mutation: the terminal table moving its own cursor for the arrows over a source table (the mount's focus never
+// moves, and no line shows `>`).
+TEST_CASE("tui table: the arrows and PageDown move the focused cell through the mount, and the view follows it",
+          "[tui]") {
+    TuiWindowFixture f{100'000, 300, {.pinned = 0}};
+    f.screen.setFocus(&WidgetBase::of(*f.table).view());
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::specialKey(KeyCode::Down)));
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::specialKey(KeyCode::Down)));
+    f.settle();
+    CHECK(f.screenLine(3).starts_with(" >"));
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::specialKey(KeyCode::PageDown)));
+    f.settle();
+    // Row 32: the view moved down three rows to show it on its last line.
+    CHECK(f.screenLine(30).starts_with(" >"));
+    CHECK(slotsOf(f.screenLine(30)).front() == "r32c0");
+}
+
+// Mutation: the terminal table taking a realized window as the mark of a source table (a long `rows` table draws its
+// header over blank lines).
+TEST_CASE("tui table: a rows table of 2,000 rows draws its rows", "[tui]") {
+    morph::testing::StepExecutor owner;
+    morph::reactive::Runtime runtime{owner};
+    core::tui::Terminal terminal{std::make_unique<core::tui::MockTerminalOutput>(40, 12)};
+    core::tui::Screen screen{terminal};
+    morph::tui::Backend backend{screen};
+    std::vector<std::int64_t> numbers(2'000);
+    std::ranges::iota(numbers, std::int64_t{0});
+    morph::reactive::Signal<std::vector<std::int64_t>> rows{runtime, numbers};
+    ui::Mounted const view{
+        runtime, backend,
+        ui::table<std::int64_t>(
+            {{.label = "Name"}}, [&rows] { return rows.get(); }, [](std::int64_t const& row) { return ui::Key{row}; },
+            [](morph::reactive::Signal<std::int64_t> const& row) {
+                return std::vector<ui::Node>{
+                    ui::text({.text = [&row] { return "row " + std::to_string(row.get()); }})};
+            })};
+    owner.runAll();
+    backend.fit();
+    screen.draw();
+    Rows const lines = morph::tui::testing::rowsOf(screen);
+    REQUIRE(lines.size() >= 3);
+    CHECK(lines.at(1).contains("row 0"));
+    CHECK(lines.at(2).contains("row 1"));
+}
+
+// Mutation: Shift with the arrows, a Shift-click and Ctrl+A over a source handled as on a short table (no range
+// reaches the mount; Ctrl+A selects the thirty realized rows).
+TEST_CASE("tui table: ranges and Ctrl+A over a source go to the mount as view rows", "[tui]") {
+    TuiWindowFixture f{100'000, 300, {.pinned = 0, .selection = ui::SelectionMode::Multiple}};
+    f.screen.setFocus(&WidgetBase::of(*f.table).view());
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::specialKey(KeyCode::Down)));  // focus row 1
+    f.settle();
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::specialKey(KeyCode::Down, core::tui::Modifier::Shift)));
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::specialKey(KeyCode::Down, core::tui::Modifier::Shift)));
+    f.settle();
+    using Range = TuiWindowFixture::Range;
+    REQUIRE(f.ranges.size() == 2);
+    CHECK(f.ranges.back() == Range{.anchor = 1, .focus = 3, .change = ui::SelectionChange::Replace});
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::charKey('a', core::tui::Modifier::Ctrl)));
+    f.settle();
+    CHECK(f.ranges.back() == Range{.anchor = 0, .focus = 99'999, .change = ui::SelectionChange::Extend});
+    // A click on view row 4 makes it the anchor; a Shift-click on view row 9 selects from it.
+    using Type = core::tui::MouseEvent::Type;
+    auto const click = [&f](int line, core::tui::Modifier modifiers) {
+        static_cast<void>(f.screen.dispatchEvent(
+            core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = 10, .y = line + 1, .modifiers = modifiers}));
+        static_cast<void>(f.screen.dispatchEvent(core::tui::MouseEvent{
+            .type = Type::Release, .button = 0, .x = 10, .y = line + 1, .modifiers = modifiers}));
+        f.settle();
+    };
+    click(5, core::tui::Modifier::None);
+    click(10, core::tui::Modifier::Shift);
+    CHECK(f.ranges.back() == Range{.anchor = 4, .focus = 9, .change = ui::SelectionChange::Replace});
+}
+
+namespace {
+
+/// The cell of the last @p glyph on @p line, counting a character a cell; none when the line has none.
+std::optional<int> lastCellOf(std::string const& line, char32_t glyph) {
+    std::u32string const cells = unicode::convert_to<char32_t>(std::string_view{line});
+    std::size_t const found = cells.rfind(glyph);
+    return found == std::u32string::npos ? std::nullopt : std::optional<int>{static_cast<int>(found)};
+}
+
+/// A table of a filterable Name and a stretching filterable Qty, one row, grouped as `Lot`, with menus.
+struct Configured {
+    explicit Configured(Harness& harness) : table{harness.make<TableImpl>(nullptr)} {
+        table->setColumns({{.label = "Name", .filterable = true},
+                           {.label = "Qty", .width = ui::Sizing::stretch(1), .filterable = true}});
+        row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+        for (std::string const text : {"apple", "3"}) {
+            cells.push_back(harness.make<TextImpl>(row.get()));
+            cells.back()->setText(text);
+        }
+        table->setRowKey(*row, key(1));
+        table->setFiltered({1});
+        table->setColumnGroups({{.label = "Lot", .first = 0, .count = 2}});
+        table->setOnFilter([this](std::size_t column) { reported.push_back("filter " + std::to_string(column)); });
+        table->setOnGroupFilter([this](std::size_t group) { reported.push_back("group " + std::to_string(group)); });
+        table->setMenu(
+            [](std::optional<std::size_t> column) {
+                return std::vector<ui::MenuEntry>{{.label = column ? "Hide " + std::to_string(*column) : "Columns"}};
+            },
+            [this](std::optional<std::size_t> column, std::vector<std::size_t> path) {
+                reported.push_back("menu " + (column ? std::to_string(*column) : std::string{"-"}) + "/" +
+                                   std::to_string(path.front()));
+            });
+    }
+    ~Configured() {
+        cells.clear();
+        row.reset();
+    }
+    Configured(Configured const&) = delete;
+    Configured& operator=(Configured const&) = delete;
+    Configured(Configured&&) = delete;
+    Configured& operator=(Configured&&) = delete;
+
+    std::unique_ptr<TableImpl> table;
+    std::unique_ptr<StackImpl> row;
+    std::vector<std::unique_ptr<TextImpl>> cells;
+    std::vector<std::string> reported;
+};
+
+/// Clicks the first row of the open menu list.
+void clickFirstEntry(Harness& harness, TableImpl const& table) {
+    auto const* const popup = table.openPopup();
+    REQUIRE(popup != nullptr);
+    auto const area = popup->screenBounds();
+    static_cast<void>(harness.click({.x = area.x, .y = area.y}));
+}
+
+}  // namespace
+
+// Mutation: keep no room for the `⋯` (`TableImpl::menuRoom` answers 0): it is drawn over Qty's filled filter button,
+// and a click there opens the table's menu.
+TEST_CASE("tui table: filter buttons, the group line and the table menu's button are drawn apart, and each reports",
+          "[tui][table]") {
+    Harness harness{30, 5};
+    Configured configured{harness};
+    Rows const drawn = harness.draw();
+    REQUIRE(drawn.size() >= 3);
+    // The group line over both columns ends in the group's empty button; the header line ends in Qty's filled button,
+    // a gap, and the `⋯`.
+    CHECK(drawn.at(0).starts_with("  Lot"));
+    CHECK(drawn.at(1).starts_with("  Name ▿"));
+    CHECK(drawn.at(1).ends_with("▾ ⋯"));
+    auto const qtyButton = lastCellOf(drawn.at(1), U'▾');
+    auto const nameButton = lastCellOf(drawn.at(1), U'▿');
+    auto const groupButton = lastCellOf(drawn.at(0), U'▿');
+    auto const menuButton = lastCellOf(drawn.at(1), U'⋯');
+    REQUIRE(qtyButton);
+    REQUIRE(nameButton);
+    REQUIRE(groupButton);
+    REQUIRE(menuButton);
+    CHECK(*menuButton == 29);
+    static_cast<void>(harness.click({.x = *qtyButton, .y = 1}));
+    static_cast<void>(harness.click({.x = *nameButton, .y = 1}));
+    static_cast<void>(harness.click({.x = *groupButton, .y = 0}));
+    static_cast<void>(harness.draw());
+    static_cast<void>(harness.click({.x = *menuButton, .y = 1}));
+    static_cast<void>(harness.draw());
+    CHECK(configured.table->openMenuEntries().size() == 1);
+    clickFirstEntry(harness, *configured.table);
+    CHECK(configured.reported == std::vector<std::string>{"filter 1", "filter 0", "group 0", "menu -/0"});
+}
+
+// Mutation: make `TableImpl::contextPress` take nothing (the right press opens no menu).
+TEST_CASE("tui table: a right click on a header opens its menu, and Shift+F10 on the focused header does too",
+          "[tui][table]") {
+    Harness harness{30, 5};
+    Configured configured{harness};
+    static_cast<void>(harness.draw());
+    using Type = core::tui::MouseEvent::Type;
+    // Name's header, on the line under the group line.
+    static_cast<void>(harness.send(core::tui::MouseEvent{.type = Type::Press, .button = 2, .x = 3, .y = 2}));
+    static_cast<void>(harness.send(core::tui::MouseEvent{.type = Type::Release, .button = 2, .x = 3, .y = 2}));
+    static_cast<void>(harness.draw());
+    REQUIRE(configured.table->openMenuEntries().size() == 1);
+    CHECK(configured.table->openMenuEntries().front().label == "Hide 0");
+    clickFirstEntry(harness, *configured.table);
+    static_cast<void>(harness.draw());
+    harness.focus(*configured.table);
+    CHECK(harness.key(KeyCode::Up) == EventResult::Handled);
+    CHECK(harness.key(KeyCode::Right) == EventResult::Handled);
+    CHECK(harness.key(KeyCode::F10, core::tui::Modifier::Shift) == EventResult::Handled);
+    static_cast<void>(harness.draw());
+    REQUIRE(configured.table->openMenuEntries().size() == 1);
+    CHECK(configured.table->openMenuEntries().front().label == "Hide 1");
+    // The list has the focus: Enter chooses its entry.
+    static_cast<void>(harness.key(KeyCode::Enter));
+    CHECK(configured.reported == std::vector<std::string>{"menu 0/0", "menu 1/0"});
+}
+
+// Mutation: leave an open menu open in `TableImpl::openMenu` (the second right click opens nothing, and the first
+// header's menu stays).
+TEST_CASE("tui table: a right click on another header while a menu is open closes it and opens that header's menu",
+          "[tui][table]") {
+    Harness harness{30, 5};
+    Configured configured{harness};
+    static_cast<void>(harness.draw());
+    using Type = core::tui::MouseEvent::Type;
+    auto const rightClick = [&harness](int x, int y) {
+        static_cast<void>(harness.send(core::tui::MouseEvent{.type = Type::Press, .button = 2, .x = x, .y = y}));
+        static_cast<void>(harness.send(core::tui::MouseEvent{.type = Type::Release, .button = 2, .x = x, .y = y}));
+        static_cast<void>(harness.draw());
+    };
+    // Name's header, then Qty's, on the line under the group line (1-based cells).
+    rightClick(3, 2);
+    REQUIRE(configured.table->openMenuEntries().size() == 1);
+    CHECK(configured.table->openMenuEntries().front().label == "Hide 0");
+    auto const qty = lastCellOf(harness.draw().at(1), U'Q');
+    REQUIRE(qty);
+    rightClick(*qty + 1, 2);
+    REQUIRE(configured.table->openMenuEntries().size() == 1);
+    CHECK(configured.table->openMenuEntries().front().label == "Hide 1");
+    clickFirstEntry(harness, *configured.table);
+    CHECK(configured.reported == std::vector<std::string>{"menu 1/0"});
+}
+
+// Mutation: `setOnStatusEntry` ignored, under which Alt+1 reports nothing.
+TEST_CASE("tui table: select-all asks the handler; a status entry reports its id", "[tui]") {
+    TuiWindowFixture f{100, 30, {.pinned = 0, .selection = ui::SelectionMode::Multiple}};
+    int asked = 0;
+    std::vector<std::string> chosen;
+    f.table->setOnSelectAll([&asked] { ++asked; });
+    f.table->setOnStatusEntry([&chosen](std::string id) { chosen.push_back(std::move(id)); });
+    f.screen.setFocus(&WidgetBase::of(*f.table).view());
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::charKey('a', core::tui::Modifier::Ctrl)));
+    f.settle();
+    CHECK(asked == 1);
+    f.table->setStatus(ui::TableStatus{
+        .counts = "100 rows",
+        .message = "m",
+        .entries = {{.id = "run", .label = "Run on these"}},
+        .standing = "1 row could not be saved",
+        .standingEntries = {{.id = "select", .label = "Select them"}, {.id = "clear", .label = "Clear marks"}},
+        .shown = true});
+    f.settle();
+    std::string const line = f.screenLine(31);
+    CHECK(line.contains("[Alt+1 Select them]"));
+    CHECK(line.contains("[Alt+2 Clear marks]"));
+    CHECK(line.contains("[Alt+3 Run on these]"));
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::charKey('2', core::tui::Modifier::Alt)));
+    f.settle();
+    CHECK(chosen == std::vector<std::string>{"clear"});
+}
+
+namespace {
+
+using morph::tui::detail::WidgetBase;
+
+// A grid of two specimens (`GridFixture`) between two text inputs, on the terminal backend: its columns are every
+// member in schema order, label first.
+struct TuiGridFixture {
+    explicit TuiGridFixture(std::string schema = std::string{morph::test::grid::kSpecimens})
+        : f{2, {}, std::move(schema)},
+          terminal{std::make_unique<core::tui::MockTerminalOutput>(100, 12)},
+          screen{terminal},
+          backend{screen} {
+        ui::TextInput before;
+        before.common.testId = "before";
+        ui::TextInput after;
+        after.common.testId = "after";
+        view.emplace(f.h.rt, backend,
+                     ui::column(ui::Column{.children = {ui::textInput(std::move(before)),
+                                                        f.grid->node(morph::test::grid::columnsOf(f), {}),
+                                                        ui::textInput(std::move(after))}}));
+        auto const& column = dynamic_cast<morph::tui::detail::ContainerBase const&>(WidgetBase::of(view->root()));
+        table = dynamic_cast<TableImpl*>(column.children()[1]);
+        afterInput = column.children()[2];
+        settle();
+    }
+    TuiGridFixture(TuiGridFixture const&) = delete;
+    TuiGridFixture& operator=(TuiGridFixture const&) = delete;
+    TuiGridFixture(TuiGridFixture&&) = delete;
+    TuiGridFixture& operator=(TuiGridFixture&&) = delete;
+    ~TuiGridFixture() { view.reset(); }
+
+    void settle() {
+        for (int turn = 0; turn < 32; ++turn) {
+            backend.fit();
+            screen.draw();
+            if (f.h.owner.runAll() == 0) {
+                backend.fit();
+                screen.draw();
+                return;
+            }
+        }
+        FAIL("the grid did not settle");
+    }
+
+    void send(core::tui::InputEvent const& event) {
+        static_cast<void>(screen.dispatchEvent(event));
+        settle();
+    }
+
+    [[nodiscard]] std::string line(std::size_t at) const {
+        Rows const lines = morph::tui::testing::rowsOf(screen);
+        return at < lines.size() ? lines.at(at) : std::string{};
+    }
+
+    morph::test::grid::GridFixture f;
+    core::tui::Terminal terminal;
+    core::tui::Screen screen;
+    morph::tui::Backend backend;
+    std::optional<ui::Mounted> view;
+    TableImpl* table = nullptr;
+    WidgetBase* afterInput = nullptr;
+};
+
+}  // namespace
+
+// Mutation: the terminal table taking focus in an open popup of a widget inside it for focus leaving (the dropdown's
+// list taking the focus commits and closes the editor).
+TEST_CASE("tui grid: focus in an editor's own popup does not leave the table", "[tui][grid]") {
+    TuiGridFixture g{morph::test::grid::specimensWithChoices()};
+    REQUIRE(g.table != nullptr);
+    g.f.grid->focusCell(morph::test::grid::at(1, "unit"));
+    g.settle();
+    g.screen.setFocus(&g.table->view());
+    g.send(core::tui::test::specialKey(KeyCode::F2));
+    REQUIRE(g.f.grid->editing() == morph::test::grid::at(1, "unit"));
+    g.send(core::tui::test::specialKey(KeyCode::Down));
+    // The list has the focus, in the screen's overlay rather than under the table.
+    CHECK_FALSE(morph::tui::detail::isWithin(g.screen.focusedComponent(), g.table->view()));
+    CHECK(g.f.grid->editing() == morph::test::grid::at(1, "unit"));
+}
+
+// Mutation: the terminal table reporting the second click of a double click twice, once as a single click (the check
+// box flips back: its value is false).
+TEST_CASE("tui grid: a double click on a Boolean cell flips it once", "[tui][grid]") {
+    TuiGridFixture g{morph::test::grid::specimensWithChoices()};
+    REQUIRE(g.table != nullptr);
+    std::size_t headerLine = 0;
+    while (headerLine < 12 && !g.line(headerLine).contains("checked")) {
+        ++headerLine;
+    }
+    std::size_t const checkedAt = g.line(headerLine).find("checked");
+    REQUIRE(checkedAt != std::string::npos);
+    using Type = core::tui::MouseEvent::Type;
+    int const x = static_cast<int>(checkedAt) + 2;
+    int const y = static_cast<int>(headerLine) + 2;  // the first row, 1-based
+    for (int click = 0; click < 2; ++click) {
+        static_cast<void>(
+            g.screen.dispatchEvent(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = x, .y = y}));
+        static_cast<void>(
+            g.screen.dispatchEvent(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = x, .y = y}));
+    }
+    g.settle();
+    CHECK(g.f.grid->focus() == morph::test::grid::at(1, "checked"));
+    CHECK(g.f.json("specimens[0].checked") == "true");
+}
+
+// Mutation: the terminal table ignoring setOnText (the keystroke moves nothing and opens no editor).
+TEST_CASE("tui grid: typing on a focused cell opens its editor, Enter commits and moves down", "[tui][grid]") {
+    TuiGridFixture g;
+    REQUIRE(g.table != nullptr);
+    g.f.grid->focusCell(morph::test::grid::at(1, "mass"));
+    g.settle();
+    g.screen.setFocus(&g.table->view());
+    g.send(core::tui::test::charKey('5'));
+    REQUIRE(g.f.grid->editing() == morph::test::grid::at(1, "mass"));
+    // The editor has the focus, inside the table, and row 1 shows what it holds.
+    auto const* const focused = g.screen.focusedComponent();
+    CHECK(focused != &g.table->view());
+    CHECK(morph::tui::detail::isWithin(focused, g.table->view()));
+    std::size_t headerLine = 0;
+    while (headerLine < 12 && !g.line(headerLine).contains("mass")) {
+        ++headerLine;
+    }
+    std::size_t const massAt = g.line(headerLine).find("mass");
+    REQUIRE(massAt != std::string::npos);
+    CHECK(g.line(headerLine + 1).substr(massAt, 6).contains('5'));
+    g.send(core::tui::test::specialKey(KeyCode::Enter));
+    CHECK(g.f.form->field("specimens[0].mass").draft() == "5");
+    CHECK_FALSE(g.f.grid->editing().has_value());
+    CHECK(g.f.grid->focus() == morph::test::grid::at(2, "mass"));
+    g.f.grid->focusCell(morph::test::grid::at(2, "note"));
+    g.settle();
+    g.screen.setFocus(&g.table->view());
+    g.send(core::tui::test::specialKey(KeyCode::Tab));
+    CHECK(g.screen.focusedComponent() == &g.afterInput->view());
+}
+
+// Mutation: the terminal table drawing the band over the declared columns' widths instead of the runs `setBands` gave
+// (the label starts over column 0).
+TEST_CASE("tui table: bands draw above the header", "[tui][table][bands]") {
+    Harness harness{60, 6};
+    auto table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(6)},
+                       {.label = "M8", .width = ui::Sizing::fixed(8)},
+                       {.label = "M4", .width = ui::Sizing::fixed(8)},
+                       {.label = "M2", .width = ui::Sizing::fixed(8)}});
+    auto row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    std::vector<std::unique_ptr<TextImpl>> cells;
+    for (std::string const text : {"a", "1", "2", "3"}) {
+        cells.push_back(harness.make<TextImpl>(row.get()));
+        cells.back()->setText(text);
+    }
+    table->setRowKey(*row, key(1));
+    table->setBands({{.level = 0, .label = "Mass retained", .unit = "g", .first = 1, .count = 3, .pinned = false}});
+    Rows const drawn = harness.draw();
+    REQUIRE(drawn.size() >= 2);
+    std::size_t const m8 = drawn.at(1).find("M8");
+    REQUIRE(m8 != std::string::npos);
+    CHECK(drawn.at(0).find("Mass retained [g]") == m8);  // over columns 1 to 3, not over Name
+    CHECK(drawn.at(1).contains("Name"));
+    table->setBands({});
+    CHECK(harness.draw().at(0).contains("Name"));  // no band line once none is given
+    cells.clear();
+    row.reset();
+}
+
+// Mutations: the terminal table covering only a span's own column (B1 and C1 still drawn); a summary row drawn with a
+// data row's gutter (no `Σ`).
+TEST_CASE("tui table: a span across columns and a summary row", "[tui][table][spans][summary]") {
+    Harness harness{60, 6};
+    auto table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "A", .width = ui::Sizing::fixed(6)},
+                       {.label = "B", .width = ui::Sizing::fixed(6)},
+                       {.label = "C", .width = ui::Sizing::fixed(6)},
+                       {.label = "D", .width = ui::Sizing::fixed(6)}});
+    std::vector<std::unique_ptr<StackImpl>> rows;
+    std::vector<std::unique_ptr<TextImpl>> cells;
+    std::vector<std::vector<std::string>> const texts{{"wide text here", "B1", "C1", "D1"}, {"A2", "B2", "C2", "D2"}};
+    for (std::size_t at = 0; at < texts.size(); ++at) {
+        rows.push_back(harness.make<StackImpl>(table.get(), ui::Axis::Horizontal));
+        for (std::string const& text : texts.at(at)) {
+            cells.push_back(harness.make<TextImpl>(rows.back().get()));
+            cells.back()->setText(text);
+        }
+        table->setRowKey(*rows.back(), key(static_cast<std::int64_t>(at) + 1));
+    }
+    table->setRowSummary(*rows.at(1));
+    table->setRowSpans(*rows.at(0), {ui::RowSpan{.column = 0, .rows = 1, .columns = 3}});
+    Rows const drawn = harness.draw();
+    REQUIRE(drawn.size() >= 3);
+    CHECK(drawn.at(1).contains("wide text here"));
+    CHECK(!drawn.at(1).contains("B1"));
+    CHECK(!drawn.at(1).contains("C1"));
+    CHECK(drawn.at(1).contains("D1"));
+    CHECK(drawn.at(2).starts_with("\u03A3"));
+    CHECK(drawn.at(2).contains("A2"));
+    cells.clear();
+    rows.clear();
 }

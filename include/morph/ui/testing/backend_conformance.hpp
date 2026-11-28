@@ -148,10 +148,12 @@ public:
     /// @param click How the click is modified.
     virtual void clickRow(Widget& table, std::size_t row, RowClick click) = 0;
 
-    /// @brief Clicks a column's header of a table as a user would.
+    /// @brief Clicks a column's header of a table as a user would, with `Shift` held for `HeaderClick::Shift`.
     /// @param table  The table.
     /// @param column The column's index among the table's columns.
-    virtual void clickHeader(Widget& table, std::size_t column) = 0;
+    /// @param click  Whether `Shift` is held.
+    // NOLINTNEXTLINE(google-default-arguments): every probe takes the same default, and the cases rely on it.
+    virtual void clickHeader(Widget& table, std::size_t column, HeaderClick click = HeaderClick::Plain) = 0;
 
     /// @brief The rows a table shows as selected.
     /// @param table The table.
@@ -229,6 +231,90 @@ public:
         static_cast<void>(spotlight);
         return nullptr;
     }
+
+    /// @brief Opens a header's menu, or the table's menu, as a user would (a right click on the header, or the `⋯`
+    ///        button), reads its entries, and closes it.
+    /// @param table  The table.
+    /// @param column The column, or none for the table's menu.
+    /// @return The entries of the top level; none when the probe reads none.
+    [[nodiscard]] virtual std::vector<MenuEntry> headerMenu(Widget& table, std::optional<std::size_t> column) {
+        static_cast<void>(table);
+        static_cast<void>(column);
+        return {};
+    }
+
+    /// @brief Opens a header's menu, or the table's menu, and chooses an entry as a user would, opening each submenu
+    ///        on the path first.
+    /// @param table  The table.
+    /// @param column The column, or none for the table's menu.
+    /// @param path   The entry's index at each level, from the top.
+    virtual void chooseHeaderMenuEntry(Widget& table, std::optional<std::size_t> column,
+                                       std::vector<std::size_t> const& path) {
+        static_cast<void>(table);
+        static_cast<void>(column);
+        static_cast<void>(path);
+    }
+
+    /// @brief Moves a column as a user would: dragging its header, or the keys on a focused header.
+    /// @param table    The table.
+    /// @param column   The column's index among the table's columns.
+    /// @param position Its new place among the visible columns.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`column`, `position`): the column to move then where it goes, as the backend's `moveColumn` reads
+    virtual void moveColumn(Widget& table, std::size_t column, std::size_t position) {
+        static_cast<void>(table);
+        static_cast<void>(column);
+        static_cast<void>(position);
+    }
+
+    /// @brief The text a column's header draws: its label and its sort mark.
+    /// @param table  The table.
+    /// @param column The column's index among the table's columns.
+    /// @return The text; empty when the probe reads none.
+    [[nodiscard]] virtual std::string headerText(Widget const& table, std::size_t column) {
+        static_cast<void>(table);
+        static_cast<void>(column);
+        return {};
+    }
+
+    /// @brief What assistive technology reads as a column header's name.
+    /// @param table  The table.
+    /// @param column The column's index among the table's columns.
+    /// @return The name; empty when the probe reads none.
+    [[nodiscard]] virtual std::string headerName(Widget const& table, std::size_t column) {
+        static_cast<void>(table);
+        static_cast<void>(column);
+        return {};
+    }
+
+    /// @brief What assistive technology reads as a column header's description.
+    /// @param table  The table.
+    /// @param column The column's index among the table's columns.
+    /// @return The description; empty when it has none or the probe reads none.
+    [[nodiscard]] virtual std::string headerDescription(Widget const& table, std::size_t column) {
+        static_cast<void>(table);
+        static_cast<void>(column);
+        return {};
+    }
+
+    /// @brief Presses a filterable column's filter button in its header, as a user would.
+    /// @param table  The table.
+    /// @param column The column's index among the table's columns.
+    virtual void pressFilter(Widget& table, std::size_t column) {
+        static_cast<void>(table);
+        static_cast<void>(column);
+    }
+
+    /// @brief Presses a column group's filter button in the group row, as a user would.
+    /// @param table The table.
+    /// @param group The group's index among the table's column groups.
+    virtual void pressGroupFilter(Widget& table, std::size_t group) {
+        static_cast<void>(table);
+        static_cast<void>(group);
+    }
+
+    /// @brief What the backend's `copyText` last put on the clipboard, read back from where it wrote it.
+    /// @return The text; empty before any, or when the probe reads none.
+    [[nodiscard]] virtual std::string clipboardText() { return {}; }
 };
 
 /// @brief One scripted case.
@@ -1010,9 +1096,9 @@ struct Entry {
                              .onSelectionChange = note("Table onSelectionChange"),
                              .sort =
                                  [odd] {
-                                     return odd() ? std::optional<TableSort>{TableSort{
+                                     return odd() ? std::vector<TableSort>{TableSort{
                                                         .column = 0, .direction = SortDirection::Descending}}
-                                                  : std::nullopt;
+                                                  : std::vector<TableSort>{};
                                  },
                              .onSort = note("Table onSort"),
                              .onActivate = note("Table onActivate")},
@@ -2825,22 +2911,22 @@ struct SelectionReport {
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> headerClickAsksToSort(ConformanceProbe& probe) {
     reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
-    reactive::Signal<std::optional<TableSort>> shown{probe.runtime(), std::nullopt};
+    reactive::Signal<std::vector<TableSort>> shown{probe.runtime(), {}};
     std::vector<std::size_t> asked;
-    Mounted const view{probe.runtime(), probe.backend(),
-                       ui::table<Entry>(
-                           {{.label = "Name", .sortable = true}, {.label = "Id"}}, [&rows] { return rows.get(); },
-                           [](Entry const& entry) { return Key{entry.id}; },
-                           [](reactive::Signal<Entry> const& entry) {
-                               return std::vector<Node>{
-                                   ui::text({.text = [&entry] { return entry.get().label; }}),
-                                   ui::text({.text = [&entry] { return std::to_string(entry.get().id); }})};
-                           },
-                           TableOptions{.sort = [&shown] { return shown.get(); },
-                                        .onSort = [&asked](std::size_t column) { asked.push_back(column); }})};
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::table<Entry>(
+            {{.label = "Name", .sortable = true}, {.label = "Id"}}, [&rows] { return rows.get(); },
+            [](Entry const& entry) { return Key{entry.id}; },
+            [](reactive::Signal<Entry> const& entry) {
+                return std::vector<Node>{ui::text({.text = [&entry] { return entry.get().label; }}),
+                                         ui::text({.text = [&entry] { return std::to_string(entry.get().id); }})};
+            },
+            TableOptions{.sort = [&shown] { return shown.get(); },
+                         .onSort = [&asked](std::size_t column, HeaderClick) { asked.push_back(column); }})};
     probe.settle();
     Checks checks;
-    shown.set(TableSort{.column = 0, .direction = SortDirection::Descending});
+    shown.set({TableSort{.column = 0, .direction = SortDirection::Descending}});
     probe.settle();
     checks.that(asked.empty(), "showing a sort asked to sort");
     probe.clickHeader(view.root(), 0);
@@ -4417,6 +4503,265 @@ struct MinColumnGridSpec {
     return checks.result();
 }
 
+/// @brief A table of entries under the given columns, each cell a Text of the entry's label and its column's index.
+/// @param rows    The entries; must outlive the node's mounts.
+/// @param columns The columns.
+/// @param options Sorting, menus and the rest.
+/// @return The node.
+[[nodiscard]] inline Node columnsTable(reactive::Signal<std::vector<Entry>> const& rows,
+                                       std::vector<TableColumn> columns, TableOptions options) {
+    std::size_t const count = columns.size();
+    return ui::table<Entry>(
+        std::move(columns), [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+        [count](reactive::Signal<Entry> const& entry) {
+            std::vector<Node> cells;
+            cells.reserve(count);
+            for (std::size_t column = 0; column < count; ++column) {
+                cells.push_back(
+                    ui::text({.text = [&entry, column] { return entry.get().label + std::to_string(column); }}));
+            }
+            return cells;
+        },
+        std::move(options));
+}
+
+/// @brief A header click as a failure message shows it.
+/// @param clicks The column and the kind of click of each report.
+/// @return Such as `1:Shift,0:Plain`.
+[[nodiscard]] inline std::string headerClicks(std::vector<std::pair<std::size_t, HeaderClick>> const& clicks) {
+    std::string text;
+    for (auto const& [column, click] : clicks) {
+        text +=
+            (text.empty() ? "" : ",") + std::to_string(column) + (click == HeaderClick::Shift ? ":Shift" : ":Plain");
+    }
+    return text;
+}
+
+/// @brief Case: a `Shift`-click on a sortable header reports `Shift`, and a plain click `Plain`.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> shiftClickReportsShift(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    std::vector<std::pair<std::size_t, HeaderClick>> clicks;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       columnsTable(rows, {{.label = "Name", .sortable = true}, {.label = "Mass", .sortable = true}},
+                                    {.onSort = [&clicks](std::size_t column, HeaderClick click) {
+                                        clicks.emplace_back(column, click);
+                                    }})};
+    probe.settle();
+    probe.clickHeader(view.root(), 1, HeaderClick::Shift);
+    probe.settle();
+    probe.clickHeader(view.root(), 0, HeaderClick::Plain);
+    probe.settle();
+    Checks checks;
+    checks.text("the header clicks reported", "1:Shift,0:Plain", headerClicks(clicks));
+    return checks.result();
+}
+
+/// @brief Case: a chain of three keys marks every header with its direction and its place, and describes it to
+///        assistive technology; a chain of one key marks its header with the direction alone, and a header not in
+///        the chain has no description.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> sortChainMarksHeaders(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    reactive::Signal<std::vector<TableSort>> chain{probe.runtime(),
+                                                   {TableSort{.column = 1, .direction = SortDirection::Descending},
+                                                    TableSort{.column = 0, .direction = SortDirection::Ascending},
+                                                    TableSort{.column = 2, .direction = SortDirection::Ascending}}};
+    Mounted const view{probe.runtime(), probe.backend(),
+                       columnsTable(rows,
+                                    {{.label = "Name", .sortable = true},
+                                     {.label = "Mass", .sortable = true},
+                                     {.label = "Site", .sortable = true}},
+                                    {.sort = [&chain] { return chain.get(); }})};
+    probe.settle();
+    Checks checks;
+    checks.text("Name's header in a chain of three", "Name \u25B22", probe.headerText(view.root(), 0));
+    checks.text("Mass's header in a chain of three", "Mass \u25BC1", probe.headerText(view.root(), 1));
+    checks.text("Site's header in a chain of three", "Site \u25B23", probe.headerText(view.root(), 2));
+    checks.text("Name's description in a chain of three", "sorted ascending, key 2 of 3",
+                probe.headerDescription(view.root(), 0));
+    chain.set({TableSort{.column = 0, .direction = SortDirection::Descending}});
+    probe.settle();
+    checks.text("Name's header in a chain of one", "Name \u25BC", probe.headerText(view.root(), 0));
+    checks.text("Name's description in a chain of one", "sorted descending", probe.headerDescription(view.root(), 0));
+    checks.text("Mass's description out of the chain", "", probe.headerDescription(view.root(), 1));
+    return checks.result();
+}
+
+/// @brief Menus that report what was chosen: a header's `Sort ascending`, a separator and `Hide column`, and the
+///        table's `Columns…`.
+/// @param chosen Where each choice is recorded, as its column (`-` for none) and path.
+/// @return The options' `menu` and `onMenu`.
+[[nodiscard]] inline TableOptions menuOptions(std::vector<std::string>& chosen) {
+    TableOptions options;
+    options.menu = [](std::optional<std::size_t> column) {
+        if (!column) {
+            return std::vector<MenuEntry>{{.label = "Columns\u2026"}};
+        }
+        return std::vector<MenuEntry>{{.label = "Sort ascending"}, {.separator = true}, {.label = "Hide column"}};
+    };
+    options.onMenu = [&chosen](std::optional<std::size_t> column, std::vector<std::size_t> const& path) {
+        std::string text = column ? std::to_string(*column) : std::string{"-"};
+        for (std::size_t const index : path) {
+            text += "/" + std::to_string(index);
+        }
+        chosen.push_back(std::move(text));
+    };
+    return options;
+}
+
+/// @brief Case: a header's menu shows its entries, and choosing one reports the header's column and the entry's path.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> headerMenuReportsColumnAndPath(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    std::vector<std::string> chosen;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        columnsTable(rows, {{.label = "Name"}, {.label = "Mass"}, {.label = "Site"}}, menuOptions(chosen))};
+    probe.settle();
+    Checks checks;
+    std::vector<MenuEntry> const entries = probe.headerMenu(view.root(), 1);
+    checks.that(entries.size() == 3 && entries.at(0).label == "Sort ascending" && entries.at(1).separator &&
+                    entries.at(2).label == "Hide column",
+                "Mass's menu shows " + std::to_string(entries.size()) +
+                    " entries, not Sort ascending, a separator and Hide column");
+    probe.settle();
+    probe.chooseHeaderMenuEntry(view.root(), 1, {2});
+    probe.settle();
+    checks.that(chosen == std::vector<std::string>{"1/2"},
+                "choosing Hide column in Mass's menu reported " + std::to_string(chosen.size()) +
+                    " choices, not column 1 and path [2] once" + (chosen.empty() ? "" : ": " + chosen.front()));
+    return checks.result();
+}
+
+/// @brief Case: the table's menu is the menu with no column: choosing its entry reports none and the path.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> tableMenuHasNoColumn(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    std::vector<std::string> chosen;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       columnsTable(rows, {{.label = "Name"}, {.label = "Mass"}}, menuOptions(chosen))};
+    probe.settle();
+    probe.chooseHeaderMenuEntry(view.root(), std::nullopt, {0});
+    probe.settle();
+    Checks checks;
+    checks.that(chosen == std::vector<std::string>{"-/0"},
+                "choosing the table menu's first entry reported " + std::to_string(chosen.size()) +
+                    " choices, not no column and path [0] once" + (chosen.empty() ? "" : ": " + chosen.front()));
+    return checks.result();
+}
+
+/// @brief Case: a column the user moves reports its column and its new place.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> columnMoveReportsPlace(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    std::vector<std::pair<std::size_t, std::size_t>> moves;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       columnsTable(rows, {{.label = "Name"}, {.label = "Mass"}, {.label = "Site"}},
+                                    {.onColumnMove = [&moves](std::size_t column, std::size_t position) {
+                                        moves.emplace_back(column, position);
+                                    }})};
+    probe.settle();
+    probe.moveColumn(view.root(), 0, 1);
+    probe.settle();
+    Checks checks;
+    checks.that(
+        moves == std::vector<std::pair<std::size_t, std::size_t>>{{0, 1}},
+        "moving Name to place 1 reported " + std::to_string(moves.size()) + " moves, not column 0 to place 1 once" +
+            (moves.empty()
+                 ? ""
+                 : ": " + std::to_string(moves.front().first) + " to " + std::to_string(moves.front().second)));
+    return checks.result();
+}
+
+/// @brief Case: a filtered column's header is named so for assistive technology, and an unfiltered one by its label.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> filteredHeaderIsNamed(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        columnsTable(rows, {{.label = "Name", .filterable = true}, {.label = "Mass", .filterable = true}},
+                     {.onFilter = [](std::size_t) {}, .filtered = std::vector<std::size_t>{0}})};
+    probe.settle();
+    Checks checks;
+    checks.text("the filtered header's name", "Name, filtered", probe.headerName(view.root(), 0));
+    checks.text("the unfiltered header's name", "Mass", probe.headerName(view.root(), 1));
+    return checks.result();
+}
+
+/// @brief Case: a filterable column's filter button reports its column once.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> filterButtonReportsColumn(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    std::vector<std::size_t> pressed;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       columnsTable(rows, {{.label = "Name"}, {.label = "Mass", .filterable = true}},
+                                    {.onFilter = [&pressed](std::size_t column) { pressed.push_back(column); }})};
+    probe.settle();
+    probe.pressFilter(view.root(), 1);
+    probe.settle();
+    Checks checks;
+    checks.that(
+        pressed == std::vector<std::size_t>{1},
+        "pressing Mass's filter button reported " + std::to_string(pressed.size()) + " presses, not column 1 once");
+    return checks.result();
+}
+
+/// @brief Case: a column group's filter button in the group row reports the group once.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> groupFilterButtonReportsGroup(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    std::vector<std::size_t> pressed;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        columnsTable(rows, {{.label = "Name"}, {.label = "Mass"}, {.label = "Site"}},
+                     {.columnGroups = std::vector<TableColumnGroup>{{.label = "Place", .first = 1, .count = 2}},
+                      .onGroupFilter = [&pressed](std::size_t group) { pressed.push_back(group); }})};
+    probe.settle();
+    probe.pressGroupFilter(view.root(), 0);
+    probe.settle();
+    Checks checks;
+    checks.that(
+        pressed == std::vector<std::size_t>{0},
+        "pressing Place's filter button reported " + std::to_string(pressed.size()) + " presses, not group 0 once");
+    return checks.result();
+}
+
+/// @brief Case: `Ctrl+C` on a focused table reports a copy once.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> ctrlCReportsCopy(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    int copies = 0;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       columnsTable(rows, {{.label = "Name"}}, {.onCopy = [&copies] { ++copies; }})};
+    probe.settle();
+    probe.press(view.root(), "Ctrl+C");
+    probe.settle();
+    Checks checks;
+    checks.that(copies == 1, "Ctrl+C on the table asked to copy " + std::to_string(copies) + " times, not once");
+    return checks.result();
+}
+
+/// @brief Case: `copyText` puts its text on the clipboard, where the probe reads it back.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> copyTextReachesClipboard(ConformanceProbe& probe) {
+    Checks checks;
+    checks.that(probe.backend().copyText("a\tb"), "copyText reported no clipboard");
+    probe.settle();
+    checks.text("the clipboard", "a\tb", probe.clipboardText());
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The spotlight's cases, which every backend that runs guided tours passes. They are their own list, so a
@@ -4555,7 +4900,7 @@ struct MinColumnGridSpec {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 57> const cases{{
+    static std::array<ConformanceCase, 67> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -4640,6 +4985,21 @@ struct MinColumnGridSpec {
         {.name = "an unlabelled steps indicator still names its current step",
          .run = detail::unlabelledStepsNameTheirCurrentStep},
         {.name = "a stack told it is the head bar keeps its children", .run = detail::headBarKeepsItsChildren},
+        {.name = "table: a Shift-click on a sortable header reports Shift, a plain click Plain",
+         .run = detail::shiftClickReportsShift},
+        {.name = "table: a chain of three keys marks every header with its place",
+         .run = detail::sortChainMarksHeaders},
+        {.name = "table: a header's menu shows its entries and choosing one reports the column and the path",
+         .run = detail::headerMenuReportsColumnAndPath},
+        {.name = "table: the table's menu is the menu with no column", .run = detail::tableMenuHasNoColumn},
+        {.name = "table: a column moved by the user reports its column and new place",
+         .run = detail::columnMoveReportsPlace},
+        {.name = "table: a filtered column's header is named so", .run = detail::filteredHeaderIsNamed},
+        {.name = "table: Ctrl+C on a focused table reports a copy", .run = detail::ctrlCReportsCopy},
+        {.name = "backend: copyText puts its text on the clipboard", .run = detail::copyTextReachesClipboard},
+        {.name = "table: a filterable header's filter button reports its column",
+         .run = detail::filterButtonReportsColumn},
+        {.name = "table: a group's filter button reports the group", .run = detail::groupFilterButtonReportsGroup},
     }};
     return cases;
 }

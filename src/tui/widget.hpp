@@ -123,12 +123,18 @@ public:
     [[nodiscard]] std::string const& effectiveSurface() const noexcept;
     /// Keeps a table row's tone, which its cells draw in.
     void applyRowTone(std::optional<ui::Tone> tone) noexcept { _rowTone = tone; }
+    /// Keeps whether a table row is muted, which its cells draw dim.
+    void applyRowMuted(bool muted) noexcept { _rowMuted = muted; }
+    /// Whether the widget draws dim: its own row is muted, or its nearest container's.
+    [[nodiscard]] bool effectiveRowMuted() const noexcept;
     /// The tone the widget draws in: its own row tone, or else its nearest container's; none for no toned row.
     [[nodiscard]] std::optional<ui::Tone> effectiveRowTone() const noexcept;
     /// Sets the text core::tui's hover shows; empty shows none.
     void applyTooltip(std::string_view text) { _tooltip = text; }
-    /// What the hover shows: the tooltip, and a field adds its messages.
-    [[nodiscard]] virtual std::string hoverText() const { return _tooltip; }
+    /// Sets what a table row's marks say on hover, which wins over its own tooltip; empty leaves the tooltip.
+    void applyMarksTooltip(std::string_view text) { _marksTooltip = text; }
+    /// What the hover shows: a row's marks' text, else the tooltip, and a field adds its messages.
+    [[nodiscard]] virtual std::string hoverText() const { return _marksTooltip.empty() ? _tooltip : _marksTooltip; }
     /// What assistive technology reads as the widget's description; none for a widget that is not described.
     [[nodiscard]] virtual std::string accessibleDescription() const { return {}; }
     /// Declares the chords this widget handles while the focus is inside it.
@@ -196,6 +202,12 @@ public:
     /// A left press on @p cell (0-based, relative to this widget) that this widget took, after it took the focus
     /// when it takes it on a press. It may destroy the widget.
     virtual void pressAt(::core::tui::Point cell);
+    /// A right press on @p cell (0-based, relative to this widget), while the widget is actionable: a context menu's
+    /// gesture. Returns whether the widget took it; by default none does, and the press goes on outwards.
+    [[nodiscard]] virtual bool contextPress(::core::tui::Point cell) {
+        static_cast<void>(cell);
+        return false;
+    }
     /// The pointer moved to @p cell (relative to this widget, and possibly outside it) while a press this widget took
     /// lasts and the widget is actionable. It may destroy the widget.
     virtual void dragTo(::core::tui::Point cell);
@@ -265,7 +277,9 @@ private:
     std::uint64_t _sequence;
     std::string _surface;
     std::optional<ui::Tone> _rowTone;
+    bool _rowMuted = false;
     std::string _tooltip;
+    std::string _marksTooltip;
     std::vector<std::string> _chords;
     std::function<void(std::string)> _onChord;
     ::core::tui::Point _drawShift{};
@@ -605,6 +619,13 @@ public:
 struct CellPlace {
     ui::Align across = ui::Align::Start;  ///< Start, Center or End; Stretch reads as Start.
     ui::Align down = ui::Align::Center;   ///< Start, Center or End; Stretch fills the row's height.
+};
+
+/// Where a table cell is drawn in its row when the table places each cell by its column: from @p x, @p width cells.
+struct CellSlot {
+    int x = 0;        ///< The slot's start, from the row's start.
+    int width = 0;    ///< The cells it takes; 0 gives the child no area.
+    CellPlace place;  ///< Where the cell sits in the slot.
 };
 
 /// How `arrangeStack` places children.

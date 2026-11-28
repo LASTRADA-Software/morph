@@ -334,7 +334,7 @@ ui::Node trailTable(Audit const& audit) {
     return ui::table(
                audit.shown,
                {.key = ui::row("at"),
-                .columns =
+                .columns = layout::unfiltered(
                     {{.name = "when",
                       .label = "When",
                       .width = ui::fixed(10),
@@ -357,7 +357,7 @@ ui::Node trailTable(Audit const& audit) {
                       .label = "Reason",
                       .width = ui::stretch(),
                       .cell = ui::text({.text = ui::cond(noReason, ui::AnyHandle{"—"}, reason),
-                                        .role = ui::cond(noReason, Text{"muted"}, Text{"normal"})})}},
+                                        .role = ui::cond(noReason, Text{"muted"}, Text{"normal"})})}}),
                 .pageSize = std::int64_t{25},
                 .page = audit.page,
                 .empty = noEntries(audit),

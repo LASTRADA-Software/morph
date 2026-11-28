@@ -53,12 +53,18 @@ struct RecordInfo {
     std::type_index type;
     /// The glaze JSON name of the key member; empty for a keyless record or one without an `id` member.
     std::optional<std::string> keyField;
+    /// The glaze JSON name of the member holding the key a record had before an action changed it, collected beside
+    /// `keyField` at the same paths; empty for a record whose key does not change. `"from"` on a table's record.
+    std::optional<std::string> previousKeyField;
     /// The source types this record is derived from.
     std::vector<std::type_index> derivedFrom;
     /// True when the record's keys must not reach other principals.
     bool privateKeys = false;
     /// True when the key's raw type is `std::string`; false when it is integral or there is no key.
     bool keyIsString = false;
+    /// True for a table's record, registered by `BRIDGE_REGISTER_TABLE`: keyed by `key`, and keyed even when it is
+    /// derived from other records, since a source's change reaches it as a whole-record change.
+    bool table = false;
 };
 
 namespace detail {
@@ -205,6 +211,39 @@ inline bool registerRecordOnce(std::string_view name) noexcept {
     applyKey<T, Opts...>(info);
     info.privateKeys = (std::is_same_v<Opts, privateKeys> || ... || false);
     // Unused when the record takes no options: the fold below is then empty.
+    [[maybe_unused]] auto const addSources = []<typename O>(RecordInfo& target) {
+        if constexpr (IsDerivedFrom<O>::value) {
+            []<typename... S>(RecordInfo& out, derivedFrom<S...>) { (out.derivedFrom.emplace_back(typeid(S)), ...); }(
+                target, O{});
+        }
+    };
+    (addSources.template operator()<Opts>(info), ...);
+    mutableRecordRegistry().push_back(std::move(info));
+    return true;
+}
+
+/// @brief Static-init helper for `BRIDGE_REGISTER_TABLE`: registers a table's record.
+///
+/// The record is keyed by `key`, the member a `ChangedRow` names its row by, and marked `table`.
+/// @tparam T The table's tag type, `morph::table::TableOf<fn>`.
+/// @tparam Opts Any of `privateKeys` and `derivedFrom<>`.
+/// @param name The record's wire name, `<model type>.<id of the table>`.
+/// @return Always true, so the result can initialise a namespace-scope variable.
+template <typename T, typename... Opts>
+inline bool registerTableRecordOnce(std::string const& name) noexcept {
+    // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
+    assert(!::morph::model::registrationPhaseClosed() &&
+           "registerTableRecordOnce: registration after the registration phase closed. The process-level "
+           "registries are unsynchronised and are read-only once dispatch begins -- registering now "
+           "races their internals against concurrent lookups. Load and register plugin modules before "
+           "the first dispatch.");
+    static_assert(((std::is_same_v<Opts, privateKeys> || IsDerivedFrom<Opts>::value) && ...),
+                  "BRIDGE_REGISTER_TABLE: a table's record takes only privateKeys and derivedFrom<>");
+    RecordInfo info{.name = name, .type = std::type_index{typeid(T)}, .keyField = "key", .derivedFrom = {}};
+    info.table = true;
+    info.previousKeyField = "from";
+    info.privateKeys = (std::is_same_v<Opts, privateKeys> || ... || false);
+    // Unused when the table takes no options: the fold below is then empty.
     [[maybe_unused]] auto const addSources = []<typename O>(RecordInfo& target) {
         if constexpr (IsDerivedFrom<O>::value) {
             []<typename... S>(RecordInfo& out, derivedFrom<S...>) { (out.derivedFrom.emplace_back(typeid(S)), ...); }(

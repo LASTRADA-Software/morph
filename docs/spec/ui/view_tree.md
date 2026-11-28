@@ -118,7 +118,7 @@ lowers them to the kinds below.
 | `Dialog` | `dialog` | `open`, `title`, `description` (applied only when bound or not empty), `descriptionSpans` (the description as runs; while bound or not empty, `setDescriptionSpans` is called in place of `setDescription`), `child`, `onDismiss`, `sheet` (default `false`), `dismissLabel` (default `Close`; labels a sheet's control and the one `closeButton` draws), `headNote` and `footerNote` (muted text on the title's row, against its trailing edge, and leading in the footer's row; empty shows none), `closeButton` (default `false`: a dismiss control on the title's row, dismissing as Escape does; a sheet's head holds one already, so it adds nothing there): the mount calls `setSheet`, `setDismissLabel`, `setHeadNote`, `setFooterNote` and `setCloseButton` only when they are bound or not the default. A `Drawer` takes `headNote`, `footerNote`, `closeButton` and `dismissLabel` as a dialog does |
 | `Busy` | `busy` | `active`, `label` |
 | `ForEach` | `forEach<RowT>` | rows, key function, row view, `axis`, `gap`, `common` (the row container's, as on every kind), `wrap` (a `bool`; honoured on a horizontal `axis` only, as a Row's), `divided` (a `bool`; honoured on a vertical `axis` only, as a Column's) ([below](#keyed-collections)) |
-| `Table` | `table<RowT>` | `columns` (`TableColumn{label, width, role, align, valign, sortable, wrap, shrink}`, set once; a `Stretch` `width` starts from the column's content and its weight shares only the width the content leaves (the contract's four steps), and `shrink` also makes the column give up width before the other stretch columns; `sortable` makes a click on the header ask to sort by the column; `role` styles a column's default cell and has no effect on the style of one with its own `.cell`, and a `Mono` role makes a fixed width count monospace characters; `wrap`, default `true`, with `false` keeps the column's text cells to one line, cut at the column's width with an ellipsis; `align`, default `Start`, places a text's or a text input's text, a label-width cell and the header label across the column, and `valign`, default `Center`, places every cell down its row, `Stretch` filling it), rows, key function, cells — or a row view answering `TableRowView{cells, tone, label, heading, spans}`, whose tone, label and `spans` bind in the row's own scope and whose `heading` makes the row a heading of exactly one cell (`ui::table` refuses any other count, as it refuses a data row of the wrong count); a row's `spans` let its cells cover the rows below it ([Row spans](#row-spans)), and a sorted or virtualized table draws no spans, and a bad span is refused alone — and `TableOptions{selectionMode, selection, onSelectionChange (the keys and a `SelectionChange`: `Replace`, the whole selection, or `Extend`, which keeps the keys the backend does not hold), onActivate, selectColumn (set once: a leading column of check boxes drawing the selection), selectAllLabel (the header box's name, default `Select all`), sort (a `Prop<std::optional<TableSort{column, direction}>>`: the column whose header marks the sort, and its `SortDirection`; the table never reorders its rows, which arrive sorted), onSort (a sortable column's index when the user asks to sort by it), common}`; the mount tells the widget `sort` and `onSort` only when a column is sortable ([below](#keyed-collections)) |
+| `Table` | `table<RowT>` | `columns` (`TableColumn{id, label, width, role, align, valign, sortable, filterable, wrap, shrink}`, set once; a `Stretch` `width` starts from the column's content and its weight shares only the width the content leaves (the contract's four steps), and `shrink` also makes the column give up width before the other stretch columns; `sortable` makes a click on the header ask to sort by the column; `role` styles a column's default cell and has no effect on the style of one with its own `.cell`, and a `Mono` role makes a fixed width count monospace characters; `wrap`, default `true`, with `false` keeps the column's text cells to one line, cut at the column's width with an ellipsis; `align`, default `Start`, places a text's or a text input's text, a label-width cell and the header label across the column, and `valign`, default `Center`, places every cell down its row, `Stretch` filling it), rows, key function, cells — or a row view answering `TableRowView{cells, tone, label, heading, spans}`, whose tone, label and `spans` bind in the row's own scope and whose `heading` makes the row a heading of exactly one cell (`ui::table` refuses any other count, as it refuses a data row of the wrong count); a row's `spans` let its cells cover the rows below it ([Row spans](#row-spans)), and a sorted or virtualized table draws no spans, and a bad span is refused alone — and `TableOptions{selectionMode, selection, onSelectionChange (the keys and a `SelectionChange`: `Replace`, the whole selection, or `Extend`, which keeps the keys the backend does not hold), onActivate, selectColumn (set once: a leading column of check boxes drawing the selection), selectAllLabel (the header box's name, default `Select all`), sort (a `Prop<std::vector<TableSort{column, direction}>>`: the sort chain the headers mark, most significant key first, each header with its direction and, with two or more keys, its place; the table never reorders its rows, which arrive sorted), onSort (a sortable column's index when the user asks to sort by it, and a `HeaderClick`: `Shift` while Shift is held), menu and onMenu (a header's menu entries by its column, the table's by none, and the choice as that column and the entry's path), onColumnMove (a column and its new visible place), onColumnResize (a column and its width in units, or none to restore the declared one), onFilter, filtered (the columns whose filter buttons are filled and whose headers are named `{label}, filtered`), columnGroups (`TableColumnGroup{label, first, count, filtered}`, a header row over the groups' visible places), onGroupFilter, onCopy (`Ctrl+C`), common, source, status, onRetry}`; the mount tells the widget `sort` and `onSort` only when a column is sortable ([below](#keyed-collections)). Every member of `TableOptions` is a member of `Table` too, and `table` copies each across. A `column` is always an index into `columns`, which hold every column, hidden ones included; only a move's position and a group's `first` count visible places. `table(columns, TableSource, options)` takes its rows by view index instead: `TableSource{rows (a `TableRows`), cellView(column, rowSignal) (a cell's view, built once per cell from a signal of its own that the mount sets to the row's record), rowView(rowSignal) (the row's `TableRowLook{tone, label, spans, heading, keep}`), alwaysFetched, levels, alwaysWindowed, rowScopedCells}`; the mount realizes the rows the backend reports in view and `overscan` rows either side, except a source whose `alwaysWindowed` is `false` (a document's rows), which realizes every row while the view holds fewer than `Virtualization::threshold` and alone draws `TableRowLook::spans` then (`SpanTable::windowed`; the backend is still told the realized window after each pass, as every source table's is, `(0, count, count)` here, since a backend takes the view's count from it), tells `rows` which rows and columns (`alwaysFetched`, then the columns' `TableColumn::id`) are in view, applies each `ViewChange` to the realized rows by key, so a moved row keeps its widget, and sets a row's signals again only for the rows the change names, a set of an equal record changing nothing (`Mounted::stats()` counts `cellBinds`, `rowBinds`, `cellsCreated`); a cell of a column whose level (`levels`) the row lacks is `CellLoad::Unloaded`, or `Failed`, told through `setCellLoad`. `status` (`TableStatus{counts, state, retry, message, shown}`) is the status line, `onRetry` its Retry. A source table also takes `arrangement` (`TableArrangement{visible, pinned, widths}`: the visible columns in layout order, the pinned count, the user's widths), `highlight` (`TableHighlight{key, row}`: scrolled to, marked, followed by key; never selection or focus), `focus` and `onFocusCell` (`CellRef{key, column}`: focus is a row key and a column id, held by the mount, whose row and column stay realized), `onSelectRange(anchorRow, focusRow, change)` (a range the backend reports as view rows), and `keyMoves` (`KeyMoves{generation, moves}`: rows an action gave new keys, each `(from, to)`; for each generation it has not applied, the mount moves what it holds by key: a highlight on `from` follows `to`, and focus on `from` goes to `to`, as does focus on the row that took `from`'s place when `from` left the view before the moves came (only the first generation after it left acts on that); focus is told to the backend at once when a realized row holds `to`, and else the rows are asked where `to` is (`locateRow`), as after a reset: an answer that the view lacks it hands focus to the row now at the old row's index, and an index the answer gives is told only while no realized row there holds another key, since the answer is of the view after the change and the rows may still be before it, and is followed by `to`'s key until a realized row holds it; nothing is sent to the backend for the move itself, since the selection's mark follows the lowering's `selection`). Its columns are windowed once the backend reports its horizontal viewport and `windowingOf` says so (`Virtualization::columnThreshold`, `cellThreshold`): the pinned columns, those under the viewport and `columnOverscan` each side, their widths in `ColumnExtents` (only growing; a user's width stays). A cell (its scope, its row signal and its widget) is pooled per row when its column leaves the window or its row goes to another key, except a cell of a column `rowScopedCells` marks: its view shares state its row declares, so when its row goes to another key it is destroyed and built for that key, a build (`cellsCreated`) where a rebind would do; a source marks only the columns whose cells read such state. A pooled cell waits in its row: the default cell (`defaultCellView(columnSignal, rowSignal)`, for every column whose `ownCell` is false) in a pool per `TextRole`, a column's own cell in a pool per column; one entering takes a pooled cell and is rebound by its signals (`cellsRebound`), and only an empty pool builds one (`cellsCreated`); a row with nothing left to realize drops its pooled cells, so the cells alive are those in the window. A reset of the rows (a new sort or filter) finds the focused and highlighted rows again by key among the rows realized; a highlight not found is cleared until the lowering locates it again, and focus not found stays on its key without being reported, and the mount asks the rows where the key is (`TableRows::locateRow`, a keyed fetch naming no columns for a server's rows): a key in the view takes focus at the index the answer gives, its row kept realized wherever it is and, when the rows do not hold it, scrolled to so the window fetches it, and only an answer that the view lacks the key moves focus to the row now at its index, or the last, as for a removed row; either is told to the backend once the view's count is known, which a server's rows learn from the first page after the reset; a realized row found with the key first ends the search, and an answer the rows could not give leaves focus looking among the realized rows. A pass that realizes nothing, because every build it tried threw, posts no further pass. The mount's extents, the window it gives the backend and the scroll and widths the backend reports are in the backend's measure (`TableWidget::tableMeasure`); a column's `Sizing::fixed` amount and a width in `TableArrangement::widths` are in `Sizing` units, which the mount scales into that measure. Pools last only while a row has cells left to realize: a column hidden then shown, or scrolled away and back, builds its cells again. One pass binds or builds at most `realizePerFrame` cells, nearest the centre first, the rest blank (`placeholders`) until later turns. `cellReads` names what each column's cell reads, fetched while the column is in the window |
 | `DateTimeInput` | `dateTimeInput` | `value` (`std::optional<time::Timestamp>`; `nullopt` or an empty `Timestamp` shows an empty field), `onChange` (`nullopt` for a cleared field; the change is the commit, since both backends report one only when an edit is finished), `onCommit` (the same value, after `onChange`), `mode` (`DateMode{Date, DateTime}`), `offsetMinutes` (the display zone's offset from UTC), `pattern` (the pattern it shows and reads its value in; empty is ISO) — the last three set once; `label` and `showLabel` (below) |
 | `Slider` | `slider` | `value` (`std::int64_t`), `minimum`, `maximum`, `step` (the three set once), `onChange` (each step while a drag lasts), `onCommit` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePicker` | `filePicker` | `path`, `mode` (`FilePickerMode{Open, Save}`, set once), `onPicked` |
@@ -151,7 +151,7 @@ Every node but `Custom` also carries `Common`:
 | `surface` | The named token set of the theme that styles the node and everything inside it, a `Prop<std::string>`; the mount sets it again on each change |
 | `keys` | `KeyBinding{chord, onPress}`s: chords handled while focus is inside the node; the innermost node declaring a chord takes it, and for a chord listed twice the first entry is called. A focused widget's own chords come before its own keys, and its own keys before its ancestors' chords ([`backend_contract.md`](backend_contract.md), Chords) |
 | `autofocus` | The widget takes keyboard focus when the content it is part of mounts ([below](#focus)) |
-| `focusId` | The name `Mounted::focus` finds the widget by after mount; set once ([below](#focus)). The interpreter makes it a key unique per declaration, row and component use (its node's pointer, the component use's key and the row keys) |
+| `focusId` | The name `Mounted::focus` finds the widget by after mount ([below](#focus)); bound, it is the name it has now: an element of a pooled table cell takes the key of the row the cell shows. The interpreter makes it a key unique per declaration, row and component use (its node's pointer, the component use's key and the row keys) |
 
 Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, FilePicker) also carry
 `field`, a `FieldState`:
@@ -388,6 +388,72 @@ point), focuses it, and asks it to reveal the cursor's line (`TextInputWidget::r
 several inputs with one name, the one mounted first is taken. It answers whether a mounted text input had the
 name; a widget of another kind with that name answers false and is left alone.
 
+### The focus chain
+
+The **focus chain** is the mounted widgets that take focus — a text input, a button, a check box, a select, a menu,
+a date-time input, a slider, a file picker, a table, a tabs, and a badge with `onRemove` — that are shown and enabled
+with every container around them, in document order: a walk of the mounted tree in child order, which the mount
+keeps through every reorder it makes, computed when asked. A table is one stop: what a source table mounts in its
+rows (its cells, an open cell editor) is not on the chain. `Mounted::focusNext(name)` and `focusPrevious(name)` move
+focus to the control after or before the widget whose `focusId` is `name`, through `Widget::focus()`, and answer
+whether one took it. A table's key handler moves focus the same way when it answers `KeyOutcome::FocusNext` or
+`FocusPrevious` ([Editable tables](#editable-tables)).
+
+### Editable tables
+
+A table over a `TableSource` takes what a grid needs (`ui/grid.hpp`, [`../table/editing.md`](../table/editing.md)),
+each on `Table` and `TableOptions` alike:
+
+- **`gridFocus`** (`std::optional<Prop<std::optional<GridFocus>>>`): engaged, the table's focus is a grid's.
+  `GridFocus{key, viewRow, column}` names a row by key, or by view position while the row there is not fetched yet
+  (`key` empty), and a column by id. The mount shows it with `setFocusCell` at the key's view position, found among
+  the realized rows when the given position holds another key, or at `viewRow` while it names no key, and keeps that
+  row realized, so the window fetches a placeholder. A click or a `FocusMove` is resolved to a cell and handed to
+  **`onGridFocus`** (its key empty when that row is not fetched), and does not move the mount's own focus; the
+  focused cell's menu opening does the same. `GridController::node` passes the cell its focus then names to the
+  table's `onFocusCell`, so what a table's focus feeds (a copy of the focused cell) follows a grid's.
+- **`onActivateCell(CellRef)`**: a double click on a cell. **`onClickCell(CellRef)`**: a single click on a fetched
+  row's cell, after the click moved focus (a grid toggles a Boolean cell with it). **`onFocusOut()`**: focus left
+  the table and everything inside it, an open popup of a widget inside it (an editor's list) included. **`onText(text)`**: printable text typed while a cell has focus and no editor is open.
+- **`onKey(chord) -> KeyOutcome`** with **`keyChords`**: the chords are declared to the backend with `setKeys`, after
+  the node's own `keys`, on every change of `keyChords`; a chord of `keyChords` goes to `onKey`, any other declared one
+  to its key binding. `Handled` and `Ignored` end there; `FocusNext` and `FocusPrevious` move focus along the chain
+  from the table.
+- **`editing`** (`std::optional<Prop<std::optional<CellRef>>>`) with **`editor(CellRef) -> Node`**: while `editing`
+  names a cell whose row is realized, the mount builds `editor(cell)` once, mounts it as a child of that row's widget
+  in a scope of its own, calls `setCellEditor(row, column, &widget)` (`column` an index into `columns`) and
+  `widget.focus()`; when `editing` changes, the row is given another key, or the row goes, it calls
+  `setCellEditor(row, column, nullptr)` and unmounts the editor. A focused cell's row stays realized, so an open
+  editor's row is never pooled.
+- **Marks are a cell's.** `markedCell(content, marks)` gives `MarkedCell{content, marks}` (`CellMarks{readOnly,
+  modified, error, stale, muted}`), a node a `TableSource::cellView` returns, whose content may be an `accentedCell`.
+  The mount mounts the content as the cell and binds the marks in the cell's own scope, as an accent is: it calls
+  `setCellMarks(row, column, marks)` on every change and whenever the cell is attached to a row at a column, whether
+  or not the marks changed. The binding reads the cell's own row signal, so a cell rebound to another row (its
+  signal set) evaluates its marks again with its content, and nothing per row holds them. Anywhere but a table cell a
+  `MarkedCell` mounts its content and its marks are not read. A row's own mark is `TableRowLook::modified`
+  (`std::optional<Prop<bool>>`), bound in the row's scope and told with `setRowModified`.
+- **`bands`** (`std::vector<table::BandInfo>`, set once): header bands over a table over a `TableSource`. The mount
+  computes the runs with `bandRuns` over the visible column ids in layout order and the pinned count, cuts each run to
+  the column window's places, and tells the backend `setBands` at mount and whenever the runs change (a move, a hide,
+  a pin, a scroll of the column window). A run never covers a column that is not its band's, and a band with no
+  visible column gives none. A column under a band whose unit equals its own is given to `setColumns` without its unit
+  (`columnUnitShown`); `bandedHeaderName` is a column header's accessible name under its bands.
+- **`TableRowLook::summary`** (`bool`): a summary row. The mount calls `TableWidget::setRowSummary(row)` once, right
+  after `setRowKey`; its cells are built by `cellView` as any row's. The mount positions rows by
+  `TableRows::mountedTotal()`, which a decorator such as `SummaryRows` makes larger than `total()` with rows outside
+  the count and the selection.
+- **`cellSelection`** (`std::optional<Prop<std::optional<CellRange>>>`) with **`onCellSelect(optional<CellRange>)`**:
+  engaged, the table selects cells, not rows. `CellRange{anchor, focus}` is two `CellRef` corners; the rectangle is the
+  rows between the corners' keys' view positions and the columns between their ids' places in the layout. The mount
+  tells the backend `setSelectionMode(None)` and `setCellSelection` with the rectangle at the corners' view positions
+  (found by scanning the view, which is whole on the client) and visible places now, again after every change of the
+  rows and of the arrangement, so a sort or a column move redraws the rectangle the same corners span; a corner whose
+  row is not in the view, or whose column is hidden, shows no rectangle and the range is kept. A rectangle the backend
+  reports (`setOnCellSelect`, by view rows and visible places) is turned into a `CellRange` through the rows' keys and
+  the visible columns' ids and handed to `onCellSelect`; a corner outside the view or the visible columns reports
+  nothing. A grid binds it to `GridController::selection` and `select`.
+
 ### Callbacks
 
 Every callback the mount hands a widget, a drop's `accepts` predicate included, runs:
@@ -470,6 +536,13 @@ built, or what a kept row's update touches, is not a dependency of the whole lis
    fewest moves possible. An append or a removal moves nothing; an insert at the front, or moving
    one row, is one move; reversing three rows is two.
 
+**Configuring a table.** The mount binds `filtered` and `columnGroups` as it binds `sort`, telling the widget only a
+value that is bound or not empty, wires each handler with `event(...)`, calls `setMenu` only when `menu` is set (the
+entries are read untracked, as a handler runs, each time a menu opens) and `setOnColumnResize` only when
+`onColumnResize` is, so a table that configures nothing is told nothing. A table over a `TableSource` also tells the
+widget its visible columns (`setVisibleColumns`) once mounted and whenever the arrangement changes them. A sort
+chain counts as sorted for the row spans while it is not empty.
+
 **Virtualized rows.** A Table whose `Virtualization::threshold` the row count has crossed realizes a
 widget only for rows at or near the visible range a backend reports (`TableWidget::
 setOnVisibleRangeChanged`), not for every row regardless of scroll position. This narrows point 2's
@@ -527,12 +600,15 @@ Effect's reconcile and after a change of one row's `spans`, so a backend can see
 duration of one change (the last covered row removed, the rows moved under an unchanged span). Hence the backends'
 tolerance below. A requested span is refused, and its cell draws in its own row alone, when:
 
-- its `column` is not a column of the table, or its `rows` is 0 (`rows` of 1 is valid and covers nothing);
+- its `column` is not a column of the table, or its `rows` or `columns` is 0 (a span of 1 by 1 is valid and covers
+  nothing);
 - the row is a heading row;
 - it runs past the last row the mount holds (a table paged by the document holds one page, so a span across a page
   boundary runs past the last row), or over a heading row;
 - the row's column is covered by an earlier row's effective span, whether or not this row has a span of its own
-  there; the earlier span wins, so the later one never overlaps it;
+  there, or the span would cover a cell an earlier span (of this row or one above) covers: a span covers its rows and
+  `columns` visible places from its column's place in the arrangement; the earlier span wins, so the later one never
+  overlaps it;
 - the row repeats a column its earlier `RowSpan` already named (the first wins).
 
 Only the bad span is refused; the row's other spans and every other row's stay. Each refusal is reported, not ignored:
@@ -548,6 +624,14 @@ then), so a table with a `sort` and no sortable column keeps its spans; and a so
 still counts as engaged while the rows keep their order. And while the table is above its virtualization threshold,
 where a row's widget may be released while the rows it covers are still shown, spans are refused, and
 `kRowSpanVirtualized` is reported once per table, only when some row requests a span of two or more rows.
+
+A span's `columns` (`RowSpan::columns`) covers that many visible columns from its own, its own included, in every row
+it covers; the giver has already cut it at a column the user moved or hid (`cutColumns`), and the mount passes it on.
+A span whose own column is hidden covers nothing and is not sent. Both backends draw a span across columns over the
+columns from its own by index, clipped at the last, and hide the cells it covers in its own row and the rows below.
+A grid of a form gives its spans through `FormGridSource::setSpans`: `covered` is true for every cell another row's
+span covers, only while the grid is unsorted and under its windowing thresholds, and the walk, a paste and a click pass
+over a covered cell.
 
 **What the backends do** with a row's effective spans, `setRowSpans(row, spans)` (see
 [`backend_contract.md`](backend_contract.md)). A backend derives which cells are covered from the current order of the

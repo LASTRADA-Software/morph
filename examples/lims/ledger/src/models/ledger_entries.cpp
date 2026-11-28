@@ -27,7 +27,6 @@
 #include "lims/org/core/errors.hpp"
 #include "lims/org/core/model_support.hpp"
 #include "lims/org/core/money.hpp"
-#include "lims/org/core/plan_sql.hpp"
 #include "lims/org/models/org_model.hpp"
 
 namespace lims {
@@ -100,12 +99,14 @@ struct LoadedEntry {
 }
 
 /// @brief Maps an entry's rows to its view.
-/// @param mapper The open mapper, for the account codes.
 /// @param entry The rows.
+/// @param base The company's base currency.
+/// @param accountCode The code of an account by id, or nothing for an account that does not exist.
 /// @return The view.
 /// @throws ValidationError if a row holds a state, currency or side outside its enumeration, or a line names an
 ///         account that does not exist.
-[[nodiscard]] JournalEntryView toView(Lightweight::DataMapper& mapper, LoadedEntry const& entry) {
+template <typename AccountCode>
+[[nodiscard]] JournalEntryView toView(LoadedEntry const& entry, CurrencyCode base, AccountCode const& accountCode) {
     auto const& row = entry.header;
     int const state = row.state.Value();
     int const currency = row.currency.Value();
@@ -114,7 +115,6 @@ struct LoadedEntry {
     }
     CompanyId const company{row.companyId.Value()};
     auto const transaction = static_cast<CurrencyCode>(currency);
-    CurrencyCode const base = companyCurrency(company);
     JournalEntryView view{
         .id = JournalEntryId{static_cast<std::int64_t>(row.id.Value())},
         .company = company,
@@ -137,21 +137,38 @@ struct LoadedEntry {
         if (side != static_cast<int>(PostingSide::Debit) && side != static_cast<int>(PostingSide::Credit)) {
             throw ValidationError{"entry " + std::to_string(row.id.Value()) + " stores a line side out of range"};
         }
-        auto const accounts = mapper.Query<db::AccountRecord>()
-                                  .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", line.account.Value())
-                                  .All();
-        if (accounts.empty()) {
+        std::optional<std::string> code = accountCode(line.account.Value());
+        if (!code.has_value()) {
             throw ValidationError{"entry " + std::to_string(row.id.Value()) + " has a line on account " +
                                   std::to_string(line.account.Value()) + ", which does not exist"};
         }
         view.lines.push_back(PostingLine{
-            .accountCode = std::string{accounts.front().code.Value().ToStringView()},
+            .accountCode = std::move(*code),
             .side = static_cast<PostingSide>(side),
             .amount = amountOf(line.amountNum.Value(), line.amountDen.Value(), transaction),
             .companyAmount = amountOf(line.companyNum.Value(), line.companyDen.Value(), base),
         });
     }
     return view;
+}
+
+/// @brief Maps one entry's rows to its view, reading its company and its lines' accounts.
+/// @param mapper The open mapper, for the account codes.
+/// @param entry The rows.
+/// @return The view.
+/// @throws ValidationError as the overload above.
+/// @throws NotFound if the entry's company does not exist.
+[[nodiscard]] JournalEntryView toView(Lightweight::DataMapper& mapper, LoadedEntry const& entry) {
+    CurrencyCode const base = companyCurrency(CompanyId{entry.header.companyId.Value()});
+    return toView(entry, base, [&mapper](std::int64_t account) -> std::optional<std::string> {
+        auto const accounts = mapper.Query<db::AccountRecord>()
+                                  .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", account)
+                                  .All();
+        if (accounts.empty()) {
+            return std::nullopt;
+        }
+        return std::string{accounts.front().code.Value().ToStringView()};
+    });
 }
 
 /// @brief The journal's columns as the table engine reflects them from `JournalEntryView`.
@@ -167,29 +184,56 @@ struct LoadedEntry {
     return columns;
 }
 
-/// @brief How the database reads each journal column it can filter and order by.
-///
-/// `lines` is a serialisation of another table and `rate` is a quantity held as a numerator and denominator, whose
-/// exact comparison would multiply two `int64` values in SQLite, which turns an overflowing product into a real; both
-/// are refused. The enum columns are mapped to the enumerator's name, which is how the table engine holds them.
-/// @return The columns by id.
-[[nodiscard]] plansql::Columns const& journalSqlColumns() {
-    static plansql::Columns const columns{
-        {"id", plansql::integer("id")},
-        {"company", plansql::integer("company_id")},
-        {"period", plansql::integer("period_id")},
-        {"date", plansql::dateTime(plansql::wholeSeconds("date_ms"))},
-        {"state", plansql::text(plansql::enumName<EntryState>("state", kMaxEntryState + 1))},
-        {"sourceKey", plansql::storedText("source_key")},
-        {"sourceReference", plansql::storedText("source_reference")},
-        {"memo", plansql::storedText("memo")},
-        {"currency", plansql::text(plansql::enumName<CurrencyCode>("currency", kMaxCurrencyCode + 1))},
-        {"reverses", plansql::integer("reverses_id")},
-        {"reversedBy", plansql::integer("reversed_by_id")},
-        {"createdBy", plansql::storedText("created_by")},
-        {"postedBy", plansql::storedText("posted_by")},
+/// @brief Reads every entry of @p company with a fixed number of statements per chunk of entries, not per entry:
+///        the headers in one query, the lines in chunks of entry ids, and the accounts once.
+/// @param company The company.
+/// @return Its entries, in the order the database returns the headers.
+/// @throws NotFound if the company has entries and does not exist.
+/// @throws ValidationError as `toView`.
+[[nodiscard]] std::vector<JournalEntryView> companyEntries(CompanyId company) {
+    // Bounded so one statement's parameter list stays well under the driver's limit.
+    constexpr std::size_t kIdsPerQuery = 500;
+    Lightweight::DataMapper mapper;
+    auto headers = mapper.Query<db::EntryRecord>()
+                       .Where(::Lightweight::FieldNameOf<&db::EntryRecord::companyId>, "=", *company)
+                       .All();
+    std::vector<JournalEntryView> entries;
+    if (headers.empty()) {
+        return entries;
+    }
+    CurrencyCode const base = companyCurrency(company);
+    std::map<std::int64_t, std::string> codes;
+    for (auto const& account : mapper.Query<db::AccountRecord>().All()) {
+        codes.emplace(static_cast<std::int64_t>(account.id.Value()), std::string{account.code.Value().ToStringView()});
+    }
+    std::map<std::int64_t, std::vector<db::EntryLineRecord>> lines;
+    std::vector<std::int64_t> ids;
+    ids.reserve(kIdsPerQuery);
+    for (std::size_t first = 0; first < headers.size(); first += kIdsPerQuery) {
+        ids.clear();
+        for (std::size_t i = first; i < std::min(first + kIdsPerQuery, headers.size()); ++i) {
+            ids.push_back(static_cast<std::int64_t>(headers.at(i).id.Value()));
+        }
+        for (auto const& line : mapper.Query<db::EntryLineRecord>()
+                                    .WhereIn(::Lightweight::FieldNameOf<&db::EntryLineRecord::entry>, ids)
+                                    .All()) {
+            lines[line.entry.Value()].push_back(line);
+        }
+    }
+    auto const accountCode = [&codes](std::int64_t account) -> std::optional<std::string> {
+        auto const found = codes.find(account);
+        return found == codes.end() ? std::nullopt : std::optional<std::string>{found->second};
     };
-    return columns;
+    entries.reserve(headers.size());
+    for (auto const& header : headers) {
+        LoadedEntry entry{.header = header, .lines = {}};
+        if (auto const found = lines.find(static_cast<std::int64_t>(entry.header.id.Value())); found != lines.end()) {
+            entry.lines = std::move(found->second);
+            std::ranges::sort(entry.lines, {}, [](db::EntryLineRecord const& line) { return line.position.Value(); });
+        }
+        entries.push_back(toView(entry, base, accountCode));
+    }
+    return entries;
 }
 
 /// @brief Changes the entry row @p entryId only where it still holds the state the caller read.
@@ -522,40 +566,20 @@ ListEntriesResult LedgerModel::execute(const ListEntries& action) {
     if (std::ranges::find(visibleCompanies, action.company) == visibleCompanies.end()) {
         return result;
     }
-    Lightweight::DataMapper mapper;
-    for (auto const& header : mapper.Query<db::EntryRecord>()
-                                  .Where(::Lightweight::FieldNameOf<&db::EntryRecord::companyId>, "=", *action.company)
-                                  .All()) {
-        result.entries.push_back(toView(mapper, loadWritten(mapper, static_cast<std::int64_t>(header.id.Value()))));
-    }
+    result.entries = companyEntries(action.company);
     std::ranges::sort(result.entries, {}, [](JournalEntryView const& entry) { return *entry.id; });
     return result;
 }
 
-bool LedgerModel::canTranslateEntryColumn(std::string_view column, ::morph::table::PlanUse /*use*/) {
-    return plansql::translatable(journalSqlColumns(), column);
-}
-
 ::morph::table::Page<JournalEntryView> LedgerModel::pageEntries(CompanyId company,
-                                                                ::morph::table::QueryPlan const& plan) {
-    auto const translation = plansql::translate(plan, journalSqlColumns(), "id");
-    if (!translation) {
-        throw ValidationError{"ListEntriesPage: " + translation.error().message};
+                                                                ::morph::table::TableQuery const& query) {
+    auto const rows = companyEntries(company);
+    auto page = ::morph::table::apply<JournalEntryView>(
+        rows, [](JournalEntryView const& entry) { return ::morph::table::RowId{*entry.id}; }, query);
+    if (!page) {
+        throw ValidationError{"ListEntriesPage: " + page.error().message};
     }
-    Lightweight::DataMapper mapper;
-    // One read transaction for the count and the page, so the total agrees with the rows. It is rolled back, never
-    // committed, and no write happens inside it.
-    Lightweight::SqlTransaction const reading{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    auto const fetched = plansql::fetch(mapper, db::EntryRecord::TableName, "id",
-                                        "company_id = " + std::to_string(*company), *translation, plan);
-    ::morph::table::Page<JournalEntryView> page;
-    page.offset = plan.offset;
-    page.total = fetched.total;
-    page.totalKind = ::morph::table::TotalKind::Exact;
-    for (std::int64_t const id : fetched.ids) {
-        page.rows.push_back(toView(mapper, loadWritten(mapper, id)));
-    }
-    return page;
+    return std::move(*page);
 }
 
 // An action handler: the registry calls it on the instance, like every other.
@@ -564,18 +588,18 @@ bool LedgerModel::canTranslateEntryColumn(std::string_view column, ::morph::tabl
     if (!action.validate()) {
         throw ValidationError{"ListEntriesPage: a company is required"};
     }
-    auto const plan = ::morph::table::planQuery(action.query, journalColumns(), {}, {}, {}, canTranslateEntryColumn);
-    if (!plan) {
-        throw ValidationError{"ListEntriesPage: " + plan.error().message};
+    auto const checked = ::morph::table::validate(action.query, journalColumns());
+    if (!checked) {
+        throw ValidationError{"ListEntriesPage: " + checked.error().message};
     }
     auto const visibleCompanies = OrgModel::visibleCompanies(currentPrincipal());
     if (std::ranges::find(visibleCompanies, action.company) == visibleCompanies.end()) {
         ::morph::table::Page<JournalEntryView> empty;
-        empty.offset = plan->offset;
+        empty.offset = checked->page.offset;
         empty.total = 0;
         return empty;
     }
-    return pageEntries(action.company, *plan);
+    return pageEntries(action.company, action.query);
 }
 
 // An action handler: the registry calls it on the instance, like every other.

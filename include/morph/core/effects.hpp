@@ -70,6 +70,14 @@ private:
 
 }  // namespace morph::model
 
+namespace morph::table {
+
+// The record type of a registered table, defined and documented in `<morph/table/description.hpp>`.
+template <auto Function>
+struct TableOf;
+
+}  // namespace morph::table
+
 namespace morph::effects {
 
 /// @brief Effect: the action edits existing rows of record @p R, and its result carries them.
@@ -81,6 +89,17 @@ struct updates {};
 /// @tparam R A record type.
 template <typename R>
 struct changes {};
+
+/// @brief Effect: the action edits rows of a table, and its result carries their keys in a
+///        `morph::table::ChangedRows<Function>`.
+/// @tparam Function The table's function, as `BRIDGE_REGISTER_TABLE` names it.
+template <auto Function>
+using updatesTable = updates<::morph::table::TableOf<Function>>;
+
+/// @brief Effect: the action may change any row of a table: a whole-table change.
+/// @tparam Function The table's function, as `BRIDGE_REGISTER_TABLE` names it.
+template <auto Function>
+using changesTable = changes<::morph::table::TableOf<Function>>;
 
 /// @brief Effect: the state of the instance the action ran on changed.
 struct changesInstance {};
@@ -116,13 +135,22 @@ struct ActionRecord {
     std::string record;
     /// The record's key field, empty for a keyless record.
     std::optional<std::string> keyField;
-    /// The JSON paths at which the result holds the record; `""` is the result itself.
+    /// The JSON paths at which the result holds the record; `""` is the result itself. Empty when `opaque`.
     std::vector<std::string> paths;
+    /// True when the result holds the record at no path a key can be read at, as a table's page holds its
+    /// table's record: the action holds it for watch admission, and no reader finds its rows in the value.
+    bool opaque = false;
+    /// The paths of the members that open an entry holding the result: those a holder of the record's rows names in
+    /// its `openMembers()`. While any is set, a row the result does not hold may come to belong to it.
+    std::vector<std::string> open;
+    /// The paths of the members that make an entry holding the result partial: the one each holder of the record's
+    /// rows names as its `partialMember()`. While any is set, a merge by key would leave them describing other rows.
+    std::vector<std::string> partial;
 
     /// @brief Memberwise equality.
     /// @param lhs One entry.
     /// @param rhs The other.
-    /// @return True when record, key field and paths match.
+    /// @return True when record, key field, paths, opacity and the open and partial members match.
     friend bool operator==(ActionRecord const& lhs, ActionRecord const& rhs) = default;
 };
 
@@ -410,11 +438,11 @@ struct Resolved {
 /// @brief Whether two registrations of one record type declared the same record.
 /// @param lhs One registration.
 /// @param rhs The other.
-/// @return True when name, key, sources and privacy all match.
+/// @return True when name, key, sources, privacy and tableness all match.
 [[nodiscard]] inline bool sameRegistration(record::RecordInfo const& lhs, record::RecordInfo const& rhs) {
     return lhs.name == rhs.name && lhs.type == rhs.type && lhs.keyField == rhs.keyField &&
-           lhs.derivedFrom == rhs.derivedFrom && lhs.privateKeys == rhs.privateKeys &&
-           lhs.keyIsString == rhs.keyIsString;
+           lhs.previousKeyField == rhs.previousKeyField && lhs.derivedFrom == rhs.derivedFrom &&
+           lhs.privateKeys == rhs.privateKeys && lhs.keyIsString == rhs.keyIsString && lhs.table == rhs.table;
 }
 
 /// @brief Appends a problem for every `derivedFrom` cycle among the records.
@@ -503,7 +531,9 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
     for (std::size_t index = 0; index < records.size(); ++index) {
         auto const& info = records[index];
         indexOf.emplace(info.type, index);
-        if (info.keyField && !info.derivedFrom.empty()) {
+        // A table's record keeps its key: a source's change reaches it as a whole-record change, and its own
+        // actions name its rows.
+        if (info.keyField && !info.derivedFrom.empty() && !info.table) {
             problems.push_back("record `" + info.name +
                                "` is derived from other records but has a key; a derived record is keyless");
         }
@@ -539,6 +569,15 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
             if (found == indexOf.end()) {
                 continue;
             }
+            // An opaque holding names no path, so it neither hides nor is hidden by a path.
+            if (slot->opaque) {
+                auto const& info = records[found->second];
+                if (std::ranges::find(matched, info.name, &ActionRecord::record) == matched.end()) {
+                    matched.push_back(
+                        ActionRecord{.record = info.name, .keyField = info.keyField, .paths = {}, .opaque = true});
+                }
+                continue;
+            }
             if (std::ranges::any_of(kept, [&](std::string_view prefix) { return pathWithin(prefix, slot->path); })) {
                 continue;
             }
@@ -546,10 +585,34 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
             auto const& info = records[found->second];
             auto entry = std::ranges::find(matched, info.name, &ActionRecord::record);
             if (entry == matched.end()) {
-                matched.push_back(ActionRecord{.record = info.name, .keyField = info.keyField, .paths = {}});
+                matched.push_back(
+                    ActionRecord{.record = info.name, .keyField = info.keyField, .paths = {}, .opaque = false});
                 entry = std::prev(matched.end());
             }
             entry->paths.push_back(slot->path);
+        }
+        // A holder above a record's rows says which of its members open or make partial what holds them.
+        for (auto& entry : matched) {
+            for (auto const& holder : result.holders) {
+                bool const above = std::ranges::any_of(entry.paths, [&](std::string const& path) {
+                    return holder.path != path && pathWithin(holder.path, path);
+                });
+                if (!above) {
+                    continue;
+                }
+                auto const at = [&](std::string const& member) {
+                    return holder.path.empty() ? member : holder.path + "." + member;
+                };
+                for (auto const& member : holder.open) {
+                    if (std::ranges::find(entry.open, at(member)) == entry.open.end()) {
+                        entry.open.push_back(at(member));
+                    }
+                }
+                if (!holder.partial.empty() &&
+                    std::ranges::find(entry.partial, at(holder.partial)) == entry.partial.end()) {
+                    entry.partial.push_back(at(holder.partial));
+                }
+            }
         }
         if (!matched.empty()) {
             for (auto const& entry : matched) {

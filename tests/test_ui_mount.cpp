@@ -6,17 +6,25 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <functional>
+#include <map>
 #include <memory>
 #include <morph/reactive/runtime.hpp>
 #include <morph/reactive/signal.hpp>
+#include <morph/table/engine.hpp>
+#include <morph/table/view_change.hpp>
 #include <morph/testing/owner_probe_recorder.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/grid.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/ui/table_rows.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <morph/ui/view.hpp>
 #include <morph/util/datetime.hpp>
+#include <numeric>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -25,6 +33,7 @@
 
 #include "test_support.hpp"
 #include "ui_echoing_backend.hpp"
+#include "ui_fake_rows.hpp"
 #include "ui_test_support.hpp"
 
 namespace ui = morph::ui;
@@ -1395,6 +1404,190 @@ std::ptrdiff_t widgetCount(RecordingBackend const& backend) {
 
 }  // namespace
 
+// ── The column window ───────────────────────────────────────────────────────
+
+namespace {
+
+using ui::CellRef;
+using ui::ColumnExtents;
+using ui::FocusMove;
+using ui::Key;
+using ui::MountStats;
+using ui::TableArrangement;
+using ui::Value;
+using ui::Virtualization;
+using ui::windowingOf;
+namespace table = morph::table;
+
+using morph::testing::FakeRows;
+
+struct WindowOptions {
+    std::size_t pinned = 0;
+    std::vector<std::size_t> custom;
+    // Changes the columns before the table is built.
+    std::function<void(std::vector<ui::TableColumn>&)> columns;
+    // Changes the table's options before the table is built.
+    std::function<void(ui::TableOptions&)> tune;
+};
+
+// The text of a record's field, or nothing.
+std::string fieldText(Value const& record, std::string const& field) {
+    Value const* const value = record.field(field);
+    return value != nullptr && value->asString() != nullptr ? *value->asString() : std::string{};
+}
+
+// One table over `FakeRows` on a recording backend: every column 100 wide with the default text cell, but the
+// `custom` ones, which have a cell of their own; a viewport of 30 rows by 2,000 (twenty columns), reported at once.
+struct WindowFixture {
+    WindowFixture(std::int64_t rowCount, std::size_t columnCount, WindowOptions const& options = {})
+        : rows{std::make_shared<FakeRows>(rowCount, columnCount, runtime.owner())},
+          arrangement{runtime, TableArrangement{.visible = {}, .pinned = options.pinned, .widths = {}}},
+          focus{runtime, std::nullopt},
+          highlight{runtime, std::nullopt} {
+        std::vector<ui::TableColumn> columns;
+        for (std::size_t column = 0; column < columnCount; ++column) {
+            // NOLINTNEXTLINE(performance-inefficient-vector-operation): `columns` is a fixture list built once; sizing it first would not change what the case checks
+            columns.push_back(ui::TableColumn{.id = "c" + std::to_string(column),
+                                              .label = "C" + std::to_string(column),
+                                              .width = ui::Sizing::fixed(100)});
+        }
+        if (options.columns) {
+            options.columns(columns);
+        }
+        ui::TableSource source;
+        source.rows = rows;
+        source.ownCell.assign(columnCount, false);
+        for (std::size_t const column : options.custom) {
+            source.ownCell.at(column) = true;
+        }
+        source.defaultCellView = [](Signal<std::size_t> const& column, Signal<Value> const& row) {
+            return ui::text(
+                {.text = [&column, &row] { return fieldText(row.get(), "c" + std::to_string(column.get())); }});
+        };
+        source.cellView = [this](std::size_t column, Signal<Value> const& row) {
+            ++cellViewCalls;
+            if (throwing) {
+                throw std::runtime_error{"the cell does not build"};
+            }
+            return ui::text({.text = [&row, column] { return fieldText(row.get(), "c" + std::to_string(column)); }});
+        };
+        ui::TableOptions tableOptions;
+        tableOptions.arrangement = [this] { return arrangement.get(); };
+        tableOptions.focus = [this] { return focus.get(); };
+        tableOptions.highlight = [this] { return highlight.get(); };
+        tableOptions.onFocusCell = [this](std::optional<CellRef> cell) {
+            if (onFocusCell) {
+                onFocusCell(std::move(cell));
+            }
+        };
+        if (options.tune) {
+            options.tune(tableOptions);
+        }
+        view = std::make_unique<ui::Mounted>(
+            runtime, backend, ui::table(std::move(columns), std::move(source), std::move(tableOptions)));
+        table = backend.all("Table").front();
+        scrollColumns(0);
+        scrollRows(0);
+    }
+
+    void settle() {
+        while (owner.runAll() > 0) {
+        }
+    }
+
+    void scrollRows(std::size_t first) {
+        firstRow = first;
+        backend.scrollTable(table, first, 30);
+        settle();
+    }
+
+    void scrollColumns(int scrollX, int viewport = 2000) {
+        backend.scrollTableColumns(table, scrollX, viewport);
+        settle();
+    }
+
+    // Scrolls down over @p n rows a viewport at a time, settling one owner turn at a time, and keeps the largest
+    // number of cells built or rebound in one turn.
+    void flingRows(std::size_t n) {
+        auto const work = [this] { return stats().cellsRebound + stats().cellsCreated; };
+        for (std::size_t moved = 0; moved < n; moved += 30) {
+            std::size_t before = work();
+            firstRow += 30;
+            backend.scrollTable(table, firstRow, 30);
+            maxRebindsPerTurn = std::max(maxRebindsPerTurn, work() - before);
+            for (;;) {
+                before = work();
+                if (!owner.runOne()) {
+                    break;
+                }
+                maxRebindsPerTurn = std::max(maxRebindsPerTurn, work() - before);
+            }
+        }
+    }
+
+    [[nodiscard]] MountStats const& stats() const { return view->stats(); }
+    [[nodiscard]] std::size_t realizedRows() const { return backend.children(table).size(); }
+
+    [[nodiscard]] std::size_t cellsAlive() const {
+        std::size_t alive = 0;
+        for (int const row : backend.children(table)) {
+            for (int const cell : backend.children(row)) {
+                static_cast<void>(cell);
+                ++alive;
+            }
+        }
+        return alive;
+    }
+
+    [[nodiscard]] std::size_t headerCellsAlive() { return backend.headerCells(table); }
+
+    [[nodiscard]] std::optional<int> cellOf(Key const& key, std::size_t column) const {
+        for (int const row : backend.children(table)) {
+            if (backend.prop(row, "rowKey") != ui::testing::detail::formatKey(key)) {
+                continue;
+            }
+            for (int const cell : backend.children(row)) {
+                if (backend.prop(cell, "column") == std::to_string(column)) {
+                    return cell;
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] ColumnExtents const& extents() const { return *view->columnExtents(); }
+
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    std::shared_ptr<FakeRows> rows;
+    Signal<TableArrangement> arrangement;
+    Signal<std::optional<CellRef>> focus;
+    Signal<std::optional<ui::TableHighlight>> highlight;
+    std::function<void(std::optional<CellRef>)> onFocusCell;
+    std::size_t cellViewCalls = 0;
+    // Every own cell's build throws while set.
+    bool throwing = false;
+    std::size_t maxRebindsPerTurn = 0;
+    std::size_t firstRow = 0;
+    std::unique_ptr<ui::Mounted> view;
+    int table = 0;
+};
+
+// The indices 0 to n - 1 without @p left.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `allColumnsBut(n, left)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+std::vector<std::size_t> allColumnsBut(std::size_t n, std::size_t left) {
+    std::vector<std::size_t> out;
+    for (std::size_t column = 0; column < n; ++column) {
+        if (column != left) {
+            out.push_back(column);
+        }
+    }
+    return out;
+}
+
+}  // namespace
+
 // Mutation: mount a hidden stack's children at once (the hidden count equals the shown one).
 TEST_CASE("ui::Mounted: a stack that mounts hidden does not build its children", "[ui]") {
     auto const count = [](ui::Prop<bool> visible) {
@@ -1436,4 +1629,971 @@ TEST_CASE("ui::Mounted: a hidden stack mounts its children the first time it is 
     shown.set(true);
     owner.runAll();
     CHECK(widgetCount(backend) == 52);
+}
+
+// Mutation: `windowingOf` leaving `cellThreshold` out of the columns (the 1,000 × 30 line's `.columns` is false).
+TEST_CASE("windowing: the three thresholds", "[ui][mount]") {
+    Virtualization const v{};
+    CHECK(windowingOf(v, 1999, 300, false).rows);
+    CHECK(windowingOf(v, 1999, 300, false).columns);
+    CHECK_FALSE(windowingOf(v, 1999, 10, false).rows);
+    CHECK_FALSE(windowingOf(v, 1999, 10, false).columns);
+    CHECK(windowingOf(v, 2000, 10, false).rows);
+    CHECK_FALSE(windowingOf(v, 2000, 10, false).columns);
+    CHECK(windowingOf(v, 100, 41, false).columns);
+    CHECK_FALSE(windowingOf(v, 100, 41, false).rows);
+    CHECK_FALSE(windowingOf(v, 100, 40, false).columns);
+    CHECK(windowingOf(v, 10, 10, true).rows);
+    CHECK_FALSE(windowingOf(v, 10, 10, true).columns);
+    CHECK(windowingOf(v, 1000, 30, false).columns);  // 30,000 cells in 30 columns: by cellThreshold alone
+    CHECK_FALSE(windowingOf(v, 600, 30, false).columns);
+}
+
+// Mutation: the column window never on (`windowColumns` is all 300).  Gate F2.
+TEST_CASE("table window: 1,999 x 300 realizes only the windows", "[ui][mount]") {
+    WindowFixture f{1'999, 300, {.pinned = 2}};
+    f.scrollRows(500);
+    f.scrollColumns(10'000);        // columns 100 to 119 in view
+    CHECK(f.realizedRows() == 50);  // 30 and overscan 10 each side
+    CHECK(f.backend.windowColumns(f.table).size() == 2 + 20 + (2 * 4));
+    CHECK(f.cellsAlive() == f.realizedRows() * f.backend.windowColumns(f.table).size());
+    CHECK(f.headerCellsAlive() == f.backend.windowColumns(f.table).size());
+    CHECK(f.backend.totalWidth(f.table) == 300 * 100);
+    CHECK(f.rows->lastVisible.columns.size() == 30);  // the window's columns go to `visible`
+}
+
+// Mutations: a leaving row's slot not reused (cellsCreated grows on the second fling); no frame
+// budget (maxRebindsPerTurn is 720, thirty rows of twenty-four cells).  Gate F8.
+TEST_CASE("table window: a fling creates no cell once the pools are warm", "[ui][mount]") {
+    WindowFixture f{100'000, 300, {.pinned = 2}};
+    f.flingRows(2'000);
+    auto const created = f.stats().cellsCreated;
+    f.flingRows(2'000);
+    CHECK(f.stats().cellsCreated == created);
+    CHECK(f.maxRebindsPerTurn <= 240);
+    CHECK(f.stats().placeholders > 0);  // the budget left cells blank for a turn
+}
+
+// Mutation: rebinding a cell by building it again through cellView (cellViewCalls grows on the second fling).
+TEST_CASE("table window: a pooled cell is rebound by its row signal", "[ui][mount]") {
+    WindowFixture f{100'000, 300, {.pinned = 2, .custom = {5}}};
+    f.flingRows(2'000);
+    auto const views = f.cellViewCalls;
+    auto const rebound = f.stats().cellsRebound;
+    f.flingRows(2'000);
+    CHECK(f.cellViewCalls == views);
+    CHECK(f.stats().cellsRebound > rebound);
+    f.scrollRows(40'000);
+    f.settle();
+    REQUIRE(f.cellOf(Key{std::int64_t{40'000}}, 5).has_value());
+    CHECK(f.backend.prop(*f.cellOf(Key{std::int64_t{40'000}}, 5), "text") == "r40000c5");  // rebound to its new row
+}
+
+// A table of a fixed column and two stretch columns, over a viewport of @p viewport.
+struct StretchFixture : WindowFixture {
+    explicit StretchFixture(int viewport, bool wrapFirst = false)
+        : WindowFixture{10, 3, {.columns = [wrapFirst](std::vector<ui::TableColumn>& columns) {
+                            columns.at(1).width = ui::Sizing::stretch(1);
+                            columns.at(1).wrap = wrapFirst;
+                            columns.at(2).width = ui::Sizing::stretch(1);
+                            columns.at(2).wrap = false;
+                        }}} {
+        scrollColumns(0, viewport);
+    }
+
+    [[nodiscard]] std::vector<int> widths() const {
+        return {extents().widthOf(0), extents().widthOf(1), extents().widthOf(2)};
+    }
+
+    void measure(std::size_t column, ui::ColumnMeasure const& measure) {
+        backend.measureColumn(table, column, measure);
+        settle();
+    }
+};
+
+// Mutation: the stretch columns keep the estimate (the fit is never run).
+TEST_CASE("table stretch: the stretch columns share the width the fixed column leaves", "[ui][mount]") {
+    StretchFixture f{600};
+    f.measure(1, {.header = 50, .natural = 200, .least = 200});
+    f.measure(2, {.header = 50, .natural = 200, .least = 200});
+    // 500 left of 600: each is 200 and half of the spare 100.
+    CHECK(f.widths() == std::vector<int>{100, 250, 250});
+    CHECK(f.extents().totalWidth() == 600);
+}
+
+// Mutation: a stretch width only grows (`ColumnExtents::grow` in place of `fit`).
+TEST_CASE("table stretch: the stretch columns narrow when the table does, and widen when it grows again",
+          "[ui][mount]") {
+    StretchFixture f{600};
+    f.measure(1, {.header = 100, .natural = 200, .least = 200});
+    f.measure(2, {.header = 100, .natural = 200, .least = 200});
+    f.scrollColumns(0, 400);
+    // 300 left, floors 100 each: the last column gives up first, down to its header.
+    CHECK(f.widths() == std::vector<int>{100, 200, 100});
+    f.scrollColumns(0, 700);
+    CHECK(f.widths() == std::vector<int>{100, 300, 300});
+}
+
+// Mutation: a wrapping column's least width is its natural width (step 2 never narrows it).
+TEST_CASE("table stretch: a wrapping column narrows to its least width before the others give up width",
+          "[ui][mount]") {
+    StretchFixture f{340, /*wrapFirst*/ true};
+    f.measure(1, {.header = 50, .natural = 200, .least = 80});
+    f.measure(2, {.header = 50, .natural = 100, .least = 100});
+    // 240 left: between the least widths (180) and the natural ones (300).
+    CHECK(f.widths() == std::vector<int>{100, 140, 100});
+    f.scrollColumns(0, 100 + 180);
+    CHECK(f.widths() == std::vector<int>{100, 80, 100});
+}
+
+TEST_CASE("table stretch: a table too narrow for the floors keeps every stretch column at its header", "[ui][mount]") {
+    StretchFixture f{150};
+    f.measure(1, {.header = 60, .natural = 200, .least = 200});
+    f.measure(2, {.header = 70, .natural = 200, .least = 200});
+    CHECK(f.widths() == std::vector<int>{100, 60, 70});
+}
+
+TEST_CASE("table stretch: a measure only adds to what the mount knows", "[ui][mount]") {
+    StretchFixture f{600};
+    f.measure(1, {.header = 50, .natural = 200, .least = 200});
+    f.measure(2, {.header = 50, .natural = 200, .least = 200});
+    f.measure(1, {.natural = 120});  // narrower: the widest cell seen stays
+    CHECK(f.widths() == std::vector<int>{100, 250, 250});
+    f.measure(1, {.natural = 300, .least = 300});
+    // 500 left, naturals 300 and 200: the spare 0.
+    CHECK(f.widths() == std::vector<int>{100, 300, 200});
+}
+
+TEST_CASE("table stretch: a width the user set is not stretched", "[ui][mount]") {
+    StretchFixture f{600};
+    f.measure(1, {.header = 50, .natural = 200, .least = 200});
+    f.measure(2, {.header = 50, .natural = 200, .least = 200});
+    TableArrangement arrangement = f.arrangement.peek();
+    arrangement.widths = {{1, 150}};
+    f.arrangement.set(arrangement);
+    f.settle();
+    // The user's 150 is held, and the last column takes the rest of 600 - 100 - 150.
+    CHECK(f.widths() == std::vector<int>{100, 150, 350});
+}
+
+// Mutation: no anchoring (`horizontalOffset` is never set).
+TEST_CASE("table window: a column growing left of the view keeps the columns in view where they are", "[ui][mount]") {
+    // Content columns, which the estimate (100) starts at the width the other fixtures give them.
+    WindowFixture f{1'999, 300, {.pinned = 0, .columns = [](std::vector<ui::TableColumn>& columns) {
+                                     for (ui::TableColumn& column : columns) {
+                                         column.width = ui::Sizing::content();
+                                     }
+                                 }}};
+    f.scrollColumns(10'000);  // column 100 is the first in view
+    f.backend.measureColumn(f.table, 98, 160);
+    f.settle();  // an overscan column grows by 60
+    CHECK(f.backend.horizontalOffset(f.table) == 10'060);
+    CHECK(f.extents().offsetOf(100) == 10'060);
+    f.backend.measureColumn(f.table, 98, 120);
+    f.settle();  // narrower: a width only grows
+    CHECK(f.extents().widthOf(98) == 160);
+    CHECK(f.backend.horizontalOffset(f.table) == 10'060);
+    f.backend.measureColumn(f.table, 110, 180);
+    f.settle();  // inside the view: no anchoring
+    CHECK(f.backend.horizontalOffset(f.table) == 10'060);
+}
+
+// Mutations: pinned columns dropped from the window when scrolled away; no display unpinning (`pinnedShown` 12);
+// the pins not given back when the viewport widens (`pinnedShown` stays 10).
+TEST_CASE("table window: pinned columns stay realized, and a narrow table unpins for display only", "[ui][mount]") {
+    WindowFixture f{1'999, 300, {.pinned = 2}};
+    f.scrollColumns(20'000);
+    std::vector<std::size_t> const window = f.backend.windowColumns(f.table);
+    CHECK(window.at(0) == 0);
+    CHECK(window.at(1) == 1);  // still the first two
+    CHECK(f.cellOf(Key{std::int64_t{0}}, 1).has_value());
+    TableArrangement wide = f.arrangement.peek();
+    wide.pinned = 12;  // 1,200 of a 2,000 viewport: over half
+    f.arrangement.set(wide);
+    f.settle();
+    CHECK(f.backend.pinnedShown(f.table) == 10);           // the last two scroll with the rest
+    CHECK(f.arrangement.peek().pinned == 12);              // display only
+    f.backend.scrollTableColumns(f.table, 20'000, 4'000);  // 1,200 of 4,000: the pins come back
+    f.settle();
+    CHECK(f.backend.pinnedShown(f.table) == 12);
+}
+
+// Mutation: a pass that reads every column's width (columnReads grows by 300 a pass).  Gate F9.
+TEST_CASE("table window: a pass reads no width outside the column window", "[ui][mount]") {
+    WindowFixture f{1'999, 300, {.pinned = 2}};
+    f.scrollColumns(10'000);
+    std::size_t const before = f.extents().columnReads();
+    for (int x = 10'000; x < 12'000; x += 100) {
+        f.scrollColumns(x);  // twenty passes, one column each
+    }
+    std::size_t const window = 2 + 20 + (2 * 4);
+    CHECK(f.extents().columnReads() - before <= 20 * window);  // the window's columns, per pass
+}
+
+// Mutations: the rows rebuilt on a layout change (cellsCreated grows); a hide that pools nothing (the destroyed
+// cell, still among its row's children, makes the next pass throw).  Gate D8.
+TEST_CASE("table window: hiding and moving a column create no cell widgets", "[ui][mount]") {
+    WindowFixture f{1'999, 300, {.pinned = 2}};
+    auto const before = f.stats().cellsCreated;
+    std::size_t const alive = f.cellsAlive();
+    TableArrangement hidden = f.arrangement.peek();
+    hidden.visible = allColumnsBut(300, 5);  // column 5 was in the window
+    f.arrangement.set(hidden);
+    f.settle();
+    CHECK(f.stats().cellsCreated == before);
+    CHECK(f.cellsAlive() == alive);  // the entering column took the pooled cells
+    CHECK_FALSE(f.cellOf(Key{std::int64_t{0}}, 5).has_value());
+    CHECK(f.headerCellsAlive() == f.backend.windowColumns(f.table).size());
+    TableArrangement moved = hidden;
+    std::swap(moved.visible.at(3), moved.visible.at(4));
+    f.arrangement.set(moved);
+    f.settle();
+    CHECK(f.stats().cellsCreated == before);
+    REQUIRE(f.cellOf(Key{std::int64_t{0}}, 3).has_value());
+    CHECK(f.backend.prop(*f.cellOf(Key{std::int64_t{0}}, 3), "text") == "r0c3");  // every cell still its own
+    CHECK(f.rows->lastVisible.first == 0);                                        // rows and their order untouched
+}
+
+// Mutations: the focused row not kept realized (the focused cell is gone after the scroll); the focused row counted
+// in `setRealizedWindow`'s contiguous range (`9990+51`).  Gate F10.
+TEST_CASE("table focus: the focused cell survives a scroll of 10,000 rows and 200 columns", "[ui][mount]") {
+    WindowFixture f{100'000, 300, {.pinned = 2}};
+    f.focus.set(CellRef{.key = Key{std::int64_t{7}}, .column = "c5"});
+    f.settle();
+    f.scrollRows(10'000);
+    f.scrollColumns(20'000);
+    REQUIRE(f.cellOf(Key{std::int64_t{7}}, 5).has_value());  // its row and its column stay realized
+    CHECK(f.backend.focusCell(f.table) == std::pair{std::size_t{7}, std::size_t{5}});
+    CHECK(f.realizedRows() == 51);                                         // one row beyond the window at most
+    CHECK(f.backend.prop(f.table, "realizedWindow") == "9990+50/100000");  // the contiguous rows; row 7 apart
+    CHECK(f.backend.lastCounts(f.table) == std::pair{std::optional<std::int64_t>{100'000}, std::size_t{300}});
+}
+
+// Mutation: a slot's index told only when it is built (a reused slot keeps the view row of the row it showed before).
+TEST_CASE("table window: every realized row tells the backend its view row, the focused one beyond the window too",
+          "[ui][mount]") {
+    WindowFixture f{100'000, 300, {.pinned = 0}};
+    f.focus.set(CellRef{.key = Key{std::int64_t{7}}, .column = "c5"});
+    f.settle();
+    f.scrollRows(10'000);
+    std::vector<std::string> told;
+    for (int const row : f.backend.children(f.table)) {
+        told.push_back(f.backend.prop(row, "viewRow"));
+    }
+    REQUIRE(told.size() == 51);
+    CHECK(told.front() == "7");   // the focused row, before the window
+    CHECK(told.at(1) == "9990");  // the window: the rows in view and `overscan` above them
+    CHECK(told.back() == "10039");
+}
+
+// Mutation: `Last` clamped to the rows held (focus stays on row 199).
+TEST_CASE("table focus: Ctrl+End over rows not fetched lands on the last row when it arrives", "[ui][mount]") {
+    WindowFixture f{100'000, 300, {.pinned = 0}};
+    std::vector<std::optional<CellRef>> reported;
+    f.onFocusCell = [&reported](std::optional<CellRef> cell) { reported.push_back(std::move(cell)); };
+    f.focus.set(CellRef{.key = Key{std::int64_t{0}}, .column = "c0"});
+    f.settle();
+    f.rows->holdFrom(200);
+    f.backend.focusMove(f.table, FocusMove::Last);
+    f.settle();
+    CHECK(f.backend.focusCell(f.table).first == 99'999);                      // the placeholder holds focus
+    CHECK(f.rows->lastVisible.first + f.rows->lastVisible.count >= 100'000);  // and is asked for
+    f.rows->arrive();
+    f.settle();
+    REQUIRE_FALSE(reported.empty());
+    CHECK(reported.back() == CellRef{.key = Key{std::int64_t{99'999}}, .column = "c0"});
+}
+
+// Mutations: the realized row count reported (50); a lower bound reported as exact.
+TEST_CASE("table focus: the reported row count is the total, or unknown for a lower bound", "[ui][mount]") {
+    WindowFixture f{9'093, 300, {.pinned = 0}};
+    CHECK(f.backend.lastCounts(f.table) == std::pair{std::optional<std::int64_t>{9'093}, std::size_t{300}});
+    f.rows->setTotal(100'000, table::TotalKind::AtLeast);
+    f.settle();
+    CHECK(f.backend.lastCounts(f.table) == std::pair{std::optional<std::int64_t>{}, std::size_t{300}});
+    TableArrangement fewer = f.arrangement.peek();
+    fewer.visible = allColumnsBut(300, 5);
+    f.arrangement.set(fewer);
+    f.settle();
+    CHECK(f.backend.lastCounts(f.table).second == 299);  // the visible columns
+    f.rows->holdFrom(200);
+    f.focus.set(CellRef{.key = Key{std::int64_t{0}}, .column = "c0"});
+    f.settle();
+    f.backend.focusMove(f.table, FocusMove::Last);
+    f.settle();
+    CHECK(f.backend.focusCell(f.table).first == 199);  // AtLeast: the last row known
+}
+
+// Mutation: the column window ignoring `cellThreshold` (thirty columns are under `columnThreshold`, so all 30 are in
+// the window).  Gate F2.
+TEST_CASE("table window: 1,000 x 30 is windowed by its cells alone", "[ui][mount]") {
+    WindowFixture f{1'000, 30};
+    CHECK(f.backend.windowColumns(f.table).size() == 20 + 4);  // twenty in view, four overscan on the right
+    CHECK(f.cellsAlive() == f.realizedRows() * 24);
+}
+
+// Mutations: a reset followed by view index (focus moves to row 7's place and is reported; the mark stays on 12);
+// focus taken by the row now at its index although its key is still in the view.
+TEST_CASE("table focus: a new order finds focus and the highlight by key", "[ui][mount]") {
+    WindowFixture f{100'000, 30};
+    std::vector<std::optional<CellRef>> reported;
+    f.onFocusCell = [&reported](std::optional<CellRef> cell) { reported.push_back(std::move(cell)); };
+    f.focus.set(CellRef{.key = Key{std::int64_t{7}}, .column = "c3"});
+    f.highlight.set(ui::TableHighlight{.key = Key{std::int64_t{12}}, .row = 12});
+    f.settle();
+    REQUIRE(f.backend.focusCell(f.table) == std::pair{std::size_t{7}, std::size_t{3}});
+    REQUIRE(f.backend.prop(f.table, "highlightedRow") == "12");
+    // Every row one place down: key k at view index k + 1.
+    f.rows->reorder([](std::int64_t index) { return index == 0 ? std::int64_t{99'999} : index - 1; });
+    f.settle();
+    CHECK(f.backend.focusCell(f.table) == std::pair{std::size_t{8}, std::size_t{3}});
+    CHECK(f.backend.prop(f.table, "highlightedRow") == "13");
+    CHECK(reported.empty());  // the user moved nothing
+    // Reversed: keys 7 and 12 are far from the rows realized.
+    f.rows->reorder([](std::int64_t index) { return 99'999 - index; });
+    f.settle();
+    CHECK(reported.empty());  // focus stays on its key; the row now at its place does not take it
+    CHECK(f.backend.prop(f.table, "highlightedRow") == "none");  // until the key is located again
+}
+
+// Mutations: the located index ignored, the fallback taken instead (focus stays on view row 7 and the row there is
+// reported); an answer that the view lacks the key leaving focus looking for it (nothing is reported).
+TEST_CASE("table focus: a new order follows the focused key off-screen and only its absence moves focus",
+          "[ui][mount]") {
+    WindowFixture f{100'000, 30};
+    std::vector<std::optional<CellRef>> reported;
+    f.onFocusCell = [&reported](std::optional<CellRef> cell) { reported.push_back(std::move(cell)); };
+    f.focus.set(CellRef{.key = Key{std::int64_t{7}}, .column = "c3"});
+    f.settle();
+    REQUIRE(f.backend.focusCell(f.table) == std::pair{std::size_t{7}, std::size_t{3}});
+    // Reversed: key 7 is at view row 99,992, far from the rows realized; the rows are asked where it is.
+    std::size_t const asked = f.rows->locateCalls;
+    f.rows->reorder([](std::int64_t index) { return 99'999 - index; });
+    f.settle();
+    CHECK(f.rows->locateCalls == asked + 1);
+    CHECK(f.backend.focusCell(f.table) == std::pair{std::size_t{99'992}, std::size_t{3}});
+    CHECK(f.cellOf(Key{std::int64_t{7}}, 3).has_value());  // its row realized where it is
+    CHECK(reported.empty());                               // the same cell: nothing to report
+    // A new order without key 7: the row now at its place takes focus, and is reported.
+    f.rows->reorder([](std::int64_t index) { return index == 99'992 ? std::int64_t{100'000} : 99'999 - index; });
+    f.settle();
+    CHECK(f.backend.focusCell(f.table) == std::pair{std::size_t{99'992}, std::size_t{3}});
+    REQUIRE(reported.size() == 1);
+    CHECK(reported.back() == CellRef{.key = Key{std::int64_t{100'000}}, .column = "c3"});
+}
+
+// Mutation: no pooled cell dropped once a row has nothing left to realize (the widgets alive grow with every column
+// scrolled past).  Gate F2.
+TEST_CASE("table window: cells of their own columns scrolled across stay bounded", "[ui][mount]") {
+    std::vector<std::size_t> every(300);
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(every.begin(), every.end(), std::size_t{0});
+    WindowFixture f{1'999, 300, {.pinned = 0, .custom = every}};
+    for (int x = 0; x <= 20'000; x += 1'000) {
+        f.scrollColumns(x);
+        CHECK(f.cellsAlive() == f.realizedRows() * f.backend.windowColumns(f.table).size());
+    }
+}
+
+// Mutation: a pass that realized nothing posts the next anyway (the owner never goes idle).
+TEST_CASE("table window: cells whose build throws on every pass stop being retried", "[ui][mount]") {
+    std::vector<std::size_t> every(300);
+    // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from libc++.
+    std::iota(every.begin(), every.end(), std::size_t{0});
+    WindowFixture f{1'999, 300, {.pinned = 0, .custom = every}};
+    Probe const probe{f.owner.coreExecutor()};  // each failed pass is reported, not asserted
+    f.throwing = true;
+    f.backend.scrollTableColumns(f.table, 10'000, 2'000);  // twenty-eight new columns of their own, none builds
+    std::size_t turns = 0;
+    while (f.owner.runOne() && ++turns < 1'000) {
+    }
+    CHECK(turns < 1'000);
+}
+
+// Mutations: a fixed width taken as the backend's measure (every extent is 10); the padding left out (78, not 84).
+TEST_CASE("table window: widths are in the backend's measure", "[ui][mount]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    backend.setTableMeasure(ui::TableMeasure{.unit = 7.8, .monoUnit = 10.12, .contentEstimate = 64, .padding = 6});
+    auto const rows = std::make_shared<FakeRows>(50, 4, runtime.owner());
+    std::vector<ui::TableColumn> columns{
+        {.id = "c0", .label = "A", .width = ui::Sizing::fixed(10)},
+        {.id = "c1", .label = "B", .width = ui::Sizing::fixed(10), .role = ui::TextRole::Mono},
+        {.id = "c2", .label = "C"},
+        {.id = "c3", .label = "D", .width = ui::Sizing::fixed(10)},
+    };
+    ui::TableSource source;
+    source.rows = rows;
+    source.cellView = [](std::size_t column, Signal<Value> const& row) {
+        return ui::text({.text = [&row, column] { return fieldText(row.get(), "c" + std::to_string(column)); }});
+    };
+    ui::TableOptions options;
+    options.arrangement = TableArrangement{.visible = {}, .pinned = 0, .widths = {{3, 5}}};  // the user's 5 units
+    ui::Mounted const view{runtime, backend, ui::table(std::move(columns), std::move(source), std::move(options))};
+    owner.runAll();
+    ColumnExtents const& extents = *view.columnExtents();
+    CHECK(extents.widthOf(0) == 84);   // 10 units of 7.8, rounded, and the padding
+    CHECK(extents.widthOf(1) == 108);  // 10 monospace characters of 10.12, rounded up, and the padding
+    CHECK(extents.widthOf(2) == 64);   // the backend's estimate
+    CHECK(extents.widthOf(3) == 45);
+}
+
+// Mutations: the mount sending the rectangle once at its first positions (the sort leaves "r0+2,c0+2" recorded);
+// the mount reading a reported position as a `Table::columns` index (with `a` hidden, position 0 reports column a).
+TEST_CASE("mount: a cell selection is shown by its corners' positions now", "[ui][mount][cells]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto const rows = std::make_shared<FakeRows>(3, 3, runtime.owner());
+    std::vector<std::int64_t> order{1, 2, 3};
+    rows->reorder([&order](std::int64_t index) { return order.at(static_cast<std::size_t>(index)); });
+    std::vector<ui::TableColumn> columns{
+        {.id = "a", .label = "A"}, {.id = "b", .label = "B"}, {.id = "c", .label = "C"}};
+    ui::TableSource source;
+    source.rows = rows;
+    source.cellView = [](std::size_t column, Signal<Value> const& row) {
+        return ui::text({.text = [&row, column] { return fieldText(row.get(), "c" + std::to_string(column)); }});
+    };
+    auto const cell = [](std::int64_t key, std::string column) {
+        return CellRef{.key = Key{key}, .column = std::move(column)};
+    };
+    Signal<std::optional<ui::CellRange>> selection{runtime,
+                                                   ui::CellRange{.anchor = cell(1, "a"), .focus = cell(2, "b")}};
+    Signal<TableArrangement> arrangement{runtime, TableArrangement{}};
+    std::vector<std::optional<ui::CellRange>> reported;
+    ui::TableOptions options;
+    options.arrangement = [&arrangement] { return arrangement.get(); };
+    options.cellSelection = ui::Prop<std::optional<ui::CellRange>>{[&selection] { return selection.get(); }};
+    options.onCellSelect = [&reported](std::optional<ui::CellRange> range) { reported.push_back(std::move(range)); };
+    ui::Mounted const view{runtime, backend, ui::table(std::move(columns), std::move(source), std::move(options))};
+    owner.runAll();
+    int const table = backend.all("Table").front();
+    CHECK(backend.prop(table, "cellSelection") == "r0+2,c0+2");
+    order = {3, 1, 2};
+    rows->reorder([&order](std::int64_t index) { return order.at(static_cast<std::size_t>(index)); });
+    owner.runAll();
+    CHECK(backend.prop(table, "cellSelection") == "r1+2,c0+2");
+    backend.selectCells(table, 0, 1, 2, 2);
+    owner.runAll();
+    REQUIRE(reported.size() == 1);
+    CHECK(reported.back() == ui::CellRange{cell(3, "b"), cell(2, "c")});
+    arrangement.set(TableArrangement{.visible = {1, 2}, .pinned = 0, .widths = {}});
+    owner.runAll();
+    CHECK(backend.prop(table, "cellSelection").empty());  // a corner's column is hidden; the range is kept
+    backend.selectCells(table, 0, 0, 0, 1);
+    owner.runAll();
+    REQUIRE(reported.size() == 2);
+    CHECK(reported.back() == ui::CellRange{cell(3, "b"), cell(3, "c")});  // positions, not indices
+    arrangement.set(TableArrangement{});
+    owner.runAll();
+    CHECK(backend.prop(table, "cellSelection") == "r1+2,c0+2");
+    selection.set(std::nullopt);
+    owner.runAll();
+    CHECK(backend.prop(table, "cellSelection").empty());
+}
+
+// ── Bands, spans and summary rows ────────────────────────────────────────────
+
+namespace {
+
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kMassBand` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
+std::vector<table::BandInfo> const kMassBand{
+    {.label = "Mass retained", .unit = "g", .columns = {"m8", "m4", "m2"}, .bands = {}}};
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization, cert-err58-cpp): `kIds` is a test constant built from literals; if building it threw, the run would fail at load, which is what a broken fixture should do
+std::vector<std::string> const kIds{"name", "m8", "m4", "m2", "total"};
+
+// The keys of a table's realized rows in child order, a text key without its quotes.
+std::vector<std::string> childKeys(RecordingBackend const& backend, int table) {
+    std::vector<std::string> out;
+    for (int const row : backend.children(table)) {
+        std::string key = backend.prop(row, "rowKey");
+        if (key.size() >= 2 && key.front() == '"' && key.back() == '"') {
+            key = key.substr(1, key.size() - 2);
+        }
+        if (!key.empty()) {
+            out.push_back(std::move(key));
+        }
+    }
+    return out;
+}
+
+// The realized row with a key, as `rowKey` records it.
+int rowWith(RecordingBackend const& backend, int table, std::string const& key) {
+    for (int const row : backend.children(table)) {
+        if (backend.prop(row, "rowKey") == key) {
+            return row;
+        }
+    }
+    FAIL("no row " << key);
+    return -1;
+}
+
+}  // namespace
+
+// Mutation: a band drawn from its first to its last column's place, which covers a foreign column.
+TEST_CASE("bands: a band follows the layout", "[ui][mount][bands]") {
+    CHECK(ui::bandRuns(kMassBand, kIds, 0) == std::vector<ui::BandRun>{{0, "Mass retained", "g", 1, 3, false}});
+    std::vector<std::string> const moved{"name", "m8", "m2", "total", "m4"};
+    CHECK(ui::bandRuns(kMassBand, moved, 0) ==
+          std::vector<ui::BandRun>{{0, "Mass retained", "g", 1, 2, false}, {0, "Mass retained", "g", 4, 1, false}});
+    CHECK(ui::bandRuns(kMassBand, kIds, 2) ==
+          std::vector<ui::BandRun>{{0, "Mass retained", "g", 1, 1, true}, {0, "Mass retained", "g", 2, 2, false}});
+    CHECK(ui::bandRuns(kMassBand, std::vector<std::string>{"name", "total"}, 0).empty());
+    CHECK_FALSE(ui::columnUnitShown(kMassBand, "m8", "g"));
+    CHECK(ui::columnUnitShown(kMassBand, "total", "g"));
+    CHECK(ui::bandedHeaderName(kMassBand, "m4", "sieve 4 mm") == "Mass retained, sieve 4 mm");
+}
+
+// Review Focus 2. Mutation: bandRuns computed once from the declared order and not from the layout's visible columns.
+TEST_CASE("bands: a stored layout hides then shows a band's column", "[ui][mount][bands]") {
+    table::ColumnLayout layout{kIds};
+    table::ColumnLayout stored{kIds};
+    for (auto const* id : {"m8", "m4", "m2"}) {
+        stored.setVisible(id, false);
+    }
+    layout.apply(stored.value());
+    CHECK(ui::bandRuns(kMassBand, layout.visible(), layout.pinned()).empty());
+    layout.setVisible("m4", true);
+    CHECK(ui::bandRuns(kMassBand, layout.visible(), layout.pinned()) ==
+          std::vector<ui::BandRun>{{0, "Mass retained", "g", 1, 1, false}});
+    table::ColumnLayout pinnedAll{kIds};
+    pinnedAll.setPinned(4);
+    CHECK(ui::bandRuns(kMassBand, pinnedAll.visible(), pinnedAll.pinned()) ==
+          std::vector<ui::BandRun>{{0, "Mass retained", "g", 1, 3, true}});
+}
+
+// Mutation: the mount telling the backend the runs of the declared order (moving m4 to the end leaves one run).
+TEST_CASE("bands: the mount draws the runs of the arrangement and drops a band's repeated unit",
+          "[ui][mount][bands]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto const rows = std::make_shared<FakeRows>(3, 5, runtime.owner());
+    std::vector<ui::TableColumn> columns;
+    for (std::string const& id : kIds) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `columns` is a fixture list built once; sizing it first would not change what the case checks
+        columns.push_back(
+            ui::TableColumn{.id = id, .label = id, .unit = id == "name" ? std::string{} : std::string{"g"}});
+    }
+    ui::TableSource source;
+    source.rows = rows;
+    source.cellView = [](std::size_t column, Signal<Value> const& row) {
+        return ui::text({.text = [&row, column] { return fieldText(row.get(), "c" + std::to_string(column)); }});
+    };
+    Signal<TableArrangement> arrangement{runtime, TableArrangement{}};
+    ui::TableOptions options;
+    options.arrangement = [&arrangement] { return arrangement.get(); };
+    options.bands = kMassBand;
+    ui::Mounted const view{runtime, backend, ui::table(std::move(columns), std::move(source), std::move(options))};
+    owner.runAll();
+    int const table = backend.all("Table").front();
+    CHECK(backend.prop(table, "bands") == "[0:Mass retained|g@1+3]");
+    std::string const headers = backend.prop(table, "columns");
+    std::size_t units = 0;
+    for (auto at = headers.find(";unit=g"); at != std::string::npos; at = headers.find(";unit=g", at + 1)) {
+        ++units;
+    }
+    CHECK(units == 1);  // total's; the band shows the sieves' unit once
+    arrangement.set(TableArrangement{.visible = {0, 1, 3, 4, 2}, .pinned = 0, .widths = {}});
+    owner.runAll();
+    CHECK(backend.prop(table, "bands") == "[0:Mass retained|g@1+2,0:Mass retained|g@4+1]");
+    arrangement.set(TableArrangement{.visible = {0, 4}, .pinned = 0, .widths = {}});
+    owner.runAll();
+    CHECK(backend.prop(table, "bands") == "[]");
+}
+
+// Mutation: cutColumns not stopping at a moved column (the second line answers 3).
+TEST_CASE("spans: a cell spanning rows and columns covers them", "[ui][mount][spans]") {
+    std::vector<std::string> const declared{"a", "b", "c", "d"};
+    CHECK(ui::cutColumns({.column = "a", .rows = 2, .columns = 3}, declared, declared) == 3);
+    CHECK(ui::cutColumns({.column = "a", .rows = 2, .columns = 3}, declared,
+                         std::vector<std::string>{"a", "c", "b", "d"}) == 1);
+    CHECK(ui::cutColumns({.column = "a", .rows = 2, .columns = 3}, declared,
+                         std::vector<std::string>{"a", "b", "d"}) == 2);
+    CHECK(ui::cutColumns({.column = "a", .rows = 2, .columns = 3}, declared, std::vector<std::string>{"b", "c"}) == 0);
+}
+
+// Mutation: the mount dropping RowSpan::columns before setRowSpans (the row records "0:2").
+TEST_CASE("spans: a span across columns reaches the backend", "[ui][mount][spans]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto const rows = std::make_shared<FakeRows>(4, 4, runtime.owner());
+    rows->reorder([](std::int64_t index) { return index + 1; });
+    std::vector<ui::TableColumn> columns{
+        {.id = "a", .label = "A"}, {.id = "b", .label = "B"}, {.id = "c", .label = "C"}, {.id = "d", .label = "D"}};
+    ui::TableSource source;
+    source.rows = rows;
+    source.alwaysWindowed = false;
+    source.cellView = [](std::size_t column, Signal<Value> const& row) {
+        return ui::text({.text = [&row, column] { return fieldText(row.get(), "c" + std::to_string(column)); }});
+    };
+    source.rowView = [](Signal<Value> const& row) {
+        ui::TableRowLook look;
+        std::int64_t const key = *row.peek().field("id")->asInt();
+        if (key == 1) {
+            look.spans = std::vector<ui::RowSpan>{ui::RowSpan{.column = 0, .rows = 2, .columns = 3}};
+        } else if (key == 3) {
+            look.spans = std::vector<ui::RowSpan>{ui::RowSpan{.column = 1, .rows = 2}};
+        }
+        return look;
+    };
+    ui::Mounted const view{runtime, backend, ui::table(std::move(columns), std::move(source))};
+    owner.runAll();
+    int const table = backend.all("Table").front();
+    CHECK(backend.prop(rowWith(backend, table, "1"), "rowSpans") == "0:2x3");
+    CHECK(backend.prop(rowWith(backend, table, "3"), "rowSpans") == "1:2");  // columns 1 keeps the existing format
+}
+
+// Mutations: setRowSummary called for every row (row 1 records summary); summary rows left out of the mount's count
+// (the bottom summary is never realized); the decorator forwarding the data rows' change untranslated (row 1's cell
+// keeps "b" after its row changes).
+TEST_CASE("summary: a summary row is drawn as one, outside the rows", "[ui][mount][summary]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto const source = std::make_shared<ui::ValueRowsSource>(
+        runtime, std::vector<ui::ValueColumn>{ui::ValueColumn{.id = "name"}},
+        [](Value const& row) { return Key{*row.field("id")->asInt()}; }, nullptr);
+    ui::ValueList records;
+    for (auto const& [id, name] : {std::pair{1, "b"}, {2, "c"}, {3, "a"}}) {
+        ui::ValueRecord record;
+        record.emplace("id", Value{std::int64_t{id}});
+        record.emplace("name", Value{std::string{name}});
+        records.emplace_back(std::move(record));
+    }
+    source->assign(records);
+    auto const data = std::make_shared<ui::EngineRows>(source, morph::ui::ValueRowsSource::recordOf(),
+                                                       table::EngineOptions{.owner = &owner});
+    while (owner.runAll() > 0) {
+    }
+    auto const decorator = std::make_shared<ui::SummaryRows>(
+        data, std::vector<ui::SummarySpec>{{.key = "stats", .top = false}, {.key = "head", .top = true}},
+        std::vector<ui::SummarySpec>{}, ui::SummaryRows::Runs{});
+    ui::TableSource mounted;
+    mounted.rows = decorator;
+    mounted.alwaysWindowed = false;
+    mounted.cellView = [](std::size_t, Signal<Value> const& row) {
+        return ui::text({.text = [&row] { return fieldText(row.get(), "name"); }});
+    };
+    mounted.rowView = [](Signal<Value> const& row) {
+        ui::TableRowLook look;
+        look.summary = row.peek().field(ui::kSummaryField) != nullptr;
+        return look;
+    };
+    ui::Mounted const view{runtime, backend,
+                           ui::table({ui::TableColumn{.id = "name", .label = "Name"}}, std::move(mounted))};
+    while (owner.runAll() > 0) {
+    }
+    int const widget = backend.all("Table").front();
+    CHECK(childKeys(backend, widget) ==
+          std::vector<std::string>{"\x1Fsummary:head", "1", "2", "3", "\x1Fsummary:stats"});
+    for (std::string const key : {"\"\x1Fsummary:head\"", "\"\x1Fsummary:stats\""}) {
+        int const row = rowWith(backend, widget, key);
+        CHECK(backend.prop(row, "summary") == "true");
+        // set right after the row's key
+        std::vector<std::string> const& log = backend.log();
+        auto const keyed =
+            std::ranges::find_if(log, [&](std::string const& line) { return line.contains("rowKey=" + key); });
+        REQUIRE(keyed != log.end());
+        // The row's next property after its key, whatever the table logs between.
+        std::string const label = keyed->substr(0, keyed->find(" rowKey="));
+        auto const next = std::find_if(std::next(keyed), log.end(),
+                                       [&label](std::string const& line) { return line.starts_with(label + " "); });
+        REQUIRE(next != log.end());
+        CHECK(*next == label + " summary=true");
+    }
+    for (std::string const key : {"1", "2", "3"}) {
+        CHECK(backend.prop(rowWith(backend, widget, key), "summary").empty());
+    }
+    CHECK(decorator->total().rows == 3);
+    CHECK(decorator->mounted(0) == std::optional<std::int64_t>{1});
+    CHECK(decorator->data(4) == std::optional<std::int64_t>{2});  // the nearest data row
+    CHECK(decorator->data(0) == std::optional<std::int64_t>{0});
+    std::optional<std::vector<table::RowId>> keys;
+    decorator->keysOf(0, 5).then([&keys](std::expected<std::vector<table::RowId>, table::TableError> const& result) {
+        if (result) {
+            keys = *result;
+        }
+    });
+    while (owner.runAll() > 0) {
+    }
+    CHECK(keys == std::vector<table::RowId>{std::int64_t{1}, std::int64_t{2}, std::int64_t{3}});
+    source->use("name");
+    REQUIRE(decorator->setSort(ui::SortChain{table::SortKey{.column = "name", .dir = table::SortDirection::Ascending}})
+                .has_value());
+    while (owner.runAll() > 0) {
+    }
+    CHECK(childKeys(backend, widget) ==
+          std::vector<std::string>{"\x1Fsummary:head", "3", "1", "2", "\x1Fsummary:stats"});
+    // A change of one row reaches that row's cell: the data rows' index is moved past the summary on top.
+    records.at(0) = Value{ui::ValueRecord{{"id", Value{std::int64_t{1}}}, {"name", Value{std::string{"bb"}}}}};
+    source->assign(records);
+    while (owner.runAll() > 0) {
+    }
+    std::vector<int> const cells = backend.children(rowWith(backend, widget, "1"));
+    REQUIRE(cells.size() == 1);
+    CHECK(backend.prop(cells.front(), "text") == "bb");
+}
+
+// Mutations: the resolve tracking cover in the span's own place only (row 2's span over a covered place is kept); the
+// resolve checking only where a span starts (row 2's wide span over a covered place is kept in the second table).
+TEST_CASE("spans: a span across columns refuses a later span over the cells it covers", "[ui][mount][spans]") {
+    using ui::detail::SpanRow;
+    std::vector<SpanRow> const rows{
+        SpanRow{.name = "row 1", .heading = false, .requested = {ui::RowSpan{.column = 0, .rows = 2, .columns = 3}}},
+        SpanRow{.name = "row 2", .heading = false, .requested = {ui::RowSpan{.column = 1, .rows = 2}}},
+        SpanRow{.name = "row 3", .heading = false, .requested = {ui::RowSpan{.column = 2, .rows = 1, .columns = 2}}},
+    };
+    ui::detail::ResolvedSpans const resolved = ui::detail::resolveRowSpans(rows, 4);
+    CHECK(resolved.effective.at(0) == std::vector<ui::RowSpan>{ui::RowSpan{.column = 0, .rows = 2, .columns = 3}});
+    CHECK(resolved.effective.at(1).empty());
+    CHECK(resolved.effective.at(2) == std::vector<ui::RowSpan>{ui::RowSpan{.column = 2, .rows = 1, .columns = 2}});
+    REQUIRE(resolved.refused.size() == 1);
+    CHECK(std::string_view{resolved.refused.front().first} == ui::detail::site::kRowSpanOverlap);
+    // A span that starts beside a covered cell and runs over it is refused too.
+    std::vector<SpanRow> const across{
+        SpanRow{.name = "row 1", .heading = false, .requested = {ui::RowSpan{.column = 2, .rows = 2}}},
+        SpanRow{.name = "row 2", .heading = false, .requested = {ui::RowSpan{.column = 0, .rows = 1, .columns = 3}}},
+    };
+    ui::detail::ResolvedSpans const wide = ui::detail::resolveRowSpans(across, 4);
+    CHECK(wide.effective.at(0) == std::vector<ui::RowSpan>{ui::RowSpan{.column = 2, .rows = 2}});
+    CHECK(wide.effective.at(1).empty());
+    REQUIRE(wide.refused.size() == 1);
+    CHECK(std::string_view{wide.refused.front().first} == ui::detail::site::kRowSpanOverlap);
+    // With column 0 moved to the last place, the wide span covers that place alone and row 2's span stands.
+    std::vector<std::optional<std::size_t>> const placeOf{3, 0, 1, 2};
+    ui::detail::ResolvedSpans const moved = ui::detail::resolveRowSpans(rows, 4, placeOf);
+    CHECK(moved.effective.at(1) == std::vector<ui::RowSpan>{ui::RowSpan{.column = 1, .rows = 2}});
+}
+
+// Mutation: a summary row's slot pooled for the rows that enter (the data row given its stack records summary and is
+// drawn as one).
+TEST_CASE("summary: a data row that enters as a summary row leaves is drawn as a data row", "[ui][mount][summary]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto const data = std::make_shared<FakeRows>(200, 1, runtime.owner());
+    auto const decorator =
+        std::make_shared<ui::SummaryRows>(data, std::vector<ui::SummarySpec>{{.key = "head", .top = true}},
+                                          std::vector<ui::SummarySpec>{}, ui::SummaryRows::Runs{});
+    ui::TableSource mounted;
+    mounted.rows = decorator;
+    mounted.cellView = [](std::size_t, Signal<Value> const& row) {
+        return ui::text({.text = [&row] { return fieldText(row.get(), "c0"); }});
+    };
+    mounted.rowView = [](Signal<Value> const& row) {
+        ui::TableRowLook look;
+        look.summary = row.peek().field(ui::kSummaryField) != nullptr;
+        return look;
+    };
+    std::vector<Key> activated;
+    ui::TableOptions options;
+    options.selectionMode = ui::SelectionMode::Single;
+    options.onActivate = [&activated](Key key) { activated.push_back(std::move(key)); };
+    ui::Mounted const view{
+        runtime, backend,
+        ui::table({ui::TableColumn{.id = "c0", .label = "C0"}}, std::move(mounted), std::move(options))};
+    owner.runAll();
+    int const table = backend.all("Table").front();
+    backend.scrollTable(table, 0, 30);
+    owner.runAll();
+    REQUIRE(backend.prop(rowWith(backend, table, "\"\x1Fsummary:head\""), "summary") == "true");
+    backend.scrollTable(table, 120, 30);
+    owner.runAll();
+    std::size_t dataRows = 0;
+    for (int const row : backend.children(table)) {
+        std::string const key = backend.prop(row, "rowKey");
+        if (key.empty() || key.front() == '"') {
+            continue;
+        }
+        ++dataRows;
+        CHECK(backend.prop(row, "summary").empty());
+    }
+    CHECK(dataRows > 0);
+    backend.activateRow(table, Key{std::int64_t{125}});
+    owner.runAll();
+    CHECK(activated == std::vector<Key>{Key{std::int64_t{125}}});
+}
+
+// Mutations: Left or Right moving by two places; Home and End swapped; PageUp stepping a different distance than
+// PageDown; Up not stopping at row 0.
+TEST_CASE("table focus: the arrows, pages, home and end move the focused cell and stop at the edges", "[ui][mount]") {
+    WindowFixture f{200, 6, {.pinned = 0}};
+    f.focus.set(CellRef{.key = Key{std::int64_t{10}}, .column = "c2"});
+    f.settle();
+    auto const cell = [&f] { return f.backend.focusCell(f.table); };
+    REQUIRE(cell() == std::pair{std::size_t{10}, std::size_t{2}});
+    f.backend.focusMove(f.table, FocusMove::Left);
+    CHECK(cell() == std::pair{std::size_t{10}, std::size_t{1}});
+    f.backend.focusMove(f.table, FocusMove::Home);
+    CHECK(cell() == std::pair{std::size_t{10}, std::size_t{0}});
+    f.backend.focusMove(f.table, FocusMove::Left);  // stays at the first column
+    CHECK(cell() == std::pair{std::size_t{10}, std::size_t{0}});
+    f.backend.focusMove(f.table, FocusMove::Right);
+    CHECK(cell() == std::pair{std::size_t{10}, std::size_t{1}});
+    f.backend.focusMove(f.table, FocusMove::End);
+    CHECK(cell() == std::pair{std::size_t{10}, std::size_t{5}});
+    f.backend.focusMove(f.table, FocusMove::Right);  // stays at the last column
+    CHECK(cell() == std::pair{std::size_t{10}, std::size_t{5}});
+    f.backend.focusMove(f.table, FocusMove::PageDown);
+    std::size_t const paged = cell().first;
+    CHECK(paged > 11);
+    f.backend.focusMove(f.table, FocusMove::PageUp);
+    CHECK(cell().first == 10);
+    f.backend.focusMove(f.table, FocusMove::First);
+    CHECK(cell().first == 0);
+    f.backend.focusMove(f.table, FocusMove::Up);  // stays at the first row
+    CHECK(cell().first == 0);
+    f.backend.focusMove(f.table, FocusMove::PageUp);
+    CHECK(cell().first == 0);
+    f.backend.focusMove(f.table, FocusMove::Last);
+    CHECK(cell().first == 199);
+    f.backend.focusMove(f.table, FocusMove::PageDown);  // stays at the last row
+    CHECK(cell().first == 199);
+}
+
+// Mutations: a removal before the row not moving it up; an insertion at or before the row not moving it down; a move
+// across the row moving it the wrong way; a removal of the row leaving the mark.
+TEST_CASE("table highlight: the marked row follows the operations of a view change", "[r2][ui][mount]") {
+    using Kind = table::ViewOp::Kind;
+    struct Case {
+        std::vector<table::ViewOp> ops;
+        std::string highlighted;
+    };
+    auto const op = [](Kind kind, std::size_t first, std::size_t count, std::size_t to = 0) {
+        return table::ViewOp{.kind = kind, .first = first, .count = count, .to = to};
+    };
+    // The marked row is at view index 20.
+    std::vector<Case> const cases{
+        {.ops = {op(Kind::Removed, 5, 2)}, .highlighted = "18"},
+        {.ops = {op(Kind::Removed, 25, 2)}, .highlighted = "20"},
+        {.ops = {op(Kind::Removed, 19, 3)}, .highlighted = "none"},
+        {.ops = {op(Kind::Inserted, 10, 3)}, .highlighted = "23"},
+        {.ops = {op(Kind::Inserted, 20, 1)}, .highlighted = "21"},
+        {.ops = {op(Kind::Inserted, 25, 4)}, .highlighted = "20"},
+        {.ops = {op(Kind::Moved, 20, 1, 3)}, .highlighted = "3"},
+        {.ops = {op(Kind::Moved, 2, 1, 30)}, .highlighted = "19"},
+        {.ops = {op(Kind::Moved, 40, 1, 10)}, .highlighted = "21"},
+        {.ops = {op(Kind::Moved, 40, 1, 25)}, .highlighted = "20"},
+        {.ops = {op(Kind::Changed, 20, 1)}, .highlighted = "20"},
+        {.ops = {op(Kind::Removed, 0, 1), op(Kind::Inserted, 0, 3)}, .highlighted = "22"},
+    };
+    for (Case const& item : cases) {
+        WindowFixture f{50, 4, {.pinned = 0}};
+        f.highlight.set(ui::TableHighlight{.key = Key{std::int64_t{20}}, .row = 20});
+        f.settle();
+        REQUIRE(f.backend.prop(f.table, "highlightedRow") == "20");
+        f.rows->announce(item.ops);
+        f.settle();
+        CHECK(f.backend.prop(f.table, "highlightedRow") == item.highlighted);
+    }
+}
+
+namespace {
+
+ui::MenuItem entryOf(std::string label, std::function<void()> select = {}) {
+    ui::MenuItem item;
+    item.label = std::move(label);
+    item.onSelect = std::move(select);
+    return item;
+}
+
+ui::MenuItem dividerItem() {
+    ui::MenuItem item;
+    item.separator = true;
+    return item;
+}
+
+std::vector<std::string> labelsOfEntries(std::vector<ui::MenuEntry> const& entries) {
+    std::vector<std::string> labels;
+    labels.reserve(entries.size());
+    for (ui::MenuEntry const& entry : entries) {
+        labels.push_back(entry.separator ? std::string{"-"} : entry.label);
+    }
+    return labels;
+}
+
+}  // namespace
+
+// Mutations: a leading, doubled or trailing separator kept; a hidden entry shown; a submenu's entry reported for its
+// parent.
+TEST_CASE("table menus: a cell menu drops leading, doubled and trailing separators and hidden entries",
+          "[r2][ui][mount]") {
+    std::vector<std::string> chosen;
+    WindowFixture f{3, 3, {.tune = [&chosen](ui::TableOptions& options) {
+                        options.cellMenu = [&chosen](Key const&, std::size_t) {
+                            std::vector<ui::MenuItem> items;
+                            items.push_back(dividerItem());
+                            items.push_back(entryOf("Open", [&chosen] { chosen.emplace_back("Open"); }));
+                            items.push_back(dividerItem());
+                            items.push_back(dividerItem());
+                            ui::MenuItem hidden = entryOf("Hidden");
+                            hidden.visible = false;
+                            items.push_back(std::move(hidden));
+                            ui::MenuItem more = entryOf("More", [&chosen] { chosen.emplace_back("More"); });
+                            more.items.push_back(entryOf("Sub", [&chosen] { chosen.emplace_back("Sub"); }));
+                            items.push_back(std::move(more));
+                            ui::MenuItem off = entryOf("Off", [&chosen] { chosen.emplace_back("Off"); });
+                            off.enabled = false;
+                            items.push_back(std::move(off));
+                            items.push_back(dividerItem());
+                            return items;
+                        };
+                    }}};
+    std::vector<ui::MenuEntry> const entries = f.backend.rightClickCell(f.table, Key{std::int64_t{1}}, 1);
+    CHECK(labelsOfEntries(entries) == std::vector<std::string>{"Open", "-", "More", "Off"});
+    REQUIRE(entries.at(2).items.size() == 1);
+    CHECK(entries.at(2).items.front().label == "Sub");
+    CHECK_FALSE(entries.at(3).enabled);
+    f.backend.chooseCellMenu(f.table, Key{std::int64_t{1}}, 1, {"Open"});
+    f.backend.chooseCellMenu(f.table, Key{std::int64_t{1}}, 1, {"More", "Sub"});
+    f.backend.chooseCellMenu(f.table, Key{std::int64_t{1}}, 1, {"Off"});
+    CHECK(chosen == std::vector<std::string>{"Open", "Sub"});
+}
+
+// Mutations: the caller's header entries shown for the table's own menu; no separator between the built-in entries
+// and the caller's; a built-in entry routed to the caller's action; a disabled header leaving a built-in entry on.
+TEST_CASE("table menus: a header's menu adds the caller's entries after the built-in ones", "[r2][ui][mount]") {
+    std::vector<std::string> chosen;
+    std::vector<std::vector<std::size_t>> builtIn;
+    bool headerOn = true;
+    WindowFixture f{3, 3, {.tune = [&](ui::TableOptions& options) {
+                        options.menu = [](std::optional<std::size_t> column) {
+                            if (column) {
+                                return std::vector<ui::MenuEntry>{ui::MenuEntry{.label = "Sort"}};
+                            }
+                            return std::vector<ui::MenuEntry>{ui::MenuEntry{.label = "Table"}};
+                        };
+                        options.onMenu = [&builtIn](std::optional<std::size_t>, std::vector<std::size_t> path) {
+                            builtIn.push_back(std::move(path));
+                        };
+                        options.headerEntries = [&chosen](std::size_t column) {
+                            std::vector<ui::MenuItem> items;
+                            if (column == 2) {
+                                return items;  // nothing to add for this column
+                            }
+                            items.push_back(entryOf("Extra", [&chosen] { chosen.emplace_back("Extra"); }));
+                            ui::MenuItem nested = entryOf("Nested");
+                            nested.items.push_back(entryOf("Deep", [&chosen] { chosen.emplace_back("Deep"); }));
+                            items.push_back(std::move(nested));
+                            return items;
+                        };
+                        options.headerEnabled = ui::Prop<bool>{[&headerOn] { return headerOn; }};
+                    }}};
+    CHECK(labelsOfEntries(f.backend.menuOf(f.table, std::nullopt)) == std::vector<std::string>{"Table"});
+    CHECK(labelsOfEntries(f.backend.menuOf(f.table, 0)) == std::vector<std::string>{"Sort", "-", "Extra", "Nested"});
+    CHECK(labelsOfEntries(f.backend.menuOf(f.table, 2)) == std::vector<std::string>{"Sort"});
+    f.backend.chooseMenu(f.table, 0, {"Extra"});
+    f.backend.chooseMenu(f.table, 0, {"Nested", "Deep"});
+    f.backend.chooseMenu(f.table, 0, {"Nested"});  // a submenu's own entry does nothing
+    f.backend.chooseMenu(f.table, 0, {"Sort"});
+    f.backend.chooseMenu(f.table, std::nullopt, {"Table"});
+    CHECK(chosen == std::vector<std::string>{"Extra", "Deep"});
+    CHECK(builtIn == std::vector<std::vector<std::size_t>>{{0}, {0}});
+    headerOn = false;
+    std::vector<ui::MenuEntry> const off = f.backend.menuOf(f.table, 0);
+    CHECK_FALSE(off.front().enabled);  // the built-in entry
+    CHECK(off.back().enabled);         // the caller's own stay as they are
 }

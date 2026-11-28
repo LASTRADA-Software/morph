@@ -10,6 +10,7 @@
 #include <core/tui/Modifier.hpp>
 #include <core/tui/Screen.hpp>
 #include <core/tui/Unicode.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <iterator>
 #include <limits>
@@ -217,6 +218,15 @@ std::optional<ui::Tone> WidgetBase::effectiveRowTone() const noexcept {
     return std::nullopt;
 }
 
+bool WidgetBase::effectiveRowMuted() const noexcept {
+    for (WidgetBase const* widget = this; widget != nullptr; widget = widget->_container) {
+        if (widget->_rowMuted) {
+            return true;
+        }
+    }
+    return false;
+}
+
 namespace {
 
 /// Whether the terminal draws a surface inverted: the dark navigator column and the top bar of the app shell, joined
@@ -260,6 +270,17 @@ void colour(::core::tui::Buffer& buffer, ::core::tui::Rect area, ::core::tui::Co
     }
 }
 
+/// Marks every cell of @p area dim: what a muted table row does to what its cells painted.
+void dim(::core::tui::Buffer& buffer, ::core::tui::Rect area) {
+    for (int row = area.y; row < area.y + area.height; ++row) {
+        for (int col = area.x; col < area.x + area.width; ++col) {
+            if (auto* const cell = buffer.cellAt({.x = col, .y = row})) {
+                cell->style.dim = true;
+            }
+        }
+    }
+}
+
 }  // namespace
 
 // A view whose drawn bounds are not a part of where it was laid out was not placed by a parent's area (an
@@ -276,6 +297,9 @@ void WidgetBase::render(::core::tui::Canvas& canvas) {
     }
     if (auto const tone = effectiveRowTone()) {
         colour(canvas.buffer(), drawn, toneStyle(canvas.theme(), *tone).fg);
+    }
+    if (effectiveRowMuted()) {
+        dim(canvas.buffer(), drawn);
     }
     if (invertsSurface(effectiveSurface())) {
         invert(canvas.buffer(), drawn);
@@ -555,11 +579,16 @@ EventResult WidgetBase::pointer(::core::tui::MouseEvent const& mouse) {
 }
 
 // Any press ends an earlier gesture whose release never arrived, whether or not this widget takes the new one, and
-// the drag it started. Handling the press makes this view the screen's pointer capture target, so the moves and the
-// release that follow come here wherever the pointer goes. A widget with a drag key arms a drag, and still takes the
-// press as any other (a slider's thumb jumps to it).
+// the drag it started. A right press goes to `contextPress`. Handling a left press makes this view the screen's
+// pointer capture target, so the moves and the release that follow come here wherever the pointer goes. A widget with
+// a drag key arms a drag, and still takes the press as any other (a slider's thumb jumps to it).
 EventResult WidgetBase::press(::core::tui::MouseEvent const& mouse) {
     _context->endPress();
+    // The right button opens a context menu where the widget has one; it starts no gesture, so its release clicks
+    // nothing.
+    if (mouse.button == 2) {
+        return actionable() && contextPress(cellOf(mouse)) ? EventResult::Handled : EventResult::Ignored;
+    }
     if (mouse.button != 0 || !actionable() || !(takesPress() || _dragKey)) {
         return EventResult::Ignored;
     }
@@ -1150,6 +1179,37 @@ void attach(Context& context, ui::ContainerWidget* parent, WidgetBase& widget) {
             .y = area.y + std::max(0, (area.height - size.height) / 2)};
 }
 
+namespace {
+
+// Reports the ranges of @p tables, skipping one a handler destroyed meanwhile. The watches are removed on every exit,
+// a throwing handler's included.
+void reportWindowRanges(Context& context, std::vector<TableImpl*> const& tables) {
+    std::vector<WidgetBase*> alive(tables.begin(), tables.end());
+    for (auto& each : alive) {
+        context.watches.push_back(&each);
+    }
+    auto const unwatch = [&context, &alive] {
+        for (auto& each : alive) {
+            std::erase(context.watches, &each);
+        }
+    };
+    try {
+        for (std::size_t i = 0; i < tables.size(); ++i) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `i` is the loop index over `alive`
+            if (alive[i] != nullptr) {
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `tables` is built beside `alive` with one entry each, and `i` is the loop index over `alive`
+                tables[i]->reportRanges();
+            }
+        }
+    } catch (...) {
+        unwatch();
+        throw;
+    }
+    unwatch();
+}
+
+}  // namespace
+
 // A root view's own bounds are enough: hit-testing descends only into a view whose bounds hold the point, and a
 // root that is drawn empties those of its descendants itself (see View). A frame is no widget's view, so its
 // descendants are emptied here.
@@ -1158,6 +1218,11 @@ void fit(Context& context) {
     if (context.pressed != nullptr && screen.pointerCapture() != &context.pressed->view()) {
         context.endPress();
     }
+    // The rows and columns a table's last frame found in view, reported before any size is asked: the mount realizes
+    // them here, outside a frame's drawing. The list is taken first, so a report that asks for another frame adds
+    // its table for that frame. Each table taken is watched: a report's handler may destroy another one still to come,
+    // which is then skipped.
+    reportWindowRanges(context, std::exchange(context.windowTables, {}));
     // Before any size is asked: what a span lifts or covers decides its table's rows' heights. Planning may drop the
     // table from the list, so the loop walks a copy.
     for (auto* const table : std::vector<TableImpl*>{context.spanTables}) {

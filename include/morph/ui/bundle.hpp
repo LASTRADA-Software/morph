@@ -409,6 +409,23 @@ namespace detail {
     return std::nullopt;
 }
 
+/// @brief Words joined by single spaces, for a refusal's reason.
+/// @param words The words.
+/// @return The words, space separated. Built by appending: concatenating `std::string{}` temporaries with `+` makes
+///         GCC at -O3 report a `-Wrestrict` overlap inside the standard library that cannot happen.
+[[nodiscard]] inline std::string joinedLabel(std::initializer_list<std::string_view> words) {
+    std::string joined;
+    bool first = true;
+    for (std::string_view const word : words) {
+        if (!first) {
+            joined += ' ';
+        }
+        first = false;
+        joined += word;
+    }
+    return joined;
+}
+
 /// @brief The must-understand keys of a message: its top level, every element of its listed arrays and every value
 ///        of its listed maps.
 /// @param root   The parsed message.
@@ -434,7 +451,7 @@ namespace detail {
             continue;
         }
         for (Json const& item : *items) {
-            if (auto reason = mustUnderstand(item, std::string{what} + " " + std::string{key})) {
+            if (auto reason = mustUnderstand(item, joinedLabel({what, key}))) {
                 return reason;
             }
         }
@@ -446,7 +463,7 @@ namespace detail {
             continue;
         }
         for (auto const& [name, item] : *items) {
-            if (auto reason = mustUnderstand(item, std::string{what} + " " + std::string{key} + " " + name)) {
+            if (auto reason = mustUnderstand(item, joinedLabel({what, key, name}))) {
                 return reason;
             }
         }

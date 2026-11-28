@@ -3,10 +3,14 @@
 
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlMigration.hpp>
+#include <algorithm>
+#include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <system_error>
 
 #include "testkit/db_fixture.hpp"
@@ -28,7 +32,7 @@ public:
     explicit MigrationProbe(std::uint64_t lastApplied) {
         removeFile();
         ::Lightweight::SqlConnection::SetDefaultConnectionString(
-            ::Lightweight::SqlConnectionString{std::string{"DRIVER=SQLite3;Database="} + kFile});
+            ::Lightweight::SqlConnectionString{probeConnectionString()});
         auto& migrations = ::Lightweight::SqlMigration::MigrationManager::GetInstance();
         migrations.CloseDataMapper();
         migrations.CreateMigrationHistory();
@@ -58,6 +62,33 @@ public:
 
 private:
     static constexpr char const* kFile = "lims_migration_probe.db";
+
+    /// @brief The shared test database's connection string with its database replaced by the probe file, so the probe
+    ///        uses the driver `ODBC_CONNECTION_STRING` names, as `DbFixture` does.
+    /// @return The connection string.
+    [[nodiscard]] static std::string probeConnectionString() {
+        std::string const shared = ::morph::ladder::testkit::DbFixture::computeConnectionString(
+            std::getenv("ODBC_CONNECTION_STRING"));  // NOLINT(concurrency-mt-unsafe): nothing sets it
+        std::string out;
+        std::size_t begin = 0;
+        while (begin < shared.size()) {
+            auto end = shared.find(';', begin);
+            if (end == std::string::npos) {
+                end = shared.size();
+            }
+            std::string const part = shared.substr(begin, end - begin);
+            auto const key = part.substr(0, part.find('='));
+            bool const isDatabase =
+                key.size() == 8 && std::ranges::equal(key, std::string_view{"database"}, [](char lhs, char rhs) {
+                    return std::tolower(static_cast<unsigned char>(lhs)) == rhs;
+                });
+            if (!isDatabase && !part.empty()) {
+                out += part + ";";
+            }
+            begin = end + 1;
+        }
+        return out + "Database=" + kFile;
+    }
 
     /// @brief Deletes the probe file; a file still open elsewhere is left for the next probe to replace.
     static void removeFile() {

@@ -3,6 +3,7 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <morph/forms/engine/form_session.hpp>
@@ -118,6 +119,21 @@ TEST_CASE("FormSession: prefilling a complete payload never submits; the next us
     harness.type(*form, "a", "9");
     REQUIRE(harness.server.submits().size() == 1);
     CHECK(harness.server.lastBody() == R"({"a":9,"b":7})");
+}
+
+// Mutation: drop assign's reload of the field's loaded cells -> `modified` still reports the assigned field.
+TEST_CASE("FormSession: an assigned value counts as loaded, so the field reads as unmodified",
+          "[forms-engine][session]") {
+    Harness harness;
+    auto const form = harness.session("TestAction", kTwoInts);
+    form->prefill(R"({"a":1,"b":2})");
+    harness.settle();
+    std::uint64_t const loads = form->loadGeneration();
+    form->assign("b", "7");
+    harness.settle();
+    CHECK_FALSE(form->modified("b"));
+    CHECK(form->loadGeneration() > loads);
+    CHECK_FALSE(form->modified("a"));
 }
 
 // Mutation: make refill load every field (as prefill does) -> the typed "9" is replaced by the record's 1.

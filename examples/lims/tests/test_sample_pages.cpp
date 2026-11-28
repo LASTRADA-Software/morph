@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The sample list pages in the database: the page a caller gets equals the page the table engine gives over the same
-// visible rows, for every sort and filter the standard corpus derives and for the date queries it cannot.
+// The sample list: the action reads the caller's samples and answers with the table engine, so a caller sees only
+// the samples at the sites where they hold a role.
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <algorithm>
-#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
-#include <expected>
 #include <memory>
-#include <morph/table/plan_conformance.hpp>
 #include <morph/table/query.hpp>
 #include <string>
 #include <utility>
@@ -156,97 +153,10 @@ struct Samples {
     return views;
 }
 
-/// @brief Date-time queries the standard corpus cannot make: its operands are the cells' own text, and a date-time
-///        cell's text is not a date the parser reads. The operands are the whole seconds of the rows' own instants, so
-///        every equality, bound and tie falls on a boundary, and a few instants that match no row.
-/// @param samples The visible samples.
-/// @return The queries.
-[[nodiscard]] std::vector<morph::table::TableQuery> dateQueries(std::vector<lims::SampleView> const& samples) {
-    using morph::table::ColumnFilter;
-    using morph::table::FilterEntry;
-    using morph::table::SortDirection;
-    using morph::table::SortKey;
-    using morph::table::TableQuery;
-    std::vector<TableQuery> queries;
-    auto const filtered = [&](FilterEntry entry, bool asExclude) {
-        TableQuery query;
-        ColumnFilter filter;
-        (asExclude ? filter.exclude : filter.include).push_back(std::move(entry));
-        query.filters.columns.emplace("registeredAt", std::move(filter));
-        query.sort = {SortKey{.column = "registeredAt", .dir = SortDirection::Descending}};
-        queries.push_back(std::move(query));
-    };
-    std::vector<std::string> instants{"2026-11-10T09:00:00.500Z", "2026-11-11", "1963-01-01T00:00:00Z"};
-    for (auto const& sample : samples) {
-        auto const second = lims::test::isoSecond(sample.registeredAt);
-        if (std::ranges::find(instants, second) == instants.end()) {
-            instants.push_back(second);
-        }
-    }
-    for (bool const asExclude : {false, true}) {
-        for (std::string const& instant : instants) {
-            filtered(FilterEntry{.eq = instant}, asExclude);
-            filtered(FilterEntry{.ne = instant}, asExclude);
-            filtered(FilterEntry{.lt = instant}, asExclude);
-            filtered(FilterEntry{.le = instant}, asExclude);
-            filtered(FilterEntry{.gt = instant}, asExclude);
-            filtered(FilterEntry{.ge = instant}, asExclude);
-            filtered(FilterEntry{.between = std::array<std::string, 2>{instant, "2026-11-12"}}, asExclude);
-        }
-    }
-    return queries;
-}
-
 }  // namespace
 
-// The page the database returns is the page the table engine returns over the same visible rows, as alice sees them
-// (every site of two companies, and not the sample with no site) and as bob sees them (one site), with the total cap
-// lowered so the above-cap rule runs on a small table.
-// Mutations: drop the plan's filters from the statement; drop the site scope (bob gets every sample); drop the Latin-1
-// fold; order a state by its ordinal.
-TEST_CASE(
-    "lab: a page of samples from the database equals the engine's page over the same rows, for every sort and filter "
-    "the list offers",
-    "[lims][lab][pages]") {
-    DbFixture fixture;
-    static_cast<void>(setUp());
-    for (std::string const principal : {"alice", "bob"}) {
-        CAPTURE(principal);
-        ScopedPrincipal const caller{principal};
-        auto const sites = lims::OrgModel::visibleSites(principal);
-        auto const rows = visibleViews(sites);
-        REQUIRE_FALSE(rows->empty());
-        morph::table::RowsSource<lims::SampleView> const source{
-            rows, [](lims::SampleView const& sample) { return morph::table::RowId{*sample.id}; }};
-        auto corpus = morph::table::standardCorpus(source);
-        CHECK(corpus.size() > 300U);
-        for (auto&& query : dateQueries(*rows)) {
-            corpus.push_back(std::move(query));
-        }
-        morph::table::ConformanceOptions options;
-        options.limits.totalCap = 10;
-        options.translatable = lims::SampleModel::canTranslateSampleColumn;
-        auto const model = [&](morph::table::QueryPlan const& plan)
-            -> std::expected<morph::table::ModelPage, morph::table::TableError> {
-            auto const page = lims::SampleModel::pageSamples(sites, plan);
-            morph::table::ModelPage out;
-            for (auto const& row : page.rows) {
-                out.rows.emplace_back(*row.id);
-            }
-            out.total = page.total;
-            out.totalKind = page.totalKind;
-            out.offset = page.offset;
-            return out;
-        };
-        auto const failures = morph::table::conformanceFailures(source, model, corpus, options);
-        for (std::size_t i = 0; i < failures.size() && i < 10; ++i) {
-            WARN(failures[i]);
-        }
-        CHECK(failures.empty());
-    }
-}
-
-// Mutation: let ListSamples ignore the plan's offset.
+// Mutations: let ListSamples ignore the query's offset; let pageSamples ignore its sites (bob's total is every
+// sample).
 TEST_CASE("lab: the sample list answers through the action with an exact total", "[lims][lab][pages]") {
     DbFixture fixture;
     static_cast<void>(setUp());
@@ -263,16 +173,4 @@ TEST_CASE("lab: the sample list answers through the action with an exact total",
     CHECK(page.offset == 2);
     request.query.sort = {morph::table::SortKey{.column = "nope", .dir = morph::table::SortDirection::Ascending}};
     CHECK_THROWS_AS(model.execute(request), lims::ValidationError);
-}
-
-// Mutation: let pageSamples run a plan whose sort names a column the statement cannot order by.
-TEST_CASE("lab: a plan the statement cannot translate is refused", "[lims][lab][pages]") {
-    DbFixture fixture;
-    static_cast<void>(setUp());
-    ScopedPrincipal const bob{"bob"};
-    morph::table::QueryPlan plan;
-    plan.sort.push_back(morph::table::PlannedSortKey{.column = "nope"});
-    plan.limit = 5;
-    plan.totalCap = 10;
-    CHECK_THROWS_AS(lims::SampleModel::pageSamples(lims::OrgModel::visibleSites("bob"), plan), lims::ValidationError);
 }

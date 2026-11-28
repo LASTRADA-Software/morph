@@ -9,12 +9,15 @@ add_executable(morph_net_tests
     test_socket_backend.cpp
     test_push_net.cpp
     test_push_two_clients.cpp
+    test_push_tables.cpp
+    test_push_unloaded_rows.cpp
 )
 
 target_link_libraries(morph_net_tests
     PRIVATE
         morph::net
         morph_test_main
+        "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph_wide_table_model>"
 )
 
 apply_warnings(morph_net_tests)

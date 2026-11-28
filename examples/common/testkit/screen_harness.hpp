@@ -397,6 +397,10 @@ public:
         return true;
     }
 
+    /// @brief Runs the work already queued on the owner, and what that work queues: a table over `rows` takes its
+    ///        rows into the engine from a posted task, so a screen that has just mounted shows them after this.
+    void settle() { _context.owner().drain(); }
+
     /// @brief Advances the scheduler's clock by @p delta, firing the timers then due, such as a query's
     ///        `refreshEvery`. The harness's scheduler is manual: no timer fires unless a test advances it.
     /// @param delta How far.

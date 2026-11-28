@@ -7,9 +7,12 @@
 
 #include <QCoreApplication>
 #include <QFile>
+#include <QList>
+#include <QPointF>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QString>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
@@ -159,7 +162,7 @@ QList<QQuickItem*> radiosOf(std::string_view testId) {
 
 TEST_CASE("qt_quick interpreter: a bound property follows its value", "[qt_quick][interpreter]") {
     QtHarness h;
-    auto screen = h.mount(kBehaviour);
+    auto const screen = h.mount(kBehaviour);
     CHECK(QtHarness::widget("count").shownText() == "0");
     h.click("add");
     h.click("add");
@@ -172,7 +175,7 @@ TEST_CASE("qt_quick interpreter: a bound property follows its value", "[qt_quick
 TEST_CASE("qt_quick interpreter: a page inside a locale scope mounts, lays out and has its size",
           "[qt_quick][interpreter]") {
     QtHarness h;
-    auto screen = h.mount(R"({
+    auto const screen = h.mount(R"({
       "vocab": "ui/1", "id": "around",
       "view": { "kind": "localeScope", "locale": "de", "children": [
         { "kind": "page", "testId": "sheet", "width": 210000, "height": 297000, "a11y": { "name": "Sheet" }, "children": [
@@ -189,7 +192,7 @@ TEST_CASE("qt_quick interpreter: a page inside a locale scope mounts, lays out a
 
 TEST_CASE("qt_quick interpreter: a refused selection snaps back, an accepted one stays", "[qt_quick][interpreter]") {
     QtHarness h;
-    auto screen = h.mount(kBehaviour);
+    auto const screen = h.mount(kBehaviour);
     auto const& refused = dynamic_cast<detail::SelectImpl const&>(QtHarness::widget("refused"));
     auto const& taken = dynamic_cast<detail::SelectImpl const&>(QtHarness::widget("taken"));
     CHECK(refused.shownText() == "a");
@@ -204,7 +207,7 @@ TEST_CASE("qt_quick interpreter: a refused selection snaps back, an accepted one
 
 TEST_CASE("qt_quick interpreter: typing into a controlled input keeps the cursor", "[qt_quick][interpreter]") {
     QtHarness h;
-    auto screen = h.mount(kBehaviour);
+    auto const screen = h.mount(kBehaviour);
     auto const& name = dynamic_cast<detail::TextInputImpl const&>(QtHarness::widget("name"));
     h.click("name");
     h.scene.type(QStringLiteral("abc"));
@@ -219,7 +222,7 @@ TEST_CASE("qt_quick interpreter: typing into a controlled input keeps the cursor
 TEST_CASE("qt_quick interpreter: a dialog dismisses and reopens, and a document that keeps it open keeps it open",
           "[qt_quick][interpreter]") {
     QtHarness h;
-    auto screen = h.mount(kBehaviour);
+    auto const screen = h.mount(kBehaviour);
     h.click("open");
     REQUIRE(detail::findWidget(QStringLiteral("inside")) != nullptr);
     CHECK(QtHarness::widget("inside").item()->isVisible());
@@ -253,7 +256,7 @@ constexpr char const* kFrames = R"({
 
 TEST_CASE("qt_quick interpreter: a flush that changes several values is one frame", "[qt_quick][interpreter]") {
     QtHarness h;
-    auto screen = h.mount(kFrames);
+    auto const screen = h.mount(kFrames);
     int frames = 0;
     QObject::connect(&h.scene.window(), &QQuickWindow::frameSwapped, &h.scene.window(), [&frames] { ++frames; });
     h.scene.settle();
@@ -325,7 +328,7 @@ detail::ContainerCore& rowsContainer() {
 TEST_CASE("qt_quick interpreter: a list change moves the fewest rows and keeps every kept row's item",
           "[qt_quick][interpreter]") {
     QtHarness h;
-    auto screen = h.mount(kList);
+    auto const screen = h.mount(kList);
     CHECK(cellTexts() == std::vector<std::string>{"one", "two", "three"});
     std::vector<QQuickItem*> const before = cellItems();
     detail::ContainerCore const& rows = rowsContainer();
@@ -360,7 +363,7 @@ TEST_CASE("qt_quick interpreter: a list change moves the fewest rows and keeps e
 
 TEST_CASE("qt_quick interpreter: focus and a half-typed edit survive a reorder", "[qt_quick][interpreter]") {
     QtHarness h;
-    auto screen = h.mount(kList);
+    auto const screen = h.mount(kList);
     detail::ItemBase const& two = *QtHarness::widgets("cell").at(1);
     h.scene.click(*two.focusTarget());
     h.scene.type(QStringLiteral("!"));
@@ -390,14 +393,14 @@ constexpr char const* kKeys = R"({
 TEST_CASE("qt_quick interpreter: a table row keyed above 2^53 is selected and reported exactly",
           "[qt_quick][interpreter]") {
     QtHarness h;
-    auto screen = h.mount(kKeys);
+    auto const screen = h.mount(kKeys);
     h.reply(0, R"([{"id":9007199254740993,"name":"big"},{"id":9007199254740994,"name":"bigger"}])");
     std::vector<detail::ItemBase const*> const names = QtHarness::widgets("name");
     REQUIRE(names.size() == 2);
     // The row is the cell's container's container: the cell sits in the column that holds the row's scope.
     detail::ContainerCore* const holder = names.at(1)->container();
     REQUIRE(holder != nullptr);
-    auto* const row = dynamic_cast<detail::TableRowImpl*>(holder);
+    auto const* const row = dynamic_cast<detail::TableRowImpl*>(holder);
     detail::ItemBase const* rowBase = row;
     if (rowBase == nullptr) {
         auto const* const inner = dynamic_cast<detail::ItemBase const*>(holder);
@@ -456,7 +459,7 @@ std::unique_ptr<ui::Screen> mountRows(QtHarness& h) {
 TEST_CASE("qt_quick interpreter: server-calculated values show in their row, stale while a newer one is in flight",
           "[qt_quick][interpreter]") {
     QtHarness h;
-    auto screen = mountRows(h);
+    auto const screen = mountRows(h);
     CHECK(cell("result", 0).shownText() == "1");
     CHECK(cell("result", 1).shownText() == "2");
     CHECK(cell("mass", 0).shownText() == "10");
@@ -492,7 +495,7 @@ TEST_CASE("qt_quick interpreter: server-calculated values show in their row, sta
 TEST_CASE("qt_quick interpreter: a failed calculation keeps the stale value and shows the row's error",
           "[qt_quick][interpreter]") {
     QtHarness h;
-    auto screen = mountRows(h);
+    auto const screen = mountRows(h);
     h.scene.click(*cell("mass", 1).focusTarget());
     h.scene.type(QStringLiteral("1"));
     h.advance(300ms);
@@ -508,7 +511,7 @@ TEST_CASE("qt_quick interpreter: a failed calculation keeps the stale value and 
 // exact body through the model alias.
 TEST_CASE("qt_quick interpreter: a form document renders and submits", "[qt_quick][interpreter][forms]") {
     QtHarness h;
-    auto screen = h.mount(R"({
+    auto const screen = h.mount(R"({
       "vocab": "ui/1", "id": "capture",
       "models": { "sample": { "type": "Lims_SampleModel" } },
       "view": { "kind": "column", "children": [
@@ -531,7 +534,7 @@ TEST_CASE("qt_quick interpreter: a form document renders and submits", "[qt_quic
 TEST_CASE("qt_quick interpreter: a required form field shows one required mark, its control's",
           "[qt_quick][interpreter][forms]") {
     QtHarness h;
-    auto screen = h.mount(R"({
+    auto const screen = h.mount(R"({
       "vocab": "ui/1", "id": "capture",
       "models": { "sample": { "type": "Lims_SampleModel" } },
       "view": { "kind": "form", "id": "cap", "model": "sample", "action": "Lims_CaptureConcentration" } })");
@@ -551,7 +554,7 @@ TEST_CASE("qt_quick interpreter: a required form field shows one required mark, 
 TEST_CASE("qt_quick interpreter: a standalone input draws its caption above the control when the document asks",
           "[qt_quick][interpreter][forms]") {
     QtHarness h;
-    auto screen = h.mount(R"({
+    auto const screen = h.mount(R"({
       "vocab": "ui/1", "id": "captions",
       "models": { "sample": { "type": "Lims_SampleModel" } },
       "view": { "kind": "column", "children": [
@@ -590,7 +593,7 @@ TEST_CASE("qt_quick interpreter: a standalone input draws its caption above the 
 TEST_CASE("qt_quick interpreter: a collection document lists, confirms and edits", "[qt_quick][interpreter][forms]") {
     QtHarness h;
     h.dispatcher.autoReply.emplace("Lims_ListSamples", R"({"rows":[{"id":9007199254740993,"name":"Water"}]})");
-    auto screen = h.mount(R"({
+    auto const screen = h.mount(R"({
       "vocab": "ui/1", "id": "samples",
       "models": { "sample": { "type": "Lims_SampleModel" } },
       "view": { "kind": "collection", "model": "sample", "action": "Lims_ListSamples" } })");
@@ -618,7 +621,7 @@ TEST_CASE("qt_quick interpreter: a collection document lists, confirms and edits
 TEST_CASE("qt_quick interpreter: a wizard document steps on", "[qt_quick][interpreter][forms]") {
     QtHarness h;
     h.dispatcher.autoReply.emplace("Lims_CaptureConcentration", R"({"ok":true})");
-    auto screen = h.mount(R"({
+    auto const screen = h.mount(R"({
       "vocab": "ui/1", "id": "flow",
       "models": { "sample": { "type": "Lims_SampleModel" } },
       "view": { "kind": "wizard", "model": "sample", "action": "Lims_CaptureConcentration" } })");
@@ -970,7 +973,7 @@ TEST_CASE("qt_quick interpreter: a table's empty state is drawn while its rows a
 TEST_CASE("qt_quick interpreter: a switch sized as a share of its row is that share, and its case fills it",
           "[qt_quick][interpreter][percent]") {
     QtHarness h;
-    auto screen = h.mount(R"({ "vocab": "ui/1", "id": "share", "view": { "kind": "row", "testId": "row",
+    auto const screen = h.mount(R"({ "vocab": "ui/1", "id": "share", "view": { "kind": "row", "testId": "row",
       "sizing": { "lit": { "fixed": 80 } }, "children": [
         { "kind": "switch", "testId": "slot", "on": 1, "sizing": { "lit": { "percent": 30 } }, "cases": [
           { "when": 1, "children": [ { "kind": "text", "testId": "inside", "text": "inside" } ] } ] },
@@ -1064,5 +1067,38 @@ TEST_CASE("qt_quick interpreter: a screen's head trail spaces its tools and acti
         CHECK(left("head_tool_lab") - right("head_tool_q") == Catch::Approx(expected).margin(1.0));
         CHECK(left("head_action_save") - right("head_tool_lab") == Catch::Approx(expected).margin(1.0));
         CHECK(left("head_action_print") - right("head_action_save") == Catch::Approx(expected).margin(1.0));
+    }
+}
+
+// Mutation: tell a source table that realizes every row no window in `realizeWindow` (`totalRows` stays -1, the rows
+// plane has no height, and the rows fall outside the table). Not built on this host: Qt Quick does not configure here.
+TEST_CASE("qt_quick interpreter: a rows table below its threshold draws its rows", "[qt_quick][interpreter]") {
+    QtHarness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "few", "state": { "rows": { "init": { "lit": [
+        { "id": 1, "n": "one" }, { "id": 2, "n": "two" }, { "id": 3, "n": "three" } ] } } },
+      "view": { "kind": "table", "testId": "list", "id": "t", "rows": { "ref": "rows" }, "key": { "row": "id" },
+                "columns": [ { "id": "n", "label": "Name" } ] } })");
+    h.scene.settle();
+    QQuickItem* const table = QtHarness::widget("list").item();
+    REQUIRE(table != nullptr);
+    CHECK(table->property("totalRows").toLongLong() == 3);
+    CHECK(table->property("sourceContentHeight").toReal() > 0);
+    for (QString const& name : {QStringLiteral("one"), QStringLiteral("two"), QStringLiteral("three")}) {
+        INFO(name.toStdString());
+        QQuickItem const* shown = nullptr;
+        QList<QQuickItem*> pending{table};
+        while (!pending.isEmpty() && shown == nullptr) {
+            QQuickItem const* const item = pending.takeLast();
+            if (item->isVisible() && item->property("text").toString() == name) {
+                shown = item;
+            }
+            pending.append(item->childItems());
+        }
+        REQUIRE(shown != nullptr);
+        QPointF const at = shown->mapToItem(table, QPointF{0, 0});
+        CHECK(shown->height() > 0);
+        CHECK(at.y() >= 0);
+        CHECK(at.y() + shown->height() <= table->height() + 0.5);
     }
 }

@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "../attributes.hpp"
 #include "../ui/backend.hpp"
@@ -126,6 +127,11 @@ public:
 
     /// @copydoc ui::IViewBackend::setOnWidthClass
     void setOnWidthClass(std::function<void(std::string const&)> onWidthClass) override;
+
+    /// @brief Puts text on the clipboard through the terminal: an OSC 52 sequence written to the screen's output.
+    /// @param text The text, UTF-8.
+    /// @return True: the sequence was written; whether the terminal honours it cannot be known.
+    bool copyText(std::string_view text) override;
 
     /// @brief Calls the width class listener when the screen's class differs from the one last reported; a frontend
     ///        calls it after dispatching a resize, outside the draw, so the re-render comes on the next turn.

@@ -170,6 +170,29 @@ struct Written {
 
 }  // namespace
 
+// How ListEntriesPage scales: ListEntries is the read and the views, the page adds `apply`. Hidden, run by name.
+TEST_CASE("Scaling: a page of the journal at 10^4 and 10^5 entries", "[.][lims][ledger][scale]") {
+    for (std::int64_t const entries : {std::int64_t{10'000}, std::int64_t{100'000}}) {
+        DbFixture fixture;
+        lims::test::grant("alice", lims::LimsRole::Accountant);
+        ScopedPrincipal const alice{"alice"};
+        auto const books = createBooks();
+        static_cast<void>(writeEntries(books, entries, false));
+        lims::LedgerModel ledger;
+        auto const readStart = Clock::now();
+        auto const listed = ledger.execute(lims::ListEntries{.company = lims::test::seededCompany()});
+        report("ListEntries over " + std::to_string(entries) + " entries", millisSince(readStart));
+        lims::ListEntriesPage request{.company = lims::test::seededCompany(), .query = {}};
+        request.query.page.offset = entries / 2;
+        request.query.page.limit = kPageSize;
+        auto const pageStart = Clock::now();
+        auto const page = ledger.execute(request);
+        report("ListEntriesPage over " + std::to_string(entries) + " entries", millisSince(pageStart));
+        CHECK(listed.entries.size() == static_cast<std::size_t>(entries));
+        CHECK(page.rows.size() == static_cast<std::size_t>(kPageSize));
+    }
+}
+
 TEST_CASE("Stress: Hypothesis 10: a page of the journal over 10^6 entries", "[lims][ledger][scale][stress]") {
     DbFixture fixture;
     lims::test::grant("alice", lims::LimsRole::Accountant);
@@ -200,8 +223,8 @@ TEST_CASE("Stress: Hypothesis 10: a page of the journal over 10^6 entries", "[li
     CHECK(*page.rows.front().id == ids[500'000]);
     CHECK(*page.rows.back().id == ids[500'000 + kPageSize - 1]);
     CHECK(page.offset == 500'000);
-    CHECK(page.total == kEntriesForPage);
-    CHECK(page.totalKind == morph::table::TotalKind::Exact);
+    // Above `QueryLimits::totalCap` (100,000 rows) `table::apply` gives no total.
+    CHECK_FALSE(page.total.has_value());
 
     // A sorted and filtered page costs the same order: the last entries by descending id, among those whose reference
     // starts with the last one's prefix.

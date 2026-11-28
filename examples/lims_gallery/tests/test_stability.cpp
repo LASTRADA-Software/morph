@@ -163,6 +163,9 @@ TEST_CASE("stability: tests per timepoint, then review and sign", "[lims-gallery
         REQUIRE(screen.waitFor([&screen] { return screen.find("Text", "runs").has_value(); }));
         // Five tests at each of the 15 pulls; microbial limits is not run.
         CHECK(screen.text("runs") == "5 tests, 75 test runs over 15 pulls.");
+        // The check box is a table cell, which can be lowered after the summary line is on screen.
+        REQUIRE(screen.waitFor(
+            [&screen] { return screen.backend().find("Checkbox", "a11yName", "Run Microbial limits").has_value(); }));
         screen.backend().toggle(checkbox(screen, "Run Microbial limits"));
         CHECK(screen.waitFor([&screen] { return screen.text("runs") == "6 tests, 77 test runs over 15 pulls."; }));
         screen.click("continue");

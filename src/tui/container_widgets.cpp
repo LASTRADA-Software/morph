@@ -93,12 +93,26 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<C
     _places = std::move(places);
 }
 
+void StackImpl::setCellSlots(std::vector<CellSlot> slots) { _slots = std::move(slots); }
+
 ::core::tui::Size StackImpl::naturalSize() const {
     auto const inner = innerNaturalSize();
     return {.width = inner.width + leadingColumns() + _paddingColumns, .height = inner.height + (2 * _paddingRows)};
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): sums the children's natural sizes along the axis and takes the maximum across it, with the gap and fill rules in one pass
 ::core::tui::Size StackImpl::innerNaturalSize() const {
+    if (!_slots.empty()) {
+        int width = 0;
+        int height = 0;
+        for (auto const [child, slot] : std::views::zip(children(), _slots)) {
+            if (child->shown() && slot.width > 0) {
+                width = std::max(width, slot.x + slot.width);
+                height = std::max(height, requestedSize(*child).height);
+            }
+        }
+        return {.width = width, .height = height};
+    }
     if (_wrap && _axis == ui::Axis::Horizontal && _extents.empty()) {
         // One line is the natural width; the height is that of the lines at the width the row was last drawn at.
         // A child with no width takes no gap, as `planWrap` places it, so a shown but empty child does not widen the
@@ -146,7 +160,7 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<C
 }
 
 int StackImpl::contentMinimumWidth() const {
-    if (!_extents.empty()) {
+    if (!_extents.empty() || !_slots.empty()) {
         return 0;
     }
     bool const along = _axis == ui::Axis::Horizontal && !_wrap;
@@ -183,7 +197,31 @@ std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) con
     return areas;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): assigns each child its area along the axis in one pass; the stretch weights and leftover cells depend on the running offset
 std::vector<::core::tui::Rect> StackImpl::innerAreas(::core::tui::Size size) const {
+    if (!_slots.empty()) {
+        std::vector<::core::tui::Rect> areas(children().size());
+        for (auto const [child, slot, area] : std::views::zip(children(), _slots, areas)) {
+            if (!child->shown() || slot.width <= 0) {
+                continue;
+            }
+            int const height = slot.place.down == ui::Align::Stretch
+                                   ? size.height
+                                   : std::min(requestedSize(*child).height, size.height);
+            area = {.x = slot.x,
+                    .y = alignedOffset(slot.place.down, height, size.height),
+                    .width = slot.width,
+                    .height = height};
+            // A cell placed at its natural width sits where its column asks; a wider one fills the column.
+            if (child->placedAcrossColumn() &&
+                (slot.place.across == ui::Align::Center || slot.place.across == ui::Align::End)) {
+                int const natural = std::min(requestedSize(*child).width, slot.width);
+                area.x += alignedOffset(slot.place.across, natural, slot.width);
+                area.width = natural;
+            }
+        }
+        return areas;
+    }
     if (_wrap && _axis == ui::Axis::Horizontal && _extents.empty()) {
         WrappedLines const lines = wrappedLines(size.width);
         int const rowGap = layout::stepCells(_gapStep, ui::Axis::Vertical);

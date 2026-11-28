@@ -94,20 +94,19 @@ public:
     /// @throws ValidationError if the query names a column the rows do not have, or exceeds the limits.
     ::morph::table::Page<SampleView> execute(const ListSamples& action);
 
-    /// @brief Whether the database can sort or filter the sample list by @p column.
-    /// @param column The column's id.
-    /// @param use What the column is wanted for.
-    /// @return `true` for every column of `SampleView`; `false` for a name that is no column.
-    [[nodiscard]] static bool canTranslateSampleColumn(std::string_view column, ::morph::table::PlanUse use);
-
-    /// @brief Reads a page of the samples at @p sites for a validated plan.
+    /// @brief Answers @p query over the samples at @p sites: reads those rows and runs the query over them with
+    ///        `table::apply`; the total is the count up to `QueryLimits::totalCap` and omitted above it.
     /// @param sites The sites whose samples are listed.
-    /// @param plan The plan from `table::planQuery`, made with `canTranslateSampleColumn`.
-    /// @return The page, with an exact total.
-    /// @throws ValidationError if the plan holds an operand the database cannot compare.
+    /// @param query The sort, filters and page.
+    /// @param action The action named in a refusal.
+    /// @param options How `apply` runs; its `limits.totalCap` decides above which count the total is omitted.
+    /// @return The page.
+    /// @throws ValidationError if the query names a column the rows do not have, holds an operand its column cannot
+    ///         parse, or exceeds the limits.
     /// @throws Lightweight::SqlException if a statement fails.
-    [[nodiscard]] static ::morph::table::Page<SampleView> pageSamples(std::vector<SiteId> const& sites,
-                                                                      ::morph::table::QueryPlan const& plan);
+    [[nodiscard]] static ::morph::table::Page<SampleView> pageSamples(
+        std::vector<SiteId> const& sites, ::morph::table::TableQuery const& query,
+        std::string_view action = "ListSamples", ::morph::table::ApplyOptions const& options = {});
 
     /// @brief `Registered → Received`.
     /// @param action Carries no fields of its own.

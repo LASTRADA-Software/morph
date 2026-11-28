@@ -261,6 +261,13 @@ std::uint64_t registerOn(morph::backend::RemoteServer& server) {
 
 // ── IBackend::cancelPending ─────────────────────────────────────────────────
 
+// GCC at -O3 speculatively devirtualizes `cancelPending` to the counting subclass defined below, and reports its
+// counter write as overflowing the plain `LocalBackend` this test holds. The branch is guarded by a dynamic-type
+// check and never runs; the warning is silenced for this test only.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
 TEST_CASE("LocalBackend::cancelPending is G2: the error is posted, not run, and the work is not waited for",
           "[cancel-policy]") {
     gate().reset();
@@ -290,6 +297,9 @@ TEST_CASE("LocalBackend::cancelPending is G2: the error is posted, not run, and 
     CHECK(outcome.ok == 0);
     CHECK(outcome.err == 1);
 }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 TEST_CASE("SimulatedRemoteBackend::cancelPending is G2, and the server's work runs to completion", "[cancel-policy]") {
     gate().reset();

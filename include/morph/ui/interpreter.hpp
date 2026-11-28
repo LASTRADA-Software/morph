@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <charconv>
 #include <chrono>
+#include <core/async/StopToken.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -74,11 +75,25 @@ struct FormSessionOptions;
 struct FormViewOptions;
 }  // namespace forms
 
+namespace table {
+class ITableStateStore;
+struct SaveResult;
+struct TableColumn;
+struct TableDescription;
+struct TableStateKey;
+}  // namespace table
+
 }  // namespace morph
 
 namespace morph::ui {
 
+class TableStates;
+
 class Mounted;
+class GridController;
+class ModelGridSource;
+struct GridColumn;
+struct GridOptions;
 struct ChartRange;
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -92,6 +107,11 @@ struct CallOptions {
     /// @brief The mutation declares `"offline": "queue"`: a dispatcher with an offline queue holds a call that cannot
     ///        reach the server and settles the completion when the replay settles.
     bool queueOffline = false;
+    /// @brief The caller's cancel: a stop request sends the wire's `cancel` for the call where the server takes one,
+    ///        and rejects the call with `core::async::OperationCancelled`. A token with no stop state sends nothing.
+    ///        An `evaluate` call ignores it, and so does a call a `QueueingDispatcher` replays. Holding a stop token,
+    ///        `CallOptions` is not a literal type, and a channel built against it before it had one must recompile.
+    ::core::async::StopToken stop;
 };
 
 /// @brief What a channel can say about the instance it is bound to.
@@ -391,9 +411,63 @@ struct SessionOptions {
     /// @brief The most bytes a document moves inline in one file (`download` from bytes, `upload` into bytes, a
     ///        field component writing a base64 member); 1 to `kMaxInlineFileBytes`.
     std::size_t maxInlineFileBytes = kDefaultInlineFileBytes;
+    /// @brief How long a model-backed table's visible rows must stay within one page before it fetches a page that
+    ///        is not next to one it holds: a scroll that passes over pages fetches none of them. Waited for on
+    ///        `scheduler` and measured on `clock` (`std::chrono::steady_clock` without one), so the two must
+    ///        agree. Without a scheduler every fetch goes at once.
+    std::chrono::milliseconds tableSettle{80};
+    /// @brief While a model-backed table's order waits for a level, the least time between two of its refetches
+    ///        after change events, waited for on `scheduler` and measured on `clock`: the first goes at once, the
+    ///        next no sooner than this after it, whatever the number of events between.
+    std::chrono::milliseconds tableAwaitedRefetch{250};
+    /// @brief Where every table's persisted state is loaded from and saved to; with none, a table keeps its state
+    ///        for as long as it is mounted. `PreferencesTableStateStore` keeps it in the application's preferences
+    ///        store.
+    std::shared_ptr<table::ITableStateStore> tableState;
+    /// @brief How long a table waits for its stored state before its first query; past it the table starts from its
+    ///        defaults.
+    std::chrono::milliseconds tableStateTimeout{300};
+    /// @brief How long a table's arrangement must stay unchanged before its state is saved, waited for on
+    ///        `scheduler`; without one every change saves at once.
+    std::chrono::milliseconds tableStateDebounce{500};
+    /// @brief How long a filter menu waits after the last keystroke of its search, and after the last edit of a
+    ///        condition, before it asks for values or sends the filter, waited for on `scheduler`; without one each
+    ///        goes at once.
+    std::chrono::milliseconds tableFilterDebounce{250};
+    /// @brief The most rows a range selection of a model-backed table resolves; a longer range is refused in the
+    ///        table's status line and selects nothing.
+    std::size_t maxRangeRows = 10'000;
+    /// @brief The most rows a table's copy puts on the clipboard; a larger copy is refused in the table's status line.
+    std::size_t maxCopyRows = 10'000;
+    /// @brief The most values one paste into a grid writes or drops; a larger block is refused in the grid's status
+    ///        line and nothing is written.
+    std::size_t maxPasteCells = 10'000;
+    /// @brief The longest a model-backed table with `retainChanged` holds back the refetches its change events cause
+    ///        while an action of this session that changes it runs, waited for on `scheduler`: within it a row the
+    ///        action changed never leaves the view and comes back, past it other users' changes are not held up.
+    std::chrono::milliseconds retainHold{2000};
+    /// @brief The application's id: the `application` of every table-state key.
+    std::string application;
 };
 
+/// @brief How long a table's status-line message stays, unless the next gesture on the table clears it first.
+inline constexpr std::chrono::seconds kStatusMessageHold{6};
+
+class Session;
+
 namespace detail {
+
+/// @brief The table states of a session built with @p options: over `tableState`, debounced by `tableStateDebounce`
+///        on `scheduler`. A save that does not end `Saved` is said in the status line of every mounted table whose
+///        key it names; a `PreferencesTableStateStore` is given the session's scheduler and `tableStateTimeout` to
+///        wait on before it sends a save the server refused as busy again.
+/// @param session The session the states belong to; its screens hear a failed save.
+/// @param runtime The session's runtime, whose owner the states answer on.
+/// @param options The session's options.
+/// @return They; `nullptr` without a `tableState`.
+[[nodiscard]] MORPH_API std::shared_ptr<TableStates> makeTableStates(Session& session,
+                                                                     reactive::Runtime const& runtime,
+                                                                     SessionOptions const& options);
 
 /// @brief The text of a failure.
 /// @param error The failure.
@@ -585,6 +659,107 @@ struct HostCommands {
 ///        listed is in scope for every document.
 using HostScopes = std::map<std::string, std::set<std::string, std::less<>>, std::less<>>;
 
+namespace detail {
+struct WatchRegistration;
+struct WatchRegistry;
+}  // namespace detail
+
+/// @brief A watch of one record that no cache entry holds, made by `Session::watchRecord`.
+///
+/// A copyable handle over one registration: the record stays in the session's watch set, and the handler keeps
+/// hearing its changes, while any copy lives. When the last copy dies the handler is removed and the record is
+/// counted out, which sends an `unwatch` when nothing else needs it. A `Completion` hands its value to a handler as
+/// `const&`, so a caller that keeps the watch copies the holder there and lets the completion go. A holder that
+/// outlives its session releases nothing. A default-constructed holder holds nothing. The last copy must die on the
+/// runtime's owner, since releasing the watch changes the session's watch set. A session destroyed while a
+/// `watchRecord` waits for its answer drops that completion unsettled.
+class MORPH_API WatchHolder {
+public:
+    /// @brief A holder of nothing.
+    WatchHolder() = default;
+
+    /// @brief Whether the holder holds a registration.
+    /// @return `true` for a holder `watchRecord` resolved with, and its copies.
+    [[nodiscard]] bool holds() const noexcept { return _registration != nullptr; }
+
+private:
+    friend class Session;
+    explicit WatchHolder(std::shared_ptr<detail::WatchRegistration> registration)
+        : _registration{std::move(registration)} {}
+
+    std::shared_ptr<detail::WatchRegistration> _registration;
+};
+
+/// @brief A mutation's run as it is sent.
+struct RunStarted {
+    /// @brief The run's id, unique in the session.
+    std::uint64_t run;
+    /// @brief The action's id.
+    // NOLINTBEGIN(cppcoreguidelines-avoid-const-or-ref-data-members): the run's context borrows the action name and body of the call for the call's duration, and the object is built and dropped inside it
+    std::string const& action;
+    /// @brief The body sent.
+    Value const& body;
+    // NOLINTEND(cppcoreguidelines-avoid-const-or-ref-data-members)
+};
+
+/// @brief A mutation's run as it settles.
+struct RunSettled {
+    /// @brief The run's id, as `RunStarted` gave it.
+    std::uint64_t run;
+    /// @brief The action's id.
+    // NOLINTBEGIN(cppcoreguidelines-avoid-const-or-ref-data-members): the settled-run view borrows the call's action, body, reply and refusal code, and the object lives only inside the observer callback they outlive
+    std::string const& action;
+    /// @brief The body sent.
+    Value const& body;
+    /// @brief Whether the action replied.
+    bool succeeded;
+    /// @brief The reply; null for a run that failed.
+    Value const& reply;
+    /// @brief The `ActionRefusal` code of a refused run; empty for none.
+    std::string const& refusalCode;
+    // NOLINTEND(cppcoreguidelines-avoid-const-or-ref-data-members)
+    /// @brief Runs the same mutation again, with the run's bindings and another body.
+    std::function<void(Value body)> rerun;
+};
+
+/// @brief Whether an action's input names rows of a table as a selection, as one row, or as the row a cell edit
+///        changes.
+enum class TableInputKind : std::uint8_t {
+    Selection,  ///< A `table::RowSelection`: its schema property carries `x-selectionOf`.
+    Row,        ///< A `table::RowRef`: its schema property carries `x-rowOf`.
+    CellEdit,   ///< A `table::CellEdit` or `table::RowEdit` action: its schema root carries `x-cellEditOf` or
+                ///< `x-rowEditOf`, and its member `key` names the row.
+};
+
+/// @brief A top-level member of an action's input that names rows of a table.
+struct TableInput {
+    /// @brief The member's name.
+    std::string member;
+    /// @brief The table's record, as the keyword names it.
+    std::string record;
+    /// @brief A selection or one row.
+    TableInputKind kind = TableInputKind::Selection;
+};
+
+/// @brief The members of an action's input schema that name rows of a table.
+/// @param schemaJson The action's input schema.
+/// @return Each top-level property carrying `x-selectionOf` or `x-rowOf`, by member name, and the member `key` of an
+///         edit action whose root carries `x-cellEditOf` or `x-rowEditOf`; none for a schema that does not read.
+[[nodiscard]] MORPH_API std::vector<TableInput> tableInputsOf(std::string_view schemaJson);
+
+/// @brief Hears every mutation run of a session: what a model-backed table marks its rows by, and offers again.
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions): an interface; observers are not copied through it.
+class RunObserver {
+public:
+    virtual ~RunObserver() = default;
+    /// @brief A run was sent.
+    /// @param run The run.
+    virtual void started(RunStarted const& run) = 0;
+    /// @brief A run settled.
+    /// @param run The run.
+    virtual void settled(RunSettled const& run) = 0;
+};
+
 /// @brief What screens of one client session share (spec 5 §5, §12b): the query cache, the mounted queries, the
 ///        principal's permitted actions, the formatting facts and the client's `env`, `session` and `host` values.
 ///
@@ -592,6 +767,22 @@ using HostScopes = std::map<std::string, std::set<std::string, std::less<>>, std
 /// principal change.
 class MORPH_API Session {
 public:
+    /// @brief Adds an observer of every mutation run; it must be removed before it goes.
+    /// @param observer The observer.
+    void addRunObserver(RunObserver* observer) { _runObservers.push_back(observer); }
+
+    /// @brief Removes an observer added with `addRunObserver`.
+    /// @param observer The observer.
+    void removeRunObserver(RunObserver* observer) { std::erase(_runObservers, observer); }
+
+    /// @brief The observers of mutation runs, in the order they were added.
+    /// @return A copy, so an observer may remove itself while it is told.
+    [[nodiscard]] std::vector<RunObserver*> runObservers() const { return _runObservers; }
+
+    /// @brief The next run id: one counter for the whole session, so two mutations never share one.
+    /// @return The id.
+    [[nodiscard]] std::uint64_t nextRunId() noexcept { return ++_runIds; }
+
     /// @brief An empty session.
     /// @param runtime The runtime. Borrowed.
     /// @param options Timers, clock, catalog and the inline cap.
@@ -606,13 +797,14 @@ public:
           _hostValues{runtime},
           _hostCommandNames{runtime},
           _hostScopesRevision{runtime, 0},
-          _contextOffered{runtime, false} {}
+          _contextOffered{runtime, false},
+          _tableStates{detail::makeTableStates(*this, runtime, _options)} {}
 
     Session(Session const&) = delete;
     Session& operator=(Session const&) = delete;
     Session(Session&&) = delete;
     Session& operator=(Session&&) = delete;
-    ~Session() = default;
+    ~Session();
 
     /// @brief The runtime.
     /// @return It.
@@ -621,6 +813,10 @@ public:
     /// @brief The options.
     /// @return They.
     [[nodiscard]] SessionOptions const& options() const noexcept { return _options; }
+
+    /// @brief The table states the session keeps, loads and saves through `SessionOptions::tableState`.
+    /// @return They; `nullptr` when the session has no store.
+    [[nodiscard]] TableStates* tableStates() const noexcept { return _tableStates.get(); }
 
     /// @brief Sets the action ids the principal may run, as the catalog reply lists them; `{"can": ...}` follows them.
     /// @param permitted The ids.
@@ -794,6 +990,12 @@ public:
     /// @param screen It.
     void detachScreen(detail::ScreenCore& screen) { std::erase(_screens, &screen); }
 
+    /// @brief Tells every screen of the session that a table state's save did not end `Saved`, so each table
+    ///        mounted with that key says it in its status line.
+    /// @param key    The state's key.
+    /// @param result What the store answered.
+    void tableSaveFailed(table::TableStateKey const& key, table::SaveResult const& result);
+
     /// @brief Starts a query's request before its screen mounts, so the screen mounts on a warm cache.
     /// @param channel The alias's channel.
     /// @param token   The alias's instance token (`Screen::instanceToken`).
@@ -899,6 +1101,13 @@ public:
     ///        connection was down is read again.
     void reconnected();
 
+    /// @brief Hears every reconnect and `resync`, after the watch set is sent and the cache marked: what a reader
+    ///        that holds rows outside the cache and watches no record (a page window over an action that holds none)
+    ///        refetches by.
+    /// @param handler What hears it, on the runtime's owner.
+    /// @return The holder: the handler is called while a copy of it lives.
+    [[nodiscard]] std::shared_ptr<void> onReconnected(std::function<void()> handler);
+
     /// @brief The topics the cache holds now: every record an entry holds, every extra watch, and the keyed shared
     ///        instance of every entry whose action holds no record. What `reconnected` sends.
     /// @return The topics, records and instances each in name order; `replace` is false.
@@ -945,6 +1154,36 @@ public:
     /// @param entry The entry.
     static void markStale(detail::CacheEntry& entry);
 
+    /// @brief Runs a read action and settles with its reply's JSON text, making no cache entry and reading none.
+    ///
+    /// A page window's fetches go through it. The reply is not read into a `Value`: a page's `Number` cells are JSON
+    /// numbers with fractions or exponents, which a `Value` cannot hold, so the caller decodes the text against the
+    /// table's description (`table::readGenericPage`). No effects are applied: a read has none, and the caller's own
+    /// change events reach it as anyone's do.
+    /// @param channel  The alias's channel; `nullptr` fails the read at once.
+    /// @param actionId The action.
+    /// @param body     The body, sent as its canonical JSON.
+    /// @param stop     The caller's cancel: passed to the channel as `CallOptions::stop`, so the wire's `cancel` goes
+    ///                 out where the server takes one; the read then settles cancelled and its reply is dropped.
+    /// @return The reply's JSON text, byte for byte as the channel returned it, delivered on the runtime's owner; or
+    ///         the call's failure, or `core::async::OperationCancelled` after a stop.
+    [[nodiscard]] async::Completion<std::string> read(std::shared_ptr<ModelChannel> const& channel,
+                                                      std::string const& actionId, Value const& body,
+                                                      ::core::async::StopToken const& stop = {});
+
+    /// @brief Watches a record without a cache entry, for as long as a copy of the returned holder lives.
+    ///
+    /// The record is counted in the watch set as an entry's records are, so a count that leaves zero sends a
+    /// `watch` at once. @p handler hears, on the runtime's owner, each `changes` event that names the record (after
+    /// the cache's entries are marked), and a whole-type change (`keys` absent) on reconnect and on `resync`.
+    /// @param record  The record's wire name.
+    /// @param handler What hears its changes.
+    /// @return The holder, once the server has the watch: when the `watch` this call sent, or the one in flight for
+    ///         the record, is answered (whatever the answer, since a refused topic only sends no events); at once
+    ///         when the record was already watched and answered, or the session has no watcher.
+    [[nodiscard]] async::Completion<WatchHolder> watchRecord(
+        std::string const& record, std::function<void(effects::RecordChange const&)> handler);
+
 private:
     // A cap of 0 moves nothing inline, and one above the largest would not fit an envelope once encoded.
     [[nodiscard]] static SessionOptions checkedOptions(SessionOptions options);
@@ -969,6 +1208,21 @@ private:
     /// @param entry The entry.
     /// @param delta `+1` when the entry is made, `-1` when it is dropped.
     void countTopics(detail::CacheEntry const& entry, int delta);
+
+    /// @brief Counts one record in or out of the watch set, as `countTopics` counts an entry's.
+    /// @param record The record.
+    /// @param delta  `+1` or `-1`.
+    void countRecord(std::string const& record, int delta);
+
+    /// @brief Hands a record change to every watch holder of its record.
+    /// @param change The change.
+    void notifyWatchers(effects::RecordChange const& change);
+
+    /// @brief The watch registry, made on first use.
+    /// @return It.
+    detail::WatchRegistry& watchRegistry();
+
+    friend struct detail::WatchRegistration;
 
     /// @brief Sends the queued watch changes, at most one `watch` and one `unwatch`; drops them when there is no
     ///        watcher.
@@ -1015,6 +1269,8 @@ private:
     SessionOptions _options;
     reactive::Signal<std::set<std::string, std::less<>>> _permitted;
     std::map<std::string, int, std::less<>> _recordRefs;
+    std::shared_ptr<detail::WatchRegistry> _watchRegistry;
+    std::vector<std::weak_ptr<std::function<void()>>> _reconnectListeners;
     std::map<std::pair<std::string, std::string>, int> _instanceRefs;
     std::set<std::string, std::less<>> _watchRecords;
     /// The records watched for something other than the cache (`addExtraWatch`).
@@ -1052,6 +1308,10 @@ private:
     int _userDepth = 0;
     bool _lastWriteUser = false;
     std::uint64_t _privateTokens = 0;
+    std::vector<RunObserver*> _runObservers;
+    std::uint64_t _runIds = 0;
+    /// After everything a save or load reaches, so it is destroyed first.
+    std::shared_ptr<TableStates> _tableStates;
 };
 // ---------------------------------------------------------------------------------------------------------------
 // Runtime structures
@@ -1104,6 +1364,8 @@ struct MountOptions {
     Screen const* keepStateOf = nullptr;
 };
 
+class WindowRows;
+
 namespace detail {
 
 /// @brief A name bound for the expressions of one place: a command's `event`, a step's `as`, `result` in a
@@ -1124,6 +1386,10 @@ struct ElementState;
 class MutationRuntime;
 struct CheckRuntime;
 struct BoundaryRuntime;
+struct ModelTable;
+struct RowsTable;
+struct GridTable;
+struct TableConfig;
 
 /// @brief One state declaration at run time.
 struct StateSlot {
@@ -1246,9 +1512,15 @@ struct MORPH_API ElementState {
     reactive::Computed<Value>* rows = nullptr;
     /// @brief A table's bound `sort`; `nullptr` while the table holds its own.
     reactive::Computed<Value>* sortBound = nullptr;
-    /// @brief A table's rows as it shows them, made beside `rows` so that every reader of the table's element
-    ///        values, the table's own lowering included, sees one order; `nullptr` for a table without `rows`.
+    /// @brief A table's rows as it shows them, in its engine's order, and the page of them it shows: what every
+    ///        reader of the table's element values reads; `nullptr` for a table without `rows`.
     reactive::Computed<TableView>* view = nullptr;
+    /// @brief The rows a table's mount reads: a table over `rows` its `EngineRows`, a model-backed table the rows
+    ///        over its window that tell the element of each change and gesture, a collection its engine's rows that
+    ///        tell its table of each change; null for any other element.
+    std::shared_ptr<TableRows> tableRows;
+    /// @brief A model-backed table's window over the server's pages; null for any other element.
+    std::shared_ptr<WindowRows> tableWindow;
     /// @brief A `form`'s session (spec 2), made when the element is wired; null when its schema is unknown.
     std::unique_ptr<forms::FormSession> form;
     /// @brief A `collection`'s session (spec 2), made when the element is wired; null when its view document is
@@ -1257,6 +1529,21 @@ struct MORPH_API ElementState {
     /// @brief A `wizard`'s session (spec 2), made when the element is wired; null when its wizard document or a
     ///        step's schema is unknown or does not build.
     std::unique_ptr<forms::WizardSession> wizard;
+    /// @brief A model-backed table's rows, description, persisted state and status line, made when the element is
+    ///        wired; null for any other element. It outlives every mount of the table.
+    std::unique_ptr<ModelTable> modelTable;
+    /// @brief A table over `rows`: its source, engine and page, its persisted state and its status line, made when
+    ///        the element is wired; a collection's table: its engine over the session's source, its configuring,
+    ///        persisted state and status line. Null for any other element. It outlives every mount of the table.
+    std::unique_ptr<RowsTable> rowsTable;
+    /// @brief A grid of a form (a table with `form` and `field`) or a fixed grid (a table with `layoutRows`): its grid
+    ///        and its status line, made when the table is first lowered; null for any other element. It outlives every
+    ///        mount of the table.
+    std::unique_ptr<GridTable> gridTable;
+    /// @brief A form's fields drawn as grids through a field overlay's `grid` part, by the field's name: each an
+    /// element
+    ///        of its own, whose node is the part, holding its grid. Empty for any other element.
+    std::map<std::string, std::unique_ptr<ElementState>, std::less<>> fieldGrids;
 };
 
 /// @brief One check at run time.
@@ -1357,6 +1644,9 @@ public:
     reactive::Signal<Value> const* row = nullptr;
     /// @brief The canonical key of a row scope's row; empty for any other scope.
     std::string rowKey;
+    /// @brief For a row scope whose row signal is set to other rows (a pooled table cell): the canonical key of the
+    ///        row it holds now, read in place of `rowKey`; empty for any other scope.
+    std::function<std::string()> rowKeyNow;
     /// @brief For a component fallback's scope, the focus key of the `custom` node it is lowered for, so one
     ///        fallback lowered for two uses keys its elements apart; empty for any other scope.
     std::string usePrefix;
@@ -1382,6 +1672,10 @@ public:
     std::vector<std::unique_ptr<MutationRuntime>> mutations;
     /// @brief Its checks.
     std::vector<std::unique_ptr<CheckRuntime>> checks;
+    /// @brief Called with a field a row expression read that the row's record does not hold; set on a server-mode
+    ///        row scope, whose record holds only the columns fetched. Called from inside a binding's evaluation, so
+    ///        it writes no signal.
+    std::function<void(std::string_view field)> const* onMissingRowField = nullptr;
     /// @brief For a locale scope's scope, the formatting facts it writes in; `nullptr` for any other scope.
     reactive::Computed<std::shared_ptr<FormatContext const>>* localeFormat = nullptr;
     /// @brief Whether the scope declares nothing: the elements of its nodes are the enclosing scope's.
@@ -1644,6 +1938,8 @@ public:
 private:
     struct Run {
         std::uint64_t id = 0;
+        /// The id observers know the run by: `Session::nextRunId`, unique across mutations.
+        std::uint64_t sessionRun = 0;
         Value body;
         std::shared_ptr<Bindings const> bindings;
         RunDone done;
@@ -1921,6 +2217,46 @@ public:
     /// @return The value.
     [[nodiscard]] Value inputValue(ElementState const& element) const;
 
+    /// @brief Shows @p text as the table's status-line message for `kStatusMessageHold`, on the session's scheduler
+    ///        (without one, until the table's next gesture); an empty @p text clears the message and notifies
+    ///        nothing. Under `status: false` a non-empty text goes to `InterpreterHost::notify` as a warning instead.
+    /// @param table The table's element; one that is neither a model-backed table nor one over `rows` is left alone.
+    /// @param text  The message, or empty.
+    void tableMessage(ElementState& table, std::string text);
+    /// @brief Shows @p text as a model-backed table's status-line message, as the overload above does, with the
+    ///        choices it offers after it; choosing one clears the message and runs what it was given with. The
+    ///        choices go with the message: when it is cleared or replaced, or its hold ends. Under `status: false`
+    ///        the text goes to the host and no choice is offered.
+    /// @param table   The table's element; for one that is not a model-backed table the choices are not offered.
+    /// @param text    The message; not empty.
+    /// @param entries Each choice, by its id and label, with what choosing it runs.
+    void tableMessage(ElementState& table, std::string text,
+                      std::vector<std::pair<StatusEntry, std::function<void()>>> entries);
+
+    /// @brief Says a table state's failed save in the status line of every table of the screen mounted with its key.
+    /// @param key    The state's key.
+    /// @param result What the store answered.
+    void tableSaveFailed(table::TableStateKey const& key, table::SaveResult const& result);
+
+    /// @brief How many entries a model-backed table's index of row scopes holds, for tests: one per realized row
+    ///        whose scope `onActivate` can run in.
+    /// @param table The table's element.
+    /// @return The entries; 0 for an element that is not a model-backed table.
+    [[nodiscard]] static std::size_t tableRowScopes(ElementState const& table);
+
+    /// @brief Shows a model-backed table's state at the `columns` and `saved` points that name it: a `columns` point
+    ///        reads the column layout (`table::ColumnLayoutValue` as a record), a `saved` point the saved view's name.
+    /// @param table The table's element.
+    void tablePoints(ElementState& table);
+
+    /// @brief Writes a choice for a `columns` or `saved` point into the state of the model-backed table it names,
+    ///        which saves it as any change of the table's arrangement is saved.
+    /// @param point The point.
+    /// @param value The choice: a layout record for `columns`, a name or `null` for `saved`.
+    /// @return Nothing when the point names no mounted model-backed table; otherwise whether the choice was taken
+    ///         (a value that does not read as the point's part is refused).
+    [[nodiscard]] std::optional<bool> tablePoint(CustomizePoint const& point, Value const& value);
+
     // --- Commands ----------------------------------------------------------------------------------------------
 
     /// @brief Runs a command list: each command in order in one batch; done when every command in it is.
@@ -2027,6 +2363,12 @@ public:
     /// @brief Moves focus to a mounted element by its id; empty until the screen is mounted, and again once it is
     ///        unmounting.
     std::function<bool(std::string_view)> focusElement;
+    /// @brief Puts text on the clipboard through the backend's `IViewBackend::copyText`, returning whether it did;
+    ///        empty until the screen is mounted, and again once it is unmounting.
+    std::function<bool(std::string_view)> clipboard;
+    /// @brief Reads the clipboard's text through the backend's `IViewBackend::pasteText`; empty until the screen is
+    ///        mounted, and again once it is unmounting.
+    std::function<std::optional<std::string>()> pasteboard;
     /// @brief The models the opener lends.
     std::map<std::string, BorrowedModel, std::less<>> borrowed;
     /// @brief The screen scope's reactive depth.
@@ -2076,6 +2418,9 @@ public:
     std::vector<LoweredNode> loweredNodes;
     /// @brief The screen's live scopes, in creation order.
     std::vector<RtScope*> scopes;
+    /// @brief The elements of the screen's tables that keep a persisted state, model-backed or over `rows`, while
+    ///        each lives: what a failed save of a table state is said in.
+    std::vector<ElementState*> modelTables;
     /// @brief The latest command lists run, oldest first, at most `kCommandLogSize`.
     std::deque<CommandLogEntry> commandLog;
     /// @brief Set while the inspector evaluates, so that an expression error it meets is not reported.
@@ -2096,15 +2441,23 @@ public:
 private:
     void wireElement(ElementState& element);
     void wireErrors(ElementState& element);
-    /// A table's rows in the order of its sort, read in the table's scope with @p bindings. A sort that is not a
-    /// list of the table's sortable columns, or whose values cannot be ordered, is reported and leaves the source
-    /// order.
-    void sortedRows(ElementState const& element, Bindings const* bindings, TableView& view);
-    /// A grouped table's runs of its source rows by its `group`'s `by`: each row's run index and each run's heading
-    /// entry, into @p view.
-    static void groupRows(ElementState const& element, Bindings const* bindings, TableView& view);
-    /// A table's sorted rows and the page of them it shows, by its `pageSize` and `page`.
-    TableView tableView(ElementState const& element, Bindings const* bindings);
+    /// A table over `rows`: its rows in its engine's view, each grouped row's run and each run's heading entry, and
+    /// the page of them it shows, by its `pageSize` and `page`. Nothing while its stored state is read.
+    TableView tableView(RowsTable const& table);
+    /// The rows, source, engine and page of a table over `rows`, read in the table's scope with @p bindings; with
+    /// @p persisted, its stored state is loaded and its changes saved, and it is the element's own.
+    std::unique_ptr<RowsTable> makeRowsTable(ElementState& element, std::shared_ptr<Bindings const> bindings,
+                                             bool persisted);
+    /// Brings a table over `rows` to its sort: the columns its keys read are in use, and the engine orders by them,
+    /// within the groups first when it has any. A sort that is not a list of its sortable columns is reported.
+    void sortRowsTable(RowsTable& table, Value const& sort);
+    /// What a table over `rows` does when its engine's view changed: reports an invalid cell of a sort column once,
+    /// and lets the rows through once the stored order is in place.
+    void rowsTableChanged(RowsTable& table);
+    /// Shows @p text in the status line of a table over `rows`, as `tableMessage` does for a table's element.
+    void rowsTableMessage(RowsTable& rows, std::string text) const;
+    /// Applies a table over `rows`' stored state once its load completed, or reports why it could not.
+    void storedRowsState(RowsTable& table, std::optional<std::string> const& json, std::string const& failure);
     void collect(DocNode const& node, RtScope& scope, std::vector<Commands const*>& commands);
     /// The readers every kind's lowering shares, bound to one node.
     class KindKit;
@@ -2140,9 +2493,71 @@ private:
     Node lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Node lowerSwitch(DocNode const& node, LowerCtx const& ctx);
     Node lowerRows(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A model-backed table: a list of at most one table, keyed by its description's revision, over its rows.
+    Node lowerModelTable(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A grid of a form: a table over a form node's collection, its rows the field's and its cells its members.
+    Node lowerFormGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// The table of a grid of a form, kept in @p element: a `table` node's with `form` and `field`, or a field
+    /// overlay's `grid` part's.
+    Node formGridTable(DocNode const& part, LowerCtx const& ctx, ElementState& element, forms::FormSession& form,
+                       forms::FieldState& array);
+    /// The table node of the grid @p element keeps, made anew by each lowering.
+    Node gridTableNode(DocNode const& part, LowerCtx const& ctx, ElementState& element);
+    /// The rows a grid with summaries or a group is mounted over: its summary decorator, each data row's cell as the
+    /// grid draws it, each summary row's cells its part's expressions, and each run's heading.
+    TableSource summarySource(DocNode const& part, LowerCtx const& ctx, GridTable& held,
+                              std::vector<TableColumn> const& columns);
+    /// A summary cell's value: the expression the summary row's part gives the column, read with `rows` and `column`;
+    /// none when the part gives the column none.
+    std::optional<Value> summaryValue(DocNode const& table, Value const& record, std::string const& column,
+                                      LowerCtx const& ctx, ValueList rows);
+    /// A summary row's own parts: the summary flag, and its part's `label` as the row's name.
+    TableRowLook summaryLook(DocNode const& table, LowerCtx const& ctx, Value const& record);
+    /// A grid's summary cell text: its value over the data rows in its scope, at the column's member's places.
+    std::string gridSummaryText(DocNode const& part, LowerCtx const& ctx, GridTable& held, Value const& record,
+                                std::string const& column);
+    /// What a grid's part (a `table` with a `form`, a field overlay's `grid`) gives beyond its table: its columns and
+    /// its options.
+    void gridParts(DocNode const& part, LowerCtx const& ctx, forms::FieldState const& array,
+                   std::vector<GridColumn>& columns, GridOptions& options);
+    /// What any grid's part gives of its walk and its activation.
+    void gridOptions(DocNode const& part, LowerCtx const& ctx, GridOptions& options);
+    /// A fixed grid: a table whose rows are its `layoutRows`, each cell a field of the form `form` names, an
+    /// expression or a text, kept in @p element as a grid of a form is.
+    Node lowerFixedGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// The table a model-backed table shows for the description its rows hold, or the status line alone without one.
+    Node modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementState& element);
+    /// A model-backed table with a column its description edits, as a grid over its cells: the grid's controller, its
+    /// rows handed to @p source; null for a table with no editable column.
+    std::shared_ptr<GridController> editableModelTable(DocNode const& node, LowerCtx const& ctx, ElementState& element,
+                                                       table::TableDescription const& description,
+                                                       std::vector<table::TableColumn> const& shown,
+                                                       TableSource& source, TableOptions const& options,
+                                                       std::shared_ptr<std::weak_ptr<ModelGridSource>> const& drafts);
+    /// Makes a model-backed table's rows, its description query and its persisted state's load.
+    void wireModelTable(ElementState& element);
+    /// Takes the description its query holds now: reports the filters a new revision drops, then hands it to the rows.
+    void describedTable(ElementState& element, Value const& described);
+    /// Applies the filter a typed list action's table held while its kinds waited for the first reply: a stored
+    /// one fitted to those kinds, each filter it drops reported; another set, or reported as refused.
+    void inferredTable(ElementState& element);
+    /// Applies a model-backed table's stored state once its load completed, or reports why it could not.
+    void storedTableState(ElementState& element, std::optional<std::string> const& json, std::string const& failure);
+    /// A user's gesture on a model-backed table: the stored state no longer replaces the arrangement, and the
+    /// status-line message goes.
+    void tableGesture(ElementState& element);
+    /// Wires a table's header, menus and arrangement to its configuring: sort gestures held to the table's bound,
+    /// layout gestures to what it allows, each refusal shown in its status line and each change run through its
+    /// commands; and its copy, of the rows `TableConfig::gather` gives. @p keep is held by every handler, for a table
+    /// its mount owns. Returns the column chooser and the
+    /// sort dialog its menu opens, to mount beside the table; null for a table with no menus.
+    Node configureTable(TableConfig& config, LowerCtx const& ctx, TableOptions& options,
+                        std::shared_ptr<void const> const& keep);
+    /// Takes the columns a model-backed table's layout arranges from the description its rows hold now.
+    void modelLayoutColumns(ElementState& element) const;
     /// A grouped table's heading row: its `group`'s `heading`, lowered as one cell in a row scope of its own whose
     /// row is the group's run record and whose key is `key`, the row's canonical key, as a data row's scope has.
-    TableRowView headingRow(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
+    TableRowLook headingRow(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
                             std::string key);
     /// A `rowTone` value as a tone: `neutral`, `info`, `ok`, `warn`, `err`, or `null` for none. Another value is
     /// reported, at @p path, while @p noted is still false, and shows no tone.
@@ -2201,6 +2616,8 @@ private:
     Node lowerArrangeEditor(DocNode const& node, LowerCtx const& ctx, std::string const& point,
                             CustomizePoint const& spec, std::function<void(Value)> const& choose);
     void wireForm(ElementState& element);
+    /// A form's rounds of derived values over its alias: its evaluation and its `derive` action.
+    void deriveForm(ElementState& element, ModelAlias* alias);
     Node lowerForm(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     [[nodiscard]] FormSubmitter aliasCalls(ModelAlias* alias);
     [[nodiscard]] FormSubmitter aliasSubmits(ModelAlias* alias, std::string read = {});
@@ -2208,6 +2625,15 @@ private:
     void followFormatting(ElementState& element, RtScope& scope);
     void wireComposite(ElementState& element);
     Node lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A collection's table, kept in its element as a table over `rows` is: an engine over the session's source,
+    /// the configuring of every column, and its state persisted under the collection's action.
+    void wireCollectionTable(ElementState& element, std::string modelType);
+    /// The rows of a collection, lowered as a table on the engine: sorted, filtered, arranged and copied as any other
+    /// table, with @p buttons, when set, drawing each row's trailing cell for its key text.
+    Node lowerCollectionRows(ElementState& element, LowerCtx const& ctx,
+                             std::function<Node(std::string const&)> const& buttons);
+    /// Applies a collection's stored state once its load completed, or reports why it could not.
+    void storedCollectionState(RowsTable& table, std::optional<std::string> const& json, std::string const& failure);
     void presentForm(DocNode const& node, LowerCtx const& ctx, forms::FormViewOptions& options);
     Node lowerTabs(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Prop<std::size_t> controlledTabSelection(DocNode const& node, LowerCtx const& ctx, ExprPtr const& selected,
@@ -2446,6 +2872,11 @@ struct HeadTool {
     bool operator==(HeadTool const&) const = default;
 };
 
+namespace testing {
+/// @brief What a test reads of a `Screen` that its interface does not show; the tests define it.
+struct ScreenProbe;
+}  // namespace testing
+
 /// @brief A mounted screen: its scopes, its view mounted through `Mounted`, and what its host asks of it.
 ///
 /// Neither copyable nor movable. It belongs to the runtime's owner; the runtime, the session, the dispatcher and
@@ -2654,6 +3085,7 @@ public:
 private:
     friend class Interpreter;
     friend class Inspector;
+    friend struct testing::ScreenProbe;
 
     // Out of line: an exported class emits its inline members in every module, and this one destroys a
     // `std::unique_ptr<Mounted>` on a throw, which needs `Mounted` complete.

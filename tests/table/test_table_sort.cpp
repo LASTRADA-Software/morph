@@ -18,8 +18,10 @@
 #include <compare>
 #include <cstdint>
 #include <limits>
+#include <morph/table/engine.hpp>
 #include <morph/table/sort.hpp>
 #include <numeric>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -421,4 +423,74 @@ TEST_CASE("table: a merge sort is done only once a run returned true", "[table][
     auto const sorted = std::move(sort).take();
     CHECK(sorted.front() == 1499U);
     CHECK(sorted.back() == 0U);
+}
+
+// Mutation: compareKeys tying unloaded with empty (rank Empty, Invalid and Unloaded alike).
+TEST_CASE("table: unloaded cells are the tail after the empties in both directions", "[table][sort][unloaded]") {
+    using morph::table::Unloaded;
+    auto const source =
+        tabletest::slowColumn(ColumnKind::Integer, {Cell{std::int64_t{3}}, Cell{Unloaded{}}, Cell{},
+                                                    Cell{std::int64_t{1}}, Cell{Unloaded{}}, Cell{std::string{"x"}}});
+    for (auto const dir : {SortDirection::Ascending, SortDirection::Descending}) {
+        Engine engine{source};
+        REQUIRE(engine.setSort({SortKey{.column = "c", .dir = dir}}));
+        auto const keys = tabletest::viewKeys(engine);
+        auto const valid = dir == SortDirection::Ascending ? std::vector<RowId>{3, 0} : std::vector<RowId>{0, 3};
+        CHECK(std::vector<RowId>(keys.begin(), keys.begin() + 2) == valid);
+        CHECK(std::vector<RowId>(keys.begin() + 2, keys.begin() + 4) == std::vector<RowId>{2, 5});  // empty, invalid
+        CHECK(std::vector<RowId>(keys.begin() + 4, keys.end()) == std::vector<RowId>{1, 4});        // unloaded
+    }
+}
+
+// Mutation: compareKeys answering 0 whenever either cell is unloaded (an unloaded cell tying with every cell).
+TEST_CASE("table: rows with no unloaded sort cell keep their order under any completion", "[table][sort][unloaded]") {
+    using morph::table::Unloaded;
+    constexpr std::size_t kRows = 40;
+    SortChain const chain{{.column = "a", .dir = kAsc}, {.column = "b", .dir = kDesc}};
+    auto const positions = [&](std::vector<std::vector<Cell>> rows) {
+        auto const source = tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow"),
+                                                   tabletest::levelCol("b", ColumnKind::Integer, "slow")},
+                                                  std::move(rows));
+        Engine engine{source};
+        REQUIRE(engine.setSort(chain));
+        std::vector<std::size_t> out(kRows);
+        for (std::size_t viewRow = 0; viewRow < engine.viewRowCount(); ++viewRow) {
+            out[static_cast<std::size_t>(std::get<std::int64_t>(engine.rowIdAt(viewRow)))] = viewRow;
+        }
+        return out;
+    };
+    for (std::uint32_t seed = 0; seed < 200; ++seed) {
+        std::mt19937 rng{seed};
+        std::vector<std::vector<Cell>> rows(kRows);
+        std::vector<bool> loaded(kRows, true);
+        for (std::size_t row = 0; row < kRows; ++row) {
+            for (int column = 0; column < 2; ++column) {
+                if (rng() % 5 == 0) {
+                    rows[row].emplace_back(Unloaded{});
+                    loaded[row] = false;
+                } else {
+                    rows[row].emplace_back(static_cast<std::int64_t>(rng() % 6));
+                }
+            }
+        }
+        auto const before = positions(rows);
+        for (int completion = 0; completion < 20; ++completion) {
+            auto completed = rows;
+            for (auto& row : completed) {
+                for (auto& cell : row) {
+                    if (std::holds_alternative<Unloaded>(cell)) {
+                        cell = static_cast<std::int64_t>(rng() % 6);
+                    }
+                }
+            }
+            auto const after = positions(std::move(completed));
+            for (std::size_t left = 0; left < kRows; ++left) {
+                for (std::size_t right = left + 1; right < kRows; ++right) {
+                    if (loaded[left] && loaded[right]) {
+                        REQUIRE((before[left] < before[right]) == (after[left] < after[right]));
+                    }
+                }
+            }
+        }
+    }
 }

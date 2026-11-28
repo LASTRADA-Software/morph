@@ -308,7 +308,7 @@ TEST_CASE("interpreter commands: every node kind lowers to the view tree", "[ui]
         { "kind": "drawer", "id": "drawer", "side": "start", "children": [ { "kind": "spacer" } ] },
         { "kind": "custom", "name": "Chart", "props": { "title": "Trend" } },
         { "kind": "form", "model": "sample", "action": "Lims_CaptureConcentration" },
-        { "kind": "table", "model": "sample", "action": "Lims_ListResults" },
+        { "kind": "table", "model": "sample", "action": "Lims_PageResults", "columns": [ { "id": "id" } ] },
         { "kind": "table", "id": "derived", "rows": { "lit": [ { "id": 1, "name": "x" } ] },
           "columns": { "lit": [ { "id": "name", "label": "Name" } ] }, "selectionMode": "multiple" },
         { "kind": "text", "testId": "selection", "text": { "fn": "format", "args": [ "{0}", { "ref": "derived.selectedCount" } ] } },
@@ -338,7 +338,7 @@ TEST_CASE("interpreter commands: every node kind lowers to the view tree", "[ui]
     h.settle();
     CHECK(readJson(*screen, R"({"ref": "date"})") != "null");
     CHECK(h.text("date").contains('T'));
-    h.backend.selectRows(h.backend.all("Table").front(), {ui::Key{std::int64_t{1}}});
+    h.backend.selectRows(h.backend.all("Table").back(), {ui::Key{std::int64_t{1}}});
     h.settle();
     CHECK(h.text("selection") == "1");
     int const banner = h.backend.all("Banner").front();
@@ -361,8 +361,8 @@ TEST_CASE("interpreter commands: every node kind lowers to the view tree", "[ui]
     CHECK(h.backend.drag(dragged, h.byTestId("Text", "target")));
     h.settle();
     CHECK(readJson(*screen, R"({"ref": "tick"})") == "5");
-    // The form lowers through the forms engine; the table declared from a list action is reported, not lowered.
-    CHECK(h.diagnostics.size() == 1);
+    // The form lowers through the forms engine, and the table over a typed list action through its window.
+    CHECK(h.diagnostics.empty());
 }
 
 TEST_CASE("interpreter commands: roles, tones and step states map by name", "[ui][interpreter]") {

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -13,11 +14,13 @@
 #include <morph/core/executor.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/engine.hpp>
+#include <morph/table/query.hpp>
 #include <mutex>
 #include <random>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace tabletest {
@@ -32,8 +35,34 @@ inline morph::math::Rational dec(std::string_view text) {
     return morph::table::parseDecimal(text).value_or(morph::math::Rational{});
 }
 
+// The same cell, places included: the same alternative and an equal value, and for a Rational (a quantity's
+// amount and factor too) the same decimal places. `Cell == Cell` compares values only, since Rational's equality
+// ignores places.
+[[nodiscard]] inline bool sameCell(Cell const& a, Cell const& b) {
+    if (a.index() != b.index()) {
+        return false;
+    }
+    auto const sameRational = [](morph::math::Rational const& x, morph::math::Rational const& y) {
+        return x == y && x.decimalPlaces == y.decimalPlaces;
+    };
+    if (auto const* const value = std::get_if<morph::math::Rational>(&a)) {
+        return sameRational(*value, std::get<morph::math::Rational>(b));
+    }
+    if (auto const* const value = std::get_if<morph::table::QuantityCell>(&a)) {
+        auto const& other = std::get<morph::table::QuantityCell>(b);
+        return sameRational(value->amount, other.amount) && sameRational(value->toCanonical, other.toCanonical);
+    }
+    return a == b;
+}
+
 inline ColumnInfo col(std::string id, ColumnKind kind, std::string comparator = {}) {
-    return ColumnInfo{.id = std::move(id), .kind = kind, .comparator = std::move(comparator), .format = {}};
+    return ColumnInfo{
+        .id = std::move(id), .kind = kind, .comparator = std::move(comparator), .format = {}, .level = {}};
+}
+
+// A column whose cells need data level `level`: the only kind of column whose cells may be `Unloaded`.
+inline ColumnInfo levelCol(std::string id, ColumnKind kind, std::string level) {
+    return ColumnInfo{.id = std::move(id), .kind = kind, .comparator = {}, .format = {}, .level = std::move(level)};
 }
 
 // A source whose row keys are 0..n-1 (as int64) and whose cells are given row by row.
@@ -58,6 +87,74 @@ inline std::shared_ptr<morph::table::VectorSource> column(ColumnKind kind, std::
         rows.push_back({std::move(cell)});
     }
     return makeSource({col(std::move(id), kind)}, std::move(rows));
+}
+
+// A one-column source whose column `c` is at level "slow", so its cells may be `Unloaded`; keys 0..n-1.
+inline std::shared_ptr<morph::table::VectorSource> slowColumn(ColumnKind kind, std::vector<Cell> cells) {
+    std::vector<std::vector<Cell>> rows;
+    rows.reserve(cells.size());
+    for (auto& cell : cells) {
+        rows.push_back({std::move(cell)});
+    }
+    return makeSource({levelCol("c", kind, "slow")}, std::move(rows));
+}
+
+// The distinct-values cases' source: status (Text), city (Text), qty (Integer); keys 0..5. A column named in
+// `slow` is at level "slow"; each (row, column) of `unloaded` holds Cell{Unloaded{}} (its column must be slow).
+//   0: "open",   "Berlin", 1        3: empty,  "Berlin", 4
+//   1: "Open",   "Paris",  2        4: "open", "Paris",  "x" (an invalid integer)
+//   2: "closed", "Berlin", 3        5: "hold", "Rome",   5
+inline std::shared_ptr<morph::table::VectorSource> distinctSource(
+    std::vector<std::string> const& slow = {}, std::vector<std::pair<std::size_t, std::size_t>> const& unloaded = {}) {
+    using S = std::string;
+    std::vector<std::vector<Cell>> rows{{S{"open"}, S{"Berlin"}, std::int64_t{1}},
+                                        {S{"Open"}, S{"Paris"}, std::int64_t{2}},
+                                        {S{"closed"}, S{"Berlin"}, std::int64_t{3}},
+                                        {Cell{}, S{"Berlin"}, std::int64_t{4}},
+                                        {S{"open"}, S{"Paris"}, S{"x"}},
+                                        {S{"hold"}, S{"Rome"}, std::int64_t{5}}};
+    for (auto const& [row, column] : unloaded) {
+        rows.at(row).at(column) = Cell{morph::table::Unloaded{}};
+    }
+    auto const levelOf = [&slow](std::string const& id) {
+        return std::ranges::find(slow, id) != slow.end() ? std::string{"slow"} : std::string{};
+    };
+    return makeSource(
+        {levelCol("status", ColumnKind::Text, levelOf("status")), levelCol("city", ColumnKind::Text, levelOf("city")),
+         levelCol("qty", ColumnKind::Integer, levelOf("qty"))},
+        std::move(rows));
+}
+
+// A typed row whose companyA, companyB and companyC form the declared group "company". Reflected by glaze.
+struct GroupRow {
+    std::string companyA;
+    std::string companyB;
+    std::string companyC;
+    std::string name;
+    static constexpr std::array<std::string_view, 3> kCompany{"companyA", "companyB", "companyC"};
+    static constexpr std::array<morph::table::ColumnGroup, 1> columnGroups() noexcept {
+        return {{{.id = "company", .columns = kCompany}}};
+    }
+};
+
+// A typed row whose `qty` is at level "stock": the row type of the typed level cases. Reflected by glaze.
+struct LevelRow {
+    std::int64_t id = 0;
+    std::string name;
+    std::int64_t qty = 0;
+    static constexpr std::array<morph::table::ColumnLevel, 1> columnLevels() noexcept {
+        return {{{.column = "qty", .level = "stock"}}};
+    }
+};
+
+// Rows 0..count-1: id i, name "n<i>", qty 10 * i.
+inline std::vector<LevelRow> levelRows(std::int64_t count) {
+    std::vector<LevelRow> out;
+    for (std::int64_t i = 0; i < count; ++i) {
+        // NOLINTNEXTLINE(performance-inefficient-vector-operation): `out` is a fixture list built once; sizing it first would not change what the case checks
+        out.push_back(LevelRow{.id = i, .name = "n" + std::to_string(i), .qty = 10 * i});
+    }
+    return out;
 }
 
 // Folds the accented Latin-1 vowels the fixtures use to their base letter,

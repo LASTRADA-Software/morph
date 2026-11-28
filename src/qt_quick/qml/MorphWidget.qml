@@ -277,6 +277,17 @@ Item {
         return root.chords.length > 0 && root.question("chord", [key, modifiers])
     }
 
+    // Runs the chord a key is when an ancestor widget declares it, the nearest first; returns whether one did. A text
+    // field calls it for Tab, which Qt's text input takes for itself before the key reaches an ancestor's handler.
+    function takeAncestorChord(event: var): bool {
+        for (let item = root.parent; item; item = item.parent) {
+            const widget = item as MorphWidget
+            if (widget && widget.chords.length > 0)
+                return widget.takeOwnChord(event)
+        }
+        return false
+    }
+
     // A content child under an alignment other than stretch keeps its own extent across; a stretch child keeps its
     // fill, and its maximum with the alignment places it.
     // Whether this widget hands the width it has to each widget in it, as a row of actions in a sheet's footer does:

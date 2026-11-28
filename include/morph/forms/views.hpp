@@ -239,9 +239,11 @@ concept HasViewActions = requires {
 
 /// @brief The table column kind of a row property (spec 7 §4), by the names
 ///        `morph::table::ColumnKind` reads: `integer`, `decimal`, `quantity`,
-///        `number`, `text`, `date`, `dateTime`, `bool`, `custom`.
+///        `number`, `text`, `date`, `dateTime`, `bool`, `custom`, `measure`.
 ///
-/// `x-comparator` makes a column `custom`; an exact value (`num`/`den`) is
+/// `x-comparator` makes a column `custom`; `x-measure` makes it `measure`,
+/// tested before the exact-value rule since a measure's object has `num` and
+/// `den` too; an exact value (`num`/`den`) is
 /// `quantity` when it carries units and `decimal` otherwise; an integer with
 /// `x-widget` `epochDays` or `epochSeconds` is a `date` or `dateTime`; a
 /// string with `format` `date` or `date-time` likewise; a boolean is `bool`;
@@ -253,6 +255,10 @@ concept HasViewActions = requires {
     using ::morph::forms::detail::findMember;
     if (findMember(prop, "x-comparator") != nullptr) {
         return "custom";
+    }
+    if (auto const* const measure = findMember(prop, "x-measure");
+        measure != nullptr && measure->is_boolean() && measure->get_boolean()) {
+        return "measure";
     }
     auto const& node = *resolveSchemaRef(rowDom, prop);
     auto const* const properties = findMember(node, "properties");
@@ -339,11 +345,12 @@ concept HasViewActions = requires {
     // What a table needs beyond the forms view: the column's kind, the
     // schema's title (the header a table shows when no label is declared),
     // the unit alternatives a quantity column offers, the values of a closed
-    // set, and the name of a custom comparator. Each is a write into the
+    // set, the name of a custom comparator, the data level the column's
+    // cells need, and the declared group it is in. Each is a write into the
     // entry being built; see the directive above.
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
     entry["kind"] = std::string{inferColumnKind(rowDom, prop)};
-    for (std::string_view const key : {"title", "x-unitAlternatives", "x-comparator"}) {
+    for (std::string_view const key : {"title", "x-unitAlternatives", "x-comparator", "x-level", "x-column-group"}) {
         if (auto const* const value = ::morph::forms::detail::findMember(prop, key)) {
             // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
             entry[std::string{key}] = *value;

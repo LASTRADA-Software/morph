@@ -579,3 +579,60 @@ TEST_CASE("ui::table: a Ctrl-click in a windowed table keeps selected keys whose
     REQUIRE(reported.size() == 2);
     CHECK(reported.back().size() == 10);
 }
+
+// Mutation: leave `onGroupFilter` unwired in `bindTableConfig` (the group's button reports nothing), or record
+// `columnGroups` without escaping its label (the label's `:` reads as the separator).
+TEST_CASE("ui::table: filter buttons, groups, resizes, copy and menus reach their handlers through the mount",
+          "[ui]") {
+    Fixture fixture;
+    Signal<std::vector<std::size_t>> filtered{fixture.runtime, {1}};
+    std::vector<std::string> reported;
+    auto const note = [&reported](std::string text) { reported.push_back(std::move(text)); };
+    ui::TableOptions options;
+    options.menu = [](std::optional<std::size_t> column) {
+        return std::vector<ui::MenuEntry>{{.label = column ? "Hide column" : "Columns"}};
+    };
+    options.onMenu = [note](std::optional<std::size_t> column, std::vector<std::size_t> path) {
+        note("menu " + (column ? std::to_string(*column) : std::string{"-"}) + "/" + std::to_string(path.front()));
+    };
+    options.onColumnResize = [note](std::size_t column, std::optional<int> units) {
+        note("resize " + std::to_string(column) + "=" + (units ? std::to_string(*units) : std::string{"none"}));
+    };
+    options.onFilter = [note](std::size_t column) { note("filter " + std::to_string(column)); };
+    options.filtered = [&filtered] { return filtered.get(); };
+    options.columnGroups =
+        std::vector<ui::TableColumnGroup>{{.label = "Lot: A+B", .first = 0, .count = 2, .filtered = true}};
+    options.onGroupFilter = [note](std::size_t group) { note("group " + std::to_string(group)); };
+    options.onCopy = [note] { note("copy"); };
+    ui::Mounted const mounted{fixture.runtime, fixture.backend,
+                              ui::table<Item>(
+                                  {{.label = "Name", .filterable = true}, {.label = "Qty", .filterable = true}},
+                                  [&fixture] { return fixture.items.get(); }, keyOf,
+                                  [](Signal<Item> const& item) {
+                                      return std::vector<ui::Node>{
+                                          ui::text({.text = [&item] { return item.get().name; }}),
+                                          ui::text({.text = [&item] { return std::to_string(item.get().qty); }})};
+                                  },
+                                  std::move(options))};
+    int const table = fixture.backend.find("Table", "showHeader", "true").value_or(0);
+    CHECK(fixture.backend.prop(table, "columns") == "[Name:content;filterable=true,Qty:content;filterable=true]");
+    CHECK(fixture.backend.prop(table, "filtered") == "[1]");
+    CHECK(fixture.backend.prop(table, "columnGroups") == R"([Lot\: A\+B:0+2;filtered=true])");
+    CHECK(fixture.backend.headerName(table, 1) == "Qty, filtered");
+    CHECK(fixture.backend.headerName(table, 0) == "Name");
+    filtered.set({0});
+    fixture.owner.runAll();
+    CHECK(fixture.backend.prop(table, "filtered") == "[0]");
+    fixture.backend.clickFilter(table, 0);
+    fixture.backend.clickGroupFilter(table, 0);
+    fixture.backend.resizeColumn(table, 1, 9);
+    fixture.backend.resizeColumn(table, 1, std::nullopt);
+    fixture.backend.pressCopy(table);
+    fixture.backend.chooseMenu(table, 1, {"Hide column"});
+    fixture.backend.chooseMenu(table, std::nullopt, {"Columns"});
+    fixture.owner.runAll();
+    CHECK(reported == std::vector<std::string>{"filter 0", "group 0", "resize 1=9", "resize 1=none", "copy",
+                                               "menu 1/0", "menu -/0"});
+    CHECK_THROWS_AS(fixture.backend.clickGroupFilter(table, 1), std::logic_error);
+    CHECK_THROWS_AS(fixture.backend.chooseMenu(table, 0, {"Sort"}), std::logic_error);
+}

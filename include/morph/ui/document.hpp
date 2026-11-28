@@ -60,13 +60,22 @@ struct ActionRecordInfo {
     std::string record;
     /// @brief The record's key field; absent for a keyless record.
     std::optional<std::string> keyField;
-    /// @brief The JSON paths at which the result holds the record; `""` is the result itself.
+    /// @brief The JSON paths at which the result holds the record; `""` is the result itself. Empty when `opaque`.
     std::vector<std::string> paths;
+    /// @brief The paths of members that open the entry: while any is set, a row the entry does not hold may come
+    ///        to belong to it, so every change of the record marks it.
+    std::vector<std::string> open;
+    /// @brief The paths of members that make the entry partial: while any is set, an `updates` effect on the
+    ///        record marks the entry instead of merging into it.
+    std::vector<std::string> partial;
+    /// @brief The result holds the record at no path a key can be read at: every change of the record marks the
+    ///        entry, which is never merged into, and its reply keeps fractional numbers as decimals.
+    bool opaque = false;
 
     /// @brief Memberwise equality.
     /// @param lhs One entry.
     /// @param rhs The other.
-    /// @return True when record, key field and paths match.
+    /// @return True when record, key field, paths, open and partial members and opacity match.
     friend bool operator==(ActionRecordInfo const& lhs, ActionRecordInfo const& rhs) = default;
 };
 
@@ -831,5 +840,12 @@ enum class NameCategory : std::uint8_t {
 ///        tool, a column, a series, …).
 /// @return Their `kind` spellings.
 [[nodiscard]] MORPH_API std::vector<std::string_view> partKinds();
+
+/// @brief The top-level members of an action's request schema that hold a table query: each property marked
+///        `x-table` (`table::TableQuery::schemaMarker()`), in name order. A table over the action writes its
+///        query into the one member this names.
+/// @param schemaJson The schema, as `Catalog::schema` answers it.
+/// @return The members' names; empty when the text is not a schema object or no property is marked.
+[[nodiscard]] MORPH_API std::vector<std::string> tableQueryMembers(std::string_view schemaJson);
 
 }  // namespace morph::ui

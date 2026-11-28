@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <morph/export.hpp>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -85,7 +87,8 @@ public:
 
     /// @brief Declares the keyboard chords the widget handles while focus is inside it.
     ///
-    /// A chord pressed while focus is inside several widgets that declare it goes to the innermost of them only.
+    /// A chord pressed while focus is inside several widgets that declare it goes to the innermost of them only. A
+    /// widget that declares `Tab` or `Shift+Tab` receives them instead of focus moving.
     /// @param chords The chords, each modifiers joined to a key name, such as `"Ctrl+S"`.
     /// @param onChord Called with the chord that was pressed.
     virtual void setKeys(std::vector<std::string> const& chords, std::function<void(std::string)> onChord) = 0;
@@ -370,33 +373,6 @@ public:
     /// @param label The label, UTF-8.
     /// @param shown Whether the input shows it.
     virtual void setCaption(std::string_view label, bool shown) = 0;
-};
-
-/// @brief One entry of a menu as a `MenuWidget` shows it.
-struct MenuEntry {
-    /// @brief The caption.
-    std::string label;
-    /// @brief The icon's name in the theme's icon map; empty shows none.
-    std::string icon;
-    /// @brief The chord shown beside the label; empty shows none.
-    std::string keys;
-    /// @brief Engaged: a checkable entry with this mark; `nullopt`: not checkable.
-    std::optional<bool> checked;
-    /// @brief Whether the entry can be chosen, or its submenu opened.
-    bool enabled = true;
-    /// @brief The submenu; empty for an entry that is chosen.
-    std::vector<MenuEntry> items;
-    /// @brief Whether the entry is a line between entries: never chosen, never opened, and its other fields empty.
-    bool separator = false;
-    /// @brief A muted line of help shown with the entry; empty shows none.
-    std::string description;
-    /// @brief Whether the entry is a label that is not a command: drawn as muted text, exposed as static text, never
-    ///        chosen or opened. Its other fields are empty.
-    bool heading = false;
-
-    /// @brief Memberwise equality, submenus included.
-    /// @return Whether every field matches.
-    bool operator==(MenuEntry const&) const = default;
 };
 
 /// @brief The marker a button-style menu's trigger draws after its text, to say that it opens.
@@ -755,6 +731,55 @@ enum class RowClick : std::uint8_t {
     Range,   ///< Shift+click: the rows from the anchor to this one are selected, in place of the rest.
 };
 
+/// @brief A backend's horizontal measure for a table's columns (`TableWidget::tableMeasure`).
+struct TableMeasure {
+    /// @brief The backend's measure of one `Sizing` unit: a fixed column of `n` units is `n * unit` wide.
+    double unit = 1.0;
+    /// @brief The measure of one monospace character, the unit of a fixed column whose role is `TextRole::Mono`.
+    double monoUnit = 1.0;
+    /// @brief The width a column that declares none starts from, in the backend's measure, before its cells measure.
+    int contentEstimate = 100;
+    /// @brief What a column takes beyond its content, in the backend's measure: added to a fixed column's width and to
+    ///        a width the user set, so a column is as wide windowed as unwindowed (a graphical backend's cell padding
+    ///        on both sides, a terminal's gap after the column).
+    int padding = 0;
+    /// @brief The narrowest a stretch column with `shrink` goes, padding included: a column whose header is narrower
+    ///        keeps its header.
+    int shrinkFloor = 8;
+};
+
+/// @brief What a backend measured of one table column (`TableWidget::setOnColumnMeasured`), in its own measure with
+/// the
+///        column's padding added. A width of 0 reports nothing of that kind.
+struct ColumnMeasure {
+    /// @brief The width of the column's header: its label, and the marks and button it draws.
+    int header = 0;
+    /// @brief The width a shown cell asks for.
+    int natural = 0;
+    /// @brief The narrowest a shown cell is laid out without losing content: a text's widest word, else `natural`.
+    int least = 0;
+
+    /// @brief Member-wise equality.
+    /// @param other The measure to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(ColumnMeasure const& other) const = default;
+};
+
+/// @brief A key that moves a table's focused cell, which the mount resolves over rows and columns it may not have
+///        realized.
+enum class FocusMove : std::uint8_t {
+    Up,        ///< One row up.
+    Down,      ///< One row down.
+    Left,      ///< One visible column left.
+    Right,     ///< One visible column right.
+    Home,      ///< The row's first visible column.
+    End,       ///< The row's last visible column.
+    First,     ///< The view's first row (Ctrl+Home).
+    Last,      ///< The view's last row, or the last row known under a lower bound (Ctrl+End).
+    PageUp,    ///< Up by the rows in view.
+    PageDown,  ///< Down by the rows in view.
+};
+
 /// @brief Keyed rows under column headers, with selection and activation by key.
 ///
 /// Its children are the rows, each a horizontal stack whose children are the cells in column order. A hidden cell
@@ -781,7 +806,9 @@ enum class RowClick : std::uint8_t {
 /// A range runs over the keys in row order, rows the backend has not realized included.
 class MORPH_API TableWidget : public ContainerWidget {
 public:
-    /// @brief Sets the column headers and widths.
+    /// @brief Sets the column headers and widths. A column's `unit` is drawn after its label, as `headerText` writes
+    ///        it ("Mass [kg]") or on a second, muted line, and the header's accessible name is
+    ///        `headerAccessibleName` ("Mass, kg").
     /// @param columns The columns, in order.
     virtual void setColumns(std::vector<TableColumn> const& columns) = 0;
 
@@ -793,7 +820,8 @@ public:
     /// @param mode None, one, or any number.
     virtual void setSelectionMode(SelectionMode mode) = 0;
 
-    /// @brief Tells the table which key a row stands for; called once per row, right after it is built. Marks the row
+    /// @brief Tells the table which key a row stands for; called once per row, right after it is built, and again
+    ///        when a table over a `TableSource` gives a row it holds to another key. Marks the row
     ///        when its key is requested.
     /// @param row One of this table's rows.
     /// @param key The row's key.
@@ -835,10 +863,19 @@ public:
     ///        past the last row once a change settles), but a backend derives which cells are covered from the rows'
     ///        current order when it lays out or paints, never here, and clips a span that runs past its last row or
     ///        onto a heading row. A spanning cell is drawn once over the rows it covers, in its column, with the
-    ///        look of this row; the covered rows' cells in that column are not shown.
+    ///        look of this row; the covered rows' cells in that column are not shown. A span whose `columns` is above
+    ///        1 also covers that many visible columns from its own, its own included, in each row it covers; the
+    ///        backend clips it at the last visible column.
     /// @param row   One of this table's rows.
     /// @param spans The row's effective spans, by column, each column once.
     virtual void setRowSpans(Widget& row, std::vector<RowSpan> const& spans) = 0;
+
+    /// @brief Makes a row a summary row; called once, right after `setRowKey`, for a summary row. It is drawn on the
+    ///        theme's summary surface (`color.table.summary`), never selected, activated or focused for an edit, and
+    ///        its cells are set as any row's. Pasting into it and copying it are the grid's. A row made a summary row
+    ///        (or a heading) keeps that role for as long as it lives: the mount never gives it another key.
+    /// @param row One of this table's rows.
+    virtual void setRowSummary(Widget& row) { static_cast<void>(row); }
 
     /// @brief Requests the rows with these keys, and marks those it has. Never calls the `onSelectionChange` handler.
     /// @param keys The selected keys.
@@ -853,25 +890,126 @@ public:
     /// @param onActivate The handler; empty does nothing.
     virtual void setOnActivate(std::function<void(Key)> onActivate) = 0;
 
-    /// @brief Marks a column's header with the direction the rows are sorted by it, or marks none. The table never
-    ///        reorders its rows: they arrive sorted. Never calls the `onSort` handler; the mount calls it only for a
-    ///        table with a sortable column.
-    /// @param sort The column and direction, or none.
-    virtual void setSort(std::optional<TableSort> sort) = 0;
+    /// @brief Marks the headers of the sort chain's columns. Each draws its key's mark after its label
+    ///        (`sortMarkText`: the direction, and with two or more keys its place from 1) and carries its accessible
+    ///        description (`sortDescription`); a header not in the chain draws no mark and has no description. The
+    ///        table never reorders its rows: they arrive sorted. Never calls the `onSort` handler; the mount calls it
+    ///        only for a table with a sortable column.
+    /// @param chain The keys, most significant first; empty marks no header.
+    virtual void setSort(std::vector<TableSort> const& chain) = 0;
 
     /// @brief Sets what a user's request to sort calls: a click on a sortable column's header (or Enter or Space on
     ///        it, where the header takes focus) calls it with the column's index among the columns `setColumns` gave,
-    ///        which the select column is not one of. A header that is not sortable reports nothing. What the request
+    ///        which the select column is not one of, and `HeaderClick::Plain`; a `Shift`+click, `Shift+Enter` or
+    ///        `Shift+Space` with `HeaderClick::Shift`. A header that is not sortable reports nothing. What the request
     ///        means is the caller's to decide; the backend only shows `setSort`.
     /// @param onSort The handler; empty does nothing.
-    virtual void setOnSort(std::function<void(std::size_t)> onSort) = 0;
+    virtual void setOnSort(std::function<void(std::size_t, HeaderClick)> onSort) = 0;
 
-    /// @brief Tells the backend how many of the table's rows are realized, where, and how many exist in total, so
-    ///        it can size a scrollbar and place leading/trailing space for the rows that are not realized. A
-    ///        backend that never virtualizes (the default for every implementer but a windowed Qt Quick table)
-    ///        never calls `setOnVisibleRangeChanged`, so this is never called either.
-    /// @param first The view index of the first realized row.
-    /// @param count How many rows are realized, starting at `first`.
+    /// @brief Gives the headers and the table their menus. A header's menu opens on a right click on it, or on
+    ///        `Shift+F10` or the context-menu key with it focused; the table's menu from a `⋯` button at the header
+    ///        row's trailing end, whose accessible name is `Table options`. The entries are asked for each time a menu
+    ///        opens. Called only for a table that has menus; a table never told this draws no `⋯` and opens none.
+    /// @param entries  The entries of a column's menu (an index into the columns `setColumns` gave), or of the
+    ///                 table's menu (none).
+    /// @param onChoose Called with the menu's column, or none, and the chosen entry's path, an index per level from
+    ///                 the top; never for a separator, a heading, a disabled entry or one with a submenu.
+    virtual void setMenu(
+        // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `entries` by value to move it into their widget, and an override must match this signature; the default only discards it
+        std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> entries,
+        // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onChoose` by value to move it into their widget, and an override must match this signature; the default only discards it
+        std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) {
+        static_cast<void>(entries);
+        static_cast<void>(onChoose);
+    }
+
+    /// @brief Gives the cells their menu. A right click, a long press, or `Shift+F10` or the context-menu key on the
+    ///        focused cell opens it on that cell: the backend first makes the cell's row the selection alone, reported
+    ///        as `Replace`, when the row is not selected already (a row already selected keeps the selection as it
+    ///        is), then asks for the entries, which focuses the cell when it is not focused, and shows them at the
+    ///        cell. While the table has the focus, a key the table does not take itself that is one of the chords
+    ///        `setCellMenuKeys` gave asks for the focused cell's entries and is matched against their `keys` at every
+    ///        level: the first enabled entry without a submenu whose chord it is runs, as if chosen from the menu, and
+    ///        the key stops there. Any other key never asks for the entries.
+    /// @param entries The entries of a cell's menu, given its row's key and its column (an index into the columns
+    ///                `setColumns` gave); asked for each time the menu opens or a key is matched.
+    /// @param chosen  Called with the cell's row and column and the chosen entry's path, an index per level from the
+    ///                top; never for a separator, a heading, a disabled entry or one with a submenu.
+    virtual void setCellMenu(
+        std::function<std::vector<MenuEntry>(Key const& row, std::size_t column)> entries,
+        std::function<void(Key const& row, std::size_t column, std::vector<std::size_t> const& path)> chosen) = 0;
+
+    /// @brief The chords the cell menu's entries may declare, the only keys that ask for the focused cell's entries
+    ///        (`setCellMenu`). Called for a table with a cell menu, once it is built; a table never told this runs no
+    ///        entry from a key.
+    /// @param chords The chords, as an entry's `keys` writes them.
+    virtual void setCellMenuKeys(std::vector<std::string> const& chords) { static_cast<void>(chords); }
+
+    /// @brief Tells the backend which columns are visible, in their places, so that a move and a group header count
+    ///        places as the arrangement does. Called for a table over a `TableSource` once it is built and whenever
+    ///        its visible columns change; a table never told this shows every column in its own order.
+    /// @param visible Indices into the columns `setColumns` gave, in layout order.
+    virtual void setVisibleColumns(std::vector<std::size_t> const& visible) { static_cast<void>(visible); }
+
+    /// @brief Sets what moving a column calls: dragging a header onto another, or `Ctrl+Shift+Left` and
+    ///        `Ctrl+Shift+Right` on a focused header, with the column and its new place among the visible columns
+    ///        (one less, or one more, for the keys). A move to the place the column holds, or past either end,
+    ///        reports nothing.
+    /// @param handler The handler; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
+    virtual void setOnColumnMove(std::function<void(std::size_t column, std::size_t position)> handler) {
+        static_cast<void>(handler);
+    }
+
+    /// @brief Sets what dragging a header's trailing edge calls, with the column and its new width in `Sizing` units
+    ///        (`tableMeasure`'s unit), or none for a double click on the edge. Called only for a table whose columns
+    ///        can be resized; a backend that draws no edge to drag ignores it.
+    /// @param handler The handler; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
+    virtual void setOnColumnResize(std::function<void(std::size_t column, std::optional<int> units)> handler) {
+        static_cast<void>(handler);
+    }
+
+    /// @brief Sets what a filterable column's filter button calls, with the column.
+    /// @param handler The handler; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
+    virtual void setOnFilter(std::function<void(std::size_t column)> handler) { static_cast<void>(handler); }
+
+    /// @brief Fills the filter buttons of the columns that have a filter, and names their headers "{label},
+    ///        filtered" for assistive technology; every other filterable column's button is drawn empty.
+    /// @param columns Indices into the columns `setColumns` gave.
+    virtual void setFiltered(std::vector<std::size_t> const& columns) { static_cast<void>(columns); }
+
+    /// @brief Draws a group header row over the groups' columns, each group's caption over the visible places it
+    ///        names, with its own filter button, filled while it is `filtered`; an empty list draws no group row.
+    /// @param groups The groups, in order.
+    virtual void setColumnGroups(std::vector<TableColumnGroup> const& groups) { static_cast<void>(groups); }
+
+    /// @brief Draws the header bands above the column headers (and above a group row): each run over the visible
+    ///        columns it names, at its level, its label followed by its unit in brackets when it has one; an empty
+    ///        list draws none. Called once at mount and again whenever the runs change, as the column window or the
+    ///        layout moves.
+    /// @param runs The runs, outermost level first, each level left to right.
+    virtual void setBands(std::vector<BandRun> const& runs) { static_cast<void>(runs); }
+
+    /// @brief Sets what a group's filter button calls, with the group's index among those `setColumnGroups` gave.
+    /// @param handler The handler; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
+    virtual void setOnGroupFilter(std::function<void(std::size_t group)> handler) { static_cast<void>(handler); }
+
+    /// @brief Sets what `Ctrl+C` on the focused table calls.
+    /// @param onCopy The handler; empty lets the key go on.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onCopy` by value to move it into their widget, and an override must match this signature; the default only discards it
+    virtual void setOnCopy(std::function<void()> onCopy) { static_cast<void>(onCopy); }
+
+    /// @brief Tells the backend which contiguous range of view rows is realized and how many rows exist in total, so
+    ///        it can size a scrollbar and place leading/trailing space for the rows that are not realized. Called
+    ///        after each pass for every table over a `TableSource` (one that realizes every row with the whole view,
+    ///        `(0, count, count)`), and for a table over `rows` at or above its `Virtualization::threshold`, whether
+    ///        or not the backend reports a range. The focused row a source table keeps realized beyond the range is
+    ///        not counted: `setRowIndex` places it.
+    /// @param first The view index of the first row of the range.
+    /// @param count How many rows the range holds, from `first`.
     /// @param total How many rows the table's data has, realized or not.
     virtual void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total);
 
@@ -894,6 +1032,280 @@ public:
     /// @param keys Every key currently in the table's data, in row order, so a range or Ctrl+A covers the rows the
     ///        backend has not realized.
     virtual void setExistingKeys(std::vector<Key> const& keys) { static_cast<void>(keys); }
+
+    /// @brief Sets what a `Multiple` table's `Ctrl+A` calls in place of selecting the rows the backend holds and
+    ///        reporting them: the caller selects the whole view, and sets the selection back through `setSelection`.
+    ///        A backend that does not take it selects as before.
+    /// @param onSelectAll The handler; empty to select as before.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onSelectAll` by value to move it into their widget, and an override must match this signature; the default only discards it
+    virtual void setOnSelectAll(std::function<void()> onSelectAll) { static_cast<void>(onSelectAll); }
+
+    /// @brief Marks every row of the table selected but those whose key is in @p except, rows the backend does not
+    ///        hold included, until the next `setSelection`. In that state a `Ctrl`+click reports `Extend` with the
+    ///        keys now selected among the rows the backend holds, so the caller reads each held key absent from the
+    ///        report as left out and each present one as selected again; a plain click reports `Replace` and ends the
+    ///        state. A backend that takes `setOnSelectAll` must take this too: the caller selects the view through it,
+    ///        and a backend that kept drawing its key selection would report every other shown row as left out.
+    /// @param except The keys left out of the selection.
+    virtual void setSelectionView(std::vector<Key> const& except) { static_cast<void>(except); }
+
+    /// @brief Sets what choosing one of the status line's entries (`TableStatus::entries` and `standingEntries`, each
+    ///        drawn as a button with its label) calls, with the entry's id.
+    /// @param onStatusEntry The handler; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onStatusEntry` by value to move it into their widget, and an override must match this signature; the default only discards it
+    virtual void setOnStatusEntry(std::function<void(std::string entryId)> onStatusEntry) {
+        static_cast<void>(onStatusEntry);
+    }
+
+    /// @brief Sets a row's marks; called after `setRowKey` for a row whose look carries marks, and on every change.
+    ///        An `unmatched` row draws muted, a `busy` one with the busy mark, a `locked` one with the locked mark,
+    ///        and `tooltip` is the row's tooltip; `RowMarks{}` draws an unmarked row. A backend that marks no row
+    ///        ignores it.
+    /// @param row   One of this table's rows.
+    /// @param marks The marks.
+    virtual void setRowMarks(Widget& row, RowMarks const& marks) {
+        static_cast<void>(row);
+        static_cast<void>(marks);
+    }
+
+    /// @brief Shows the table's status line: its counts, the state of a failed fetch or level with "Retry" when it
+    ///        offers it, and the latest message; a status that is not `shown` takes no space. Called once the table
+    ///        is built and on every change. A backend without a status line ignores it.
+    /// @param status The status line.
+    virtual void setStatus(TableStatus const& status) { static_cast<void>(status); }
+
+    /// @brief Sets what choosing the status line's "Retry" calls.
+    /// @param onRetry The handler; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onRetry` by value to move it into their widget, and an override must match this signature; the default only discards it
+    virtual void setOnRetry(std::function<void()> onRetry) { static_cast<void>(onRetry); }
+
+    /// @brief Sets a cell's load state; called after the row's key, and on every change, for a table whose rows come
+    ///        from a `TableSource`. `Unloaded` draws a placeholder of a fixed width in the column's alignment and
+    ///        `Failed` an error mark of the same width, over the cell's own content; neither widens the column.
+    ///        A cell no call names is `Loaded`.
+    /// @param row    One of this table's rows.
+    /// @param column The cell's column: an index into the columns `setColumns` gave.
+    /// @param load   The state.
+    virtual void setCellLoad(Widget& row, std::size_t column, CellLoad load) {
+        static_cast<void>(row);
+        static_cast<void>(column);
+        static_cast<void>(load);
+    }
+
+    /// @brief Sets what a cell shows beside its text; called after the row's key, on every change, and whenever a
+    ///        cell is attached to a row at a column, for a table whose rows come from a `TableSource`. A `tone` tints
+    ///        the cell with the theme's tone surface under its selection and focus marks; a `tooltip` shows on hover
+    ///        after the theme's delay and on keyboard focus at once, is the cell's accessible description, and draws
+    ///        the theme's "more here" mark; `invalid` draws the theme's error mark in place of the cell's text. A
+    ///        cell no call names has no accent.
+    /// @param row    One of this table's rows.
+    /// @param column The cell's column: an index into the columns `setColumns` gave.
+    /// @param accent The accent.
+    virtual void setCellAccent(Widget& row, std::size_t column, CellAccent const& accent) {
+        static_cast<void>(row);
+        static_cast<void>(column);
+        static_cast<void>(accent);
+    }
+
+    /// @brief Tells the backend which columns the mount realizes, for a table whose rows come from a `TableSource`
+    ///        and whose columns the mount lays out: once the backend reported its horizontal viewport, or the
+    ///        arrangement is not the default. The header shows these columns only, each at its offset and width; the
+    ///        first @p pinned stay in view whatever the horizontal scroll. Called again whenever any of it changes.
+    /// @param columns    Indices into the columns `setColumns` gave: the pinned ones first, then the scrolled range.
+    /// @param offsets    Each column's offset from the table's left edge, as if every visible column were laid out,
+    ///                   in the backend's measure (`tableMeasure`).
+    /// @param widths     Each column's width, in the backend's measure.
+    /// @param totalWidth The width of every visible column together, in the backend's measure, which sizes the
+    ///                   horizontal scroll bar.
+    /// @param pinned     How many of @p columns are pinned.
+    virtual void setColumnWindow(
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `offsets` and `widths` are the window's two parallel int spans, and the mount builds both with `columns` from one window and passes them in this order
+        std::span<std::size_t const> columns, std::span<int const> offsets,
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `totalWidth` is a width and `pinned` a column count; the one call site in the mount passes the extents' total first, then the pinned count
+        std::span<int const> widths, int totalWidth, std::size_t pinned) {
+        static_cast<void>(columns);
+        static_cast<void>(offsets);
+        static_cast<void>(widths);
+        static_cast<void>(totalWidth);
+        static_cast<void>(pinned);
+    }
+
+    /// @brief Sets what the backend calls when its horizontal scroll or viewport changes, so the mount can window the
+    ///        columns. A backend that never calls it gets every visible column realized.
+    /// @param handler The handler, with the scroll offset and the viewport's width, both in the backend's measure
+    ///        (`tableMeasure`); empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
+    virtual void setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler) {
+        static_cast<void>(handler);
+    }
+
+    /// @brief Moves the horizontal scroll offset without reporting it back: the mount keeps the columns in view where
+    ///        they were when a column left of them grew.
+    /// @param scrollX The offset, in the backend's measure.
+    virtual void setHorizontalOffset(int scrollX) { static_cast<void>(scrollX); }
+
+    /// @brief Sets what the backend calls for a range gesture (Shift+click, Shift+arrow) over rows it does not hold
+    ///        keys for, instead of resolving the range itself.
+    /// @param handler The handler, with the view rows of the range's anchor and end, and the kind of change; empty
+    ///        does nothing.
+    virtual void setOnSelectRange(
+        // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
+        std::function<void(std::size_t anchorRow, std::size_t focusRow, SelectionChange)> handler) {
+        static_cast<void>(handler);
+    }
+
+    /// @brief Shows keyboard focus on a cell, and announces it; a row not fetched yet is announced as loading.
+    /// @param viewRow The cell's view row.
+    /// @param column  The cell's column: an index into the columns `setColumns` gave.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`viewRow`, `column`): the row position then the column, the pair every table seam in this header passes in this order
+    virtual void setFocusCell(std::size_t viewRow, std::size_t column) {
+        static_cast<void>(viewRow);
+        static_cast<void>(column);
+    }
+
+    /// @brief Sets what the backend calls with the widths a column's header and cells measured, so the mount can grow
+    /// a
+    ///        content column and fit the stretch columns to the table. A report only ever adds to what the mount
+    ///        knows: it keeps the largest of each width reported.
+    /// @param handler The handler, with the column (an index into the columns `setColumns` gave) and what was
+    /// measured,
+    ///        in the backend's measure (`tableMeasure`), padding included; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
+    virtual void setOnColumnMeasured(std::function<void(std::size_t column, ColumnMeasure const& measure)> handler) {
+        static_cast<void>(handler);
+    }
+
+    /// @brief Sets what the backend calls for a key that moves the focused cell, which the mount resolves over rows
+    ///        and columns it may not have realized.
+    /// @param handler The handler, with the move; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `handler` by value to move it into their widget, and an override must match this signature; the default only discards it
+    virtual void setOnFocusMove(std::function<void(FocusMove)> handler) { static_cast<void>(handler); }
+
+    /// @brief Sets what printable text typed while a cell has focus and no editor is open calls, with the text.
+    /// @param onText The handler; empty does nothing and lets the key go on.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onText` by value to move it into their widget, and an override must match this signature; the default only discards it
+    virtual void setOnText(std::function<void(std::string)> onText) { static_cast<void>(onText); }
+
+    /// @brief Sets what a click on a cell calls: a single click with `false`, the second click of a double click with
+    ///        `true` (its first click calls it with `false`, as a single click does).
+    /// @param onClick The handler, with the cell's view row and its column (an index into the columns `setColumns`
+    ///        gave); empty does nothing.
+    virtual void setOnCellClick(
+        // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onClick` by value to move it into their widget, and an override must match this signature; the default only discards it
+        std::function<void(std::size_t viewRow, std::size_t column, bool doubleClick)> onClick) {
+        static_cast<void>(onClick);
+    }
+
+    /// @brief Sets what focus moving to a widget outside the table, its cell editor and its popups calls.
+    /// @param onFocusOut The handler; empty does nothing.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onFocusOut` by value to move it into their widget, and an override must match this signature; the default only discards it
+    virtual void setOnFocusOut(std::function<void()> onFocusOut) { static_cast<void>(onFocusOut); }
+
+    /// @brief Draws a cell editor over a cell's area in place of the cell's content, or the cell again.
+    /// @param row    One of this table's rows; @p editor is one of its children.
+    /// @param column The cell's column: an index into the columns `setColumns` gave.
+    /// @param editor The editor, or null to draw the cell again.
+    virtual void setCellEditor(Widget& row, std::size_t column, Widget* editor) {
+        static_cast<void>(row);
+        static_cast<void>(column);
+        static_cast<void>(editor);
+    }
+
+    /// @brief Draws a rectangle of selected cells in place of a row selection, or none. Never calls the handler
+    ///        `setOnCellSelect` gave.
+    /// @param rect `{firstRow, rowCount, firstPosition, positionCount}`: view rows, and places among the visible
+    /// columns
+    ///        in layout order (a rectangle is of the layout, so these are positions, not indices into the columns
+    ///        `setColumns` gave); empty draws none.
+    virtual void setCellSelection(std::optional<std::array<std::size_t, 4>> rect) { static_cast<void>(rect); }
+
+    /// @brief Makes the table select cells, not rows: it draws no row selection and reports no `onSelectionChange`.
+    ///        It calls the handler with the rectangle a drag from cell to cell or a `Shift`+click selects, a row
+    ///        header's click (anchor `(row, 0)`, focus `(row, last position)`) and a column header's selection gesture
+    ///        (anchor
+    ///        `(0, position)`, focus `(last row, position)`). `Shift` with an arrow and `Ctrl+A` are the table's own
+    ///        chords, declared with `setKeys`, not the backend's.
+    /// @param onSelect The handler, with the anchor's and the focus's view rows and visible positions; empty selects
+    ///        rows again.
+    virtual void setOnCellSelect(
+        std::function<void(std::size_t anchorRow, std::size_t anchorPosition, std::size_t focusRow,
+                           std::size_t focusPosition)>
+            // NOLINTNEXTLINE(performance-unnecessary-value-param): overrides take `onSelect` by value to move it into their widget, and an override must match this signature; the default only discards it
+            onSelect) {
+        static_cast<void>(onSelect);
+    }
+
+    /// @brief Sets a cell's marks; called after the row's key, on every change, and whenever a cell is attached to a
+    ///        row at a column, for a table whose rows come from a `TableSource`. `readOnly` draws the theme's
+    ///        read-only cell surface, `modified` the modified mark, `error` the error mark, `stale` and `muted` the
+    ///        stale and muted looks. A cell no call names has no marks.
+    /// @param row    One of this table's rows.
+    /// @param column The cell's column: an index into the columns `setColumns` gave.
+    /// @param marks  The marks.
+    virtual void setCellMarks(Widget& row, std::size_t column, CellMarks const& marks) {
+        static_cast<void>(row);
+        static_cast<void>(column);
+        static_cast<void>(marks);
+    }
+
+    /// @brief Sets whether a row draws the row header's modified mark; called after `setRowKey` for a row whose look
+    ///        carries it, and on every change.
+    /// @param row      One of this table's rows.
+    /// @param modified Whether a cell of the row changed since the record was loaded.
+    virtual void setRowModified(Widget& row, bool modified) {
+        static_cast<void>(row);
+        static_cast<void>(modified);
+    }
+
+    /// @brief Tells the backend the counts it reports to assistive technology.
+    /// @param rows    The view's total when it is exact; nothing when it is a lower bound or not known yet.
+    /// @param columns The visible columns.
+    virtual void setCounts(std::optional<std::int64_t> rows, std::size_t columns) {
+        static_cast<void>(rows);
+        static_cast<void>(columns);
+    }
+
+    /// @brief Scrolls a view row into view.
+    /// @param viewRow The row.
+    virtual void scrollToRow(std::size_t viewRow) { static_cast<void>(viewRow); }
+
+    /// @brief Marks one row as the one a linked view highlights, or none; neither selection nor focus.
+    /// @param viewRow The row's view index; nothing clears the mark.
+    virtual void setHighlightedRow(std::optional<std::size_t> viewRow) { static_cast<void>(viewRow); }
+
+    /// @brief Places a cell of a row in a column, for a table whose rows come from a `TableSource`: called when a cell
+    ///        joins its row's cells and when a pooled cell is given another column, and with nothing when the cell
+    ///        leaves the column window or waits for its turn to be bound. A cell with no column is pooled: it is not
+    ///        drawn and takes no place, and the column it left draws blank at its width until a cell is placed
+    ///        there.
+    /// @param row    One of this table's rows.
+    /// @param cell   One of @p row's children.
+    /// @param column An index into the columns `setColumns` gave, or nothing.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`row`, `cell`): the table's realized row then its child cell, which both call sites in the mount pass in that order
+    virtual void setCellColumn(Widget& row, Widget& cell, std::optional<std::size_t> column) {
+        static_cast<void>(row);
+        static_cast<void>(cell);
+        static_cast<void>(column);
+    }
+
+    /// @brief Tells the backend a realized row's view index, for a table whose rows come from a `TableSource`: called
+    ///        for a row once it is realized and whenever its index changes. The realized rows are the children in
+    ///        view order, but not always contiguous: the focused row stays realized beyond `setRealizedWindow`'s
+    ///        range, so a backend places each row by its index, not by its position among the children.
+    /// @param row     One of this table's rows.
+    /// @param viewRow The row's view index.
+    virtual void setRowIndex(Widget& row, std::size_t viewRow) {
+        static_cast<void>(row);
+        static_cast<void>(viewRow);
+    }
+
+    /// @brief How this backend measures a table's widths, for a table whose rows come from a `TableSource`. The
+    ///        horizontal scroll and viewport it reports, the widths it measures and the offsets and widths
+    ///        `setColumnWindow` gives it are all in its own measure (pixels for a graphical backend, cells for a
+    ///        terminal); the mount turns a column's `Sizing::fixed` amount, and a width the user set, into that
+    ///        measure with these factors. The default measure is one per unit, with a content column estimated at 100.
+    /// @return The measure.
+    [[nodiscard]] virtual TableMeasure tableMeasure() const { return {}; }
 };
 
 /// @brief A date or date-and-time field, in the mode and display zone fixed at creation.
@@ -1573,6 +1985,20 @@ public:
     ///        `widthClass()` for the current class.
     /// @param onWidthClass The listener, given the new class; empty clears it.
     virtual void setOnWidthClass(std::function<void(std::string const&)> onWidthClass) = 0;
+
+    /// @brief Puts text on the system clipboard: Qt Quick's clipboard, the terminal's through an OSC 52 sequence.
+    ///        A backend without a clipboard keeps this default.
+    /// @param text The text, UTF-8.
+    /// @return Whether the text was handed to the clipboard.
+    virtual bool copyText(std::string_view text) {
+        static_cast<void>(text);
+        return false;
+    }
+
+    /// @brief Reads the system clipboard's text, what a grid's paste writes into its cells. A backend that cannot
+    ///        read a clipboard keeps this default.
+    /// @return The text, UTF-8; nothing when there is no clipboard or it holds no text.
+    [[nodiscard]] virtual std::optional<std::string> pasteText() { return std::nullopt; }
 };
 
 /// @brief The width, in units, from which a surface is `expanded`: the compact bound, 80, plus the shell's sidebar

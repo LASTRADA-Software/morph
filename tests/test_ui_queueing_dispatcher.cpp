@@ -21,7 +21,7 @@ using morph::ui::CallOptions;
 using morph::ui::QueueingDispatcher;
 using morph::ui::testing::ScriptedDispatcher;
 
-constexpr CallOptions kQueued{.evaluate = false, .queueOffline = true};
+CallOptions const kQueued{.evaluate = false, .queueOffline = true, .stop = {}};
 
 /// What became of one call: still pending, answered, or failed.
 struct Outcome {

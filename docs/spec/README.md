@@ -135,8 +135,11 @@ rules, exact values and reactive session, headless ·
 [`table/engine.md`](table/engine.md) — sorting, filtering and view
 mapping for a table, on and off the owner thread, and `table::apply` for a
 server ·
-[`table/database_pages.md`](table/database_pages.md) — paging a table that
-lives in a database: `planQuery`, `Page::totalKind` and the conformance helper
+[`table/table.md`](table/table.md) — the one table every surface
+uses: a table as a description any model can offer, the single pipeline,
+unloaded cells and levels, the caches, configuration, acting on rows, and the budgets ·
+[`table/editing.md`](table/editing.md) — typing into a table: a grid of a form, cells of a model's table, the
+cell editor, walking, paste, header bands, spans, summary rows and fixed grids
 
 **Reactive state and control**
 [`reactive/signals.md`](reactive/signals.md) ·

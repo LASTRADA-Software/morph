@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <QHash>
 #include <QKeyEvent>
 #include <QMetaObject>
 #include <QPointer>
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -14,6 +18,7 @@
 #include <morph/qt_quick/backend.hpp>
 #include <morph/ui/backend.hpp>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -222,6 +227,10 @@ private:
 /// Whether @p path names an entry the user can choose: not a separator, enabled, without a submenu, inside enabled
 /// entries.
 [[nodiscard]] bool choosable(std::vector<ui::MenuEntry> const& entries, std::vector<std::size_t> const& path);
+
+/// A menu's entries as MorphMenu reads them: `[{label, icon, keys, checked, enabled, items, separator, description,
+/// heading}]`, each submenu's entries in its `items`.
+[[nodiscard]] QVariantList menuEntries(std::vector<ui::MenuEntry> const& entries);
 
 class SpacerImpl final : public ItemWidget<ui::SpacerWidget> {
 public:
@@ -684,18 +693,106 @@ public:
     void setSelectColumn(bool shown) override;
     void setSelectAllLabel(std::string_view label) override;
     void setRowLabel(ui::Widget& row, std::string_view label) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setRowMarks(ui::Widget& row, ui::RowMarks const& marks) override;
     void setRowHeading(ui::Widget& row) override;
+    void setRowSummary(ui::Widget& row) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowSpans(ui::Widget& row, std::vector<ui::RowSpan> const& spans) override;
     void setSelection(std::vector<ui::Key> const& keys) override;
     void setOnSelectionChange(
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
-    void setSort(std::optional<ui::TableSort> sort) override;
-    void setOnSort(std::function<void(std::size_t)> onSort) override;
+    /// Each header of the chain carries its mark (`ui::sortMarkText`) and its accessible description
+    /// (`ui::sortDescription`), which MorphTable reads as `sortMarks` and `sortDescriptions`, by column.
+    void setSort(std::vector<ui::TableSort> const& chain) override;
+    void setOnSort(std::function<void(std::size_t, ui::HeaderClick)> onSort) override;
+    /// A menu opens through MorphTable's `menu` event: its entries are asked for then, and handed to MorphTable's
+    /// `showMenu`, which shows them in a button-style MorphMenu's popup under the header or the `⋯`.
+    void setMenu(std::function<std::vector<ui::MenuEntry>(std::optional<std::size_t>)> entries,
+                 std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) override;
+    /// A cell's menu opens through its row's `cellMenu` event (a right click or a long press on the cell, or the menu
+    /// key on the focused cell): its entries are asked for then, and handed to MorphTable's `showCellMenu`, which
+    /// shows them in the header menu's popup under the cell; a choice comes back as `menuChoose` with the column
+    /// `kCellMenuColumn`. A key the table leaves is offered to the focused cell's entries through `cellKey`.
+    void setCellMenu(
+        std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> entries,
+        std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> chosen) override;
+    void setCellMenuKeys(std::vector<std::string> const& chords) override { _cellMenuKeys = chords; }
+    void setVisibleColumns(std::vector<std::size_t> const& visible) override;
+    void setOnColumnMove(std::function<void(std::size_t, std::size_t)> handler) override;
+    /// MorphTable reports the header's width in pixels; its padding is taken off and the rest rounded to units of
+    /// `Theme.unitWidth` here.
+    void setOnColumnResize(std::function<void(std::size_t, std::optional<int>)> handler) override;
+    void setOnFilter(std::function<void(std::size_t)> handler) override;
+    void setFiltered(std::vector<std::size_t> const& columns) override;
+    void setColumnGroups(std::vector<ui::TableColumnGroup> const& groups) override;
+    void setBands(std::vector<ui::BandRun> const& runs) override;
+    void setOnGroupFilter(std::function<void(std::size_t)> handler) override;
+    void setOnCopy(std::function<void()> onCopy) override;
     void setExistingKeys(std::vector<ui::Key> const& keys) override;
+    void setOnSelectAll(std::function<void()> onSelectAll) override;
+    void setSelectionView(std::vector<ui::Key> const& except) override;
+    void setOnStatusEntry(std::function<void(std::string entryId)> onStatusEntry) override;
     void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) override;
     void setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setRowIndex(ui::Widget& row, std::size_t viewRow) override;
+    /// The status line: one line of text under the rows, a polite live region, with "Retry" while the state offers
+    /// it; it takes no space while not shown.
+    void setStatus(ui::TableStatus const& status) override;
+    void setOnRetry(std::function<void()> onRetry) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setCellLoad(ui::Widget& row, std::size_t column, ui::CellLoad load) override;
+    /// The row's cell draws the tone's tint under its selection and focus marks, the theme's error mark in place of
+    /// an invalid value, and the "more here" mark and a tooltip (its accessible description) for a tooltip. Throws
+    /// std::logic_error when @p row is not one of this table's rows.
+    void setCellAccent(ui::Widget& row, std::size_t column, ui::CellAccent const& accent) override;
+    /// The window's columns, offsets and widths are pixels: the header and the rows draw these columns only.
+    void setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
+                         std::span<int const> widths, int totalWidth, std::size_t pinned) override;
+    /// Only a table over a `TableSource` is given one, before any row: MorphTable then places each row by its view
+    /// index and each cell by its column.
+    void setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler) override;
+    void setHorizontalOffset(int scrollX) override;
+    void setOnColumnMeasured(
+        std::function<void(std::size_t column, ui::ColumnMeasure const& measure)> handler) override;
+    /// Pixels: a unit is `Theme.unitWidth`, a monospace character `Theme.monoAdvance`, a content column starts at
+    /// twelve units, and a column's padding is `table.cellPaddingX` a side, as the unwindowed table sizes them.
+    [[nodiscard]] ui::TableMeasure tableMeasure() const override;
+    void setFocusCell(std::size_t viewRow, std::size_t column) override;
+    void setOnFocusMove(std::function<void(ui::FocusMove)> handler) override;
+    /// MorphTable reports printable text typed on its focused cell, while no editor is open, as its `text` event.
+    void setOnText(std::function<void(std::string)> onText) override;
+    /// A row reports a tap on a cell as its `cellClick` event, `{column, double}`.
+    void setOnCellClick(
+        std::function<void(std::size_t viewRow, std::size_t column, bool doubleClick)> onClick) override;
+    /// MorphTable reports its `focusOut` event once the active focus is outside the table, its editor and its popups.
+    void setOnFocusOut(std::function<void()> onFocusOut) override;
+    /// The editor's item takes the cell's column, the cell in that column is covered, and the row places the editor
+    /// over the cell's rectangle. Throws std::logic_error when @p row is not one of this table's rows.
+    void setCellEditor(ui::Widget& row, std::size_t column, ui::Widget* editor) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setCellMarks(ui::Widget& row, std::size_t column, ui::CellMarks const& marks) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setRowModified(ui::Widget& row, bool modified) override;
+    /// MorphTable draws the rectangle (`cellRect`, `[firstRow, rowCount, firstPosition, positionCount]`, empty for
+    /// none) over the rows it spans and the visible columns at those positions.
+    void setCellSelection(std::optional<std::array<std::size_t, 4>> rect) override;
+    /// MorphTable selects cells (`selectsCells`): a drag from cell to cell, a Shift-click, a click on a row's leading
+    /// edge and a Ctrl-click on a column's header report its `cellSelect` event, and no row is selected.
+    void setOnCellSelect(std::function<void(std::size_t anchorRow, std::size_t anchorPosition, std::size_t focusRow,
+                                            std::size_t focusPosition)>
+                             onSelect) override;
+    /// A tap on a row's cell, reported by the row.
+    void cellClicked(TableRowImpl const& row, std::size_t column, bool doubleClick) const;
+    /// Shift with an arrow, a Shift-click and Ctrl+A over a source go to the handler as view rows.
+    void setOnSelectRange(
+        std::function<void(std::size_t anchorRow, std::size_t focusRow, ui::SelectionChange)> handler) override;
+    void setCounts(std::optional<std::int64_t> rows, std::size_t columns) override;
+    void scrollToRow(std::size_t viewRow) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setCellColumn(ui::Widget& row, ui::Widget& cell, std::optional<std::size_t> column) override;
 
     /// A click on a row, or Space or Shift with an arrow on the current row, as @p click; the table's selection model
     /// (`ui::TableWidget`).
@@ -705,6 +802,10 @@ public:
     void anchorAt(TableRowImpl const& row);
     /// Ctrl+A in `Multiple` mode: every row, or none when every row is selected already.
     void selectAll();
+    /// Opens the menu of @p row's cell in @p column, after making the row the selection alone when it is not selected.
+    void openCellMenu(TableRowImpl const& row, std::size_t column);
+    /// The column MorphTable reports a cell menu's choice with: no header has it.
+    static constexpr qlonglong kCellMenuColumn = -2;
     /// A double click on a row, or Enter on it.
     void activated(TableRowImpl const& row) const;
     /// The Flickable reported a scroll; @p first and @p count are what it wants realized next.
@@ -713,6 +814,8 @@ public:
     [[nodiscard]] static bool marked(ItemBase const& row);
     /// Whether a row is a group heading.
     [[nodiscard]] static bool heading(ItemBase const& row);
+    /// Whether a row is never current, selected, counted or activated: a heading or a summary row.
+    [[nodiscard]] static bool passive(ItemBase const& row);
 
 protected:
     void adopted(ItemBase& child) override;
@@ -736,17 +839,48 @@ private:
     ui::SelectionMode _mode = ui::SelectionMode::None;
     std::vector<ui::Key> _requested;
     std::function<void(std::vector<ui::Key>, ui::SelectionChange)> _onSelectionChange;
+    // Ctrl+A's and the header box's handler in place of selecting the rows held; empty for none.
+    std::function<void()> _onSelectAll;
     // Where a range starts: the row last clicked or toggled.
     std::optional<ui::Key> _anchor;
     std::function<void(ui::Key)> _onActivate;
-    std::function<void(std::size_t)> _onSort;
+    std::function<void(std::size_t, ui::HeaderClick)> _onSort;
+    std::function<std::vector<ui::MenuEntry>(std::optional<std::size_t>)> _menu;
+    std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> _onMenu;
+    std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> _cellMenu;
+    std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> _cellChosen;
+    /// The cell whose menu is open; none before any.
+    std::optional<std::pair<ui::Key, std::size_t>> _cellMenuAt;
+    /// The chords that ask for the focused cell's entries.
+    std::vector<std::string> _cellMenuKeys;
+    std::function<void(std::size_t, std::size_t)> _onColumnMove;
+    std::function<void(std::size_t, std::optional<int>)> _onColumnResize;
+    std::function<void(std::size_t)> _onFilter;
+    std::function<void(std::size_t)> _onGroupFilter;
+    std::function<void()> _onCopy;
     // Every key the table's data has, realized or dewindowed; set only above a virtualized table's threshold
     // (mount.hpp never calls setExistingKeys below it). Empty below threshold, where existingSelection() falls
     // back to realized children alone, which is already exactly every key that exists at that size.
     std::unordered_set<ui::Key> _existingKeys;
     // The same keys, in row order, for a range or Ctrl+A over rows that are not realized.
     std::vector<ui::Key> _existingOrder;
+    // The keys of the summary rows, which no selection, count or Ctrl+A takes in.
+    std::vector<ui::Key> _summaryKeys;
     std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
+    std::function<void()> _onRetry;
+    std::function<void(std::string)> _onStatusEntry;
+    // Engaged while the selection is of the view: every row but these keys is marked, until the next setSelection.
+    std::optional<std::vector<ui::Key>> _viewExcept;
+    std::function<void(int, int)> _onHorizontalRange;
+    std::function<void(std::size_t, ui::ColumnMeasure const&)> _onColumnMeasured;
+    std::function<void(ui::FocusMove)> _onFocusMove;
+    std::function<void(std::size_t, std::size_t, ui::SelectionChange)> _onSelectRange;
+    std::function<void(std::string)> _onText;
+    std::function<void(std::size_t, std::size_t, bool)> _onCellClick;
+    std::function<void(std::size_t, std::size_t, std::size_t, std::size_t)> _onCellSelect;
+    std::function<void()> _onFocusOut;
+    /// Each row's open cell editor's item, by row.
+    QHash<TableRowImpl const*, QPointer<QQuickItem>> _editors;
     /// Each row's effective spans, as last told.
     std::unordered_map<ItemBase const*, std::vector<ui::RowSpan>> _spans;
     /// Whether any row has been told it spans or is covered, so a table that never spans does no work.
@@ -779,6 +913,19 @@ public:
     /// Its key, once the table was told it.
     [[nodiscard]] std::optional<ui::Key> const& key() const noexcept { return _key; }
     void setKey(ui::Key key);
+    /// Writes the load state of the row's cell in @p column to the row's `cellLoads`, which holds the columns not
+    /// loaded.
+    void setLoad(std::size_t column, ui::CellLoad load);
+    /// Writes the accent of the row's cell in @p column to the row's `cellAccents`, which holds the columns with one:
+    /// `{tone, tooltip, invalid}`, the tone -1 for none.
+    void setAccent(std::size_t column, ui::CellAccent const& accent);
+    /// Writes the marks of the row's cell in @p column to the row's `cellMarks`, which holds the columns with some:
+    /// `{readOnly, modified, error, stale, muted}`.
+    void setMarks(std::size_t column, ui::CellMarks const& marks);
+    /// Its view row, once the table was told it.
+    [[nodiscard]] std::optional<std::size_t> viewRow() const noexcept { return _viewRow; }
+    /// Remembers the view row the table told it.
+    void setViewRow(std::size_t viewRow) noexcept { _viewRow = viewRow; }
 
 protected:
     /// The table places a row's cells in its columns.
@@ -787,6 +934,13 @@ protected:
 
 private:
     std::optional<ui::Key> _key;
+    /// The columns not loaded, by column as text: `1` unloaded, `2` failed.
+    QVariantMap _loads;
+    /// The columns with an accent, by column as text.
+    QVariantMap _accents;
+    /// The columns with marks, by column as text.
+    QVariantMap _marks;
+    std::optional<std::size_t> _viewRow;
 };
 
 }  // namespace morph::qt_quick::detail

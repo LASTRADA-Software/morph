@@ -63,6 +63,8 @@ struct CollectionColumn {
     std::optional<std::uint32_t> decimalPlaces;
     /// @brief The unit appended to an exact value (`ExtUnits.unitUnicode`, else `unitAscii`).
     std::string unit;
+    /// @brief `x-level`: the data level the column's cells need; empty is the base level.
+    std::string level;
 };
 
 /// @brief One `v-rowAction` or `v-actions` entry.
@@ -195,12 +197,23 @@ private:
             }
             column.kind = parsed;
         }
+        // A measure's cells name their units, and a collection's table has no registry to read them through: its
+        // sort and filters would be refused and its cells shown without their units.
+        if (column.kind == table::ColumnKind::Measure) {
+            return std::unexpected(SchemaError{
+                .path = "v-columns." + column.field,
+                .message = "a collection cannot show a measure column, having no unit registry; serve the rows as a "
+                           "model's table"});
+        }
         Json const* const hidden = detail::engine::member(entry, "v-hidden");
         column.hidden = hidden != nullptr && hidden->is_boolean() && hidden->get<bool>();
         if (auto const places =
                 detail::engine::SchemaReader::unsignedOf(detail::engine::member(entry, "x-decimalPlaces"))) {
             column.decimalPlaces =
                 static_cast<std::uint32_t>(std::min<std::uint64_t>(*places, math::kMaxDecimalPlaces));
+        }
+        if (auto const* const level = detail::engine::stringAt(entry, "x-level")) {
+            column.level = *level;
         }
         if (Json const* const units = detail::engine::member(entry, "ExtUnits")) {
             auto const* const unicode = detail::engine::stringAt(*units, "unitUnicode");
@@ -345,14 +358,16 @@ namespace detail::engine {
     return toJson(*value);
 }
 
-/// @brief The table columns of a collection: every `v-columns` entry, hidden ones included, by field and kind.
+/// @brief The table columns of a collection: every `v-columns` entry, hidden ones included, by field, kind and
+///        level.
 /// @param model The collection model.
 /// @return The columns.
 [[nodiscard]] inline std::vector<table::ColumnInfo> tableColumns(CollectionModel const& model) {
     std::vector<table::ColumnInfo> columns;
     columns.reserve(model.columns().size());
     for (CollectionColumn const& column : model.columns()) {
-        columns.push_back(table::ColumnInfo{.id = column.field, .kind = column.kind, .comparator = {}, .format = {}});
+        columns.push_back(table::ColumnInfo{
+            .id = column.field, .kind = column.kind, .comparator = {}, .format = {}, .level = column.level});
     }
     return columns;
 }

@@ -411,6 +411,24 @@ inline Catalog corpusCatalog() {
                 "value":{"type":"integer","title":"Value","x-order":1}},"required":["value"]}}},
               "required":["sampleId"]})"};
         }
+        // Specimens entered in a grid: `grid_test_support.hpp`'s `kSpecimens`.
+        if (action == "Lims_RecordSpecimens") {
+            return std::string{R"({"type":"object","title":"Specimens","properties":{
+  "sampleId":{"type":"integer","title":"Sample","x-order":0},
+  "reviewer":{"type":["string","null"],"title":"Reviewer","x-order":1},
+  "specimens":{"type":"array","title":"Specimens","x-order":2,"minItems":0,"maxItems":5,
+    "items":{"type":"object","properties":{
+      "label":{"type":["string","null"],"title":"Label","x-order":0},
+      "mass":{"type":["object","null"],"title":"Mass","x-decimalPlaces":2,"x-order":1},
+      "volume":{"type":["object","null"],"title":"Volume","x-decimalPlaces":1,"x-order":2},
+      "density":{"type":["object","null"],"title":"Density","x-decimalPlaces":3,"x-readonly":true,
+                 "x-computed":{"inputs":["mass","volume"]},"x-order":3},
+      "limit":{"type":["object","null"],"title":"Limit","x-decimalPlaces":2,"x-readonly":true,"x-derived":true,
+               "x-order":4},
+      "note":{"type":["string","null"],"title":"Note","x-order":5}}}}},
+  "required":["sampleId"],
+  "x-rules":[{"kind":"readonlyWhen","fields":["specimens"],"when":{"kind":"engaged","fields":["reviewer"]}}]})"};
+        }
         // A mass in kilograms (3 places) that is also entered in grams (1 place).
         if (action == "Lims_WeighSample") {
             return std::string{R"({"type":"object","title":"Weigh","properties":{
@@ -429,6 +447,10 @@ inline Catalog corpusCatalog() {
         if (action == "Lims_MeasureTemperature") {
             return std::string{R"({"type":"object","title":"Measure","properties":{
               "reading":{"type":"number","title":"Reading","x-displayDecimals":2,"x-order":0}}})"};
+        }
+        // A typed list action a table pages: its query goes in the member marked `x-table`.
+        if (action == "Lims_PageResults") {
+            return std::string{R"({"type":"object","properties":{"query":{"type":"object","x-table":true}}})"};
         }
         if (action != "Lims_CaptureConcentration") {
             return std::nullopt;
@@ -484,8 +506,16 @@ struct Harness {
     /// @param recordWatches Always true; selects this constructor.
     explicit Harness(bool recordWatches) : tools{ui::DevelopmentTools::On}, recording{recordWatches} {}
 
+    /// @brief A harness whose session and documents read @p withCatalog.
+    /// @param withCatalog   The catalog.
+    /// @param recordWatches Whether the session's watch changes go to `watches`, each answered at once.
+    explicit Harness(ui::Catalog withCatalog, bool recordWatches = false)
+        : tools{ui::DevelopmentTools::On}, recording{recordWatches}, catalog{std::move(withCatalog)} {}
+
     ui::DevelopmentTools tools;
     bool recording = false;
+    /// @brief What the session's options and `mount`'s load read.
+    ui::Catalog catalog = corpusCatalog();
     /// @brief The watch requests sent, oldest first; only with `recordWatches`.
     std::vector<WatchSent> watches;
     morph::testing::StepExecutor owner;
@@ -494,7 +524,7 @@ struct Harness {
     ui::Session session{runtime, SessionOptions{.scheduler = &scheduler,
                                                 .clock = [this] { return scheduler.now(); },
                                                 .keepUnused = std::chrono::minutes{5},
-                                                .catalog = corpusCatalog(),
+                                                .catalog = catalog,
                                                 .classify = [](std::exception_ptr const& error) -> std::string {
                                                     try {
                                                         std::rethrow_exception(error);
@@ -522,7 +552,7 @@ struct Harness {
     /// @return The screen.
     std::unique_ptr<Screen> mount(std::string_view text, ValueRecord const& params = {},
                                   MountOptions const& options = {}) {
-        auto screen = interpreter.mount(loadOrFail(text, corpusCatalog()), params, backend, options);
+        auto screen = interpreter.mount(loadOrFail(text, catalog), params, backend, options);
         if (!screen) {
             FAIL(screen.error().message());
         }

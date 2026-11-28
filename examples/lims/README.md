@@ -1786,37 +1786,16 @@ returned took 140 ms. A trial balance over 10^7 posted lines (5 * 10^6 entries o
 168,209 ms and peaked at 10,857 MB; its totals equal the independently accumulated `int64` sums exactly, so it
 answers, but by loading every line, which is not the production criterion. The inference in decision 30 (about 11 s at
 10^7) was a time estimate that assumed the lines fit in memory; the measured time is 168 s and the memory it left out is
-10.9 GB. `ListEntries` makes about five queries per entry, so most of its time is that pattern; one flat read of the
-narrow rows was not measured. Writing the rows took 25 s and 121 s. Not measured: other hardware, other databases.
+10.9 GB. `ListEntries` then made about five queries per entry, so most of its time was that pattern. It now reads the headers
+in one query, the accounts once and the lines 500 entries per query: on the Windows `cl-qt-release` build with
+SQLite's ODBC driver, a `ListEntriesPage` of 50 at offset 500,000 of 10^6 entries took 34,902 ms. Writing the rows took 25 s and 121 s. Not measured: other hardware, other databases.
 
 The first case's run was 592 s against a 600 s ctest limit, so a case named for a 10^6 or 10^7 table has a 1,800 s
 limit (`cmake/morph_add_rung.cmake`); both are `Stress:` cases and outside `ctest -L ladder -LE stress`.
 
-morph gained the database-page seam (`docs/spec/table/database_pages.md`): `table::planQuery`, a validated plan a model
-translates into its own query; `Page::totalKind`, a total that is the count or a lower bound; and
-`table::conformanceFailures`, which holds the translation to `apply`'s pages. It covers the journal's list. The trial
-balance is a sum, not a page: it computes its rows in the store and pages them with `apply` or with a plan over the
-aggregate, which the seam does not describe.
-
-On the seam, the same page (`ListEntriesPage`: 50 rows at offset 500,000 of 10^6 entries) took 180 ms with resident
-memory 46 MB to 48 MB (peak 47 MB to 51 MB), and the trial balance over 10^7 lines took 3,885 ms with peak memory 41 MB
-(40 MB before), summed in the database, exact or refused as `OutOfRange`. Same build and machine as above, one run each;
-the totals equal the independently accumulated sums exactly. The sample list pages on it too. Stock movements are the
-second instance, which is the stock movements of the inventory module.
-
-How it is held to the engine. `ListEntriesPage` and `ListSamples` translate the plan into one `SELECT` (the plan's
-filters to a `WHERE`, its sort to an `ORDER BY` ending in the row id, offset and limit) and count the filtered view
-with one `COUNT` in the same read transaction, so the total is `Exact` at any size. That read transaction holds SQLite's shared lock until the page's rows are loaded (2.7 s for the filtered page at 10^6 entries), so a concurrent writer can be turned away for that window; a busy or locked database is reported as `Conflict`. The tests run
-`conformanceFailures` over `standardCorpus` of each list's own rows, against SQLite, with the total cap lowered to 10,
-plus date-time queries the corpus cannot derive; each mutation named beside those tests fails them. Three
-rules of the spec decided the translation. Text: the default collator folds ASCII and Latin-1 letters, SQLite's `lower`
-folds ASCII, so the statement lowers and replaces the 29 Latin-1 capitals itself and compares and orders the result
-bytewise; the conformance data carries accents, a Greek capital and `?`, `{`, `'` and `%` to hold that. Dates: a
-`DateTime` column is the whole UTC second of a millisecond column, floored, so sub-second instants tie and `eq` is a
-second. Integers: an operand is never rounded, `eq 1.5` matches nothing and `lt 1.5` is `<= 1`. Empty cells sort last,
-and an exclude keeps them. `lines` and `rate` of the journal are refused with `Unavailable`: `lines` is another table
-serialised, and `rate` is a numerator and denominator whose exact comparison multiplies two `int64` values, which
-SQLite turns into a real on overflow.
+The sample and ledger lists (`ListSamples`, `ListEntriesPage`) read the caller's rows with one query and answer
+with `table::apply`, so their order, filters and total are the engine's on every surface. The total is the count up
+to `QueryLimits::totalCap` (100,000 rows) and omitted above it, so the 10^6-entry page has none.
 
 The trial balance sums `company_num` per account, side and denominator in the database and adds the few sums per
 account exactly. This is not the brief's sum of minor units: the ledger's own tests hold 5 * 10^18 whole units as a
@@ -1824,27 +1803,10 @@ figure that reports exactly, which is 5 * 10^20 minor units and does not fit `in
 one up to the denominator: a sum of numerators of one denominator past `int64` is refused even where it would reduce
 to a representable value. SQLite's `SUM` raises `integer overflow` rather than wrapping (measured by a test, not read
 from the manual), and the ledger reports that as `OutOfRange`.
+The trial balance over 10^7 lines took 3,885 ms with peak memory 41 MB, one run on the same build and machine as
+above; its totals equal the independently accumulated sums exactly.
 
 ## Findings raised by this rung
-
-- **Paging a table in the database is raw SQL.** Lightweight's query builder has no `COALESCE`, `CASE`, `NULLIF`,
-  `instr`, `replace` or computed `ORDER BY`, which the engine's meaning of empty cells, enum names and the collator's
-  fold need, so `org/core/plan_sql.hpp` writes the statement text and runs it with `SqlStatement::Prepare` and
-  `ExecuteWithVariants`: IMPLEMENTATION.md rule 4's escape tier. The statement text holds only the model's own column
-  mapping, enumerator names and the plan's clamped numbers; every operand a client sent is a `?` with a value bound
-  at run time, so no escaping is involved. A text operand holding a NUL byte is refused in words, since SQLite's
-  `length` and `instr` stop at it. Tests run quotes, a statement terminator, `%`, `_`, backslashes, `?` and a driver
-  escape through the page and compare it with the engine's. Not verified: other databases (the `lower` and `replace`
-  fold is SQLite's), a SQLite built with ICU (its `lower` would fold more than the collator and the conformance run
-  would fail). Upstream: no Lightweight issue was searched for or filed.
-
-- **The standard conformance corpus built date operands that never parsed. Fixed in morph.** Its operands were the
-  cells' own text, and a date-time cell shows as whole seconds (`1793437200`), which the default date parser does not
-  read, so `apply` and the plan refused such a query identically and the helper counted that as agreement. Measured: a
-  translation that truncated a negative millisecond instant toward zero instead of flooring it passed the corpus and
-  failed only when the lims tests built the operands from the rows' own seconds by hand. `standardCorpus` now writes
-  ISO operands, `conformanceFailures` reports a column whose queries were all refused identically, and a framework
-  test holds the truncating model.
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so
   moving `lims_operators` into `org_role_assignments` is one `RawSql` `INSERT ... SELECT`

@@ -27,6 +27,7 @@
 
 #include "../attributes.hpp"
 #include "../core/backend.hpp"
+#include "../forms/derive.hpp"
 #include "../forms/forms.hpp"
 #include "../session/session.hpp"
 #include "callback_scope.hpp"
@@ -617,10 +618,11 @@ void localTaskOp(::morph::model::detail::IModelHolder& holder, std::shared_ptr<v
                  const std::shared_ptr<::morph::exec::detail::TaskResumer>& executor, ::core::async::StopToken token,
                  ::morph::backend::detail::ActionCall::LocalDone done) {
     using R = ::morph::model::ActionTraits<Action>::Result;
-    using Handler = decltype(std::declval<Model&>().execute(std::declval<Action&>()));
+    using Handler = decltype(::morph::model::detail::invokeExecute(std::declval<Model&>(), std::declval<Action&>()));
     Action& actionRef = *static_cast<Action*>(actionOwner.get());
     Handler task;
     try {
+        ::morph::forms::clearDerived(actionRef);
         ::morph::forms::recomputeAll(actionRef);
         if (!::morph::model::ActionValidator<Action>::ready(actionRef)) {
             throw ::morph::model::ValidationError{::morph::model::ModelTraits<Model>::typeId(),
@@ -630,7 +632,7 @@ void localTaskOp(::morph::model::detail::IModelHolder& holder, std::shared_ptr<v
         ::morph::model::detail::runGuardJournaled(holder, model, std::as_const(actionRef), [&] {
             return ::morph::model::ActionTraits<Action>::toJson(actionRef);
         });
-        task = model.execute(actionRef);
+        task = ::morph::model::detail::invokeExecute(model, actionRef);
     } catch (...) {
         done(nullptr, std::current_exception());
         return;
@@ -2248,7 +2250,8 @@ private:
     template <typename Model, typename Action>
     static consteval bool isTaskHandlerCall() {
 #ifndef MORPH_CLIENT_ONLY
-        return ::morph::model::isTaskHandler<decltype(std::declval<Model&>().execute(std::declval<Action&>()))>;
+        return ::morph::model::isTaskHandler<decltype(::morph::model::detail::invokeExecute(std::declval<Model&>(),
+                                                                                            std::declval<Action&>()))>;
 #else
         // A client-only build never runs a handler locally (see makeActionCall).
         return false;
@@ -2395,6 +2398,9 @@ private:
                 // inspecting a computed field sees the authoritative value, not
                 // whatever the caller constructed the action with. No-op for actions
                 // with no computedFields. See docs/spec/forms/forms.md.
+                // Derived members are cleared first, as on every execution path, so the model and the computed fields
+                // read the same values in-process as over a server.
+                ::morph::forms::clearDerived(actionRef);
                 ::morph::forms::recomputeAll(actionRef);
                 if (!::morph::model::ActionValidator<Action>::ready(actionRef)) {
                     throw ::morph::model::ValidationError{::morph::model::ModelTraits<Model>::typeId(),
@@ -2437,7 +2443,7 @@ private:
                 });
                 auto result = [&] {
                     try {
-                        return std::make_shared<R>(model.execute(actionRef));
+                        return std::make_shared<R>(::morph::model::detail::invokeExecute(model, actionRef));
                     } catch (const std::exception& exc [[maybe_unused]]) {
                         if constexpr (::morph::model::detail::actionLoggable<Action>() ==
                                       ::morph::model::Loggable::Yes) {
@@ -3164,6 +3170,9 @@ inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std:
                 // Overwrite any computed fields from their declared inputs -- a
                 // computed field is never trusted from the client, on any path.
                 // No-op for actions with no computedFields. See docs/spec/forms/forms.md.
+                // A derived member is the model's to set: what the caller sent for it is cleared first, so neither the
+                // model nor a computed field over it reads a forged value.
+                ::morph::forms::clearDerived(action);
                 ::morph::forms::recomputeAll(action);
                 // Enforce the action's validator on the request/reply dispatch path,
                 // just as the reactive `set<>` path does in

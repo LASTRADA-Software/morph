@@ -493,6 +493,43 @@ add_library(morph ${_morph_library_type}
     src/ui/document.cpp
     src/ui/expression.cpp
     src/ui/interpreter.cpp
+    src/ui/interpreter_elements.cpp
+    src/ui/interpreter_components.cpp
+    src/ui/interpreter_lowering.cpp
+    src/ui/interpreter_forms.cpp
+    src/ui/interpreter_fixed_grid.cpp
+    src/ui/interpreter_collections.cpp
+    src/ui/interpreter_rows.cpp
+    src/ui/interpreter_table_actions.cpp
+    src/ui/interpreter_table_layout.cpp
+    src/ui/interpreter_table_model.cpp
+    src/ui/interpreter_charts.cpp
+    src/ui/interpreter_mount.cpp
+    src/ui/grid_1.cpp
+    src/ui/grid_2.cpp
+    src/ui/grid_3.cpp
+    src/ui/mount_1.cpp
+    src/ui/mount_2.cpp
+    src/ui/mount_3.cpp
+    src/ui/table_config.cpp
+    src/ui/table_dialogs.cpp
+    src/ui/table_filter_menu.cpp
+    src/ui/table_rows_1.cpp
+    src/ui/table_rows_2.cpp
+    src/ui/table_state.cpp
+    src/ui/table_state_model.cpp
+    src/ui/table_views.cpp
+    src/forms/field_control.cpp
+    src/forms/form_session.cpp
+    src/table/description.cpp
+    src/table/edits.cpp
+    src/table/level_cache.cpp
+    src/table/query.cpp
+    src/table/row_selection.cpp
+    src/table/state_store.cpp
+    src/table/view_cache.cpp
+    src/ui/cell_format.cpp
+    src/ui/form_rows.cpp
     src/ui/library.cpp
     src/ui/service.cpp
     src/ui/tour_checks.cpp
@@ -637,6 +674,7 @@ target_sources(morph
         include/morph/offline/file_offline_queue.hpp
         include/morph/offline/replay_ledger.hpp
         include/morph/session/session.hpp
+        include/morph/forms/derive.hpp
         include/morph/forms/field_errors.hpp
         include/morph/forms/forms.hpp
         include/morph/forms/blank_as.hpp
@@ -659,6 +697,15 @@ target_sources(morph
         include/morph/ui/frontend.hpp
         include/morph/ui/value.hpp
         include/morph/ui/locale_table.hpp
+        include/morph/ui/stretch_columns.hpp
+        include/morph/ui/table_config.hpp
+        include/morph/ui/table_dialogs.hpp
+        include/morph/ui/table_filter_menu.hpp
+        include/morph/ui/measure.hpp
+        include/morph/ui/table_rows.hpp
+        include/morph/ui/form_rows.hpp
+        include/morph/ui/grid.hpp
+        include/morph/ui/cell_format.hpp
         include/morph/ui/page_layout.hpp
         include/morph/ui/message.hpp
         include/morph/ui/expression.hpp
@@ -726,6 +773,9 @@ target_sources(morph
         include/morph/ui/chat/transcriber.hpp
         include/morph/ui/preferences.hpp
         include/morph/ui/preference_sync.hpp
+        include/morph/ui/table_state_model.hpp
+        include/morph/ui/table_state.hpp
+        include/morph/ui/table_views.hpp
         include/morph/ui/host_vocabulary.hpp
         include/morph/ui/catalogue.hpp
         include/morph/ui/chart_scale.hpp
@@ -764,6 +814,7 @@ target_sources(morph
         include/morph/forms/engine/overrides.hpp
         include/morph/forms/engine/field_layout.hpp
         include/morph/forms/engine/form_view.hpp
+        include/morph/forms/engine/field_control.hpp
         include/morph/forms/engine/collection.hpp
         include/morph/forms/engine/wizard.hpp
         include/morph/forms/engine/collection_view.hpp
@@ -773,10 +824,17 @@ target_sources(morph
         include/morph/table/filter.hpp
         include/morph/table/view_change.hpp
         include/morph/table/engine.hpp
-        include/morph/table/plan_conformance.hpp
         include/morph/table/query.hpp
+        include/morph/table/record_name.hpp
+        include/morph/table/row_selection.hpp
+        include/morph/table/runtime.hpp
+        include/morph/table/bands.hpp
+        include/morph/table/description.hpp
+        include/morph/table/level_cache.hpp
+        include/morph/table/view_cache.hpp
         include/morph/table/selection.hpp
         include/morph/table/edits.hpp
+        include/morph/table/state_store.hpp
 )
 
 # The detail/ headers that public headers include. They are not public surface
@@ -1334,6 +1392,11 @@ if(MORPH_BUILD_QT)
 
     if(MORPH_BUILD_QT_QUICK AND MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
         add_subdirectory(tests/qt_quick)
+    endif()
+
+    # The browser's frontend baseline: one Qt for WebAssembly executable, run by hand under a headless browser.
+    if(EMSCRIPTEN AND MORPH_BUILD_QT_QUICK AND MORPH_BUILD_TESTS)
+        add_subdirectory(tests/qt_quick/wasm)
     endif()
 
     # Qt for WebAssembly has no TLS sockets: a browser's WebSocket carries the TLS.

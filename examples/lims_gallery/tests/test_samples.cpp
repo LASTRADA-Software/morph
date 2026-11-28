@@ -39,7 +39,7 @@ TEST_CASE("samples, expanded: the table, its out-of-spec tone, and three rows se
     GalleryScreen screen{kScreen, "expanded"};
     screen.requireNoProblems();
     CHECK(screen.shows("Table", "samples"));
-    CHECK(screen.prop("Table", "samples", "columns") ==
+    CHECK(screen.prop("Table", "samples", "columns").value_or("none") ==
           "[Sample:fixed(11);sortable=true,Product · lot:stretch(6),Tests:stretch(4),Priority:content,"
           "Status:content,Due:fixed(12);sortable=true;wrap=false,Specification:content]");
     // Sorted by due time, earliest first, 25 rows a page.
@@ -85,9 +85,10 @@ TEST_CASE("samples, expanded: selecting rows drives the bulk bar, and changing p
             screen.backend().prop(badge, "text") == "STAT" && screen.backend().prop(badge, "tone") == "Err" ? 1U : 0U;
     }
     CHECK(stat == 2);
-    // The header box is Ctrl+A: every row on the page.
+    // The header box is Ctrl+A: it selects the table's whole view, every page, so all 38 samples the filters leave
+    // are selected while 25 show.
     CHECK(screen.backend().press(table, "Ctrl+A"));
-    CHECK(screen.waitFor([&screen] { return screen.text("selected") == "25 selected on this page ·"; }));
+    CHECK(screen.waitFor([&screen] { return screen.text("selected") == "38 selected on this page ·"; }));
     screen.click("select-all");
     CHECK(screen.waitFor([&screen] { return screen.text("selected") == "All 312 samples selected ·"; }));
     screen.requireNoProblems();

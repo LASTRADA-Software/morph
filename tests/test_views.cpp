@@ -12,8 +12,10 @@
 #include <glaze/glaze.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/forms/engine/collection.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/forms/views.hpp>
+#include <morph/table/query.hpp>
 #include <morph/util/quantity.hpp>
 #include <stdexcept>
 #include <string>
@@ -88,6 +90,16 @@ struct VtRowList {
 struct VtTwoRowList {
     std::vector<VtRow> extras;
     std::vector<VtRow> rows;
+};
+
+/// @brief A row whose `qty` is at data level "stock" (docs/spec/table/table.md, "Data levels").
+struct VtLevelRow {
+    std::int64_t id = 0;
+    std::string name;
+    std::int64_t qty = 0;
+    static constexpr std::array<morph::table::ColumnLevel, 1> columnLevels() noexcept {
+        return {{{.column = "qty", .level = "stock"}}};
+    }
 };
 
 struct VtListRows {};
@@ -598,4 +610,33 @@ TEST_CASE("Views::InferColumnKind::AnExactValueIsADecimalAndAQuantityWhenItCarri
     CHECK(kindOf(kDefs, R"({"type":"object","properties":{"den":{"type":"integer"}}})") == "text");
     CHECK(kindOf(kDefs, R"({"type":"object","properties":{"x":{"type":"integer"}}})") == "text");
     CHECK(kindOf(kDefs, R"({"type":"object"})") == "text");
+}
+
+// Mutation: buildColumnEntry not copying x-level.
+TEST_CASE("views: deriveColumns copies x-level", "[views]") {
+    glz::generic_u64 schema{};
+    REQUIRE_FALSE(glz::read_json(schema, morph::forms::schemaJson<vt::VtLevelRow>()));
+    CHECK(schema["properties"]["qty"]["x-level"].get_string() == "stock");
+    CHECK_FALSE(schema["properties"]["name"].contains("x-level"));
+
+    auto const columnsJson = morph::views::detail::deriveColumns<RowNoOverride, vt::VtLevelRow>();
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, columnsJson));
+    auto const& columns = dom.get_array();
+    REQUIRE(columns.size() == 3);
+    CHECK(columns[2]["field"].get_string() == "qty");
+    CHECK(columns[2]["x-level"].get_string() == "stock");
+    CHECK_FALSE(columns[1].contains("x-level"));
+
+    auto const model =
+        morph::forms::CollectionModel::fromSchema(R"({"v-query":"VtListRows","v-columns":)" + columnsJson + "}");
+    REQUIRE(model.has_value());
+    REQUIRE(model->columns().size() == 3);
+    CHECK(model->columns()[2].level == "stock");
+    CHECK(model->columns()[1].level.empty());
+    // Mutation: tableColumns building the collection's table columns without the level.
+    auto const infos = morph::forms::detail::engine::tableColumns(*model);
+    REQUIRE(infos.size() == 3);
+    CHECK(infos[2].level == "stock");
+    CHECK(infos[1].level.empty());
 }

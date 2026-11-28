@@ -437,6 +437,34 @@ TEST_CASE("ui theme values: the tab padding and gap default to 0 and a negative 
     }
 }
 
+// Mutation: leave `opacity.muted` out of `kOpacityPaths` (a muted opacity of 1.5 is accepted).
+TEST_CASE("ui theme values: a table row's busy, locked and muted tokens, and an opacity past 1 refused",
+          "[ui][theme]") {
+    ui::ThemeValues const defaults = ui::themeValues();
+    CHECK(defaults.colors.at("color.table.busy").hex() == "#1565c0");
+    CHECK(defaults.colors.at("color.table.locked").hex() == "#8e8e9338");
+    CHECK(defaults.numbers.at("opacity.muted") == 0.55);
+    ui::ThemeValues const set = valuesOf(R"({"color": {"$type": "color", "table": {"busy": {"$value": "#123456"},
+        "locked": {"$value": "#65432180"}}}, "opacity": {"muted": {"$type": "number", "$value": 0.4}}})");
+    CHECK(set.colors.at("color.table.busy").hex() == "#123456");
+    CHECK(set.colors.at("color.table.locked").hex() == "#65432180");
+    CHECK(set.numbers.at("opacity.muted") == 0.4);
+    for (std::string_view const path : {"stale", "muted"}) {
+        INFO(path);
+        auto const tokens = ui::parseTokens(std::string{R"({"opacity": {")"} + std::string{path} +
+                                            R"(": {"$type": "number", "$value": 1.5}}})");
+        REQUIRE(tokens.has_value());
+        ui::ThemeIndex index;
+        index.base = "base";
+        ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+            return id == "base" ? &*tokens : nullptr;
+        };
+        auto const refused = ui::checkTheme(index, files);
+        REQUIRE(refused.has_value());
+        CHECK(refused->contains("opacity." + std::string{path} + ": must be between 0 and 1"));
+    }
+}
+
 // Mutation: treat a token of another type as the keyword (a colour at `shape.iconOnly` is then reported), or let a
 // non-string value through as a valid name.
 TEST_CASE("ui theme values: the keyword, dimension and stroke checks skip tokens of other types and refuse non-names",

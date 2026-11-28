@@ -207,3 +207,165 @@ TEST_CASE("prettyJson breaks a container that starts past the line width, and co
     CHECK(morph::ui::compactJson(pretty) == document);
     CHECK(morph::ui::compactJson("{\t\"a\"\r\n:\t[ 1,\r2 ]\n}") == R"({"a":[1,2]})");
 }
+
+namespace {
+
+struct PointerCase {
+    std::string_view text;
+    std::string_view pointer;
+    std::string_view marker;  // where the pointer is found: the first occurrence of this text; empty for not found
+    bool last = false;        // the last occurrence instead
+};
+
+}  // namespace
+
+// Mutations: an escape in a member's name not decoded; the pair of surrogates decoded as two; a name's `~1` read as
+// `~0`; the first of equal names winning; a malformed tail after the match discarding the match.
+TEST_CASE("pointerOffset finds a pointer's place in text of every shape a person may leave", "[ui][json-source][r3]") {
+    using namespace std::string_view_literals;
+    for (PointerCase const& item : {
+             // The root, and the members and elements below it.
+             PointerCase{.text = "  {\"a\":1}", .pointer = "", .marker = "{"},
+             PointerCase{.text = "{\"a\":1}", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"a":{"b":[10,20,30]}})", .pointer = "/a/b/1", .marker = "20"},
+             PointerCase{.text = R"({"a":{"b":[10,20,30]}})", .pointer = "/a/b/2", .marker = "30"},
+             PointerCase{.text = "[ 7 , [8] ]", .pointer = "/1/0", .marker = "8"},
+             PointerCase{.text = "{ \r\n\t\"a\" \t: \n 1 }", .pointer = "/a", .marker = "\"a\""},
+             // The last of equal names wins.
+             PointerCase{.text = R"({"a":1,"a":2})", .pointer = "/a", .marker = "\"a\"", .last = true},
+             // Names with escapes of their own, and pointers escaping `~` and `/`.
+             PointerCase{.text = R"({"a/b":1,"c~d":2})", .pointer = "/a~1b", .marker = "\"a/b\""},
+             PointerCase{.text = R"({"a/b":1,"c~d":2})", .pointer = "/c~0d", .marker = "\"c~d\""},
+             PointerCase{.text = R"({"x\ty":1,"\r":2,"\b":3,"\f":4,"\n":5,"\"":6,"\\":7,"\/":8})",
+                         .pointer = "/x\ty",
+                         .marker = R"("x\ty")"},
+             PointerCase{.text = R"({"x\ty":1,"\r":2,"\b":3,"\f":4,"\n":5})", .pointer = "/\r", .marker = R"("\r")"},
+             PointerCase{.text = R"({"x\ty":1,"\r":2,"\b":3,"\f":4,"\n":5})", .pointer = "/\b", .marker = R"("\b")"},
+             PointerCase{.text = R"({"x\ty":1,"\r":2,"\b":3,"\f":4,"\n":5})", .pointer = "/\f", .marker = R"("\f")"},
+             PointerCase{.text = R"({"x\ty":1,"\r":2,"\b":3,"\f":4,"\n":5})", .pointer = "/\n", .marker = R"("\n")"},
+             PointerCase{.text = R"({"q\"r":1,"s\\t":2,"u\/v":3})", .pointer = "/q\"r", .marker = "\"q"},
+             PointerCase{.text = R"({"q\"r":1,"s\\t":2,"u\/v":3})", .pointer = "/s\\t", .marker = "\"s"},
+             PointerCase{.text = R"({"q\"r":1,"s\\t":2,"u\/v":3})", .pointer = "/u~1v", .marker = "\"u"},
+             // `\u` escapes of one, two and three bytes, a pair of surrogates, and a lone one.
+             PointerCase{.text = R"({"\u0041":1})", .pointer = "/A", .marker = R"("\u0041")"},
+             PointerCase{.text = R"({"\u00e9":1})", .pointer = "/\xC3\xA9", .marker = R"("\u00e9")"},
+             PointerCase{.text = R"({"\u20ac":1})", .pointer = "/\xE2\x82\xAC", .marker = R"("\u20ac")"},
+             PointerCase{.text = R"({"\ud83d\ude00":1})", .pointer = "/\xF0\x9F\x98\x80", .marker = "\"\\ud83d"},
+             PointerCase{.text = R"({"\ud83dx":1})", .pointer = "/\xED\xA0\xBDx", .marker = "\"\\ud83d"},
+             PointerCase{.text = R"({"\ud83d\u0041":1})",
+                         .pointer = "/\xED\xA0\xBD"
+                                    "A",
+                         .marker = "\"\\ud83d"},
+             // An escape in a value skipped on the way to a later member.
+             PointerCase{.text = R"({"a":"\u00e9\n\"","b":2})", .pointer = "/b", .marker = "\"b\""},
+             // What is not a pointer, and what is not there.
+             PointerCase{.text = "{\"a\":1}", .pointer = "a", .marker = ""},
+             PointerCase{.text = "{\"a\":1}", .pointer = "/a~", .marker = ""},
+             PointerCase{.text = "{\"a\":1}", .pointer = "/a~2", .marker = ""},
+             PointerCase{.text = "{\"a\":1}", .pointer = "/b", .marker = ""},
+             PointerCase{.text = "{}", .pointer = "/a", .marker = ""},
+             PointerCase{.text = "[]", .pointer = "/0", .marker = ""},
+             PointerCase{.text = "[1,2]", .pointer = "/2", .marker = ""},
+             PointerCase{.text = "[1,2]", .pointer = "/01", .marker = ""},
+             PointerCase{.text = "[1,2]", .pointer = "/-1", .marker = ""},
+             PointerCase{.text = "[1,2]", .pointer = "/1x", .marker = ""},
+             PointerCase{.text = "[1,2]", .pointer = "/", .marker = ""},
+             PointerCase{.text = "[1,2]", .pointer = "/a", .marker = ""},
+             PointerCase{.text = "{\"a\":1}", .pointer = "/a/b", .marker = ""},
+             PointerCase{.text = "5", .pointer = "/a", .marker = ""},
+             PointerCase{.text = "\"s\"", .pointer = "/a", .marker = ""},
+             PointerCase{.text = "", .pointer = "/a", .marker = ""},
+             PointerCase{.text = "   ", .pointer = "/a", .marker = ""},
+             // Text cut short or malformed, around a match or before one.
+             PointerCase{.text = "{\"a\":1,", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"a":1,"b":)", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"a":1 "b":2})", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"a":1,"b":"\u12)", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"a":1,"b":"\u12G4"})", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"a":1,"b" 2})", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"a":1,"b":"x)", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"a":1,"b":"x\)", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"a":1,"b":[1,2)", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = "[1,2", .pointer = "/1", .marker = "2"},
+             PointerCase{.text = "[1,2,", .pointer = "/1", .marker = "2"},
+             PointerCase{.text = "{\"a\" 1}", .pointer = "/a", .marker = ""},
+             PointerCase{.text = "{\"a\"", .pointer = "/a", .marker = ""},
+             PointerCase{.text = "{\"a\":}", .pointer = "/a", .marker = ""},
+             PointerCase{.text = R"({"a":,"b":1})", .pointer = "/a", .marker = ""},
+             PointerCase{.text = "{\"a\":]", .pointer = "/a", .marker = ""},
+             PointerCase{.text = "{a:1}", .pointer = "/a", .marker = ""},
+             PointerCase{.text = R"({"\u12G4":1})", .pointer = "/a", .marker = ""},
+             PointerCase{.text = "{\"\\u12", .pointer = "/a", .marker = ""},
+             PointerCase{.text = R"({"b":1,"a)", .pointer = "/a", .marker = ""},
+             PointerCase{.text = "[1,]", .pointer = "/1", .marker = ""},
+             PointerCase{.text = "[1 2]", .pointer = "/1", .marker = ""},
+             PointerCase{.text = R"({"b":"x\)", .pointer = "/a", .marker = ""},
+             PointerCase{.text = R"({"b":,"a":1})", .pointer = "/a", .marker = ""},
+         }) {
+        INFO(item.text << " at " << item.pointer);
+        std::optional<std::size_t> const found = morph::ui::pointerOffset(item.text, item.pointer);
+        if (item.marker.empty()) {
+            CHECK_FALSE(found.has_value());
+            continue;
+        }
+        std::size_t const expected = item.last ? item.text.rfind(item.marker) : item.text.find(item.marker);
+        REQUIRE(expected != std::string_view::npos);
+        CHECK(found == std::optional<std::size_t>{expected});
+    }
+}
+
+TEST_CASE("pointerOffset refuses a pointer deeper than the depth the source view reads", "[ui][json-source][r3]") {
+    std::string text;
+    std::string pointer;
+    for (std::size_t level = 0; level < 200; ++level) {
+        text += "[";
+        pointer += "/0";
+    }
+    text += "1";
+    text.append(200, ']');
+    CHECK_FALSE(morph::ui::pointerOffset(text, pointer).has_value());
+    CHECK(morph::ui::pointerOffset(text, "/0/0").has_value());
+}
+
+// Mutations: a container cut short while it is skipped taking the member after it as found; a trailing comma inside a
+// skipped container accepted.
+TEST_CASE("pointerOffset skips containers that are empty, cut short or malformed on the way to a member",
+          "[ui][json-source][r3]") {
+    for (PointerCase const& item : {
+             PointerCase{.text = R"({"b":{},"a":2})", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"b":[],"a":2})", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"b":[1,2],"a":3})", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"b":{"x":[1,{"y":2}]},"a":3})", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"b":{ "x" : 1 , "y" : 2 } , "a":3})", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"a":1,"b":{)", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"a":{"x":1,"y")", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = "{\"a\":[1,2", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = "{\"a\":[", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"b":{"x")", .pointer = "/a", .marker = ""},
+             PointerCase{.text = "{\"b\":[1,2", .pointer = "/a", .marker = ""},
+             PointerCase{.text = "{\"b\":[", .pointer = "/a", .marker = ""},
+             PointerCase{.text = "{\"b\":{", .pointer = "/a", .marker = ""},
+             PointerCase{.text = R"({"b":{"x":1 )", .pointer = "/a", .marker = ""},
+             PointerCase{.text = R"({"b":{"x" 1},"a":2})", .pointer = "/a", .marker = ""},
+             PointerCase{.text = R"({"b":{"x":1,},"a":2})", .pointer = "/a", .marker = ""},
+             PointerCase{.text = R"({"b":{1:2},"a":2})", .pointer = "/a", .marker = ""},
+             PointerCase{.text = R"({"b":[1 2],"a":2})", .pointer = "/a", .marker = ""},
+             PointerCase{.text = R"({"b":[,],"a":2})", .pointer = "/a", .marker = ""},
+             PointerCase{.text = R"({"\ud83d\ude0":1})", .pointer = "/a", .marker = ""},
+             PointerCase{.text = R"({"\ud83d\\":1,"a":2})", .pointer = "/a", .marker = "\"a\""},
+             PointerCase{.text = R"({"\ud800":1})", .pointer = "/\xED\xA0\x80", .marker = R"("\ud800")"},
+             PointerCase{
+                 .text = R"({"\udc00\ud800":1})", .pointer = "/\xED\xB0\x80\xED\xA0\x80", .marker = "\"\\udc00"},
+             PointerCase{.text = R"({"b":"\ud83d\ude00\ud83d","a":2})", .pointer = "/a", .marker = "\"a\""},
+         }) {
+        INFO(item.text << " at " << item.pointer);
+        std::optional<std::size_t> const found = morph::ui::pointerOffset(item.text, item.pointer);
+        if (item.marker.empty()) {
+            CHECK_FALSE(found.has_value());
+            continue;
+        }
+        std::size_t const expected = item.last ? item.text.rfind(item.marker) : item.text.find(item.marker);
+        REQUIRE(expected != std::string_view::npos);
+        CHECK(found == std::optional<std::size_t>{expected});
+    }
+}

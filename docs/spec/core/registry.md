@@ -30,6 +30,7 @@ without knowing their concrete types.
 - [Registration macros](#registration-macros)
   - [`BRIDGE_REGISTER_MODEL(M, NAME)`](#bridge_register_modelm-name)
   - [`BRIDGE_REGISTER_ACTION(M, A, NAME, ...)`](#bridge_register_actionm-a-name-)
+  - [`BRIDGE_REGISTER_TABLE(M, ID, FN, ...)`](#bridge_register_tablem-id-fn-)
   - [Moving a registrar out of the header](#moving-a-registrar-out-of-the-header)
   - [`BRIDGE_REGISTER_VALIDATOR(A, FN)`](#bridge_register_validatora-fn)
 - [`MORPH_CLIENT_ONLY` — suppressing model-owning registrars](#morph_client_only--suppressing-model-owning-registrars)
@@ -248,6 +249,19 @@ something that never reaches the journal. `detail::actionPayloadSchema<A>()`
 returns the empty string for it, entries are recorded unstamped, and replay
 does no fingerprint check on them. Opting in is a matter of defining the
 member.
+
+**An action may run itself.** Every dispatch path (the dispatcher's runner and
+its Task runner, `LocalBackend`'s ordinary and Task ops) calls the handler
+through `detail::invokeExecute(model, action)`, which is
+`Action::invoke(model, action)` when the action declares a static
+`template <typename Model> invoke(Model&, Action&)`, and `model.execute(action)`
+otherwise. Whether the handler is a Task is read from that call's type too. It
+is how an action the framework defines for a model, such as a table's
+`QueryTable` and `DescribeTable` (see
+[`BRIDGE_REGISTER_TABLE`](#bridge_register_tablem-id-fn-)), carries its handler
+with it, so the model declares no `execute` for it. Such an action is
+registered with its result named, since there is no `M::execute(A)` to deduce
+it from.
 
 ### `payload_schema.hpp` — the payload fingerprint
 
@@ -631,7 +645,9 @@ class ActionDispatcher {
 
 - `evaluate` runs the gates `dispatch` runs, as checks rather than refusals,
   and never `Model::execute`: it decodes the body, reconciles `Quantity`
-  precision, recomputes the computed fields, and returns an `Evaluation` — the
+  precision, clears the derived members (`forms::clearDerived`), recomputes the
+  computed fields — those of each nested aggregate (a `std::vector` element,
+  a nested struct, either inside an engaged `std::optional`) before the action's — and returns an `Evaluation` — the
   recomputed body (`ActionTraits<Action>::toJson`), `forms::fieldErrors` of
   it, and `ready`, whether `dispatch` would execute it (every `Quantity` within
   its unit's bounds, and `ActionValidator<Action>::ready`). No model instance,
@@ -645,8 +661,13 @@ class ActionDispatcher {
   `Quantity` fields to their declared precision, rejects any `Quantity` field
   outside its unit's declared bounds (`morph::forms::enforceQuantityBounds`,
   throwing `QuantityDecodeError`; a no-op for actions with no `Quantity`
-  members or whose units declare no `bounds()`), overwrites any declared
-  computed fields from their inputs (`morph::forms::recomputeAll`,
+  members or whose units declare no `bounds()`), value-initialises every
+  derived member (`morph::forms::clearDerived`, `forms/derive.hpp`: a member its
+  type's field metadata marks `derived()`, in the action and in every nested
+  aggregate of it — the model's to set, so a value a client sent is
+  never the one kept), overwrites any declared
+  computed fields from their inputs (`morph::forms::recomputeAll`, the nested
+  aggregates' own first,
   [forms.md](../forms/forms.md) — a no-op for actions with no
   `computedFields`; runs after precision reconciliation and bounds
   enforcement and before the validator check, so the validator sees the
@@ -1043,6 +1064,89 @@ A client-side alternative, `BRIDGE_REGISTER_ACTION_FOR_CLIENT`, avoids the
 [`BRIDGE_REGISTER_ACTION_FOR_CLIENT` — a header seam for
 `MORPH_CLIENT_ONLY`](#bridge_register_action_for_client--a-header-seam-for-morph_client_only)
 below.
+
+### `BRIDGE_REGISTER_TABLE(M, ID, FN, ...)`
+
+Registers table `ID` of model `M` ([table.md, "A model's
+tables"](../table/table.md#a-models-tables)). `ID` is a string literal; `FN` is
+`&M::fn`, a `table::ServedTable (M::*)(table::TableContext const&)`, or
+`morph::table::typed<Row>(&M::fn)` for a function returning
+`std::shared_ptr<std::vector<Row> const>`. The options after `FN` are the
+record's: `morph::table::rowScoped` and `morph::table::derivedFrom<Records...>`.
+
+```cpp
+BRIDGE_REGISTER_MODEL(lims::DesignModel, "DesignModel")
+BRIDGE_REGISTER_TABLE(lims::DesignModel, "designs", &lims::DesignModel::designs)
+BRIDGE_REGISTER_TABLE(lims::DesignModel, "recipes", &lims::DesignModel::recipes, morph::table::rowScoped)
+BRIDGE_REGISTER_TABLE(lims::SampleModel, "samples", morph::table::typed<lims::SampleView>(&lims::SampleModel::sampleRows))
+```
+
+It requires `BRIDGE_REGISTER_MODEL(M, ...)` before it, and
+`<morph/table/description.hpp>` and `<morph/core/bridge.hpp>` in the translation
+unit. It emits:
+
+- **`table::TableTraits<KEY>`**, where `KEY` is the member function: `FN` itself,
+  or `FN.function` for a typed table. It holds `model`, `row` (`void`, or the
+  typed table's `Row`), `registered = true`, `id` and `serve = FN`. Everything
+  that names a table in C++ is keyed on `KEY`, so `table::TableOf<&M::fn>` (the
+  table's record type), `table::ChangedRows<&M::fn>` and
+  `effects::updatesTable<&M::fn>` / `changesTable<&M::fn>` name a typed table as
+  they name a plain one. `TableOf<F>` does not compile for a function no
+  registration names. Every translation unit that names a table's `TableOf` or
+  `ChangedRows` must see its registration, so the macro belongs in the model's
+  header.
+- **Two actions**, registered as an action with an explicit result is:
+  `"Table." ID`, the action type `table::QueryTable<KEY>` (its JSON is the
+  `TableQuery`'s; result `GenericPage`), and `"Table." ID ".describe"`, the action
+  type `table::DescribeTable<KEY>` (result `TableDescription`, built by
+  `table::servedDescription`: the description with `capabilities.maxSortKeys`
+  carried from the served table's `limits.maxSortKeys`, then its revision; a
+  bound of 0 or above `table::kMaxSortKeysBound` (32) refuses the request with
+  `table.sourceContract`, as it refuses every query to the table, and a page's
+  `revision` is that description's). Both run
+  themselves through `invoke` (see [`ActionTraits<Action>`](#actiontraitsaction)),
+  and both are `Loggable::No`: they read, and a page fetch is not written to an
+  action log.
+- **The table's record**, through `record::detail::registerTableRecordOnce`: a
+  `RecordInfo` for `TableOf<KEY>` named `<ModelTraits<M>::typeId()>.` `ID`
+  (`DesignModel.designs`), keyed by `key`, with `table = true`. `rowScoped` sets
+  `privateKeys`; `derivedFrom<…>` sets `derivedFrom`. A table's record keeps its
+  key when it is derived: a source's change reaches it as a whole-record change,
+  as for any derived record, and its own actions name its rows.
+- **The opaque holding.** `"Table." ID`'s result slots gain
+  `ResultSlot{typeid(TableOf<KEY>), "", .opaque = true}`
+  (`detail::registerOpaqueResultOnce`), which resolution turns into
+  `ActionRecord{.record, .keyField, .paths = {}, .opaque = true}`. A page holds
+  parallel `keys` and `rows` arrays, not objects with a key member, so the
+  action holds the record at no path: it holds it for watch admission, and no
+  reader looks for its rows in the value. An opaque slot neither hides a path
+  nor is hidden by one.
+
+The record and the holding are suppressed under `MORPH_CLIENT_ONLY`, like every
+registrar that records facts only a process hosting models serves.
+
+**`ChangedRows` in a result.** The result walk (see [Action result
+slots](#action-result-slots)) reports a type with a `heldRecord` and a
+`heldMember()` at that member as well as at its own path:
+`table::ChangedRows<F>` is reported as `TableOf<F>` at `<path>.rows`, so an
+action returning one, or a struct with one member per table, has its changed
+keys collected for `updatesTable<F>` as any record's are. An
+`updatesTable<F>` on an action whose result has no `ChangedRows<F>` is refused
+when the registries resolve.
+
+**A table id is unique in the process**, not only in its model. The action ids
+carry the id and no model, and the effects registries are keyed by action id: a
+second action type under `"Table." ID` is listed in `actionResultConflicts()`
+and refused when the registries resolve, with "action `Table.<id>` is
+registered by two action types; give each its own id", which fails every
+effects lookup of the process. `QueryTable` is keyed on the function, not on the
+id text, so two models' tables `"rows"` are two action types and the conflict is
+seen rather than one table answering with the other's rows.
+
+**Admission.** A principal may watch a table's record when it may run any
+action holding it: the table's own `Table.<id>`, or an action whose result holds
+its `ChangedRows` (see `RemoteServer::mayWatchRecord`). Refusing a principal a
+table therefore means refusing it all of them.
 
 ### Moving a registrar out of the header
 
@@ -1459,6 +1563,7 @@ correctly under `MORPH_CLIENT_ONLY`.
 | `BRIDGE_REGISTER_MODEL_SOURCE` | `(M)` | Static-init factory registration for a `M` already declared via `BRIDGE_DECLARE_MODEL`. Reads `NAME` back off `ModelTraits<M>::typeId()`. |
 | `BRIDGE_DECLARE_ACTION` | `(M, A, NAME, ...)` | `ActionTraits<A>` specialisation + a link-time canary requiring `BRIDGE_REGISTER_ACTION_SOURCE(M, A)` somewhere in the link. Optional 4th arg: `Loggable`. No registration. |
 | `BRIDGE_REGISTER_ACTION_SOURCE` | `(M, A)` | Static-init dispatcher, result-slot and executor registration for an `A` already declared via `BRIDGE_DECLARE_ACTION`. Reads `NAME` back off `ActionTraits<A>::typeId()`. |
+| `BRIDGE_REGISTER_TABLE` | `(M, ID, FN, ...)` | `table::TableTraits<&M::fn>`, the actions `Table.<ID>` and `Table.<ID>.describe` (both `Loggable::No`), the table's record `<model>.<ID>` and the action's opaque holding of it. Options: `table::rowScoped`, `table::derivedFrom<…>`. See [`BRIDGE_REGISTER_TABLE`](#bridge_register_tablem-id-fn-). |
 | `BRIDGE_REGISTER_VALIDATOR` | `(A, FN)` | `ActionValidator<A>` specialisation + custom predicate. |
 
 ### Detail helpers
@@ -1692,6 +1797,13 @@ read through `detail::recordRegistry()`.
   `localOp`, which enforces the same `ValidationError` gate as this spec's
   `ActionDispatcher::registerAction` for the local execution path and performs
   the same computed-field recompute (`morph::forms::recomputeAll`) for it.
+- **Derive actions.** A form's derive action is an ordinary action of the
+  form's model whose input derives from `forms::DeriveOf<A>` (its JSON
+  `{"body": <the form's body as far as it encodes>}`, through the in-class glaze
+  meta the deriving type inherits) and whose result is `forms::Derived`
+  (`{"values": [{"path": "specimens[3].limit", "value": …}]}`). The application
+  registers it as `Loggable::No` with no effects, so a derive call is a read
+  ([../table/editing.md](../table/editing.md#derived-values)).
 - **[forms.md](../forms/forms.md)** — `allRequiredEngaged`; the closed
   cross-field rule vocabulary (`allRulesSatisfied`, `x-rules`) that composes
   into `validate()` alongside it; and `computed`/`computeList`/`recomputeAll`,
@@ -1737,10 +1849,23 @@ handler contributes `R`.
   id once in `detail::actionResultConflicts()`. Matching refuses a listed id,
   since which result a cached query holds would otherwise depend on link
   order. Recording rather than throwing keeps the registrar `noexcept`.
-- **A slot** is `{std::type_index type, std::string path}`. Every visited
-  aggregate is one, the result itself at path `""`, so matching against the
-  record registry can later stop at the first registered record on a path. The
-  walker does not read the record registry.
+- **A slot** is `{std::type_index type, std::string path, bool opaque}`. Every
+  visited aggregate is one, the result itself at path `""`, so matching against
+  the record registry can later stop at the first registered record on a path.
+  The walker does not read the record registry. A visited type with a
+  `heldRecord` type and a `heldMember()` also yields a slot of `heldRecord` at
+  that member, as `table::ChangedRows<F>` does. An `opaque` slot is added by
+  `BRIDGE_REGISTER_TABLE` only, for a record the result holds at no path.
+- **A holder's members.** A visited type with `openMembers()` (a range of
+  names) or `partialMember()` (one name) is also recorded in
+  `ActionResult::holders` as `HolderMembers{path, open, partial}`
+  (`detail::walkHolders<R>()`), a named member its reflection lacks left out.
+  `table::Page` names `awaiting` and `distinct` as open and `unloadedRows` as
+  partial. Resolution gives each `ActionRecord` the `open` and `partial`
+  member paths of every holder above one of its paths: while one is set, a row
+  the result does not hold may come to belong to it, or a merge by key would
+  leave it describing other rows. The client's catalog copies `open`,
+  `partial` and `opaque` into `ui::ActionRecordInfo`.
 - **Visited:** the result; the value of a `std::vector`, `std::optional` or
   `std::map` (adds no path segment); the members of a type glaze writes as an
   object, either by pure reflection or through a `glz::meta` object mapping.
@@ -1823,7 +1948,9 @@ for every action, which records its result holds.
   contains it (a path contains itself and every path below it; `""` contains
   all). So each path stops at its first registered record, and a record's own
   members are never searched for further records. Kept slots are grouped by
-  record into `ActionRecord{record, keyField, paths}`, giving `recordsOf`.
+  record into `ActionRecord{record, keyField, paths}`, giving `recordsOf`. An
+  opaque slot of a registered record is an `ActionRecord` with no paths and
+  `opaque` set, apart from the path matching.
   `actionsHolding(record)` is the inverse: the action ids, in id order, whose
   `recordsOf` names the record.
 - **Validation.** Resolution refuses, all problems at once:
@@ -1846,7 +1973,9 @@ for every action, which records its result holds.
     identical declaration is one, and a translation unit that does not see it
     reads the same effects;
   - a keyed record with `derivedFrom`: a key-level change to a source does not
-    say which derived rows moved, so a derived record is keyless;
+    say which derived rows moved, so a derived record is keyless. A table's
+    record (`RecordInfo::table`) is the exception: a source's change reaches it
+    as a whole-record change, and its own actions name its rows;
   - a `derivedFrom` source that is not a registered record: it never changes,
     so the derived record would never be refreshed;
   - a `derivedFrom` cycle among registered records, a record derived from

@@ -63,6 +63,9 @@ struct Context {
     std::vector<WidgetBase*> spotlights;
     /// The widget an open spotlight rings, drawn in reverse video; null for none.
     WidgetBase const* spotlit = nullptr;
+    /// Tables over a `TableSource` whose last frame found the rows or the columns in view changed: `fit` reports
+    /// them before any size is asked, so the mount realizes them outside a frame's drawing.
+    std::vector<TableImpl*> windowTables;
     /// The clock every widget reads the time from (a table telling a double click from two clicks); a test may
     /// replace it.
     std::function<std::chrono::steady_clock::time_point()> now = [] { return std::chrono::steady_clock::now(); };

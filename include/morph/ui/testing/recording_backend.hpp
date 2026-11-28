@@ -289,14 +289,20 @@ template <typename T, typename F>
     return caret == MenuCaret::Down ? "Down" : caret == MenuCaret::UpDown ? "UpDown" : "None";
 }
 
-/// @brief A table's sort as the dump shows it: the column's index and the direction, or `none`.
-/// @param sort The sort.
-/// @return `<index>:Ascending`, `<index>:Descending` or `none`.
-[[nodiscard]] inline std::string formatSort(std::optional<TableSort> const& sort) {
-    if (!sort) {
+/// @brief A table's sort chain as the dump shows it: each key's column index and direction, most significant first,
+///        or `none`.
+/// @param chain The keys.
+/// @return Such as `0:Ascending,2:Descending`, or `none` for an empty chain.
+[[nodiscard]] inline std::string formatSort(std::vector<TableSort> const& chain) {
+    if (chain.empty()) {
         return "none";
     }
-    return std::to_string(sort->column) + (sort->direction == SortDirection::Ascending ? ":Ascending" : ":Descending");
+    std::string text;
+    for (TableSort const& key : chain) {
+        text += (text.empty() ? "" : ",") + std::to_string(key.column) +
+                (key.direction == SortDirection::Ascending ? ":Ascending" : ":Descending");
+    }
+    return text;
 }
 
 /// @brief A text role's name.
@@ -583,7 +589,11 @@ struct Callbacks {
     /// @brief From `TableWidget::setOnActivate`.
     std::function<void(Key)> activate;
     /// @brief From `TableWidget::setOnSort`.
-    std::function<void(std::size_t)> sort;
+    std::function<void(std::size_t, HeaderClick)> sort;
+    /// @brief From `TableWidget::setOnRetry`.
+    Action retry;
+    /// @brief From `TableWidget::setOnFocusOut`: called when focus moves from inside the table to outside it.
+    Action focusOut;
     /// @brief The drop handler's predicate, from `Widget::setDropHandler`.
     std::function<bool(Key const&)> accepts;
     /// @brief The drop handler, from `Widget::setDropHandler`.
@@ -793,7 +803,36 @@ public:
     /// @throws std::out_of_range for an id that names no live widget.
     void focus(int widgetId) {
         _log.push_back("focus " + label(at(widgetId)));
-        _focused = widgetId;
+        int const previous = std::exchange(_focused, widgetId);
+        if (previous == 0 || previous == widgetId) {
+            return;
+        }
+        // Focus that leaves a table and everything inside it tells the table, innermost first.
+        std::vector<std::function<void()>> leaving;
+        for (auto found = _records.find(previous); found != _records.end();
+             found = _records.find(found->second.parent)) {
+            if (found->second.callbacks.focusOut && !within(widgetId, found->first)) {
+                leaving.push_back(found->second.callbacks.focusOut);
+            }
+        }
+        for (auto const& leave : leaving) {
+            leave();
+        }
+    }
+
+    /// @brief Whether a widget is a container or lies inside it.
+    /// @param widgetId  The widget.
+    /// @param container The container.
+    /// @return `true` when @p container is @p widgetId or one of its ancestors.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`widgetId`, `container`): the widget then its candidate ancestor, as the name reads at each call
+    [[nodiscard]] bool within(int widgetId, int container) const {
+        for (auto found = _records.find(widgetId); found != _records.end();
+             found = _records.find(found->second.parent)) {
+            if (found->first == container) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// @brief The widget that last took focus.
@@ -2243,7 +2282,9 @@ public:
         : FakeContainer<TableWidget>{std::move(store), std::move(kind), parent} {
         this->store().at(id()).onChildDestroyed = [this](int childId) {
             _rowKeys.erase(childId);
+            _viewRows.erase(childId);
             _headings.erase(childId);
+            std::erase_if(_loads, [childId](auto const& entry) { return entry.first.first == childId; });
             remark();
         };
     }
@@ -2265,11 +2306,13 @@ public:
 
     /// @brief Records property `columns`, each as its escaped caption, a colon and its width, then `;align=` and
     ///        `;valign=` where the column's alignment is not the default (`Start` across, `Center` down), and
-    ///        `;sortable=true` for a sortable column, which `RecordingBackend::clickHeader` reports, and
-    ///        `;wrap=false` for a column that keeps its text cells to one line, and `;shrink=true` for a stretch
-    ///        column that may be narrower than its header.
+    ///        `;sortable=true` for a sortable column, which `RecordingBackend::clickHeader` reports,
+    ///        `;filterable=true` for a column with a filter button, which `RecordingBackend::clickFilter` presses,
+    ///        `;wrap=false` for a column that keeps its text cells to one line, `;shrink=true` for a stretch column
+    ///        that may be narrower than its header, and `;unit=` with the column's unit when it has one.
     /// @param columns The columns, in order.
     void setColumns(std::vector<TableColumn> const& columns) override {
+        _columns = columns;
         _sortable.clear();
         for (TableColumn const& column : columns) {
             _sortable.push_back(column.sortable);
@@ -2285,11 +2328,17 @@ public:
                 if (column.sortable) {
                     text += ";sortable=true";
                 }
+                if (column.filterable) {
+                    text += ";filterable=true";
+                }
                 if (!column.wrap) {
                     text += ";wrap=false";
                 }
                 if (column.shrink) {
                     text += ";shrink=true";
+                }
+                if (!column.unit.empty()) {
+                    text += ";unit=" + formatItem(column.unit);
                 }
                 return text;
             }));
@@ -2341,7 +2390,8 @@ public:
         return row.has_value() && _headings.contains(*row);
     }
 
-    /// @brief Records the row's property `rowSpans`: `column:rows` pairs joined by commas, `none` for an empty list.
+    /// @brief Records the row's property `rowSpans`: `column:rows` pairs joined by commas, a span across columns as
+    ///        `column:rowsxcolumns` (`0:2x3`), `none` for an empty list.
     /// @param row   One of this table's rows.
     /// @param spans The row's effective spans.
     /// @throws std::logic_error when @p row is not this table's child.
@@ -2353,8 +2403,22 @@ public:
         std::string text;
         for (RowSpan const& span : spans) {
             text += (text.empty() ? "" : ",") + std::to_string(span.column) + ":" + std::to_string(span.rows);
+            if (span.columns != 1) {
+                text += "x" + std::to_string(span.columns);
+            }
         }
         store().set(rowId, "rowSpans", text.empty() ? std::string{"none"} : text);
+    }
+
+    /// @brief Records the row's property `summary` (`"true"`).
+    /// @param row One of this table's rows.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setRowSummary(Widget& row) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setRowSummary of a widget that is not this table's row"};
+        }
+        store().set(rowId, "summary", "true");
     }
 
     /// @brief Records the row's property `tone` (`none` for no tone).
@@ -2367,6 +2431,39 @@ public:
             throw std::logic_error{"RecordingBackend: setRowTone of a widget that is not this table's row"};
         }
         store().set(rowId, "tone", tone ? enumName(*tone) : std::string{"none"});
+        if (auto const key = _rowKeys.find(rowId); key != _rowKeys.end()) {
+            _rowTones.insert_or_assign(key->second, tone ? enumName(*tone) : std::string{"none"});
+        }
+    }
+
+    /// @brief The last tone `setRowTone` set on the row with a key.
+    /// @param key The row's key.
+    /// @return The tone's name, `none` for no tone; empty before any.
+    [[nodiscard]] std::string rowTone(Key const& key) const {
+        auto const found = _rowTones.find(key);
+        return found == _rowTones.end() ? std::string{} : found->second;
+    }
+
+    /// @brief Records the row's marks by the row's key, which `RecordingBackend::rowMarks` reads.
+    /// @param row   One of this table's rows.
+    /// @param marks The marks.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setRowMarks(Widget& row, RowMarks const& marks) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setRowMarks of a widget that is not this table's row"};
+        }
+        if (auto const key = _rowKeys.find(rowId); key != _rowKeys.end()) {
+            _rowMarks.insert_or_assign(key->second, marks);
+        }
+    }
+
+    /// @brief The last marks `setRowMarks` set on the row with a key.
+    /// @param key The row's key.
+    /// @return The marks; none before any.
+    [[nodiscard]] std::optional<RowMarks> rowMarks(Key const& key) const {
+        auto const found = _rowMarks.find(key);
+        return found == _rowMarks.end() ? std::nullopt : std::optional{found->second};
     }
 
     /// @brief Records property `selectColumn`.
@@ -2392,6 +2489,7 @@ public:
     /// @brief Requests the rows with @p keys, and records property `selection` as the rows it marks.
     /// @param keys The selected keys.
     void setSelection(std::vector<Key> const& keys) override {
+        _viewExcept.reset();
         _requested = keys;
         set("selection", marked());
     }
@@ -2403,23 +2501,288 @@ public:
         remark();
     }
 
+    /// @brief Marks every row but those of @p except until the next `setSelection`, and records property
+    ///        `selection` as the rows it marks.
+    /// @param except The keys left out.
+    void setSelectionView(std::vector<Key> const& except) override {
+        _viewExcept = except;
+        set("selection", marked());
+    }
+
+    /// @brief Stores the handler `RecordingBackend::chooseStatusEntry` calls.
+    /// @param onStatusEntry The handler.
+    void setOnStatusEntry(std::function<void(std::string entryId)> onStatusEntry) override {
+        _onStatusEntry = std::move(onStatusEntry);
+    }
+
+    /// @brief The handler `setOnStatusEntry` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::string)> const& onStatusEntry() const noexcept { return _onStatusEntry; }
+
     /// @brief Stores the handler `RecordingBackend::selectRows` calls.
     /// @param onSelectionChange The handler.
     void setOnSelectionChange(std::function<void(std::vector<Key>, SelectionChange)> onSelectionChange) override {
         callbacks().selection = std::move(onSelectionChange);
     }
 
+    /// @brief Stores what `Ctrl+A` calls in place of selecting the rows held.
+    /// @param onSelectAll The handler; empty to select the rows held.
+    void setOnSelectAll(std::function<void()> onSelectAll) override { _onSelectAll = std::move(onSelectAll); }
+
+    /// @brief The handler `setOnSelectAll` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void()> const& onSelectAll() const noexcept { return _onSelectAll; }
+
     /// @brief Stores the handler `RecordingBackend::activateRow` calls.
     /// @param onActivate The handler.
     void setOnActivate(std::function<void(Key)> onActivate) override { callbacks().activate = std::move(onActivate); }
 
-    /// @brief Records property `sort`: the column's index and direction, or `none`.
-    /// @param sort The sort shown.
-    void setSort(std::optional<TableSort> sort) override { set("sort", formatSort(sort)); }
+    /// @brief Records property `sort`: each key's column index and direction, or `none`.
+    /// @param chain The sort chain shown.
+    void setSort(std::vector<TableSort> const& chain) override {
+        _chain = chain;
+        set("sort", formatSort(chain));
+    }
 
     /// @brief Stores the handler `RecordingBackend::clickHeader` calls.
     /// @param onSort The handler.
-    void setOnSort(std::function<void(std::size_t)> onSort) override { callbacks().sort = std::move(onSort); }
+    void setOnSort(std::function<void(std::size_t, HeaderClick)> onSort) override {
+        callbacks().sort = std::move(onSort);
+    }
+
+    /// @brief Stores the menus `RecordingBackend::menuOf` reads and `RecordingBackend::chooseMenu` chooses from.
+    /// @param entries  The entries of a column's menu, or the table's.
+    /// @param onChoose The handler for a chosen entry.
+    void setMenu(std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> entries,
+                 std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) override {
+        _menu = std::move(entries);
+        _onMenu = std::move(onChoose);
+    }
+
+    /// @brief Stores the cell menu `RecordingBackend::rightClickCell` opens and `RecordingBackend::chooseCellMenu`
+    ///        chooses from, and whose entries' chords `RecordingBackend::press` runs on the focused cell.
+    /// @param entries The entries of a cell's menu.
+    /// @param chosen  The handler for a chosen entry.
+    void setCellMenu(std::function<std::vector<MenuEntry>(Key const&, std::size_t)> entries,
+                     std::function<void(Key const&, std::size_t, std::vector<std::size_t> const&)> chosen) override {
+        _cellMenu = std::move(entries);
+        _cellChosen = std::move(chosen);
+    }
+
+    /// @brief Stores the chords that ask for the focused cell's entries, which `RecordingBackend::press` checks.
+    /// @param chords The chords.
+    void setCellMenuKeys(std::vector<std::string> const& chords) override { _cellMenuKeys = chords; }
+
+    /// @brief The chords `setCellMenuKeys` gave.
+    /// @return They; empty before any.
+    [[nodiscard]] std::vector<std::string> const& cellMenuKeys() const noexcept { return _cellMenuKeys; }
+
+    /// @brief How many times the cell menu's entries were asked for.
+    /// @return The count.
+    [[nodiscard]] std::size_t cellMenuAsks() const noexcept { return _cellMenuAsks; }
+
+    /// @brief Stores the visible columns, which the drivers check a column against.
+    /// @param visible The visible columns, in layout order.
+    void setVisibleColumns(std::vector<std::size_t> const& visible) override { _visible = visible; }
+
+    /// @brief Stores the handler `RecordingBackend::moveColumn` calls.
+    /// @param handler The handler.
+    void setOnColumnMove(std::function<void(std::size_t, std::size_t)> handler) override {
+        _onColumnMove = std::move(handler);
+    }
+
+    /// @brief Stores the handler `RecordingBackend::resizeColumn` calls.
+    /// @param handler The handler.
+    void setOnColumnResize(std::function<void(std::size_t, std::optional<int>)> handler) override {
+        _onColumnResize = std::move(handler);
+    }
+
+    /// @brief Stores the handler `RecordingBackend::clickFilter` calls.
+    /// @param handler The handler.
+    void setOnFilter(std::function<void(std::size_t)> handler) override { _onFilter = std::move(handler); }
+
+    /// @brief Records property `filtered`, the columns as a list such as `[0,2]`.
+    /// @param columns The filtered columns.
+    void setFiltered(std::vector<std::size_t> const& columns) override {
+        _filtered = columns;
+        set("filtered", formatList(columns, [](std::size_t column) { return std::to_string(column); }));
+    }
+
+    /// @brief Records property `columnGroups`, each group as `label:first+count`, such as `[Company:0+3]`, with
+    ///        `;filtered=true` for a filtered group; `:`, `+` and `;` in a label are escaped as well as a list item's
+    ///        characters.
+    /// @param groups The groups.
+    void setColumnGroups(std::vector<TableColumnGroup> const& groups) override {
+        _groups = groups;
+        set("columnGroups", formatList(groups, [](TableColumnGroup const& group) {
+                std::string const label = escape(
+                    group.label, [](char character) { return std::string_view{"=,[]:+;"}.contains(character); });
+                return label + ":" + std::to_string(group.first) + "+" + std::to_string(group.count) +
+                       (group.filtered ? ";filtered=true" : "");
+            }));
+    }
+
+    /// @brief Records the property `bands`: each run as `level:label|unit@first+count`, `;pinned` for a pinned run,
+    ///        joined by commas; `|unit` only for a run with a unit.
+    /// @param runs The runs.
+    void setBands(std::vector<BandRun> const& runs) override {
+        _bands = runs;
+        set("bands", formatList(runs, [](BandRun const& run) {
+                std::string const label = escape(
+                    run.label, [](char character) { return std::string_view{"=,[]:+;@|"}.contains(character); });
+                return std::to_string(run.level) + ":" + label + (run.unit.empty() ? "" : "|" + run.unit) + "@" +
+                       std::to_string(run.first) + "+" + std::to_string(run.count) + (run.pinned ? ";pinned" : "");
+            }));
+    }
+
+    /// @brief The runs `setBands` last gave.
+    /// @return They.
+    [[nodiscard]] std::vector<BandRun> const& bands() const noexcept { return _bands; }
+
+    /// @brief Stores the handler `RecordingBackend::clickGroupFilter` calls.
+    /// @param handler The handler.
+    void setOnGroupFilter(std::function<void(std::size_t)> handler) override { _onGroupFilter = std::move(handler); }
+
+    /// @brief Stores the handler `RecordingBackend::pressCopy` and `Ctrl+C` call.
+    /// @param onCopy The handler.
+    void setOnCopy(std::function<void()> onCopy) override { _onCopy = std::move(onCopy); }
+
+    /// @brief Whether a user can reach @p column's header: it is one of the columns and, once the visible columns
+    ///        were told, one of them.
+    /// @param column The column.
+    /// @return True when its header is drawn.
+    [[nodiscard]] bool headerShown(std::size_t column) const {
+        return column < _columns.size() && (_visible.empty() || std::ranges::find(_visible, column) != _visible.end());
+    }
+
+    /// @brief How many columns are visible: as many as were told, or every column before any were.
+    /// @return The count.
+    [[nodiscard]] std::size_t visibleCount() const noexcept {
+        return _visible.empty() ? _columns.size() : _visible.size();
+    }
+
+    /// @brief The visible place of @p column: its place among the visible columns, or its index before any were told.
+    /// @param column The column.
+    /// @return The place.
+    [[nodiscard]] std::size_t placeOf(std::size_t column) const {
+        if (_visible.empty()) {
+            return column;
+        }
+        return static_cast<std::size_t>(std::distance(_visible.begin(), std::ranges::find(_visible, column)));
+    }
+
+    /// @brief The text a column's header draws: its label, then its sort key's mark (`sortMarkText`).
+    /// @param column The column.
+    /// @return The text.
+    [[nodiscard]] std::string headerText(std::size_t column) const {
+        std::string text = column < _columns.size() ? _columns.at(column).label : std::string{};
+        for (std::size_t place = 0; place < _chain.size(); ++place) {
+            if (_chain.at(place).column == column) {
+                text += sortMarkText(_chain.at(place).direction, place + 1, _chain.size());
+            }
+        }
+        return text;
+    }
+
+    /// @brief A column header's accessible description: its sort key's (`sortDescription`), or empty.
+    /// @param column The column.
+    /// @return The description.
+    [[nodiscard]] std::string headerDescription(std::size_t column) const {
+        for (std::size_t place = 0; place < _chain.size(); ++place) {
+            if (_chain.at(place).column == column) {
+                return sortDescription(_chain.at(place).direction, place + 1, _chain.size());
+            }
+        }
+        return {};
+    }
+
+    /// @brief A column header's accessible name: its label, followed by `, filtered` while it has a filter.
+    /// @param column The column.
+    /// @return The name.
+    [[nodiscard]] std::string headerName(std::size_t column) const {
+        std::string name = column < _columns.size() ? _columns.at(column).label : std::string{};
+        if (column < _columns.size() && _columns.at(column).filterable &&
+            std::ranges::find(_filtered, column) != _filtered.end()) {
+            name += ", filtered";
+        }
+        return name;
+    }
+
+    /// @brief The entries of a menu, as `setMenu` gives them.
+    /// @param column The column, or none for the table's menu.
+    /// @return The entries; none when the table has no menus.
+    [[nodiscard]] std::vector<MenuEntry> menuEntries(std::optional<std::size_t> column) const {
+        return _menu ? _menu(column) : std::vector<MenuEntry>{};
+    }
+
+    /// @brief The entries of a cell's menu, as `setCellMenu` gives them.
+    /// @param key    The cell's row.
+    /// @param column The cell's column.
+    /// @return The entries; none when the table has no cell menu.
+    [[nodiscard]] std::vector<MenuEntry> cellMenuEntries(Key const& key, std::size_t column) const {
+        if (!_cellMenu) {
+            return {};
+        }
+        ++_cellMenuAsks;
+        return _cellMenu(key, column);
+    }
+
+    /// @brief The handler `setCellMenu` gave for a chosen entry.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(Key const&, std::size_t, std::vector<std::size_t> const&)> const& cellChosen()
+        const {
+        return _cellChosen;
+    }
+
+    /// @brief The focused cell's row and column, as `setFocusCell` last placed it, its row by the view index
+    ///        `setRowIndex` gave a current row.
+    /// @return The cell; none before any `setFocusCell`, or while no current row is at its view row.
+    [[nodiscard]] std::optional<std::pair<Key, std::size_t>> focusedCellKey() const {
+        if (!_focusSet) {
+            return std::nullopt;
+        }
+        for (auto const& [rowId, viewRow] : _viewRows) {
+            if (viewRow != _focusCell.first) {
+                continue;
+            }
+            if (auto const key = _rowKeys.find(rowId); key != _rowKeys.end()) {
+                return std::pair{key->second, _focusCell.second};
+            }
+        }
+        return std::nullopt;
+    }
+
+    /// @brief The handler `setMenu` gave for a chosen entry.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> const& onMenu() const {
+        return _onMenu;
+    }
+
+    /// @brief The handler `setOnColumnMove` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::size_t, std::size_t)> const& onColumnMove() const { return _onColumnMove; }
+
+    /// @brief The handler `setOnColumnResize` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::size_t, std::optional<int>)> const& onColumnResize() const {
+        return _onColumnResize;
+    }
+
+    /// @brief The handler `setOnFilter` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::size_t)> const& onFilter() const { return _onFilter; }
+
+    /// @brief The handler `setOnGroupFilter` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::size_t)> const& onGroupFilter() const { return _onGroupFilter; }
+
+    /// @brief How many groups `setColumnGroups` gave.
+    /// @return The count.
+    [[nodiscard]] std::size_t groupCount() const noexcept { return _groups.size(); }
+
+    /// @brief The handler `setOnCopy` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void()> const& onCopy() const { return _onCopy; }
 
     /// @brief Whether the column at @p column is sortable, as `setColumns` gave it.
     /// @param column The column's index.
@@ -2452,6 +2815,400 @@ public:
         }
     }
 
+    /// @brief Records property `status` as `counts|state|retry|message|shown`, each text escaped.
+    /// @param status The status line.
+    void setStatus(TableStatus const& status) override {
+        _status = status;
+        set("status", formatText(status.counts) + "|" + formatText(status.state) + "|" + formatBool(status.retry) +
+                          "|" + formatText(status.message) + "|" + formatBool(status.shown));
+    }
+
+    /// @brief Stores the handler `RecordingBackend::retryTable` calls.
+    /// @param onRetry The handler.
+    void setOnRetry(std::function<void()> onRetry) override { callbacks().retry = std::move(onRetry); }
+
+    /// @brief Records a cell's load state, which `RecordingBackend::cellLoad` reads, and the row's property
+    ///        `load<column>` (`Loaded`, `Unloaded` or `Failed`).
+    /// @param row    One of this table's rows.
+    /// @param column The cell's column.
+    /// @param load   The state.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setCellLoad(Widget& row, std::size_t column, CellLoad load) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setCellLoad of a widget that is not this table's row"};
+        }
+        _loads.insert_or_assign(std::pair{rowId, column}, load);
+        store().set(rowId, "load" + std::to_string(column), formatCellLoad(load));
+    }
+
+    /// @brief Records a cell's accent, which `RecordingBackend::cellAccent` reads, and the row's property
+    ///        `accent<column>`: the tone's name or `-`, the tooltip, and `invalid` or `valid`, joined by `|`.
+    /// @param row    One of this table's rows.
+    /// @param column The cell's column.
+    /// @param accent The accent.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setCellAccent(Widget& row, std::size_t column, CellAccent const& accent) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setCellAccent of a widget that is not this table's row"};
+        }
+        _accents.insert_or_assign(std::pair{rowId, column}, accent);
+        std::string const tone = accent.tone ? std::to_string(static_cast<int>(*accent.tone)) : std::string{"-"};
+        store().set(rowId, "accent" + std::to_string(column),
+                    tone + "|" + formatText(accent.tooltip) + "|" + (accent.invalid ? "invalid" : "valid"));
+    }
+
+    /// @brief Records the column window, which `windowColumns`, `totalWidth` and `pinnedShown` read, and the
+    ///        properties `columnWindow` (the indices, comma-separated), `totalWidth` and `pinnedShown`.
+    /// @param columns    The columns.
+    /// @param offsets    Their offsets.
+    /// @param widths     Their widths.
+    /// @param totalWidth Every visible column's width together.
+    /// @param pinned     How many of @p columns are pinned.
+    void setColumnWindow(
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): overrides `Table::setColumnWindow`; the declaration says how its spans are told apart
+        std::span<std::size_t const> columns, std::span<int const> offsets,
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): overrides `Table::setColumnWindow`; the declaration says how its totals are told apart
+        std::span<int const> widths, int totalWidth, std::size_t pinned) override {
+        static_cast<void>(offsets);
+        static_cast<void>(widths);
+        _window = std::vector<std::size_t>(columns.begin(), columns.end());
+        _windowSet = true;
+        _totalWidth = totalWidth;
+        _pinnedShown = pinned;
+        std::string text;
+        for (std::size_t const column : columns) {
+            text += (text.empty() ? "" : ",") + std::to_string(column);
+        }
+        set("columnWindow", text);
+        set("totalWidth", std::to_string(totalWidth));
+        set("pinnedShown", std::to_string(pinned));
+    }
+
+    /// @brief Stores the handler `RecordingBackend::scrollTableColumns` calls.
+    /// @param handler The handler.
+    void setOnHorizontalRange(std::function<void(int, int)> handler) override { _onHorizontal = std::move(handler); }
+
+    /// @brief Records property `horizontalOffset`, which `RecordingBackend::horizontalOffset` reads.
+    /// @param scrollX The offset.
+    void setHorizontalOffset(int scrollX) override {
+        _horizontalOffset = scrollX;
+        set("horizontalOffset", std::to_string(scrollX));
+    }
+
+    /// @brief Stores the handler `RecordingBackend::selectTableRange` calls.
+    /// @param handler The handler.
+    void setOnSelectRange(std::function<void(std::size_t, std::size_t, SelectionChange)> handler) override {
+        _onSelectRange = std::move(handler);
+    }
+
+    /// @brief Records property `focusCell` as `<row>:<column>`, which `RecordingBackend::focusCell` reads, and adds
+    ///        the cell to the ones `RecordingBackend::focusCells` lists, and the key of the row at that view row now
+    ///        to the ones `RecordingBackend::focusKeys` lists.
+    /// @param viewRow The row.
+    /// @param column  The column.
+    void setFocusCell(std::size_t viewRow, std::size_t column) override {
+        _focusCell = {viewRow, column};
+        _focusSet = true;
+        _focusCells.emplace_back(viewRow, column);
+        std::optional<Key> named;
+        for (int const child : store().at(id()).children) {
+            auto const& props = store().at(child).props;
+            auto const found = props.find("viewRow");
+            auto const key = _rowKeys.find(child);
+            if (found != props.end() && found->second == std::to_string(viewRow) && key != _rowKeys.end()) {
+                named = key->second;
+            }
+        }
+        _focusKeys.push_back(std::move(named));
+        set("focusCell", std::to_string(viewRow) + ":" + std::to_string(column));
+    }
+
+    /// @brief Stores the handler `RecordingBackend::measureColumn` calls.
+    /// @param handler The handler.
+    void setOnColumnMeasured(std::function<void(std::size_t, ColumnMeasure const&)> handler) override {
+        _onMeasured = std::move(handler);
+    }
+
+    /// @brief Stores the handler `RecordingBackend::focusMove` calls.
+    /// @param handler The handler.
+    void setOnFocusMove(std::function<void(FocusMove)> handler) override { _onFocusMove = std::move(handler); }
+
+    /// @brief Stores the handler `RecordingBackend::typeInto` calls.
+    /// @param onText The handler.
+    void setOnText(std::function<void(std::string)> onText) override { _onText = std::move(onText); }
+
+    /// @brief The handler `setOnText` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::string)> const& onText() const noexcept { return _onText; }
+
+    /// @brief Stores the handler `RecordingBackend::clickCell` calls.
+    /// @param onClick The handler.
+    void setOnCellClick(std::function<void(std::size_t, std::size_t, bool)> onClick) override {
+        _onCellClick = std::move(onClick);
+    }
+
+    /// @brief The handler `setOnCellClick` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::size_t, std::size_t, bool)> const& onCellClick() const noexcept {
+        return _onCellClick;
+    }
+
+    /// @brief Stores the handler `RecordingBackend::focusOut` calls, which focus moving from inside the table to a
+    ///        widget outside it calls too.
+    /// @param onFocusOut The handler.
+    void setOnFocusOut(std::function<void()> onFocusOut) override { callbacks().focusOut = std::move(onFocusOut); }
+
+    /// @brief Records the row's property `editor:<column>`: the editor widget's id, empty for none.
+    /// @param row    One of this table's rows.
+    /// @param column The cell's column.
+    /// @param editor The editor, a child of @p row, or null.
+    /// @throws std::logic_error when @p row is not this table's child, or @p editor not the row's.
+    void setCellEditor(Widget& row, std::size_t column, Widget* editor) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setCellEditor of a widget that is not this table's row"};
+        }
+        std::string shown;
+        if (editor != nullptr) {
+            int const editorId = store().idOf(*editor);
+            if (store().at(editorId).parent != rowId) {
+                throw std::logic_error{"RecordingBackend: setCellEditor of an editor that is not the row's child"};
+            }
+            shown = std::to_string(editorId);
+        }
+        store().set(rowId, "editor:" + std::to_string(column), shown);
+    }
+
+    /// @brief Records property `cellSelection`: `r<firstRow>+<rowCount>,c<firstPosition>+<positionCount>`, `c`
+    /// counting
+    ///        visible positions, or empty for none.
+    /// @param rect The rectangle, or nothing.
+    void setCellSelection(std::optional<std::array<std::size_t, 4>> rect) override {
+        set("cellSelection", rect ? "r" + std::to_string(rect->at(0)) + "+" + std::to_string(rect->at(1)) + ",c" +
+                                        std::to_string(rect->at(2)) + "+" + std::to_string(rect->at(3))
+                                  : std::string{});
+    }
+
+    /// @brief Stores the handler `RecordingBackend::selectCells` calls.
+    /// @param onSelect The handler.
+    void setOnCellSelect(std::function<void(std::size_t, std::size_t, std::size_t, std::size_t)> onSelect) override {
+        _onCellSelect = std::move(onSelect);
+    }
+
+    /// @brief Calls the handler `setOnCellSelect` stored, as a drag from cell to cell would.
+    /// @param anchorRow      The anchor's view row.
+    /// @param anchorPosition The anchor's visible position.
+    /// @param focusRow       The focus's view row.
+    /// @param focusPosition  The focus's visible position.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): two corners, each a row and a position.
+    void selectCells(std::size_t anchorRow, std::size_t anchorPosition, std::size_t focusRow,
+                     std::size_t focusPosition) {
+        if (_onCellSelect) {
+            auto const handler = _onCellSelect;
+            handler(anchorRow, anchorPosition, focusRow, focusPosition);
+        }
+    }
+
+    /// @brief Records the row's property `marks:<column>`: `r`, `m`, `e`, `s` and `u` for the marks set, in that
+    ///        order, empty for none.
+    /// @param row    One of this table's rows.
+    /// @param column The cell's column.
+    /// @param marks  The marks.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setCellMarks(Widget& row, std::size_t column, CellMarks const& marks) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setCellMarks of a widget that is not this table's row"};
+        }
+        std::string shown;
+        shown += marks.readOnly ? "r" : "";
+        shown += marks.modified ? "m" : "";
+        shown += marks.error ? "e" : "";
+        shown += marks.stale ? "s" : "";
+        shown += marks.muted ? "u" : "";
+        store().set(rowId, "marks:" + std::to_string(column), shown);
+    }
+
+    /// @brief Records the row's property `modified`.
+    /// @param row      One of this table's rows.
+    /// @param modified Whether the row draws its modified mark.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setRowModified(Widget& row, bool modified) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setRowModified of a widget that is not this table's row"};
+        }
+        store().set(rowId, "modified", formatBool(modified));
+    }
+
+    /// @brief Records property `counts` as `<rows or unknown>/<columns>`, which `RecordingBackend::lastCounts` reads.
+    /// @param rows    The rows, or nothing.
+    /// @param columns The visible columns.
+    void setCounts(std::optional<std::int64_t> rows, std::size_t columns) override {
+        _counts = {rows, columns};
+        set("counts", (rows ? std::to_string(*rows) : std::string{"unknown"}) + "/" + std::to_string(columns));
+    }
+
+    /// @brief Records property `scrolledToRow`.
+    /// @param viewRow The row.
+    void scrollToRow(std::size_t viewRow) override { set("scrolledToRow", std::to_string(viewRow)); }
+
+    /// @brief Records property `highlightedRow`, `none` for no mark.
+    /// @param viewRow The row, or nothing.
+    void setHighlightedRow(std::optional<std::size_t> viewRow) override {
+        set("highlightedRow", viewRow ? std::to_string(*viewRow) : std::string{"none"});
+    }
+
+    /// @brief Records the cell's property `column`, `none` for a pooled cell.
+    /// @param row    One of this table's rows.
+    /// @param cell   One of the row's children.
+    /// @param column The column, or nothing.
+    /// @throws std::logic_error when @p row is not this table's child, or @p cell not the row's.
+    void setCellColumn(Widget& row, Widget& cell, std::optional<std::size_t> column) override {
+        int const rowId = store().idOf(row);
+        int const cellId = store().idOf(cell);
+        if (store().at(rowId).parent != id() || store().at(cellId).parent != rowId) {
+            throw std::logic_error{"RecordingBackend: setCellColumn of a widget that is not a cell of this table"};
+        }
+        store().set(cellId, "column", column ? std::to_string(*column) : std::string{"none"});
+    }
+
+    /// @brief Records the row's property `viewRow`.
+    /// @param row     One of this table's rows.
+    /// @param viewRow The row's view index.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setRowIndex(Widget& row, std::size_t viewRow) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setRowIndex of a widget that is not this table's row"};
+        }
+        _viewRows[rowId] = viewRow;
+        store().set(rowId, "viewRow", std::to_string(viewRow));
+    }
+
+    /// @brief The measure the backend was given, `TableMeasure{}` unless `RecordingBackend::setTableMeasure` set one.
+    /// @return It.
+    [[nodiscard]] TableMeasure tableMeasure() const override { return _measure ? *_measure : TableMeasure{}; }
+
+    /// @brief Shares the backend's measure, which `tableMeasure` answers.
+    /// @param measure The measure; null for the default.
+    void measureBy(std::shared_ptr<TableMeasure const> measure) { _measure = std::move(measure); }
+
+    /// @brief Calls the handler `setOnHorizontalRange` stored, as a backend's scroll would.
+    /// @param scrollX  The offset.
+    /// @param viewport The viewport's width.
+    void scrollColumns(int scrollX, int viewport) {
+        if (_onHorizontal) {
+            _onHorizontal(scrollX, viewport);
+        }
+    }
+
+    /// @brief Calls the handler `setOnSelectRange` stored, as a Shift+click would, or a Ctrl+Shift+click with
+    ///        `Extend`.
+    /// @param anchor The anchor's view row.
+    /// @param focus  The end's view row.
+    /// @param change Whether the range replaces the selection or is added to it.
+    void selectRange(std::size_t anchor, std::size_t focus, SelectionChange change = SelectionChange::Replace) {
+        if (_onSelectRange) {
+            _onSelectRange(anchor, focus, change);
+        }
+    }
+
+    /// @brief Calls the handler `setOnColumnMeasured` stored, as a cell's layout would.
+    /// @param column  The column.
+    /// @param measure What was measured.
+    void measure(std::size_t column, ColumnMeasure const& measure) {
+        if (_onMeasured) {
+            _onMeasured(column, measure);
+        }
+    }
+
+    /// @brief Calls the handler `setOnFocusMove` stored, as a key would.
+    /// @param move The move.
+    void moveFocus(FocusMove move) {
+        if (_onFocusMove) {
+            _onFocusMove(move);
+        }
+    }
+
+    /// @brief The column window last set.
+    /// @return Its columns; empty before any.
+    [[nodiscard]] std::vector<std::size_t> const& windowColumns() const noexcept { return _window; }
+
+    /// @brief The total width last set.
+    /// @return It; 0 before any.
+    [[nodiscard]] int totalWidth() const noexcept { return _totalWidth; }
+
+    /// @brief How many leading columns of the last window are pinned.
+    /// @return The count.
+    [[nodiscard]] std::size_t pinnedShown() const noexcept { return _pinnedShown; }
+
+    /// @brief The header cells drawn: one per column of the window once one is set, one per column before.
+    /// @return The count.
+    [[nodiscard]] std::size_t headerCells() const noexcept { return _windowSet ? _window.size() : _columns.size(); }
+
+    /// @brief The last horizontal offset set.
+    /// @return It, or nothing when never set.
+    [[nodiscard]] std::optional<int> horizontalOffset() const noexcept { return _horizontalOffset; }
+
+    /// @brief The focused cell last set.
+    /// @return Its view row and column; `{0, 0}` before any.
+    [[nodiscard]] std::pair<std::size_t, std::size_t> focusCell() const noexcept { return _focusCell; }
+
+    /// @brief Every focused cell set, oldest first.
+    /// @return Their view rows and columns.
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> const& focusCells() const noexcept {
+        return _focusCells;
+    }
+
+    /// @brief For every focused cell set, the key of the row the table held at that view row when it was set.
+    /// @return The keys, oldest first; none where no row was at that view row.
+    [[nodiscard]] std::vector<std::optional<Key>> const& focusKeys() const noexcept { return _focusKeys; }
+
+    /// @brief The counts last set.
+    /// @return The rows (or nothing) and the columns.
+    [[nodiscard]] std::pair<std::optional<std::int64_t>, std::size_t> lastCounts() const noexcept { return _counts; }
+
+    /// @brief The status line last set.
+    /// @return It; the default before any `setStatus`.
+    [[nodiscard]] TableStatus const& status() const noexcept { return _status; }
+
+    /// @brief The columns last set.
+    /// @return They; empty before any `setColumns`.
+    [[nodiscard]] std::vector<TableColumn> const& columns() const noexcept { return _columns; }
+
+    /// @brief A current row's cell's load state, as `setCellLoad` last set it.
+    /// @param key    The row's key.
+    /// @param column The cell's column.
+    /// @return The state; `Loaded` when none was set.
+    /// @throws std::logic_error when no current row has @p key.
+    [[nodiscard]] CellLoad cellLoad(Key const& key, std::size_t column) const {
+        std::optional<int> const row = rowOf(key);
+        if (!row) {
+            throw std::logic_error{"RecordingBackend: cellLoad of " + formatKey(key) + ", which Table#" +
+                                   std::to_string(id()) + " has no row for"};
+        }
+        auto const found = _loads.find(std::pair{*row, column});
+        return found == _loads.end() ? CellLoad::Loaded : found->second;
+    }
+
+    /// @brief A current row's cell's accent, as `setCellAccent` last set it.
+    /// @param key    The row's key.
+    /// @param column The cell's column.
+    /// @return The accent; `CellAccent{}` when none was set.
+    /// @throws std::logic_error when no current row has @p key.
+    [[nodiscard]] CellAccent cellAccent(Key const& key, std::size_t column) const {
+        std::optional<int> const row = rowOf(key);
+        if (!row) {
+            throw std::logic_error{"RecordingBackend: cellAccent of " + formatKey(key) + ", which Table#" +
+                                   std::to_string(id()) + " has no row for"};
+        }
+        auto const found = _accents.find(std::pair{*row, column});
+        return found == _accents.end() ? CellAccent{} : found->second;
+    }
+
     /// @brief The selection mode last set.
     /// @return The mode; `None` until `setSelectionMode` runs.
     [[nodiscard]] SelectionMode mode() const noexcept { return _mode; }
@@ -2482,6 +3239,7 @@ public:
     ///        input left it; nothing is logged.
     /// @param keys Keys of current rows.
     void select(std::vector<Key> const& keys) {
+        _viewExcept.reset();
         _requested = keys;
         remark();
     }
@@ -2541,6 +3299,14 @@ public:
     /// @return The keys.
     [[nodiscard]] std::vector<Key> markedKeys() const {
         std::vector<Key> keys;
+        if (_viewExcept) {
+            for (Key const& key : rowKeys()) {
+                if (!std::ranges::contains(*_viewExcept, key)) {
+                    keys.push_back(key);
+                }
+            }
+            return keys;
+        }
         for (Key const& key : _requested.value_or(std::vector<Key>{})) {
             if ((rowOf(key).has_value() || _existing.contains(key)) && !headingKey(key)) {
                 keys.push_back(key);
@@ -2568,9 +3334,68 @@ private:
     std::unordered_set<Key> _existing;
     // Engaged once `setSelection` ran or the user selected.
     std::optional<std::vector<Key>> _requested;
+    // Engaged while the selection is of the view: every row but these keys is marked.
+    std::optional<std::vector<Key>> _viewExcept;
+    // The last marks of each row, by its key.
+    std::map<Key, RowMarks> _rowMarks;
+    std::map<Key, std::string> _rowTones;
+    std::function<void(std::string)> _onStatusEntry;
     // The row a Shift-click's range starts from: the last row clicked without Shift.
     std::optional<Key> _anchor;
     std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
+    std::function<void()> _onSelectAll;
+    std::vector<TableSort> _chain;
+    std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> _menu;
+    std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> _onMenu;
+    std::function<std::vector<MenuEntry>(Key const&, std::size_t)> _cellMenu;
+    std::function<void(Key const&, std::size_t, std::vector<std::size_t> const&)> _cellChosen;
+    std::vector<std::string> _cellMenuKeys;
+    mutable std::size_t _cellMenuAsks = 0;  // how many times the cell menu's entries were asked for
+    std::map<int, std::size_t> _viewRows;   // row id -> view index, as setRowIndex told it
+    bool _focusSet = false;                 // whether setFocusCell ran
+    std::vector<std::size_t> _visible;
+    std::function<void(std::size_t, std::size_t)> _onColumnMove;
+    std::function<void(std::size_t, std::optional<int>)> _onColumnResize;
+    std::function<void(std::size_t)> _onFilter;
+    std::vector<std::size_t> _filtered;
+    std::vector<TableColumnGroup> _groups;
+    std::vector<BandRun> _bands;
+    std::function<void(std::size_t)> _onGroupFilter;
+    std::function<void()> _onCopy;
+    TableStatus _status;
+    std::vector<TableColumn> _columns;
+    std::map<std::pair<int, std::size_t>, CellLoad> _loads;  // (row id, column) -> state, as setCellLoad told it
+    std::map<std::pair<int, std::size_t>, CellAccent>
+        _accents;                      // (row id, column) -> accent, as setCellAccent told it
+    std::vector<std::size_t> _window;  // the column window, as setColumnWindow last gave it
+    bool _windowSet = false;
+    int _totalWidth = 0;
+    std::size_t _pinnedShown = 0;
+    std::optional<int> _horizontalOffset;
+    std::pair<std::size_t, std::size_t> _focusCell;
+    std::vector<std::pair<std::size_t, std::size_t>> _focusCells;
+    std::vector<std::optional<Key>> _focusKeys;
+    std::pair<std::optional<std::int64_t>, std::size_t> _counts;
+    std::function<void(int, int)> _onHorizontal;
+    std::function<void(std::size_t, std::size_t, SelectionChange)> _onSelectRange;
+    std::function<void(std::size_t, ColumnMeasure const&)> _onMeasured;
+    std::function<void(FocusMove)> _onFocusMove;
+    std::function<void(std::size_t, std::size_t, std::size_t, std::size_t)> _onCellSelect;
+    std::function<void(std::string)> _onText;
+    std::function<void(std::size_t, std::size_t, bool)> _onCellClick;
+    std::shared_ptr<TableMeasure const> _measure;
+
+    [[nodiscard]] static std::string formatCellLoad(CellLoad load) {
+        switch (load) {
+            case CellLoad::Unloaded:
+                return "Unloaded";
+            case CellLoad::Failed:
+                return "Failed";
+            case CellLoad::Loaded:
+            default:
+                return "Loaded";
+        }
+    }
 };
 
 }  // namespace detail
@@ -2656,7 +3481,9 @@ public:
         return std::make_unique<detail::FakeBusy>(_store, "Busy", parent);
     }
     [[nodiscard]] std::unique_ptr<TableWidget> createTable(ContainerWidget* parent) override {
-        return std::make_unique<detail::FakeTable>(_store, "Table", parent);
+        auto table = std::make_unique<detail::FakeTable>(_store, "Table", parent);
+        table->measureBy(_tableMeasure);
+        return table;
     }
     [[nodiscard]] std::unique_ptr<DateTimeInputWidget> createDateTimeInput(ContainerWidget* parent, DateMode mode,
                                                                            int offsetMinutes) override {
@@ -2909,7 +3736,8 @@ public:
     /// and stops when the field has a submit handler, and goes on after the commit when it has none; a `Checkbox`'s
     /// `Space` toggles it; a segmented `Select`'s `Left` and `Right` choose the previous or the next option, stopping
     /// at the ends; a `Table`'s `Enter` activates its first marked row, and stops whether or not one is marked; a
-    /// `Multiple` table's `Ctrl+A` selects every row, or clears them when every row is selected, as `Extend`. Then
+    /// `Multiple` table's `Ctrl+A` calls its select-all handler when it has one (`setOnSelectAll`), and otherwise
+    /// selects every row, or clears them when every row is selected, as `Extend`. Then
     /// the chords of its ancestors, innermost first. A handler that destroys the focused widget stops the key there.
     /// Like every helper it acts only when a user could reach @p widgetId.
     /// @param widgetId The widget focus is on.
@@ -3288,18 +4116,579 @@ public:
         invoke(record.callbacks.selection, std::move(keys), change);
     }
 
-    /// @brief Clicks a column's header as the user would: a sortable column's reaches `onSort` with its index; any
-    ///        other header does nothing, since a user can click it.
+    /// @brief A plain click on a row: `clickRow` with `RowClick::Only`.
+    /// @param widgetId The table.
+    /// @param key      The row's key.
+    void clickRow(int widgetId, Key const& key) { clickRow(widgetId, key, RowClick::Only); }
+
+    /// @brief A `Ctrl`+click on a row: `clickRow` with `RowClick::Toggle`.
+    /// @param widgetId The table.
+    /// @param key      The row's key.
+    void ctrlClickRow(int widgetId, Key const& key) { clickRow(widgetId, key, RowClick::Toggle); }
+
+    /// @brief The user's select-all on a `Multiple` table (`Ctrl+A`, the select-all box): the handler
+    ///        `setOnSelectAll` stored.
+    /// @param widgetId The table.
+    /// @throws std::logic_error when the widget is not a table or has no select-all handler.
+    void selectAll(int widgetId) {
+        detail::Record const& record = expectKind(widgetId, "selectAll", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable*>(record.widget);
+        if (table == nullptr || !table->onSelectAll()) {
+            throw std::logic_error{"RecordingBackend: selectAll of Table#" + std::to_string(widgetId) +
+                                   ", which has no select-all handler"};
+        }
+        if (reachable(record)) {
+            std::function<void()> const selectAll = table->onSelectAll();
+            selectAll();
+        }
+    }
+
+    /// @brief Chooses an entry the status line shows: the handler `setOnStatusEntry` stored, with its id.
+    /// @param widgetId The table.
+    /// @param entry    The entry's id.
+    /// @throws std::logic_error when the widget is not a table, has no handler, or its status shows no such entry.
+    void chooseStatusEntry(int widgetId, std::string const& entry) {
+        detail::Record const& record = expectKind(widgetId, "chooseStatusEntry", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable*>(record.widget);
+        bool const shown =
+            table != nullptr && (std::ranges::contains(table->status().entries, entry, &StatusEntry::id) ||
+                                 std::ranges::contains(table->status().standingEntries, entry, &StatusEntry::id));
+        if (!shown || !table->onStatusEntry()) {
+            throw std::logic_error{"RecordingBackend: chooseStatusEntry of " + entry + " on Table#" +
+                                   std::to_string(widgetId) + ", whose status line shows no such entry"};
+        }
+        if (reachable(record)) {
+            std::function<void(std::string)> const choose = table->onStatusEntry();
+            choose(entry);
+        }
+    }
+
+    /// @brief Clicks a column's header as the user would: a sortable column's reaches `onSort` with its index and
+    ///        @p click; any other header does nothing, since a user can click it.
     /// @param widgetId The table.
     /// @param column The column's index among the columns `setColumns` gave.
-    /// @throws std::logic_error when the widget is not a table.
+    /// @param click  Whether `Shift` is held.
+    /// @throws std::logic_error when the widget is not a table, or the column's header is not drawn.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-    void clickHeader(int widgetId, std::size_t column) {
+    void clickHeader(int widgetId, std::size_t column, HeaderClick click = HeaderClick::Plain) {
         detail::Record const& record = expectKind(widgetId, "clickHeader", {"Table"});
-        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
-        if (table != nullptr && table->sortable(column) && reachable(record)) {
-            invoke(record.callbacks.sort, column);
+        auto const& table = shownHeader(record, widgetId, column, "clickHeader");
+        if (table.sortable(column) && reachable(record)) {
+            invoke(record.callbacks.sort, column, click);
         }
+    }
+
+    /// @brief The entries of a header's menu, or of the table's menu, as a user opening it would see them.
+    /// @param widgetId The table.
+    /// @param column   The column, or none for the table's menu.
+    /// @return The entries; none when the table has no menus or a user cannot reach it.
+    /// @throws std::logic_error when the widget is not a table, or the column's header is not drawn.
+    [[nodiscard]] std::vector<MenuEntry> menuOf(int widgetId, std::optional<std::size_t> column) {
+        detail::Record const& record = expectKind(widgetId, "menuOf", {"Table"});
+        detail::FakeTable const& table = column ? shownHeader(record, widgetId, *column, "menuOf") : fakeTable(record);
+        return reachable(record) ? table.menuEntries(column) : std::vector<MenuEntry>{};
+    }
+
+    /// @brief Chooses an entry of a header's menu, or of the table's menu, by its labels from the top, as a user
+    ///        opening each submenu on the way would. Nothing is reported for a disabled entry, an entry inside a
+    ///        disabled one, or an entry with a submenu.
+    /// @param widgetId The table.
+    /// @param column   The column, or none for the table's menu.
+    /// @param labels   The entry's label at each level, from the top; not empty.
+    /// @throws std::logic_error when the widget is not a table, the column's header is not drawn, or a label names
+    ///         no entry of its level.
+    void chooseMenu(int widgetId, std::optional<std::size_t> column, std::vector<std::string_view> const& labels) {
+        std::vector<MenuEntry> const entries = menuOf(widgetId, column);
+        detail::Record const& record = _store->at(widgetId);
+        std::vector<MenuEntry> const* level = &entries;
+        std::vector<std::size_t> path;
+        bool enabled = true;
+        MenuEntry const* entry = nullptr;
+        for (std::string_view const label : labels) {
+            auto const found = std::ranges::find_if(*level, [label](MenuEntry const& candidate) {
+                return !candidate.separator && !candidate.heading && candidate.label == label;
+            });
+            if (found == level->end()) {
+                throw std::logic_error{"RecordingBackend: chooseMenu of '" + std::string{label} + "', which Table#" +
+                                       std::to_string(widgetId) + "'s menu does not have"};
+            }
+            path.push_back(static_cast<std::size_t>(std::distance(level->begin(), found)));
+            enabled = enabled && found->enabled;
+            entry = &*found;
+            level = &found->items;
+        }
+        if (entry != nullptr && enabled && entry->items.empty() && reachable(record)) {
+            invoke(fakeTable(record).onMenu(), column, std::move(path));
+        }
+    }
+
+    /// @brief Opens a cell's menu as a right click on the cell would: in a table that selects, a row that is not
+    ///        selected becomes the selection alone, reported as `Replace`; then the entries are asked for, which
+    ///        focuses the cell.
+    /// @param widgetId The table.
+    /// @param key      The cell's row.
+    /// @param column   The cell's column: an index into the table's columns.
+    /// @return The entries; none when the table has no cell menu or a user cannot reach it.
+    /// @throws std::logic_error when the widget is not a table, or no current row has @p key.
+    [[nodiscard]] std::vector<MenuEntry> rightClickCell(int widgetId, Key const& key, std::size_t column) {
+        detail::Record const& record = expectKind(widgetId, "rightClickCell", {"Table"});
+        auto* const table = dynamic_cast<detail::FakeTable*>(record.widget);
+        std::optional<int> const rowId = table == nullptr ? std::nullopt : table->rowOf(key);
+        if (!rowId.has_value()) {
+            throw std::logic_error{"RecordingBackend: rightClickCell of " + detail::formatKey(key) + " of Table#" +
+                                   std::to_string(widgetId) + ", which has no such row"};
+        }
+        if (!reachable(record) || !reachable(_store->at(*rowId))) {
+            return {};
+        }
+        if (table->mode() != SelectionMode::None && !table->headingKey(key) &&
+            !std::ranges::contains(table->markedKeys(), key)) {
+            table->selectByUser({key});
+            invoke(record.callbacks.selection, std::vector<Key>{key}, SelectionChange::Replace);
+        }
+        return exists(widgetId) ? table->cellMenuEntries(key, column) : std::vector<MenuEntry>{};
+    }
+
+    /// @brief How many times a table's cell menu entries were asked for: by an opened menu or by a key.
+    /// @param widgetId The table.
+    /// @return The count.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::size_t cellMenuAsks(int widgetId) { return fakeTable(widgetId, "cellMenuAsks").cellMenuAsks(); }
+
+    /// @brief Chooses an entry of a cell's menu by its labels from the top, as a user opening it on the cell and each
+    ///        submenu on the way would. Nothing is reported for a disabled entry, an entry inside a disabled one, or
+    ///        an entry with a submenu.
+    /// @param widgetId The table.
+    /// @param key      The cell's row.
+    /// @param column   The cell's column.
+    /// @param labels   The entry's label at each level, from the top; not empty.
+    /// @throws std::logic_error when the widget is not a table, or a label names no entry of its level.
+    void chooseCellMenu(int widgetId, Key const& key, std::size_t column,
+                        std::vector<std::string_view> const& labels) {
+        detail::Record const& record = expectKind(widgetId, "chooseCellMenu", {"Table"});
+        std::vector<MenuEntry> const entries = fakeTable(record).cellMenuEntries(key, column);
+        std::vector<MenuEntry> const* level = &entries;
+        std::vector<std::size_t> path;
+        bool enabled = true;
+        MenuEntry const* entry = nullptr;
+        for (std::string_view const label : labels) {
+            auto const found = std::ranges::find_if(*level, [label](MenuEntry const& candidate) {
+                return !candidate.separator && !candidate.heading && candidate.label == label;
+            });
+            if (found == level->end()) {
+                throw std::logic_error{"RecordingBackend: chooseCellMenu of '" + std::string{label} +
+                                       "', which Table#" + std::to_string(widgetId) + "'s cell menu does not have"};
+            }
+            path.push_back(static_cast<std::size_t>(std::distance(level->begin(), found)));
+            enabled = enabled && found->enabled;
+            entry = &*found;
+            level = &found->items;
+        }
+        if (entry != nullptr && enabled && entry->items.empty() && reachable(record)) {
+            invoke(fakeTable(record).cellChosen(), key, column, path);
+        }
+    }
+
+    /// @brief Moves a column as a user dragging its header would: `onColumnMove` gets the column and @p position,
+    ///        unless the column is at that place already or the place is past the last visible column.
+    /// @param widgetId The table.
+    /// @param column   The column.
+    /// @param position Its new place among the visible columns.
+    /// @throws std::logic_error when the widget is not a table, or the column's header is not drawn.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+    void moveColumn(int widgetId, std::size_t column, std::size_t position) {
+        detail::Record const& record = expectKind(widgetId, "moveColumn", {"Table"});
+        detail::FakeTable const& table = shownHeader(record, widgetId, column, "moveColumn");
+        if (reachable(record) && table.placeOf(column) != position && position < table.visibleCount()) {
+            invoke(table.onColumnMove(), column, position);
+        }
+    }
+
+    /// @brief Resizes a column as a user dragging its header's trailing edge would, or double-clicking it.
+    /// @param widgetId The table.
+    /// @param column   The column.
+    /// @param units    The width in `Sizing` units, or none for the double click.
+    /// @throws std::logic_error when the widget is not a table, or the column's header is not drawn.
+    void resizeColumn(int widgetId, std::size_t column, std::optional<int> units) {
+        detail::Record const& record = expectKind(widgetId, "resizeColumn", {"Table"});
+        detail::FakeTable const& table = shownHeader(record, widgetId, column, "resizeColumn");
+        if (reachable(record)) {
+            invoke(table.onColumnResize(), column, units);
+        }
+    }
+
+    /// @brief Presses a filterable column's filter button; another column's header has none, so nothing happens.
+    /// @param widgetId The table.
+    /// @param column   The column.
+    /// @throws std::logic_error when the widget is not a table, or the column's header is not drawn.
+    void clickFilter(int widgetId, std::size_t column) {
+        detail::Record const& record = expectKind(widgetId, "clickFilter", {"Table"});
+        detail::FakeTable const& table = shownHeader(record, widgetId, column, "clickFilter");
+        if (reachable(record) && table.columns().at(column).filterable) {
+            invoke(table.onFilter(), column);
+        }
+    }
+
+    /// @brief Presses a column group's filter button in the group header row.
+    /// @param widgetId The table.
+    /// @param group    The group's index among those `setColumnGroups` gave.
+    /// @throws std::logic_error when the widget is not a table, or it draws no such group.
+    void clickGroupFilter(int widgetId, std::size_t group) {
+        detail::Record const& record = expectKind(widgetId, "clickGroupFilter", {"Table"});
+        detail::FakeTable const& table = fakeTable(record);
+        if (group >= table.groupCount()) {
+            throw std::logic_error{"RecordingBackend: clickGroupFilter of group " + std::to_string(group) +
+                                   ", which Table#" + std::to_string(widgetId) + " does not draw"};
+        }
+        if (reachable(record)) {
+            invoke(table.onGroupFilter(), group);
+        }
+    }
+
+    /// @brief Asks to copy as `Ctrl+C` on the focused table does.
+    /// @param widgetId The table.
+    /// @throws std::logic_error when the widget is not a table.
+    void pressCopy(int widgetId) {
+        detail::Record const& record = expectKind(widgetId, "pressCopy", {"Table"});
+        if (reachable(record)) {
+            invoke(fakeTable(record).onCopy());
+        }
+    }
+
+    /// @brief The text a column's header draws: its label, then its sort key's mark.
+    /// @param widgetId The table.
+    /// @param column   The column.
+    /// @return The text.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::string headerText(int widgetId, std::size_t column) {
+        return fakeTable(expectKind(widgetId, "headerText", {"Table"})).headerText(column);
+    }
+
+    /// @brief Whether a column's header is drawn: the column is one of the table's and, once the visible columns were
+    ///        told, one of them.
+    /// @param widgetId The table.
+    /// @param column   The column.
+    /// @return True when its header is drawn.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] bool headerShown(int widgetId, std::size_t column) {
+        return fakeTable(expectKind(widgetId, "headerShown", {"Table"})).headerShown(column);
+    }
+
+    /// @brief A column header's accessible description: its sort key's, or empty.
+    /// @param widgetId The table.
+    /// @param column   The column.
+    /// @return The description.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::string headerDescription(int widgetId, std::size_t column) {
+        return fakeTable(expectKind(widgetId, "headerDescription", {"Table"})).headerDescription(column);
+    }
+
+    /// @brief A column header's accessible name: its label, and `, filtered` while it has a filter.
+    /// @param widgetId The table.
+    /// @param column   The column.
+    /// @return The name.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::string headerName(int widgetId, std::size_t column) {
+        return fakeTable(expectKind(widgetId, "headerName", {"Table"})).headerName(column);
+    }
+
+    /// @brief Records the text as the clipboard's, which `clipboardText` reads, unless `setClipboard(false)` took
+    ///        the clipboard away.
+    /// @param text The text.
+    /// @return Whether the backend has a clipboard: true unless `setClipboard(false)`.
+    bool copyText(std::string_view text) override {
+        if (!_hasClipboard) {
+            return false;
+        }
+        _clipboard = std::string{text};
+        return true;
+    }
+
+    /// @brief The clipboard's text, as `copyText` last recorded it.
+    /// @return The text; nothing while `setClipboard(false)` took the clipboard away.
+    [[nodiscard]] std::optional<std::string> pasteText() override {
+        return _hasClipboard ? std::optional{_clipboard} : std::nullopt;
+    }
+
+    /// @brief Gives the backend a clipboard, as it has from the start, or takes it away, as a platform without
+    ///        one would: `copyText` then writes nothing and returns false.
+    /// @param available Whether there is a clipboard.
+    void setClipboard(bool available) { _hasClipboard = available; }
+
+    /// @brief The last text `copyText` was given.
+    /// @return It; empty before any.
+    [[nodiscard]] std::string clipboardText() const { return _clipboard; }
+
+    /// @brief Chooses "Retry" on a table's status line.
+    /// @param widgetId The table.
+    /// @throws std::logic_error when the widget is not a table.
+    void retryTable(int widgetId) {
+        detail::Record const& record = expectKind(widgetId, "retryTable", {"Table"});
+        if (reachable(record)) {
+            invoke(record.callbacks.retry);
+        }
+    }
+
+    /// @brief The last marks the mount set on a table's row.
+    /// @param widgetId The table.
+    /// @param key      The row's key.
+    /// @return The marks; none before any `setRowMarks` of that row.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::optional<RowMarks> rowMarks(int widgetId, Key const& key) {
+        detail::Record const& record = expectKind(widgetId, "rowMarks", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        return table == nullptr ? std::nullopt : table->rowMarks(key);
+    }
+
+    /// @brief The last tone the mount set on a table's row, by the row's key.
+    /// @param widgetId The table.
+    /// @param key      The row's key.
+    /// @return The tone's name, `none` for no tone; empty before any `setRowTone` of that row.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::string rowTone(int widgetId, Key const& key) {
+        detail::Record const& record = expectKind(widgetId, "rowTone", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        return table == nullptr ? std::string{} : table->rowTone(key);
+    }
+
+    /// @brief A table's status line, as the mount last set it.
+    /// @param widgetId The table.
+    /// @return The status; the default before any `setStatus`.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] TableStatus tableStatus(int widgetId) {
+        detail::Record const& record = expectKind(widgetId, "tableStatus", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        return table == nullptr ? TableStatus{} : table->status();
+    }
+
+    /// @brief A table's columns, as the mount last set them.
+    /// @param widgetId The table.
+    /// @return The columns; empty before any `setColumns`.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::vector<TableColumn> tableColumns(int widgetId) {
+        detail::Record const& record = expectKind(widgetId, "tableColumns", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        return table == nullptr ? std::vector<TableColumn>{} : table->columns();
+    }
+
+    /// @brief Scrolls a table sideways as the user would: the handler `setOnHorizontalRange` stored gets the offset
+    ///        and the viewport's width.
+    /// @param widgetId The table.
+    /// @param scrollX  The offset.
+    /// @param viewport The viewport's width.
+    /// @throws std::logic_error when the widget is not a table.
+    void scrollTableColumns(int widgetId, int scrollX, int viewport) {
+        fakeTable(widgetId, "scrollTableColumns").scrollColumns(scrollX, viewport);
+    }
+
+    /// @brief Moves a table's focused cell as a key would.
+    /// @param widgetId The table.
+    /// @param move     The move.
+    /// @throws std::logic_error when the widget is not a table.
+    void focusMove(int widgetId, FocusMove move) { fakeTable(widgetId, "focusMove").moveFocus(move); }
+
+    /// @brief Types printable text on a table's focused cell, as a key with no editor open does: calls the handler
+    ///        `TableWidget::setOnText` stored, if any.
+    /// @param widgetId The table.
+    /// @param text     The text.
+    /// @throws std::logic_error when the widget is not a table.
+    void typeInto(int widgetId, std::string text) {
+        detail::FakeTable const& table = fakeTable(widgetId, "typeInto");
+        if (reachable(_store->at(widgetId)) && table.onText()) {
+            std::function<void(std::string)> const handler = table.onText();
+            handler(std::move(text));
+        }
+    }
+
+    /// @brief Clicks a table's cell: calls the handler `TableWidget::setOnCellClick` stored with `false`, and for a
+    ///        double click then again with `true`, as a backend does.
+    /// @param widgetId    The table.
+    /// @param viewRow     The cell's view row.
+    /// @param column      The cell's column: an index into the table's columns.
+    /// @param doubleClick Whether the click is a double click.
+    /// @throws std::logic_error when the widget is not a table.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a row and a column, as every cell driver takes them.
+    void clickCell(int widgetId, std::size_t viewRow, std::size_t column, bool doubleClick = false) {
+        detail::FakeTable const& table = fakeTable(widgetId, "clickCell");
+        if (!reachable(_store->at(widgetId)) || !table.onCellClick()) {
+            return;
+        }
+        std::function<void(std::size_t, std::size_t, bool)> const handler = table.onCellClick();
+        handler(viewRow, column, false);
+        if (doubleClick) {
+            handler(viewRow, column, true);
+        }
+    }
+
+    /// @brief Selects a rectangle of cells as a drag from one cell to another does: calls the handler
+    ///        `TableWidget::setOnCellSelect` stored, if any.
+    /// @param tableId        The table.
+    /// @param anchorRow      The anchor's view row.
+    /// @param anchorPosition The anchor's place among the visible columns.
+    /// @param focusRow       The focus's view row.
+    /// @param focusPosition  The focus's place among the visible columns.
+    /// @throws std::logic_error when the widget is not a table.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): two corners, each a row and a position.
+    void selectCells(int tableId, std::size_t anchorRow, std::size_t anchorPosition, std::size_t focusRow,
+                     std::size_t focusPosition) {
+        detail::FakeTable& table = fakeTable(tableId, "selectCells");
+        if (reachable(_store->at(tableId))) {
+            table.selectCells(anchorRow, anchorPosition, focusRow, focusPosition);
+        }
+    }
+
+    /// @brief Moves focus out of a table and everything inside it: calls the handler `TableWidget::setOnFocusOut`
+    ///        stored, if any.
+    /// @param widgetId The table.
+    /// @throws std::logic_error when the widget is not a table.
+    void focusOut(int widgetId) {
+        detail::Record const& record = expectKind(widgetId, "focusOut", {"Table"});
+        invoke(record.callbacks.focusOut);
+    }
+
+    /// @brief Selects a range of view rows as a Shift+click over rows the backend holds no keys for would: the
+    ///        handler `setOnSelectRange` stored gets the two rows and @p change, `Replace` unless the range is added
+    ///        to the selection as a Ctrl+Shift+click adds it.
+    /// @param widgetId The table.
+    /// @param anchor   The anchor's view row.
+    /// @param focus    The end's view row.
+    /// @param change   Whether the range replaces the selection or is added to it.
+    /// @throws std::logic_error when the widget is not a table.
+    void selectTableRange(int widgetId, std::size_t anchor, std::size_t focus,
+                          SelectionChange change = SelectionChange::Replace) {
+        fakeTable(widgetId, "selectTableRange").selectRange(anchor, focus, change);
+    }
+
+    /// @brief Reports the width a cell of a column measured, as a backend's layout would.
+    /// @param widgetId The table.
+    /// @param column   The column: an index into the table's columns.
+    /// @param width    The width.
+    /// @throws std::logic_error when the widget is not a table.
+    void measureColumn(int widgetId, std::size_t column, int width) {
+        fakeTable(widgetId, "measureColumn").measure(column, ColumnMeasure{.natural = width, .least = width});
+    }
+
+    /// @brief Reports what a column's header and cells measured, as a backend's layout would.
+    /// @param widgetId The table.
+    /// @param column   The column: an index into the table's columns.
+    /// @param measure  What was measured.
+    /// @throws std::logic_error when the widget is not a table.
+    void measureColumn(int widgetId, std::size_t column, ColumnMeasure const& measure) {
+        fakeTable(widgetId, "measureColumn").measure(column, measure);
+    }
+
+    /// @brief A table's column window, as the mount last set it.
+    /// @param widgetId The table.
+    /// @return Its columns, pinned first; empty before any.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::vector<std::size_t> windowColumns(int widgetId) {
+        return fakeTable(widgetId, "windowColumns").windowColumns();
+    }
+
+    /// @brief A table's total width, as the mount last set it.
+    /// @param widgetId The table.
+    /// @return The width; 0 before any.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] int totalWidth(int widgetId) { return fakeTable(widgetId, "totalWidth").totalWidth(); }
+
+    /// @brief How many leading columns of a table's last column window the mount marked pinned.
+    /// @param widgetId The table.
+    /// @return The count.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::size_t pinnedShown(int widgetId) { return fakeTable(widgetId, "pinnedShown").pinnedShown(); }
+
+    /// @brief The header cells a table draws: the column window's once one is set, every column's before.
+    /// @param widgetId The table.
+    /// @return The count.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::size_t headerCells(int widgetId) { return fakeTable(widgetId, "headerCells").headerCells(); }
+
+    /// @brief Sets the measure every table of this backend answers `TableWidget::tableMeasure` with, before a mount.
+    /// @param measure The measure.
+    void setTableMeasure(TableMeasure const& measure) { *_tableMeasure = measure; }
+
+    /// @brief A table's horizontal offset, as the mount last moved it.
+    /// @param widgetId The table.
+    /// @return The offset, or nothing when the mount never moved it.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::optional<int> horizontalOffset(int widgetId) {
+        return fakeTable(widgetId, "horizontalOffset").horizontalOffset();
+    }
+
+    /// @brief A table's focused cell, as the mount last set it.
+    /// @param widgetId The table.
+    /// @return Its view row and column.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::pair<std::size_t, std::size_t> focusCell(int widgetId) {
+        return fakeTable(widgetId, "focusCell").focusCell();
+    }
+
+    /// @brief Every focused cell the mount set on a table, oldest first.
+    /// @param widgetId The table.
+    /// @return Their view rows and columns.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> focusCells(int widgetId) {
+        return fakeTable(widgetId, "focusCells").focusCells();
+    }
+
+    /// @brief For every focused cell the mount set on a table, the key of the row at that view row when it was set.
+    /// @param widgetId The table.
+    /// @return The keys, oldest first; none where no row was at that view row.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::vector<std::optional<Key>> focusKeys(int widgetId) {
+        return fakeTable(widgetId, "focusKeys").focusKeys();
+    }
+
+    /// @brief A table's counts, as the mount last set them.
+    /// @param widgetId The table.
+    /// @return The rows (nothing when unknown) and the visible columns.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::pair<std::optional<std::int64_t>, std::size_t> lastCounts(int widgetId) {
+        return fakeTable(widgetId, "lastCounts").lastCounts();
+    }
+
+    /// @brief A cell's load state in a table whose rows come from a `TableSource`.
+    /// @param widgetId The table.
+    /// @param rowKey   The row's key.
+    /// @param column   The cell's column: an index into the table's columns.
+    /// @return The state `setCellLoad` last gave the cell; `Loaded` when none.
+    /// @throws std::logic_error when the widget is not a table, or none of its current rows has @p rowKey.
+    [[nodiscard]] CellLoad cellLoad(int widgetId, Key const& rowKey, std::size_t column) {
+        detail::Record const& record = expectKind(widgetId, "cellLoad", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        if (table == nullptr) {
+            throw std::logic_error{"RecordingBackend: cellLoad of a widget that is not a table"};
+        }
+        return table->cellLoad(rowKey, column);
+    }
+
+    /// @brief A cell's accent in a table whose rows come from a `TableSource`.
+    /// @param widgetId The table.
+    /// @param rowKey   The row's key.
+    /// @param column   The cell's column: an index into the table's columns.
+    /// @return The accent `setCellAccent` last gave the cell; `CellAccent{}` when none.
+    /// @throws std::logic_error when the widget is not a table, or none of its current rows has @p rowKey.
+    [[nodiscard]] CellAccent cellAccent(int widgetId, Key const& rowKey, std::size_t column) {
+        detail::Record const& record = expectKind(widgetId, "cellAccent", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        if (table == nullptr) {
+            throw std::logic_error{"RecordingBackend: cellAccent of a widget that is not a table"};
+        }
+        return table->cellAccent(rowKey, column);
+    }
+
+    /// @brief The widget of a current row of a table.
+    /// @param widgetId The table.
+    /// @param rowKey   The row's key.
+    /// @return The row's widget id; nothing when no current row has @p rowKey.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::optional<int> tableRow(int widgetId, Key const& rowKey) {
+        detail::Record const& record = expectKind(widgetId, "tableRow", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        if (table == nullptr) {
+            throw std::logic_error{"RecordingBackend: tableRow of a widget that is not a table"};
+        }
+        return table->rowOf(rowKey);
     }
 
     /// @brief Activates a row of a table (Enter or a double click).
@@ -3415,6 +4804,11 @@ public:
     }
 
 private:
+    // The fake behind a table, for a helper that drives it; throws as `expectKind` does.
+    detail::FakeTable& fakeTable(int widgetId, std::string_view helper) {
+        return dynamic_cast<detail::FakeTable&>(*expectKind(widgetId, helper, {"Table"}).widget);
+    }
+
     // The fake behind a text field's record.
     static detail::FakeTextInput& textInput(detail::Record const& record) {
         return dynamic_cast<detail::FakeTextInput&>(*record.widget);
@@ -3431,6 +4825,7 @@ private:
         }
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): matches a chord against the widget's own keys, then its table's, then its cells'; each tier has the checks the one before leaves
     bool ownKey(int widgetId, std::string const& chord) {
         detail::Record const& record = _store->at(widgetId);
         bool const enter = chord == "Enter";
@@ -3455,10 +4850,23 @@ private:
             commit(widgetId);
             return false;
         }
+        if (record.kind == "Table" && chord == "Ctrl+C") {
+            auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+            if (table == nullptr || !table->onCopy()) {
+                return false;
+            }
+            invoke(table->onCopy());
+            return true;
+        }
         if (record.kind == "Table" && chord == "Ctrl+A") {
             auto* const table = dynamic_cast<detail::FakeTable*>(record.widget);
             if (table == nullptr || table->mode() != SelectionMode::Multiple) {
                 return false;
+            }
+            if (table->onSelectAll()) {
+                std::function<void()> const selectAll = table->onSelectAll();
+                selectAll();
+                return true;
             }
             std::vector<Key> keys = table->allOrNone();
             table->select(keys);
@@ -3473,7 +4881,43 @@ private:
             }
             return true;
         }
+        if (record.kind == "Table") {
+            return cellKey(record, chord);
+        }
         return false;
+    }
+
+    // A chord of the table's cell menu keys runs the focused cell's menu entry that declares it: the first enabled one
+    // without a submenu, in the order the menu lists them, a submenu's entries after the entry that opens it. Any
+    // other chord asks for nothing.
+    static bool cellKey(detail::Record const& record, std::string const& chord) {
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        std::optional<std::pair<Key, std::size_t>> const cell =
+            table == nullptr ? std::nullopt : table->focusedCellKey();
+        if (!cell || !table->cellChosen() || !std::ranges::contains(table->cellMenuKeys(), chord)) {
+            return false;
+        }
+        std::vector<MenuEntry> const entries = table->cellMenuEntries(cell->first, cell->second);
+        std::vector<std::size_t> path;
+        std::function<bool(std::vector<MenuEntry> const&)> const find = [&](std::vector<MenuEntry> const& level) {
+            for (std::size_t at = 0; at < level.size(); ++at) {
+                MenuEntry const& entry = level.at(at);
+                if (entry.separator || entry.heading || !entry.enabled) {
+                    continue;
+                }
+                path.push_back(at);
+                if (entry.items.empty() ? entry.keys == chord : find(entry.items)) {
+                    return true;
+                }
+                path.pop_back();
+            }
+            return false;
+        };
+        if (!find(entries)) {
+            return false;
+        }
+        invoke(table->cellChosen(), cell->first, cell->second, path);
+        return true;
     }
 
     // A helper applies to some kinds only; using it on another kind is a mistake in the test, not a user action.
@@ -3576,7 +5020,31 @@ private:
         }
     }
 
+    // The fake table behind a table's record.
+    static detail::FakeTable const& fakeTable(detail::Record const& record) {
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        if (table == nullptr) {
+            throw std::logic_error{"RecordingBackend: Table#" + std::to_string(record.id) + " is not a table"};
+        }
+        return *table;
+    }
+
+    // The fake table, once a user could reach the column's header: a hidden column's is not drawn.
+    static detail::FakeTable const& shownHeader(detail::Record const& record, int widgetId, std::size_t column,
+                                                std::string_view helper) {
+        detail::FakeTable const& table = fakeTable(record);
+        if (!table.headerShown(column)) {
+            throw std::logic_error{"RecordingBackend: " + std::string{helper} + " of column " +
+                                   std::to_string(column) + ", whose header Table#" + std::to_string(widgetId) +
+                                   " does not draw"};
+        }
+        return table;
+    }
+
     std::shared_ptr<detail::RecordStore> _store = std::make_shared<detail::RecordStore>();
+    std::string _clipboard;
+    bool _hasClipboard = true;
+    std::shared_ptr<TableMeasure> _tableMeasure = std::make_shared<TableMeasure>();
     std::optional<Mm> _pageWidth;
     std::shared_ptr<std::vector<detail::FakePage*>> _pages = std::make_shared<std::vector<detail::FakePage*>>();
     std::unordered_set<std::string> _components;

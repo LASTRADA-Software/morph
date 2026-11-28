@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -17,6 +18,7 @@
 
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"
+#include "../table/bands.hpp"
 #include "../util/datetime.hpp"
 #include "alignment.hpp"
 #include "badge_style.hpp"
@@ -27,6 +29,7 @@
 #include "input_emphasis.hpp"
 #include "page_layout.hpp"
 #include "text_align.hpp"
+#include "value.hpp"
 
 /// @file
 /// @brief The toolkit-agnostic view tree: props, node kinds and their builders.
@@ -373,6 +376,85 @@ struct TableSort {
     [[nodiscard]] bool operator==(TableSort const& other) const = default;
 };
 
+/// @brief How a click on a sortable header, or `Enter` or `Space` on a focused one, was modified.
+enum class HeaderClick : std::uint8_t {
+    Plain,  ///< No modifier: sort by the column alone.
+    Shift,  ///< `Shift` held: add the column to the sort chain, or flip its direction where it is in it.
+};
+
+/// @brief The mark a header draws after its label for one key of the sort chain.
+/// @param direction The key's direction.
+/// @param place     The key's place in the chain, from 1.
+/// @param count     How many keys the chain holds.
+/// @return `" ▲"` or `" ▼"` for a chain of one key, else the arrow followed by @p place, such as `" ▲2"`.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): (`place`, `count`): a chain position then the chain length, passed by name at the three call sites
+[[nodiscard]] inline std::string sortMarkText(SortDirection direction, std::size_t place, std::size_t count) {
+    std::string mark = direction == SortDirection::Ascending ? " ▲" : " ▼";
+    if (count != 1) {
+        mark += std::to_string(place);
+    }
+    return mark;
+}
+
+/// @brief A sorted header's accessible description, for one key of the sort chain; both backends set it from this
+///        and nothing else.
+/// @param direction The key's direction.
+/// @param place     The key's place in the chain, from 1.
+/// @param count     How many keys the chain holds.
+/// @return `"sorted ascending"` or `"sorted descending"` for a chain of one key, else, for example,
+///         `"sorted ascending, key 2 of 3"`.
+[[nodiscard]] inline std::string sortDescription(SortDirection direction, std::size_t place, std::size_t count) {
+    std::string text = direction == SortDirection::Ascending ? "sorted ascending" : "sorted descending";
+    if (count != 1) {
+        text += ", key " + std::to_string(place) + " of " + std::to_string(count);
+    }
+    return text;
+}
+
+/// @brief A column group's header, drawn over its columns while they stand side by side in the layout.
+struct TableColumnGroup {
+    /// @brief The group's caption.
+    std::string label;
+    /// @brief The visible place of its first column in the table's arrangement.
+    std::size_t first = 0;
+    /// @brief How many visible columns, from `first`, it stands over.
+    std::size_t count = 0;
+    /// @brief Whether the group has a filter: its filter button is drawn filled.
+    bool filtered = false;
+
+    /// @brief Member-wise equality.
+    /// @param other The group to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(TableColumnGroup const& other) const = default;
+};
+
+/// @brief One entry of a menu as a `MenuWidget` shows it.
+struct MenuEntry {
+    /// @brief The caption.
+    std::string label;
+    /// @brief The icon's name in the theme's icon map; empty shows none.
+    std::string icon;
+    /// @brief The chord shown beside the label; empty shows none.
+    std::string keys;
+    /// @brief Engaged: a checkable entry with this mark; `nullopt`: not checkable.
+    std::optional<bool> checked;
+    /// @brief Whether the entry can be chosen, or its submenu opened.
+    bool enabled = true;
+    /// @brief The submenu; empty for an entry that is chosen.
+    std::vector<MenuEntry> items;
+    /// @brief Whether the entry is a line between entries: never chosen, never opened, and its other fields empty.
+    bool separator = false;
+    /// @brief A muted line of help shown with the entry; empty shows none.
+    std::string description;
+    /// @brief Whether the entry is a label that is not a command: drawn as muted text, exposed as static text, never
+    ///        chosen or opened. Its other fields are empty.
+    bool heading = false;
+
+    /// @brief Memberwise equality, submenus included.
+    /// @return Whether every field matches.
+    bool operator==(MenuEntry const&) const = default;
+};
+
 /// @brief How much space a widget asks for along one dimension, in backend units (a character cell on the TUI).
 struct Sizing {
     /// @brief The sizing rule.
@@ -485,8 +567,9 @@ struct Common {
     /// @brief The stable identifier an automated test finds the widget by; empty means none. Set once.
     std::string testId;
     /// @brief The name a focus request after mount finds the widget by (`Mounted::focus`), such as a document
-    ///        element's id; empty means none. Set once.
-    std::string focusId;
+    ///        element's id; empty means none. Bound, the widget is found by the name it has now: an element in a
+    ///        table cell a pooled cell shows for another row takes that row's name.
+    Prop<std::string> focusId;
     /// @brief Text shown while the pointer rests on the widget; empty shows none.
     Prop<std::string> tooltip;
     /// @brief The named token set of the theme that styles this node and everything inside it; empty is the
@@ -829,15 +912,19 @@ struct Column {
     bool holder = false;
 };
 
-/// @brief A table cell that covers rows below its own: the cell of @ref column in the row that gives it, extended
-///        down over @ref rows rows counting that row.
+/// @brief A table cell that covers cells below and beside its own: the cell of @ref column in the row that gives it,
+///        extended down over @ref rows rows counting that row, and right over @ref columns visible columns counting
+///        its own.
 struct RowSpan {
     /// @brief The column's index in the table's columns; the select column is not one.
     std::size_t column = 0;
     /// @brief How many rows the cell covers, the row that gives it included; 1 covers nothing.
     std::size_t rows = 1;
+    /// @brief How many columns the cell covers by visible position, its own included; 1 covers nothing beside it. The
+    ///        giver cuts it where a column the span names was moved away or hidden (`cutColumns`).
+    std::size_t columns = 1;
 
-    /// @brief Whether two spans name the same column and count.
+    /// @brief Whether two spans name the same column and counts of rows and columns.
     /// @param other The other span.
     /// @return True when equal.
     [[nodiscard]] bool operator==(RowSpan const& other) const noexcept = default;
@@ -1197,6 +1284,120 @@ struct Virtualization {
     /// @brief How many rows beyond the visible range, on each side, keep a realized widget so a small scroll does
     ///        not have to realize a widget on every frame; set once.
     std::size_t overscan = 10;
+    /// @brief Above this many visible columns, a table over a `TableSource` realizes only the columns in or near the
+    ///        horizontal viewport; set once.
+    std::size_t columnThreshold = 40;
+    /// @brief Above this many cells (rows times visible columns), such a table windows both its rows and its columns;
+    ///        set once.
+    std::size_t cellThreshold = 20'000;
+    /// @brief How many columns beyond the horizontal viewport, on each side, keep realized cells; set once.
+    std::size_t columnOverscan = 4;
+    /// @brief The most cells one pass of a table's windows builds or binds to another row or column; the rest draw
+    ///        blank at their column's width and are realized over the following turns; set once.
+    std::size_t realizePerFrame = 240;
+};
+
+/// @brief Which of a table's columns show, in which order, how many are pinned, and the widths the user set.
+struct TableArrangement {
+    /// @brief Indices into `Table::columns`, in layout order; empty shows every column in its own order.
+    std::vector<std::size_t> visible;
+    /// @brief How many of the leading visible columns stay in view whatever the horizontal scroll.
+    std::size_t pinned = 0;
+    /// @brief Widths the user set, in `Sizing` units, by index into `Table::columns`; measurement does not change such
+    ///        a width.
+    std::map<std::size_t, int> widths;
+
+    /// @brief Member-wise equality.
+    /// @param other The arrangement to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(TableArrangement const& other) const = default;
+};
+
+/// @brief One part of a header band as the backend draws it: a run of the band's columns that stand together in the
+///        layout, on one side of the pinned edge.
+struct BandRun {
+    /// @brief The band's level, 0 for the outermost.
+    std::size_t level = 0;
+    /// @brief The band's text.
+    std::string label;
+    /// @brief The unit shown after the label; empty for none.
+    std::string unit;
+    /// @brief The visible position of the run's first column (not an index into `Table::columns`).
+    std::size_t first = 0;
+    /// @brief How many visible columns the run covers, from `first`.
+    std::size_t count = 0;
+    /// @brief Whether the run lies in the pinned part.
+    bool pinned = false;
+
+    /// @brief Member-wise equality.
+    /// @param other The run to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(BandRun const& other) const = default;
+};
+
+/// @brief The row a linked chart highlights: its key, and the view row the server has it at.
+struct TableHighlight {
+    /// @brief The row's key.
+    Key key;
+    /// @brief Its view row when the highlight was set.
+    std::size_t row = 0;
+
+    /// @brief Member-wise equality.
+    /// @param other The highlight to compare with.
+    /// @return `true` when key and row match.
+    [[nodiscard]] bool operator==(TableHighlight const& other) const = default;
+};
+
+/// @brief A cell by its row's key and its column's id.
+struct CellRef {
+    /// @brief The row's key.
+    Key key;
+    /// @brief The column's id (`TableColumn::id`).
+    std::string column;
+
+    /// @brief Member-wise equality.
+    /// @param other The cell to compare with.
+    /// @return `true` when key and column match.
+    [[nodiscard]] bool operator==(CellRef const& other) const = default;
+};
+
+/// @brief A rectangle of cells by its two corners: the rows between the corners' keys' view positions and the columns
+///        between their ids' places in the layout, both ends included. A sort or a column move keeps the corners, so
+///        the rectangle they span may change, as a spreadsheet's does.
+struct CellRange {
+    /// @brief The corner the selection started from.
+    CellRef anchor;
+    /// @brief The corner it was extended to.
+    CellRef focus;
+
+    /// @brief Member-wise equality.
+    /// @param other The range to compare with.
+    /// @return `true` when both corners match.
+    [[nodiscard]] bool operator==(CellRange const& other) const = default;
+};
+
+/// @brief A grid's focused cell as the mount shows it: a row by key, or by view position while the row there is not
+///        fetched yet, and a column by id.
+struct GridFocus {
+    /// @brief The row's key; empty while the row at `viewRow` is not fetched yet (a placeholder).
+    std::optional<Key> key;
+    /// @brief The row's view position: read only while `key` is empty.
+    std::size_t viewRow = 0;
+    /// @brief The column's id (`TableColumn::id`).
+    std::string column;
+
+    /// @brief Member-wise equality.
+    /// @param other The focus to compare with.
+    /// @return `true` when key, view row and column match.
+    [[nodiscard]] bool operator==(GridFocus const& other) const = default;
+};
+
+/// @brief What a table's key handler did with a chord.
+enum class KeyOutcome : std::uint8_t {
+    Handled,        ///< The table took the key.
+    Ignored,        ///< The table did not take it.
+    FocusNext,      ///< Focus leaves the table for the next control of the focus chain.
+    FocusPrevious,  ///< Focus leaves the table for the previous control of the focus chain.
 };
 
 /// @brief One widget per row of a keyed collection, updated in place when a row with the same key changes.
@@ -1217,8 +1418,216 @@ struct ForEach {
     bool divided = false;
 };
 
+class TableRows;
+
+/// @brief Whether a cell's value is here, for a table mounted over a `TableSource`: read from the row's
+///        `TableRows::unloadedLevels` and the level of the cell's column.
+enum class CellLoad : std::uint8_t {
+    Loaded,    ///< The value is here, or the column has no level.
+    Unloaded,  ///< The column's level has not loaded for the row: a placeholder of a fixed width.
+    Failed,    ///< The column's level failed to load for the row: an error mark of the same width.
+};
+
+/// @brief What a table cell shows beside its text: its tone, its tooltip, and whether its value could not be read.
+struct CellAccent {
+    /// @brief The cell's tone: the theme's tone surface under its selection and focus marks; disengaged for none.
+    std::optional<Tone> tone;
+    /// @brief The cell's tooltip, and its accessible description; empty for none.
+    std::string tooltip;
+    /// @brief Whether the value could not be read as the column's kind: the backend draws its error mark in place of
+    ///        the text, and `tooltip` says so.
+    bool invalid = false;
+
+    /// @brief Member-wise equality.
+    /// @param other The accent to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(CellAccent const& other) const = default;
+};
+
+/// @brief A table cell with an accent: a node a `TableSource::cellView` or `defaultCellView` returns. Mounted as a
+///        cell of a source table, its content is the cell and its accent is bound in the cell's own scope and told
+///        to `TableWidget::setCellAccent`; mounted anywhere else, its content is mounted and the accent is not read.
+struct AccentedCell {
+    /// @brief The cell's content. Must not be null.
+    Node content;
+    /// @brief The accent.
+    Prop<CellAccent> accent;
+};
+
+/// @brief What marks one cell of an editable table: read-only, changed since the record was loaded, not encoding,
+/// being
+///        saved, or being recomputed.
+struct CellMarks {
+    /// @brief The cell takes no edit: drawn on the theme's read-only cell surface.
+    bool readOnly = false;
+    /// @brief The cell's value differs from the loaded one: the theme's modified mark.
+    bool modified = false;
+    /// @brief The cell's draft does not encode, or the server refused it: the theme's error mark.
+    bool error = false;
+    /// @brief The cell's value is being saved, or is the last one known: drawn stale.
+    bool stale = false;
+    /// @brief The cell's value is being recomputed: drawn muted.
+    bool muted = false;
+
+    /// @brief Member-wise equality.
+    /// @param other The marks to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(CellMarks const& other) const = default;
+};
+
+/// @brief A table cell with marks: a node a `TableSource::cellView` returns. Mounted as a cell of a source table, its
+///        content is the cell and its marks are bound in the cell's own scope and told to `TableWidget::setCellMarks`
+///        on every change and whenever the cell is attached to a row; mounted anywhere else, its content is mounted
+///        and the marks are not read. Its content may be an `AccentedCell`, whose accent is bound in the same scope.
+struct MarkedCell {
+    /// @brief The cell's content. Must not be null.
+    Node content;
+    /// @brief The marks.
+    Prop<CellMarks> marks;
+};
+
+/// @brief What marks a whole row: it is being worked on, it is locked by someone else, or it is kept in view although
+///        it no longer matches the filter. A row's marks do not vary by cell, so its row look carries them.
+struct RowMarks {
+    /// @brief An action of this session is working on the row.
+    bool busy = false;
+    /// @brief Another user holds the row; it cannot be edited here.
+    bool locked = false;
+    /// @brief The row is retained and the filter rejects it: it draws muted.
+    bool unmatched = false;
+    /// @brief What the row's tooltip says of its marks; empty for none.
+    std::string tooltip;
+
+    /// @brief Member-wise equality.
+    /// @param other The marks to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(RowMarks const& other) const = default;
+};
+
+/// @brief Rows whose keys an action changed, for the mount to move what it holds by key: its focus and its
+///        highlighted row. A generation the mount has applied is not applied again.
+struct KeyMoves {
+    /// @brief Increases with each set of moves; 0 holds none.
+    std::uint64_t generation = 0;
+    /// @brief Each row's old key, then its new one.
+    std::vector<std::pair<Key, Key>> moves;
+
+    /// @brief Member-wise equality.
+    /// @param other The moves to compare with.
+    /// @return `true` when generation and moves match.
+    [[nodiscard]] bool operator==(KeyMoves const& other) const = default;
+};
+
+/// @brief A row's own parts beyond its cells, for a table mounted over a `TableSource`: built once per realized row
+///        key, bound in the row's scope. Nothing per cell is carried here.
+struct TableRowLook {
+    /// @brief The row's tone, bound in the row's scope; disengaged for none.
+    std::optional<Prop<std::optional<Tone>>> tone;
+    /// @brief The row's marks, bound in the row's scope; disengaged for a table whose rows carry none.
+    std::optional<Prop<RowMarks>> marks;
+    /// @brief The row's accessible name, bound in the row's scope; disengaged names the row by its key.
+    std::optional<Prop<std::string>> label;
+    /// @brief Whether some cell of the row changed since the record was loaded, bound in the row's scope: the row
+    ///        header's modified mark (`TableWidget::setRowModified`); disengaged for a table whose rows carry none.
+    std::optional<Prop<bool>> modified;
+    /// @brief The cells of this row that cover the rows below, bound in the row's scope; disengaged for none.
+    std::optional<Prop<std::vector<RowSpan>>> spans;
+    /// @brief Non-null: the row is a heading, this node its one cell spanning every column; no cell is built for it.
+    Node heading;
+    /// @brief Whether the row is a summary row: drawn on the theme's summary surface, never selected, activated,
+    ///        focused for an edit or pasted into (`TableWidget::setRowSummary`). Its cells are built as any row's.
+    bool summary = false;
+    /// @brief What the row's parts need kept alive while the row is realized, such as the scope they are bound in;
+    ///        the mount holds it with the row.
+    std::shared_ptr<void const> keep;
+};
+
+/// @brief Where a table's rows come from when they come by view index: the rows, and cells as the mount builds them.
+///
+/// The mount realizes the rows in and near view. A realized row holds a signal the mount keeps equal to its record,
+/// and one cell per column, each with a signal of its own set to the same record: the cell's view is built once from
+/// it, and a change of the row re-evaluates only the cells whose record changed.
+struct TableSource {
+    /// @brief The rows, by view index. Must not be null.
+    std::shared_ptr<TableRows> rows;
+    /// @brief One cell's view for the column at an index into `Table::columns` (which holds every column and does
+    ///        not change with the layout), built once per cell widget from a signal the mount sets to the record of
+    ///        the row the cell shows. Must not be empty.
+    std::function<Node(std::size_t column, reactive::Signal<Value> const& row)> cellView;
+    /// @brief The row's own parts, built once per realized row key from a signal the mount keeps equal to its
+    ///        record; empty for none.
+    std::function<TableRowLook(reactive::Signal<Value> const& row)> rowView;
+    /// @brief The default cell, shared by every column whose `ownCell` entry is `false`: built once per cell from a
+    ///        signal holding the column it shows (an index into `Table::columns`, which the mount sets when it moves
+    ///        a pooled cell to another column of the same `TextRole`) and one the mount sets to the row's record.
+    ///        Empty: every column's cells come from `cellView`.
+    std::function<Node(reactive::Signal<std::size_t> const& column, reactive::Signal<Value> const& row)>
+        defaultCellView;
+    /// @brief Per `Table::columns` index, whether the column's cells come from `cellView`, pooled per column, rather
+    ///        than from `defaultCellView`, pooled per role; a missing entry reads as `true`.
+    std::vector<bool> ownCell;
+    /// @brief Column ids named to every `TableRows::visible` call, whatever the column window holds: what the row's
+    ///        own parts read. The ids of the columns in the window, and what their cells read, are added per call.
+    std::vector<std::string> alwaysFetched;
+    /// @brief Per `Table::columns` index, the row fields that column's cell reads beside its own id, named to
+    ///        `TableRows::visible` while the column is in the window; a missing entry reads as none.
+    std::vector<std::vector<std::string>> cellReads;
+    /// @brief Per `Table::columns` index, the level of that column; empty, or an empty entry: the column has none.
+    std::vector<std::string> levels;
+    /// @brief Whether the rows are windowed whatever their count, as a server's rows are. `false` realizes every row
+    ///        while the view holds fewer than `Virtualization::threshold`, as a short table over a document's rows
+    ///        does, and only then draws `TableRowLook::spans`.
+    bool alwaysWindowed = true;
+    /// @brief Per `Table::columns` index, whether that column's cells each show one row only: their view shares state
+    ///        with the row's own parts, so when a realized row is given to another key they are destroyed and built
+    ///        for it rather than rebound by their signal. Set it for a column whose cell reads state its row declares;
+    ///        each such cell then costs a build where a rebind would do. A missing entry reads as `false`: the
+    ///        column's cells are rebound to any row.
+    std::vector<bool> rowScopedCells;
+};
+
+/// @brief A choice the status line offers beside its text, as a button the user may choose.
+struct StatusEntry {
+    /// @brief What the choice reports through `Table::onStatusEntry`.
+    std::string id;
+    /// @brief The button's text.
+    std::string label;
+
+    /// @brief Member-wise equality.
+    /// @param other The entry to compare with.
+    /// @return `true` when id and label match.
+    [[nodiscard]] bool operator==(StatusEntry const& other) const = default;
+};
+
+/// @brief A table's status line: its counts, the state of its fetches and levels, and the latest message.
+struct TableStatus {
+    /// @brief The leading part: the rows counted, or empty while no total is known.
+    std::string counts;
+    /// @brief A failed level or fetch; empty when none.
+    std::string state;
+    /// @brief Whether the state offers "Retry", which calls `Table::onRetry`.
+    bool retry = false;
+    /// @brief The latest refusal or notice; empty when none.
+    std::string message;
+    /// @brief The choices the message offers, after it.
+    std::vector<StatusEntry> entries;
+    /// @brief What stays on the line while its cause lasts, as rows being saved; empty when nothing does.
+    std::string standing;
+    /// @brief The choices `standing` offers, after it.
+    std::vector<StatusEntry> standingEntries;
+    /// @brief Whether the line takes space.
+    bool shown = false;
+
+    /// @brief Member-wise equality.
+    /// @param other The status to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(TableStatus const& other) const = default;
+};
+
 /// @brief One column of a `Table`.
 struct TableColumn {
+    /// @brief The column's id; empty for a table built from C++ with no ids.
+    std::string id;
     /// @brief The header caption.
     std::string label;
     /// @brief The column's width request. A `Stretch` column starts from its content (the larger of its header and its
@@ -1240,6 +1649,12 @@ struct TableColumn {
     Align valign = Align::Center;
     /// @brief Whether a click on the column's header asks to sort by it (`Table::onSort`).
     bool sortable = false;
+    /// @brief The unit the column's values are in, which the header shows after the label (`headerText`) and names
+    ///        in its accessible name (`headerAccessibleName`); empty for none.
+    std::string unit;
+    /// @brief Whether the column's header draws a filter button (`Table::onFilter`), filled while `Table::filtered`
+    ///        names the column.
+    bool filterable = false;
     /// @brief Whether the column's text cells may break across lines. With `false` each is drawn on one line and cut
     ///        at the column's width with an ellipsis, such as a value with its unit in a narrow column.
     bool wrap = true;
@@ -1277,15 +1692,133 @@ struct Table {
     bool selectColumn = false;
     /// @brief The accessible name of the select column's header box.
     Prop<std::string> selectAllLabel = std::string{"Select all"};
-    /// @brief The column whose header shows the sort, and its direction; none marks no header. The table never
+    /// @brief The sort chain the headers show, most significant key first; empty marks no header. The table never
     ///        orders its rows itself: they come in the order shown.
-    Prop<std::optional<TableSort>> sort;
-    /// @brief Called with a sortable column's index when the user asks to sort by it (a click on its header).
-    std::function<void(std::size_t)> onSort;
+    Prop<std::vector<TableSort>> sort;
+    /// @brief Called with a sortable column's index when the user asks to sort by it (a click on its header, or
+    ///        `Enter` or `Space` on it), and whether `Shift` was held.
+    std::function<void(std::size_t, HeaderClick)> onSort;
+    /// @brief The entries of a header's menu, given its column (an index into `columns`), or of the table's menu,
+    ///        given none. Empty: no header or table menu.
+    std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> menu;
+    /// @brief Called with the menu's column (none for the table's menu) and the chosen entry's path, an index per
+    ///        level from the top.
+    std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onMenu;
+    /// @brief Called when the user moves a column's header (a drag, or `Ctrl+Shift+Left` or `Right`), with the
+    ///        column (an index into `columns`) and its new place among the arrangement's visible columns.
+    std::function<void(std::size_t column, std::size_t position)> onColumnMove;
+    /// @brief Called when the user drags a header's trailing edge, with the column and its new width in `Sizing`
+    ///        units, or none for a double click on the edge, which gives the column its declared width again.
+    ///        Empty: the edges cannot be dragged.
+    std::function<void(std::size_t column, std::optional<int> units)> onColumnResize;
+    /// @brief Called with a filterable column's index when the user presses its header's filter button.
+    std::function<void(std::size_t column)> onFilter;
+    /// @brief The columns that have a filter, by index into `columns`: their filter buttons are drawn filled and
+    ///        their headers named "{label}, filtered".
+    Prop<std::vector<std::size_t>> filtered;
+    /// @brief The column groups whose header row is drawn over their columns; empty draws no group row.
+    Prop<std::vector<TableColumnGroup>> columnGroups;
+    /// @brief Called with a group's index into `columnGroups` when the user presses its filter button.
+    std::function<void(std::size_t group)> onGroupFilter;
+    /// @brief The header bands over the columns, outermost first, nested at most `table::kMaxBandLevels` levels; set
+    ///        once. The mount draws each over the runs of its columns the column window shows (`bandRuns`); empty
+    ///        draws none. A table over a `TableSource` only.
+    std::vector<table::BandInfo> bands;
+    /// @brief Called when the user asks to copy (`Ctrl+C` on the focused table).
+    std::function<void()> onCopy;
     /// @brief Called with a row's key when the user activates it (Enter or a double click).
     std::function<void(Key)> onActivate;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief When set, `rows` is ignored and rows come by view index from the source; set once.
+    std::optional<TableSource> source;
+    /// @brief The status line; the default takes no space.
+    Prop<TableStatus> status;
+    /// @brief Called when the user chooses the status line's "Retry".
+    std::function<void()> onRetry;
+    /// @brief Which columns show, their order, the pinned count and the user's widths; a table over a `TableSource`
+    ///        only. The default shows every column, none pinned.
+    Prop<TableArrangement> arrangement;
+    /// @brief The row a linked chart highlights, set once a keyed reply has given its view row: the mount scrolls to
+    ///        it, marks it and follows its key through later changes of the rows. Disengaged: no mark. A table over a
+    ///        `TableSource` only; it never changes the selection or the keyboard focus.
+    Prop<std::optional<TableHighlight>> highlight;
+    /// @brief Called with a range gesture the backend cannot resolve itself, as the view rows of its anchor and its
+    ///        end and the kind of change; a table over a `TableSource` only.
+    std::function<void(std::size_t anchorRow, std::size_t focusRow, SelectionChange change)> onSelectRange;
+    /// @brief The focused cell, which the mount keeps realized whatever the windows; disengaged leaves focus where the
+    ///        user put it. A table over a `TableSource` only, focusing a row the mount has realized.
+    Prop<std::optional<CellRef>> focus;
+    /// @brief Called with the cell the user's keys moved focus to, once its row is fetched.
+    std::function<void(std::optional<CellRef>)> onFocusCell;
+    /// @brief Called, in place of `onSelectionChange`, when the user asks a `Multiple` table to select every row
+    ///        (`Ctrl+A`): the handler selects the whole view, rows the backend does not hold included. Empty: the
+    ///        backend selects the rows it holds and reports them through `onSelectionChange`.
+    std::function<void()> onSelectAll;
+    /// @brief The entries of a cell's menu, given its row's key and its column (an index into `columns`), asked for
+    ///        each time the menu opens (a right click, the menu key or a long press on the cell), which focuses the
+    ///        cell, and for a key of `cellMenuKeys` the user presses while the table has the focus, for the focused
+    ///        cell. The mount reads each entry's bound parts once, untracked, and runs the chosen entry's `onSelect`.
+    ///        Empty: no cell menu.
+    std::function<std::vector<MenuItem>(Key const& row, std::size_t column)> cellMenu;
+    /// @brief The chords `cellMenu`'s entries may declare in `keys`: while the table has the focus, a key that is one
+    ///        of them asks for the focused cell's entries and runs the one that declares it; any other key never asks.
+    std::vector<std::string> cellMenuKeys;
+    /// @brief The caller's entries of a header's menu, given its column, read when the menu opens: shown after
+    ///        `menu`'s own entries for that column and a separator, and run by the mount when chosen. An entry hidden
+    ///        by its `visible` is left out, and with no entry shown nothing is added. Empty: `menu`'s entries alone.
+    std::function<std::vector<MenuItem>(std::size_t column)> headerEntries;
+    /// @brief Whether the header's sort, filter and arrangement gestures are offered, read each time a header's menu
+    ///        opens: while false, every entry `menu` gives for a column is disabled. The gestures' handlers are still
+    ///        called, for the caller to refuse; the table's own menu (`menu` with no column) and `headerEntries` are
+    ///        left as given.
+    Prop<bool> headerEnabled = true;
+    /// @brief Engaged: the selection is every row of the view less these keys, which the mount gives the backend
+    ///        through `setSelectionView` on each change; when it disengages the mount sets `selection` again.
+    Prop<std::optional<std::vector<Key>>> selectionView;
+    /// @brief Rows an action gave new keys: the mount's focus and highlighted row follow a row from its old key to
+    ///        its new one, and focus the change that removed the old key already moved to the row at its index is
+    ///        taken back to the new key. A table over a `TableSource` only.
+    Prop<KeyMoves> keyMoves;
+    /// @brief Called with the id of the status line's entry the user chose.
+    std::function<void(std::string entryId)> onStatusEntry;
+    /// @brief Engaged: the table's focus is a grid's. The mount shows the cell it names, at its key's view position
+    ///        now, or at `GridFocus::viewRow` while it names no key, and keeps that row realized, fetched or not; a
+    ///        click or a `FocusMove` goes to `onGridFocus` and does not move the mount's own focus. A table over a
+    ///        `TableSource` only.
+    std::optional<Prop<std::optional<GridFocus>>> gridFocus;
+    /// @brief Called, while `gridFocus` is engaged, with the cell a click or a `FocusMove` resolves to; its key is
+    ///        empty when that row is not fetched yet.
+    std::function<void(GridFocus)> onGridFocus;
+    /// @brief Called with the cell the user double-clicked.
+    std::function<void(CellRef)> onActivateCell;
+    /// @brief Called with the cell the user clicked once, after the click moved focus (a fetched row's only).
+    std::function<void(CellRef)> onClickCell;
+    /// @brief Called when focus leaves the table's widget and everything inside it, an open editor included.
+    std::function<void()> onFocusOut;
+    /// @brief Engaged: the cell whose editor is open, or none. While it names a cell, the mount builds `editor` for
+    ///        it once, mounts it in that cell's row, draws it over the cell and focuses it; a change unmounts it. A
+    ///        table over a `TableSource` only.
+    std::optional<Prop<std::optional<CellRef>>> editing;
+    /// @brief Builds the editor of the cell `editing` names.
+    std::function<Node(CellRef const&)> editor;
+    /// @brief Called with each chord of `keyChords` pressed while focus is in the table; the outcome says whether the
+    ///        table took it, or whether focus leaves the table along the focus chain.
+    std::function<KeyOutcome(std::string const& chord)> onKey;
+    /// @brief The chords `onKey` takes, declared to the backend again on each change.
+    Prop<std::vector<std::string>> keyChords;
+    /// @brief Called with printable text typed while a cell has focus and no editor is open.
+    std::function<void(std::string)> onText;
+    /// @brief Engaged: the table selects cells, not rows, and this is the selected rectangle, or none. The mount shows
+    ///        it at its corners' view positions and visible places now, so a sort or a column move redraws the
+    ///        rectangle the same corners span; a corner whose row is not in the view, or whose column is hidden, shows
+    ///        none, and the range is kept. The backend draws no row selection and reports no `onSelectionChange`. A
+    ///        table over a `TableSource` only.
+    std::optional<Prop<std::optional<CellRange>>> cellSelection;
+    /// @brief Called, while `cellSelection` is engaged, with the rectangle the user selected: a drag from cell to
+    /// cell,
+    ///        a `Shift`+click, a row header's click or a column header's selection gesture.
+    std::function<void(std::optional<CellRange>)> onCellSelect;
 };
 
 /// @brief A date, or a date and time, edited in a display zone and reported as an instant.
@@ -1752,7 +2285,7 @@ struct NodeData {
     std::variant<Text, Button, TextInput, Checkbox, Select, Menu, Column, Row, Grid, Spacer, Panel, Scroll, Switch,
                  Tabs, Dialog, Busy, ForEach, Table, DateTimeInput, Slider, FilePicker, Banner, Badge, Progress, Steps,
                  KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom, ActionBar, Chart, Page,
-                 PageRegion>
+                 PageRegion, AccentedCell, MarkedCell>
         kind;
 };
 
@@ -1773,6 +2306,30 @@ template <typename Kind>
 /// @param spec The node.
 /// @return The node.
 [[nodiscard]] inline Node text(Text spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief A table cell with an accent.
+/// @param content The cell's content; must not be null.
+/// @param accent  The accent.
+/// @return The node.
+/// @throws std::invalid_argument when @p content is null.
+[[nodiscard]] inline Node accentedCell(Node content, Prop<CellAccent> accent) {
+    if (content == nullptr) {
+        throw std::invalid_argument{"ui::accentedCell: the content must not be null"};
+    }
+    return detail::makeNode(AccentedCell{.content = std::move(content), .accent = std::move(accent)});
+}
+
+/// @brief A table cell with marks.
+/// @param content The cell's content; must not be null.
+/// @param marks   The marks.
+/// @return The node.
+/// @throws std::invalid_argument when @p content is null.
+[[nodiscard]] inline Node markedCell(Node content, Prop<CellMarks> marks) {
+    if (content == nullptr) {
+        throw std::invalid_argument{"ui::markedCell: the content must not be null"};
+    }
+    return detail::makeNode(MarkedCell{.content = std::move(content), .marks = std::move(marks)});
+}
 
 /// @brief A push button.
 /// @param spec The node.
@@ -1803,6 +2360,45 @@ template <typename Kind>
 /// @param spec The node.
 /// @return The node.
 [[nodiscard]] inline Node column(Column spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief The layout of a table inside the column that takes its place, which holds the table's own layout. The table
+///        fills the column across, and along it unless its height is fixed or a stretch: a share of a row is the
+///        column's to take (a column's child takes none), and a row offers to fill its height to the column, not to
+///        the table inside it, so a content height stretches within the column, which is as tall as the table is or as
+///        its row makes it. Placement in the parent (`alignSelf`, `bleed`) is the column's alone.
+/// @param placed The table's own layout.
+/// @return The layout the table takes inside the column.
+[[nodiscard]] inline LayoutHints wrappedTableLayout(LayoutHints placed) {
+    if (placed.width.kind == Sizing::Kind::Percent) {
+        placed.width = Sizing::stretch(1);
+    }
+    if (placed.height.kind == Sizing::Kind::Content) {
+        placed.height = Sizing::stretch(1);
+    }
+    placed.alignSelf.reset();
+    placed.bleed = false;
+    return placed;
+}
+
+/// @brief A table with other nodes under it, in a column that takes the table's place: the column takes the table's
+///        visibility and layout, the table `wrappedTableLayout` within it, and every other common property stays on
+///        the table alone, so its test id and the element id a focus request finds name the table. The column has no
+///        gap, so a node that draws nothing in place (a dialog) adds no space.
+/// @param placed The table's common properties; its layout becomes the one inside the column.
+/// @param beside The nodes under the table, in order.
+/// @param table  Makes the table, after @p placed is changed.
+/// @return The column.
+[[nodiscard]] inline Node besideTable(Common& placed, std::vector<Node> beside, std::function<Node()> const& table) {
+    Column wrapper;
+    wrapper.common.visible = placed.visible;
+    wrapper.common.layout = placed.layout;
+    placed.layout = wrappedTableLayout(placed.layout);
+    wrapper.children.push_back(table());
+    for (Node& node : beside) {
+        wrapper.children.push_back(std::move(node));
+    }
+    return column(std::move(wrapper));
+}
 
 /// @brief Children laid out left to right.
 /// @param spec The node.
@@ -2042,14 +2638,96 @@ struct TableOptions {
     bool selectColumn = false;
     /// @brief The accessible name of the select column's header box.
     Prop<std::string> selectAllLabel = std::string{"Select all"};
-    /// @brief The column whose header shows the sort, and its direction.
-    Prop<std::optional<TableSort>> sort;
-    /// @brief Called with a sortable column's index when the user asks to sort by it.
-    std::function<void(std::size_t)> onSort;
+    /// @brief The sort chain the headers show, most significant key first.
+    Prop<std::vector<TableSort>> sort;
+    /// @brief Called with a sortable column's index when the user asks to sort by it, and whether `Shift` was held.
+    std::function<void(std::size_t, HeaderClick)> onSort;
+    /// @brief The entries of a header's menu, given its column, or of the table's menu, given none.
+    std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> menu;
+    /// @brief Called with the menu's column (none for the table's menu) and the chosen entry's path.
+    std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onMenu;
+    /// @brief Called with a column the user moved and its new place among the visible columns.
+    std::function<void(std::size_t column, std::size_t position)> onColumnMove;
+    /// @brief Called with a column the user resized and its width in units, or none to restore its declared width.
+    std::function<void(std::size_t column, std::optional<int> units)> onColumnResize;
+    /// @brief Called with a filterable column's index when the user presses its filter button.
+    std::function<void(std::size_t column)> onFilter;
+    /// @brief The columns that have a filter.
+    Prop<std::vector<std::size_t>> filtered;
+    /// @brief The column groups whose header row is drawn over their columns.
+    Prop<std::vector<TableColumnGroup>> columnGroups;
+    /// @brief Called with a group's index when the user presses its filter button.
+    std::function<void(std::size_t group)> onGroupFilter;
+    /// @brief The header bands over the columns (`Table::bands`).
+    std::vector<table::BandInfo> bands;
+    /// @brief Called when the user asks to copy (`Ctrl+C` on the focused table).
+    std::function<void()> onCopy;
     /// @brief Called with a row's key when the user activates it.
     std::function<void(Key)> onActivate;
     /// @brief Visibility, enablement, layout, drag-and-drop of the table.
     Common common{};
+    /// @brief When set, the table's rows come by view index from the source, and the rows a builder is given are
+    ///        ignored.
+    std::optional<TableSource> source;
+    /// @brief The status line; the default takes no space.
+    Prop<TableStatus> status;
+    /// @brief Called when the user chooses the status line's "Retry".
+    std::function<void()> onRetry;
+    /// @brief Which columns show, their order, the pinned count and the user's widths.
+    Prop<TableArrangement> arrangement;
+    /// @brief The row a linked chart highlights; disengaged for none.
+    Prop<std::optional<TableHighlight>> highlight;
+    /// @brief Called with a range gesture the backend cannot resolve itself, as two view rows and the kind of change.
+    std::function<void(std::size_t anchorRow, std::size_t focusRow, SelectionChange change)> onSelectRange;
+    /// @brief The focused cell; disengaged leaves focus where the user put it.
+    Prop<std::optional<CellRef>> focus;
+    /// @brief Called with the cell the user's keys moved focus to, once its row is fetched.
+    std::function<void(std::optional<CellRef>)> onFocusCell;
+    /// @brief Called, in place of `onSelectionChange`, when the user asks a `Multiple` table to select every row
+    ///        (`Ctrl+A`): the handler selects the whole view, rows the backend does not hold included. Empty: the
+    ///        backend selects the rows it holds and reports them through `onSelectionChange`.
+    std::function<void()> onSelectAll;
+    /// @brief The entries of a cell's menu, given its row's key and its column; empty for no cell menu.
+    std::function<std::vector<MenuItem>(Key const& row, std::size_t column)> cellMenu;
+    /// @brief The chords `cellMenu`'s entries may declare; any other key never asks for a cell's entries.
+    std::vector<std::string> cellMenuKeys;
+    /// @brief The caller's entries of a header's menu, given its column, shown after `menu`'s own.
+    std::function<std::vector<MenuItem>(std::size_t column)> headerEntries;
+    /// @brief Whether the header's sort, filter and arrangement entries are enabled.
+    Prop<bool> headerEnabled = true;
+    /// @brief Engaged: the selection is every row of the view less these keys, which the mount gives the backend
+    ///        through `setSelectionView` on each change; when it disengages the mount sets `selection` again.
+    Prop<std::optional<std::vector<Key>>> selectionView;
+    /// @brief Rows an action gave new keys: the mount's focus and highlighted row follow a row from its old key to
+    ///        its new one, and focus the change that removed the old key already moved to the row at its index is
+    ///        taken back to the new key. A table over a `TableSource` only.
+    Prop<KeyMoves> keyMoves;
+    /// @brief Called with the id of the status line's entry the user chose.
+    std::function<void(std::string entryId)> onStatusEntry;
+    /// @brief Engaged: the table's focus is a grid's (`Table::gridFocus`).
+    std::optional<Prop<std::optional<GridFocus>>> gridFocus;
+    /// @brief Called with the cell a click or a `FocusMove` resolves to, while `gridFocus` is engaged.
+    std::function<void(GridFocus)> onGridFocus;
+    /// @brief Called with the cell the user double-clicked.
+    std::function<void(CellRef)> onActivateCell;
+    /// @brief Called with the cell the user clicked once (`Table::onClickCell`).
+    std::function<void(CellRef)> onClickCell;
+    /// @brief Called when focus leaves the table and everything inside it.
+    std::function<void()> onFocusOut;
+    /// @brief Engaged: the cell whose editor is open, or none (`Table::editing`).
+    std::optional<Prop<std::optional<CellRef>>> editing;
+    /// @brief Builds the editor of the cell `editing` names.
+    std::function<Node(CellRef const&)> editor;
+    /// @brief Called with each chord of `keyChords` pressed while focus is in the table.
+    std::function<KeyOutcome(std::string const& chord)> onKey;
+    /// @brief The chords `onKey` takes.
+    Prop<std::vector<std::string>> keyChords;
+    /// @brief Called with printable text typed while a cell has focus and no editor is open.
+    std::function<void(std::string)> onText;
+    /// @brief Engaged: the table selects cells, and this is the selected rectangle (`Table::cellSelection`).
+    std::optional<Prop<std::optional<CellRange>>> cellSelection;
+    /// @brief Called with the rectangle the user selected (`Table::onCellSelect`).
+    std::function<void(std::optional<CellRange>)> onCellSelect;
 };
 
 /// @brief What a table's row view builds for one row: its cells, one per column, and its tone.
@@ -2148,8 +2826,113 @@ template <typename RowT>
     spec.selectAllLabel = std::move(options.selectAllLabel);
     spec.sort = std::move(options.sort);
     spec.onSort = std::move(options.onSort);
+    spec.menu = std::move(options.menu);
+    spec.onMenu = std::move(options.onMenu);
+    spec.onColumnMove = std::move(options.onColumnMove);
+    spec.onColumnResize = std::move(options.onColumnResize);
+    spec.onFilter = std::move(options.onFilter);
+    spec.filtered = std::move(options.filtered);
+    spec.columnGroups = std::move(options.columnGroups);
+    spec.onGroupFilter = std::move(options.onGroupFilter);
+    spec.bands = std::move(options.bands);
+    spec.onCopy = std::move(options.onCopy);
     spec.onActivate = std::move(options.onActivate);
     spec.common = std::move(options.common);
+    spec.source = std::move(options.source);
+    spec.status = std::move(options.status);
+    spec.onRetry = std::move(options.onRetry);
+    spec.arrangement = std::move(options.arrangement);
+    spec.highlight = std::move(options.highlight);
+    spec.onSelectRange = std::move(options.onSelectRange);
+    spec.focus = std::move(options.focus);
+    spec.onFocusCell = std::move(options.onFocusCell);
+    spec.onSelectAll = std::move(options.onSelectAll);
+    spec.cellMenu = std::move(options.cellMenu);
+    spec.cellMenuKeys = std::move(options.cellMenuKeys);
+    spec.headerEntries = std::move(options.headerEntries);
+    spec.headerEnabled = std::move(options.headerEnabled);
+    spec.selectionView = std::move(options.selectionView);
+    spec.keyMoves = std::move(options.keyMoves);
+    spec.onStatusEntry = std::move(options.onStatusEntry);
+    spec.gridFocus = std::move(options.gridFocus);
+    spec.onGridFocus = std::move(options.onGridFocus);
+    spec.onActivateCell = std::move(options.onActivateCell);
+    spec.onClickCell = std::move(options.onClickCell);
+    spec.onFocusOut = std::move(options.onFocusOut);
+    spec.editing = std::move(options.editing);
+    spec.editor = std::move(options.editor);
+    spec.onKey = std::move(options.onKey);
+    spec.keyChords = std::move(options.keyChords);
+    spec.onText = std::move(options.onText);
+    spec.cellSelection = std::move(options.cellSelection);
+    spec.onCellSelect = std::move(options.onCellSelect);
+    return detail::makeNode(std::move(spec));
+}
+
+/// @brief A table whose rows come by view index from a `TableSource`: the mount realizes the rows in and near view,
+///        builds each cell from its column's view, and keeps a row's widget when the row moves.
+/// @param columns The columns, in order.
+/// @param source  The rows, the cells and the row's own parts.
+/// @param options Selection, sorting, the status line and `Common`; its `source` is replaced by @p source.
+/// @return The node.
+/// @throws std::invalid_argument when @p source has no rows or no cell view.
+[[nodiscard]] inline Node table(std::vector<TableColumn> columns, TableSource source, TableOptions options = {}) {
+    if (!source.rows || !source.cellView) {
+        throw std::invalid_argument{"ui::table: a table source needs its rows and its cell view"};
+    }
+    Table spec{
+        .columns = std::move(columns),
+        .rows = nullptr,
+        .showHeader = options.showHeader,
+        .virtualize = options.virtualize,
+        .selectionMode = options.selectionMode,
+    };
+    spec.selection = std::move(options.selection);
+    spec.onSelectionChange = std::move(options.onSelectionChange);
+    spec.selectColumn = options.selectColumn;
+    spec.selectAllLabel = std::move(options.selectAllLabel);
+    spec.sort = std::move(options.sort);
+    spec.onSort = std::move(options.onSort);
+    spec.menu = std::move(options.menu);
+    spec.onMenu = std::move(options.onMenu);
+    spec.onColumnMove = std::move(options.onColumnMove);
+    spec.onColumnResize = std::move(options.onColumnResize);
+    spec.onFilter = std::move(options.onFilter);
+    spec.filtered = std::move(options.filtered);
+    spec.columnGroups = std::move(options.columnGroups);
+    spec.onGroupFilter = std::move(options.onGroupFilter);
+    spec.bands = std::move(options.bands);
+    spec.onCopy = std::move(options.onCopy);
+    spec.onActivate = std::move(options.onActivate);
+    spec.common = std::move(options.common);
+    spec.source = std::move(source);
+    spec.status = std::move(options.status);
+    spec.onRetry = std::move(options.onRetry);
+    spec.arrangement = std::move(options.arrangement);
+    spec.highlight = std::move(options.highlight);
+    spec.onSelectRange = std::move(options.onSelectRange);
+    spec.focus = std::move(options.focus);
+    spec.onFocusCell = std::move(options.onFocusCell);
+    spec.onSelectAll = std::move(options.onSelectAll);
+    spec.cellMenu = std::move(options.cellMenu);
+    spec.cellMenuKeys = std::move(options.cellMenuKeys);
+    spec.headerEntries = std::move(options.headerEntries);
+    spec.headerEnabled = std::move(options.headerEnabled);
+    spec.selectionView = std::move(options.selectionView);
+    spec.keyMoves = std::move(options.keyMoves);
+    spec.onStatusEntry = std::move(options.onStatusEntry);
+    spec.gridFocus = std::move(options.gridFocus);
+    spec.onGridFocus = std::move(options.onGridFocus);
+    spec.onActivateCell = std::move(options.onActivateCell);
+    spec.onClickCell = std::move(options.onClickCell);
+    spec.onFocusOut = std::move(options.onFocusOut);
+    spec.editing = std::move(options.editing);
+    spec.editor = std::move(options.editor);
+    spec.onKey = std::move(options.onKey);
+    spec.keyChords = std::move(options.keyChords);
+    spec.onText = std::move(options.onText);
+    spec.cellSelection = std::move(options.cellSelection);
+    spec.onCellSelect = std::move(options.onCellSelect);
     return detail::makeNode(std::move(spec));
 }
 

@@ -155,6 +155,9 @@ TEST_CASE("tui forms: a collection document lists rows; Enter on a row opens its
                                                                    ui::testing::corpusCatalog()),
                                            {}, client.backend);
     REQUIRE(screen.has_value());
+    // The buttons' column is sized to its cells, which the table measures as it draws them: the mount widens the
+    // column for the next frame.
+    client.settle();
     client.settle();
     INFO(client.drawn());
     CHECK(client.shows("Samples"));
@@ -242,4 +245,79 @@ TEST_CASE("tui forms: an inline form draws each label on its control's row", "[t
             CHECK(label->find("Sample") < label->find("4242"));
         }
     }
+}
+
+// Mutation: the terminal table ignoring its select-all handler (Ctrl+A selects the page's two rows).
+TEST_CASE("tui forms: Ctrl+A on a paged table selects every row of the view", "[tui][forms][table]") {
+    TuiClient client;
+    auto const screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+      "vocab": "ui/1", "id": "paged", "state": { "rows": { "init": { "lit": [
+        { "id": 1, "n": "one" }, { "id": 2, "n": "two" }, { "id": 3, "n": "three" }, { "id": 4, "n": "four" },
+        { "id": 5, "n": "five" } ] } } },
+      "view": { "kind": "column", "children": [
+        { "kind": "table", "id": "t", "testId": "list", "rows": { "ref": "rows" }, "key": { "row": "id" },
+          "selectionMode": "multiple", "pageSize": 2, "columns": [ { "id": "n", "label": "Name" } ] },
+        { "kind": "text", "text": { "fn": "format", "args": [ "{0} picked", { "ref": "t.selectedCount" } ] } } ] } })",
+                                                                         ui::testing::corpusCatalog()),
+                                                 {}, client.backend);
+    REQUIRE(screen.has_value());
+    client.settle();
+    client.backend.focusFirst();
+    client.settle();
+    static_cast<void>(client.screen.dispatchEvent(core::tui::test::charKey('a', core::tui::Modifier::Ctrl)));
+    client.settle();
+    INFO(client.drawn());
+    CHECK(client.shows("5 picked"));
+}
+
+// Mutation: the terminal table's header box over a source sending its range through the mount, the select-all handler
+// unused (the page's range selects none of the other page's rows).
+TEST_CASE("tui forms: the header box of a paged table selects every row of the view", "[tui][forms][table]") {
+    TuiClient client;
+    auto const screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+      "vocab": "ui/1", "id": "paged", "state": { "rows": { "init": { "lit": [
+        { "id": 1, "n": "one" }, { "id": 2, "n": "two" }, { "id": 3, "n": "three" }, { "id": 4, "n": "four" },
+        { "id": 5, "n": "five" } ] } } },
+      "view": { "kind": "column", "children": [
+        { "kind": "table", "id": "t", "testId": "list", "rows": { "ref": "rows" }, "key": { "row": "id" },
+          "selectionMode": "multiple", "selectColumn": true, "pageSize": 2,
+          "columns": [ { "id": "n", "label": "Name" } ] },
+        { "kind": "text", "text": { "fn": "format", "args": [ "{0} picked", { "ref": "t.selectedCount" } ] } } ] } })",
+                                                                         ui::testing::corpusCatalog()),
+                                                 {}, client.backend);
+    REQUIRE(screen.has_value());
+    client.settle();
+    INFO(client.drawn());
+    REQUIRE(client.drawn().starts_with("[ ]"));  // the header box, at the first cell
+    using Type = core::tui::MouseEvent::Type;
+    for (Type const type : {Type::Press, Type::Release}) {  // screen cell (1, 0), 1-based
+        static_cast<void>(
+            client.screen.dispatchEvent(core::tui::MouseEvent{.type = type, .button = 0, .x = 2, .y = 1}));
+    }
+    client.settle();
+    INFO(client.drawn());
+    CHECK(client.shows("5 picked"));
+}
+
+// The table sits in a column above a text, so it is as tall as it asks to be. Mutation: tell a source table that
+// realizes every row no window in `realizeWindow` (the terminal learns no row count, asks for the header's line only,
+// and the text takes the line its rows would have had).
+TEST_CASE("tui forms: a rows table below its threshold draws its rows before any focus", "[tui][forms][table]") {
+    TuiClient client;
+    auto const screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+      "vocab": "ui/1", "id": "few", "state": { "rows": { "init": { "lit": [
+        { "id": 1, "n": "one" }, { "id": 2, "n": "two" }, { "id": 3, "n": "three" } ] } } },
+      "view": { "kind": "column", "children": [
+        { "kind": "table", "id": "t", "rows": { "ref": "rows" }, "key": { "row": "id" },
+          "columns": [ { "id": "n", "label": "Name" } ] },
+        { "kind": "text", "text": "after" } ] } })",
+                                                                         ui::testing::corpusCatalog()),
+                                                 {}, client.backend);
+    REQUIRE(screen.has_value());
+    client.settle();
+    INFO(client.drawn());
+    CHECK(client.shows("one"));
+    CHECK(client.shows("two"));
+    CHECK(client.shows("three"));
+    CHECK(client.drawn().find("three") < client.drawn().find("after"));
 }

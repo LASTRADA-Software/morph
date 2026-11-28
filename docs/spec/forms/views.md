@@ -161,6 +161,12 @@ type it is instantiated on. Each derived column carries:
   indirection.
 - `kind` — the column's table kind, by the names
   `morph::table::ColumnKind` reads: `custom` for an `x-comparator` member;
+  `measure` for an `x-measure` member, an amount with its unit's id
+  (`table::MeasureValue`), tested before the exact-value rule since its object
+  has `num` and `den` too (a forms collection refuses such a column with a
+  `SchemaError` on it: its table has no unit registry to read the cells'
+  units through, so it could neither order them nor show them in their units;
+  rows with measures are served as a model's table);
   `quantity` for an exact value (`num`/`den`) with `ExtUnits`, `decimal`
   without; `date` / `dateTime` for an integer with `x-widget` `epochDays` /
   `epochSeconds`, or a string with `format` `date` / `date-time`; `integer`,
@@ -170,6 +176,21 @@ type it is instantiated on. Each derived column carries:
   defaulting to `field`; a renderer that wants a readable header without an
   override uses `title`.
 - `x-unitAlternatives`, `x-comparator` — copied off the property when present.
+- `x-level` — the data level the column's cells need
+  ([../table/table.md, "Data levels"](../table/table.md#data-levels)), copied
+  off the property as `x-comparator` is. The row schema carries it on each
+  property the row type's `columnLevels()` names
+  (`static constexpr std::array<table::ColumnLevel, N> columnLevels() noexcept`);
+  an entry naming a member the row does not have is skipped in the schema and
+  refused where the table reflects its columns. A collection reads it as
+  `CollectionColumn::level`.
+- `x-column-group` — the id of the declared column group the column is in
+  ([../table/table.md, "Column groups"](../table/table.md#column-groups)),
+  copied off the property as `x-level` is. The row schema carries it on each
+  property the row type's `columnGroups()` names
+  (`static constexpr std::array<table::ColumnGroup, N> columnGroups() noexcept`). It is not
+  `x-group`, which a form layout writes for the title of a field's group
+  ([forms.md](forms.md)).
 - `enum` — the values of a closed set: the property's `enum`, or the `const`
   of each `oneOf` entry (glaze's shape for an enum with names).
 
@@ -194,7 +215,7 @@ have is emitted as a bare `{field, label}` column with no `x-decimalPlaces` /
 | `v-title` | top-level | string | Screen title. Defaults to `v-query`'s type id. |
 | `v-query` | top-level | string | Registered query action's type id; executed with an empty body. |
 | `v-rowKey` | top-level | string | Wire field uniquely identifying a row. Defaults to `"id"`. |
-| `v-columns` | top-level | array | Ordered column descriptors: `{field, label, kind, title?, "v-hidden"?, "x-decimalPlaces"?, ExtUnits?, "x-unitAlternatives"?, "x-comparator"?, enum?}`. Derived from the row type unless `V::columns` overrides it. |
+| `v-columns` | top-level | array | Ordered column descriptors: `{field, label, kind, title?, "v-hidden"?, "x-decimalPlaces"?, ExtUnits?, "x-unitAlternatives"?, "x-comparator"?, "x-level"?, "x-column-group"?, enum?}`. Derived from the row type unless `V::columns` overrides it. |
 | `v-rowAction` | top-level | object | `{action, bind?}` — the action a row activation opens. Omitted when `V` declares no `rowAction`. Carries only `action`/`bind`, never `label`/`scope`/`confirm`. |
 | `v-actions` | top-level | array | `{action, label, scope, bind?, confirm?}` per entry — buttons that run an action. `scope` is `"row"` or `"collection"`; `confirm` is omitted when `false`; `bind` is omitted when empty. Omitted entirely when `V` declares no `actions`. |
 

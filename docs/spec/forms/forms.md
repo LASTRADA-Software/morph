@@ -264,7 +264,9 @@ to mark a field optional loses data rather than silently accepting a gap (see
    `std::string_view` that the action declares, or
 3. It is the destination of an `A::computedFields` entry — a derived,
    read-only field is never something the user must fill in; see
-   [Computed fields](#computed-fields).
+   [Computed fields](#computed-fields), or
+4. Its type's field metadata marks it `derived()` — the model sets it; see
+   [Derived members](#derived-members--derived-and-x-derived).
 
 Required-ness is derived here, and `x-rules` is derived from `A::formRules`,
 **independently**. They can therefore disagree; the one disagreement that makes
@@ -913,7 +915,7 @@ this dual read.
 
 | Key | Where | JSON type | Meaning / renderer obligation |
 |---|---|---|---|
-| `required` | top-level (object), and every nested-aggregate object schema (inlined property or `$defs` entry) — see [Nested aggregates (recursive, cycle-safe)](#nested-aggregates-recursive-cycle-safe) | array of strings | Names of members that must be engaged before submit. A member is listed unless it is a `std::optional<...>`, appears in `A::optionalFields`, or is a `computedFields` destination (see the [Required-ness rule](#required-ness-rule)). Always emitted (an explicit `[]` when nothing is required). The renderer blocks submission until every listed field has a value. |
+| `required` | top-level (object), and every nested-aggregate object schema (inlined property or `$defs` entry) — see [Nested aggregates (recursive, cycle-safe)](#nested-aggregates-recursive-cycle-safe) | array of strings | Names of members that must be engaged before submit. A member is listed unless it is a `std::optional<...>`, appears in `A::optionalFields`, is a `computedFields` destination, or is a derived member (see the [Required-ness rule](#required-ness-rule)). Always emitted (an explicit `[]` when nothing is required). The renderer blocks submission until every listed field has a value. |
 | `x-order` | property node (sibling of `$ref`) | non-negative integer | The member's 0-based **declaration index**. Renderers lay fields out in ascending `x-order`, not in JSON key order (object key order is not preserved across DOMs). |
 | `x-decimalPlaces` | property node (sibling of `$ref`) | non-negative integer | The field's *declared* precision (`Quantity<U, Dec>::declaredDecimals`, unit default unless the type overrides it; or a bare `math::Rational` member's `FieldMeta::decimals`, which is not rounded to on dispatch). The numeric input step / rounding granularity for entry in the canonical unit. **Enforced, not merely advisory:** the request/reply dispatch path *rounds* each submitted `Quantity` to this precision before storing it — the stored value, not just its tag, is reduced (see [Advertised precision is enforced on dispatch](#advertised-precision-is-enforced-on-dispatch)). A model serving one *instance* of an action may overwrite this with a value from data — see [Per-instance constraints](#per-instance-constraints--values-that-live-in-data); `x-instanceConstraints` (below) says when it did. |
 | `x-unitAlternatives` | property node (sibling of `$ref`) | array of objects | Convertible display/entry units for the field, derived from `UnitTraits<E>::relations`. **Omitted entirely** when the unit declares no convertible peers. Each element has the five subfields below. The renderer offers these as a unit selector and recomputes the entered value *exactly* on switch; the submitted payload is always in the canonical unit (the one named by `ExtUnits`). |
@@ -929,7 +931,8 @@ this dual read.
 | `title` | property node (sibling of `$ref`) | string | The field's display label — an explicit `FieldMeta::label`, else a title-cased member name (`dryMassPct` → "Dry Mass Pct"). Standard JSON-Schema vocabulary, not an `x-*` key. **Always emitted.** See "Field metadata" above. |
 | `x-placeholder` | property node (sibling of `$ref`) | string | In-control placeholder/hint shown while the field is empty, from `FieldMeta::placeholder`. Omitted when empty; never submitted. |
 | `x-readonly` | property node (sibling of `$ref`) | boolean | `true` when the field should be displayed but not editable. Emitted only when `true` — including on every `computedFields` destination (see [Computed fields](#computed-fields)). Not a security control — see "Field metadata is not a security control" above. |
-| `x-computed` | property node (sibling of `$ref`) | object | Marks the field as derived. Present when the action declares it as a `computed(...)` destination ([Computed fields](#computed-fields)); absent otherwise. |
+| `x-computed` | property node (sibling of `$ref`) | object | Marks the field as computed. Present when the action, or the element type of a `std::vector` member, declares it as a `computed(...)` destination ([Computed fields](#computed-fields)); absent otherwise. |
+| `x-derived` | property node | boolean | `true` on a member its type's field metadata marks `derived()`: a value the model sets from the domain's data, emitted with `x-readonly` and left out of `required` ([Derived members](#derived-members--derived-and-x-derived)). |
 | ↳ `inputs` | `x-computed` object | array of strings | Wire field names of the sibling fields the value derives from, in declaration order. Advisory to the renderer; **authoritative computation is the server's** — see [Where the value is authoritative](#where-the-value-is-authoritative). |
 | `x-hidden` | property node (sibling of `$ref`) | boolean | `true` when the field should not be shown at all; the field remains part of the action payload. Emitted only when `true`. Not a security control. |
 | `x-widget` | property node (sibling of `$ref`) | string | The preferred control id: `"textarea"`, `"slider"`, `"radio"`, `"combo"`, `"password"`, `"checkbox"`, … A `fieldMetadata`-shaped override (a `.field`/`.widget` entry, read structurally — see [widget_hints.md](widget_hints.md)) wins; else the field type's own `widget()` (`Multiline`, `Ranged`). **Advisory** — a renderer that lacks the named control falls back to the type-default control (text area → text field, slider → numeric input, radio → combo). Omitted when neither a wrapper type nor an override supplies one. |
@@ -2391,7 +2394,9 @@ struct LineItem {
   into a `detail::ComputeList<...>` value assigned to `static constexpr auto
   computedFields`. The framework detects it via the `detail::HasComputedFields<A>`
   concept, mirroring `detail::HasOptionalFields<A>`/`HasFormRules<A>`.
-- **`recomputeAll<A>(action)`** is the single evaluator: it walks
+- **`recomputeAll<A>(action)`** is the single evaluator: it first recomputes
+  every nested aggregate (each element of a `std::vector` member, a nested struct member, either inside an engaged `std::optional`), recursively, with `recomputeAll` on each, so a top-level entry
+  over the rows (a sum of their totals) reads them recomputed; then it walks
   `A::computedFields` and, for each entry, overwrites the destination member
   with `fn(action)` — or, if any declared input is unengaged (`hasValue() ==
   false`, for an input satisfying `EmptyCapableField`; a non-empty-capable
@@ -2418,6 +2423,31 @@ array** (see [Required-ness rule](#required-ness-rule)) — a computed field is
 never something the user must fill. `x-computed`/`x-readonly` are additive,
 optional `x-*` keys (see the [renderer contract](#renderer-contract-the-schema-key-vocabulary)
 table below); an action that declares no `computedFields` emits neither key.
+
+### Derived members — `derived()` and `x-derived`
+
+A value that needs the domain's data (a limit from the standard in force, a
+density looked up from the material) cannot be a computed field, which must be
+pure. Its member is marked derived in its type's field metadata:
+
+```cpp
+inline const std::array<morph::forms::FieldMeta, 1> Specimen::fieldMetadata{
+    morph::forms::derived<&Specimen::limit>()};   // describe<&Specimen::limit>().withDerived()
+```
+
+The schema writes `x-derived: true` and `x-readonly: true` on its property and
+leaves it out of `required`. `recomputeAll` does not touch it: the model sets
+it when it executes the action. Every execution path clears it first
+(`forms::clearDerived`, `forms/derive.hpp`: every derived member of the action
+and of every nested aggregate (each element of a `std::vector` member, a nested struct member, either inside an engaged `std::optional`), recursively, value-initialised)
+before `recomputeAll`, so neither the model nor a computed field over it reads
+a value the client sent — the in-process path included, so an action reads
+the same in a local topology as over a server. `allFieldBoundsSatisfied` and
+`fieldErrors` skip a derived member's declared `minimum`, `maximum` and
+`multipleOf`: the validator runs on the cleared value, before the model sets
+it. A form asks for derived values while the user is
+entering through its derive action (`DeriveOf<A>` in, `Derived` out;
+[../table/editing.md](../table/editing.md#derived-values)).
 
 ### Where the value is authoritative
 
@@ -2591,7 +2621,9 @@ for the exhaustive tables and design rationale.
 |---|---|
 | `template <auto Dst, auto... Inputs, typename Fn> auto computed(Fn fn)` | A `detail::ComputedField<Dst, Fn, Inputs...>` value. |
 | `template <typename... Fields> auto computeList(Fields... fields)` | A `detail::ComputeList<Fields...>` value — assign to `static constexpr auto computedFields`. |
-| `template <typename A> void recomputeAll(A& action)` | Overwrites every `A::computedFields` destination in place; a no-op when `A` declares none. |
+| `template <typename A> void recomputeAll(A& action)` | Overwrites every computed destination in place: those of every nested aggregate (each element of a `std::vector` member, a nested struct member, either inside an engaged `std::optional`), recursively, then `A::computedFields`'; a no-op when there are none. |
+| `template <auto MemberPtr> FieldMeta derived(label, help)` (`forms/derive.hpp`) | `describe<MemberPtr>(label, help).withDerived()`: a derived member, `x-derived`. |
+| `template <typename A> void clearDerived(A& action)` (`forms/derive.hpp`) | Value-initialises every derived member of `A` and of every nested aggregate (each element of a `std::vector` member, a nested struct member, either inside an engaged `std::optional`), recursively. |
 
 ## Design decisions
 
@@ -2804,12 +2836,22 @@ therefore stops at its first repetition: that inner member is `truncated`
 must carry it is not ready. An optional member left blank is not an exception:
 the body omits it, and that is a body the schema accepts.
 
-Computed fields, `formLayout`/`fieldSpans`, and `formRules` remain **top-level
-only** regardless of nesting depth: a nested aggregate declaring any of those
-has no effect on the generated schema. This keeps the generator focused on
-what a nested-aggregate schema actually needs (per-field annotations) rather
-than becoming a general recursive-descent schema compiler that also
-re-derives layout/rules/computed-field semantics at every level.
+`formLayout`/`fieldSpans` and `formRules` remain **top-level only** regardless
+of nesting depth: a nested aggregate declaring any of those has no effect on
+the generated schema. This keeps the generator focused on what a
+nested-aggregate schema actually needs (per-field annotations) rather than
+becoming a general recursive-descent schema compiler that also re-derives
+layout and rules at every level.
+
+**Computed fields of a nested aggregate are the exception.** A grid enters the
+rows of a `std::vector<R>` member, and a row's own total is a pure function of
+the row. So a nested aggregate type that declares `computedFields` (a
+`std::vector` element, a nested struct member, either inside a `std::optional`
+member, at any depth; the shapes the schema itself descends into) has those members written `x-computed`/`x-readonly` and
+left out of its `required`, as the top level's are, and `recomputeAll`
+recomputes every such nested value before the action's own entries, on every
+path. A derived member of a nested type (`derived()`, below) is left out of its
+`required` too, and cleared on every server path as the top level's is.
 
 Every nested-aggregate type in the chain must be **default-constructible**,
 exactly like the top-level action type (see below): the recursion builds its
@@ -2822,7 +2864,8 @@ own probe instance purely to enumerate its members via reflection.
 from the top-level action type — they are not consulted on a nested
 aggregate, no matter how deep `mergeSchemaExtras` otherwise recurses (see
 [Nested aggregates (recursive, cycle-safe)](#nested-aggregates-recursive-cycle-safe)
-above). Computed fields (`computedFields`) are likewise top-level only.
+above). Computed fields (`computedFields`) are read from the top-level action
+type and from every nested aggregate type (see above).
 
 The action type must also be **default-constructible**: `mergeSchemaExtras`
 builds a probe instance (`A probe{}`) purely to enumerate member names and types

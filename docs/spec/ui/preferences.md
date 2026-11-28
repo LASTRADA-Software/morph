@@ -43,6 +43,11 @@ public:
   where its answers come from.
 - The model calls a store only with a key whose person the server derived and with a value it has already bounded
   and parsed. A store applies no bound and no key check of its own.
+- One kind of entry has an empty person: the views a table's users publish for everyone, which the table-state
+  model (`morph.tableState`) keeps with no person under the table's own scope, so every signed-in caller reads the
+  same document ([table.md, Saved views](../table/table.md#saved-views)). The model writes them only through its
+  `publish` action and never for a caller with no verified person, and no verified person is empty, so no caller's
+  own entries share a key with them. A store needs no case for them: an empty person is a key like any other.
 - An application with its own per-person settings table supplies its own store over it, keyed by the person the
   login resolves to, so choices follow the person across logins and workstations.
 
@@ -92,6 +97,23 @@ Checked by the model before the store is called; a request outside them is an `e
 The value bound is the model's, not the store's, so an application's store needs none and every store gets the
 same one.
 
+A table's persisted state is not a preference. It has its own model, `morph.tableState`
+([table.md, Persisted state](../table/table.md#persisted-state)), which keeps it in the same store, in parts and
+under a quota of its own, so `maxValueBytes` does not bound it. The preferences model refuses the names it writes
+under: the application `morph.tableState` and every scope that starts `morph.table` (`` `<name>` is kept for table
+state ``), so no preference overwrites a table's stored state or a person's table-state usage.
+
+The `columns` and `saved` points that name a table read and write the table's state, not a preference of their
+own ([table.md, Persisted state](../table/table.md#persisted-state)). A `columns` point reads the table's column
+layout as a record (`order`, `hidden`, `pinned`, `widths`, `groups`, `units`) and a `saved` point the name of the
+saved view the arrangement was taken from, or `null`; both read what the table's stored state loaded, and the
+document's default until it has. A choice for either (`Screen::setPreference`) is written into the table's state and
+saved as any change of its arrangement is, debounced; a choice that does not read as a layout, or as a name or
+`null`, is refused. A `saved` point names its table with `of`, as a `columns` point does, and reads and writes the
+state's `view` on a table over `rows` as on a model-backed table. A point naming a table over `rows` that keeps no
+state holds its choice as any other preference does, and so does a `saved` point without `of`, which names no
+table.
+
 ## The client
 
 `PreferenceSync(dispatcher, application, onError)` is the part of an application's `InterpreterHost` that talks to
@@ -127,5 +149,6 @@ owner, where their replies arrive.
   yet, and for a settings screen that can name an app point (spec 6 §19).
 - **Offline.** Spec 5 §12b keeps choices locally while offline and writes them on reconnect; that is the backend
   switch's (spec 6 §9).
-- **The fit of `columns`, `layout` and `saved`.** Their stored shapes are their editors', and the interpreter
-  lowers only `choice` and string `value` editors, so `setPreference` accepts any value for them.
+- **The fit of `layout`, and of `columns` and `saved` points that hold a plain preference.** Their stored
+  shapes are their editors', and the interpreter lowers only `choice` and string `value` editors, so
+  `setPreference` accepts any value for them.

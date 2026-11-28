@@ -182,8 +182,13 @@ struct FieldSpec {
     bool readOnly = false;
     /// @brief `x-hidden`.
     bool hidden = false;
+    /// @brief `x-computed`: a member the action recomputes, which only a round writes; `computedInputs` alone cannot
+    ///        tell an `x-computed` with no inputs from none.
+    bool computed = false;
     /// @brief `x-computed.inputs`: the members a computed field derives from.
     std::vector<std::string> computedInputs;
+    /// @brief `x-derived`: a member the model sets from the domain's data, which only a round writes.
+    bool derived = false;
     /// @brief `minimum`, as canonical decimal text.
     std::optional<std::string> minimum;
     /// @brief `maximum`, as canonical decimal text.
@@ -229,6 +234,10 @@ struct FieldSpec {
     std::int64_t sliderStep = 1;
     /// @brief An Array's item JSON type (`"string"` when undeclared).
     std::string itemType;
+    /// @brief An Array's or ObjectArray's `minItems`: the fewest rows it holds, which a grid's row deletion keeps.
+    std::optional<std::size_t> minItems;
+    /// @brief An Array's or ObjectArray's `maxItems`: the most rows it holds, which a grid's row insertion keeps.
+    std::optional<std::size_t> maxItems;
     /// @brief An Object's members, or an ObjectArray's element members, in `x-order`.
     std::vector<FieldSpec> children;
     /// @brief An Object or ObjectArray whose members are not described: its `$ref` is already on
@@ -594,8 +603,10 @@ private:
         spec.required = required;
         spec.readOnly = flagOf(raw, prop, "x-readonly");
         spec.hidden = flagOf(raw, prop, "x-hidden");
+        spec.derived = flagOf(raw, prop, "x-derived");
         spec.widget = textOf(raw, prop, "x-widget");
         if (Json const* const computed = either(raw, prop, "x-computed")) {
+            spec.computed = true;
             if (Json const* const inputs = member(*computed, "inputs"); inputs != nullptr && inputs->is_array()) {
                 for (Json const& input : inputs->get_array()) {
                     if (auto const* const text = input.get_if<std::string>()) {
@@ -657,6 +668,12 @@ private:
         }
 
         if (hasType("array")) {
+            if (auto const fewest = unsignedOf(member(prop, "minItems"))) {
+                spec.minItems = static_cast<std::size_t>(*fewest);
+            }
+            if (auto const most = unsignedOf(member(prop, "maxItems"))) {
+                spec.maxItems = static_cast<std::size_t>(*most);
+            }
             Json const* const rawItems = member(prop, "items");
             Json const items = rawItems == nullptr ? emptyObject() : resolveProp(*rawItems);
             std::vector<std::string> const itemTypes = jsonTypes(items);

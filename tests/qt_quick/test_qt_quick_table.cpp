@@ -20,16 +20,23 @@
 #include <QStringList>
 #include <QTest>
 #include <QVariantList>
+#include <QtGlobal>
 #include <algorithm>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <memory>
+#include <morph/forms/engine/form_session.hpp>
 #include <morph/qt_quick/theme.hpp>
 #include <morph/reactive/signal.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/grid.hpp>
+#include <morph/ui/locale_table.hpp>
 #include <morph/ui/mount.hpp>
 #include <morph/ui/theme.hpp>
 #include <morph/ui/view.hpp>
@@ -39,11 +46,14 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
+#include "grid_test_support.hpp"
 #include "qt_quick/kinds.hpp"
 #include "qt_quick_harness.hpp"
+#include "ui_fake_rows.hpp"
 
 namespace ui = morph::ui;
 namespace detail = morph::qt_quick::detail;
@@ -81,6 +91,21 @@ qreal columnPadding(Scene& scene) {
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     REQUIRE(theme != nullptr);
     return 2 * theme->property("tableCellPaddingX").toReal();
+}
+
+// The first item at or under @p root, by visual children, named @p name; null for none. A Repeater's delegates are not
+// QObject children of the item they sit in, so `findChild` does not reach them.
+// NOLINTNEXTLINE(misc-no-recursion): the items form a tree, and the search descends it.
+QQuickItem* itemNamed(QQuickItem& root, QString const& name) {
+    if (root.objectName() == name) {
+        return &root;
+    }
+    for (QQuickItem* const child : root.childItems()) {
+        if (QQuickItem* const found = itemNamed(*child, name)) {
+            return found;
+        }
+    }
+    return nullptr;
 }
 
 }  // namespace
@@ -364,7 +389,7 @@ TEST_CASE("qt_quick table: Enter on a focused row activates it", "[qt_quick]") {
 // Mutation: never update the cache in `reportCellWidth` (growing a cell's text then shows the same `rowScans`
 // delta as a no-op, and the column's reported width stays at its pre-growth value).
 TEST_CASE("qt_quick table: growing one row's cell does not rescan every row, and the column still widens",
-          "[qt_quick]") {
+          "[qt_quick][heavy]") {
     Scene scene;
     auto table = scene.backend().createTable(nullptr);
     table->setColumns({{.label = "A"}, {.label = "B"}, {.label = "C"}});
@@ -410,7 +435,7 @@ TEST_CASE("qt_quick table: growing one row's cell does not rescan every row, and
 // Mutation: skip the invalidateColumn/reportCellWidth wiring from TableRowImpl::adopted entirely (a cell's width
 // changing then never reaches the table, so this never observes the rescan it measures).
 // Mutation: never update the cache in `reportCellWidth`, forcing every grow through the shrink/full-rescan path.
-TEST_CASE("qt_quick table: a single-row grow's scan cost does not scale with row count", "[qt_quick]") {
+TEST_CASE("qt_quick table: a single-row grow's scan cost does not scale with row count", "[qt_quick][heavy]") {
     // What this measures: the number of rows `widestCell` visits for a single-row grow, not wall-clock time. A
     // grown column's cells still all need their x/width updated once the column widens (MorphTableRow.qml's
     // onWidthsChanged: place(), one call per row) -- that O(rows) placement cost is real, necessary, and not what
@@ -607,6 +632,52 @@ TEST_CASE(
     CHECK_FALSE(partOf(*table.rows.at(1), "tint").isVisible());
 }
 
+// Mutation: MorphTable.qml ignoring `busy` (MorphTableRow's busy mark never shown), under which row 1 shows no busy
+// mark.
+TEST_CASE("qt_quick table: a row's marks are drawn", "[qt_quick]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::string{"a"}}, ui::Key{std::string{"b"}}, ui::Key{std::string{"c"}}},
+                           ui::SelectionMode::Single);
+    table.table->setRowMarks(*table.rows.at(0),
+                             ui::RowMarks{.unmatched = true, .tooltip = "This row no longer matches the filter"});
+    table.table->setRowMarks(*table.rows.at(1), ui::RowMarks{.busy = true});
+    table.table->setRowMarks(*table.rows.at(2),
+                             ui::RowMarks{.locked = true, .tooltip = "Being edited by another user"});
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto const markOf = [](ui::StackWidget const& row, char const* name) -> QQuickItem& {
+        auto* const found = Scene::itemOf(row).findChild<QQuickItem*>(QString::fromLatin1(name));
+        REQUIRE(found != nullptr);
+        return *found;
+    };
+    QQuickItem const& muted = Scene::itemOf(*table.rows.at(0));
+    CHECK(muted.opacity() == theme->property("mutedOpacity").toReal());
+    CHECK(muted.property("tooltipText").toString() == QStringLiteral("This row no longer matches the filter"));
+    CHECK(markOf(*table.rows.at(1), "busyMark").isVisible());
+    CHECK_FALSE(markOf(*table.rows.at(0), "busyMark").isVisible());
+    CHECK(markOf(*table.rows.at(2), "lockedWash").isVisible());
+    // The marks draw in the theme's tokens, and the busy bar sits inside the selection's.
+    CHECK(markOf(*table.rows.at(1), "busyMark").property("color").value<QColor>() ==
+          theme->property("tableBusy").value<QColor>());
+    CHECK(markOf(*table.rows.at(1), "busyMark").x() == 3.0);
+    CHECK(markOf(*table.rows.at(2), "lockedWash").property("color").value<QColor>() ==
+          theme->property("tableLocked").value<QColor>());
+    CHECK(Scene::itemOf(*table.rows.at(1)).property("tooltipText").toString() == QStringLiteral("Saving this row"));
+    CHECK(Scene::itemOf(*table.rows.at(2)).property("tooltipText").toString() ==
+          QStringLiteral("Being edited by another user"));
+    for (auto const& row : table.rows) {
+        table.table->setRowMarks(*row, ui::RowMarks{});
+    }
+    scene.settle();
+    for (auto const& row : table.rows) {
+        CHECK(Scene::itemOf(*row).opacity() == 1.0);
+        CHECK_FALSE(markOf(*row, "busyMark").isVisible());
+        CHECK_FALSE(markOf(*row, "lockedWash").isVisible());
+        CHECK(Scene::itemOf(*row).property("tooltipText").toString().isEmpty());
+    }
+}
+
 namespace {
 
 struct VirtualRow {
@@ -625,6 +696,7 @@ TEST_CASE("qt_quick table: a virtualized table realizes only the window, reporti
     Scene scene;
     std::vector<VirtualRow> const many = [] {
         std::vector<VirtualRow> rows;
+        rows.reserve(20);
         for (std::int64_t i = 0; i < 20; ++i) {
             rows.push_back(VirtualRow{.id = i, .name = "row-" + std::to_string(i)});
         }
@@ -1131,14 +1203,19 @@ QQuickItem& headerOf(ui::Widget const& table, int column) {
 
 }  // namespace
 
-// Mutation: leave the label's text without the mark (the sorted header reads `Name`).
+// Mutation: leave the label's text without the mark (the sorted header reads `Name`); read the Shift state from the
+// tapped signal's event point, which has no modifiers (every click reports `Plain`).
 TEST_CASE("qt_quick table: the sorted column's header shows and states its direction, and a click asks to sort",
           "[qt_quick]") {
     Scene scene;
     Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
     table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(12), .sortable = true}, {.label = "Mass"}});
     std::vector<std::size_t> asked;
-    table.table->setOnSort([&asked](std::size_t column) { asked.push_back(column); });
+    std::vector<ui::HeaderClick> clicks;
+    table.table->setOnSort([&asked, &clicks](std::size_t column, ui::HeaderClick click) {
+        asked.push_back(column);
+        clicks.push_back(click);
+    });
     scene.settle();
     QQuickItem& name = headerOf(*table.table, 0);
     QQuickItem const& mass = headerOf(*table.table, 1);
@@ -1146,7 +1223,7 @@ TEST_CASE("qt_quick table: the sorted column's header shows and states its direc
     CHECK(name.property("activeFocusOnTab").toBool());
     CHECK_FALSE(mass.property("activeFocusOnTab").toBool());
 
-    table.table->setSort(ui::TableSort{.column = 0, .direction = ui::SortDirection::Descending});
+    table.table->setSort({ui::TableSort{.column = 0, .direction = ui::SortDirection::Descending}});
     scene.settle();
     CHECK(name.property("text").toString() == QStringLiteral("Name ▼"));
     CHECK(asked.empty());
@@ -1154,16 +1231,88 @@ TEST_CASE("qt_quick table: the sorted column's header shows and states its direc
     QAccessible::setActive(true);
     QAccessibleInterface const* const header = QAccessible::queryAccessibleInterface(&name);
     REQUIRE(header != nullptr);
-    CHECK(header->text(QAccessible::Description) == QStringLiteral("Sorted descending"));
+    CHECK(header->text(QAccessible::Description) == QStringLiteral("sorted descending"));
     CHECK(header->text(QAccessible::Name) == QStringLiteral("Name"));
     QAccessible::setActive(wasActive);
 
     scene.click(name);
     scene.click(mass);
     CHECK(asked == std::vector<std::size_t>{0});
-    table.table->setSort(std::nullopt);
+    // Shift held reports `Shift`; Ctrl, which the contract gives no meaning on a header, reports `Plain`.
+    scene.click(name, Qt::ShiftModifier);
+    scene.click(name, Qt::ControlModifier);
+    CHECK(clicks ==
+          std::vector<ui::HeaderClick>{ui::HeaderClick::Plain, ui::HeaderClick::Shift, ui::HeaderClick::Plain});
+    table.table->setSort({});
     scene.settle();
     CHECK(name.property("text").toString() == QStringLiteral("Name"));
+}
+
+// Controls: report the edge drag's width in pixels instead of units; read the drag's translation once it has ended
+// (no change of width); leave the filter button above the edge (the filterable header's drag reaches no edge).
+TEST_CASE("qt_quick table: dragging a header's trailing edge reports units, a double click on it none",
+          "[qt_quick][table]") {
+    bool const filterable = GENERATE(false, true);
+    CAPTURE(filterable);
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
+    table.table->setColumns(
+        {{.label = "Name", .width = ui::Sizing::fixed(12), .filterable = filterable}, {.label = "Mass"}});
+    int filters = 0;
+    table.table->setOnFilter([&filters](std::size_t /*column*/) { ++filters; });
+    std::vector<std::pair<std::size_t, std::optional<int>>> resized;
+    table.table->setOnColumnResize(
+        [&resized](std::size_t column, std::optional<int> units) { resized.emplace_back(column, units); });
+    scene.settle();
+    QQuickItem const& name = headerOf(*table.table, 0);
+    QQuickItem* edge = nullptr;
+    for (QQuickItem* const child : name.childItems()) {
+        if (child->objectName() == QStringLiteral("edge0")) {
+            edge = child;
+        }
+    }
+    REQUIRE(edge != nullptr);
+    // The header is the column's 12 units and its padding; four units more to the right make 16 units of content.
+    qreal const unit = units(scene).width();
+    QPoint const start = Scene::centreOf(*edge);
+    QPoint const end = start + QPoint{static_cast<int>(std::lround(4 * unit)), 0};
+    QTest::mousePress(&scene.window(), Qt::LeftButton, {}, start);
+    constexpr int steps = 10;
+    for (int step = 1; step <= steps; ++step) {
+        QTest::mouseMove(&scene.window(), start + ((end - start) * step / steps));
+    }
+    QTest::mouseRelease(&scene.window(), Qt::LeftButton, {}, end);
+    scene.settle();
+    REQUIRE(resized.size() == 1);
+    CHECK(resized.front().first == 0);
+    CHECK(resized.front().second == std::optional<int>{16});
+    scene.doubleClick(*edge);
+    REQUIRE_FALSE(resized.empty());
+    CHECK(resized.back() == std::pair<std::size_t, std::optional<int>>{0, std::nullopt});
+    CHECK(filters == 0);
+}
+
+// Control: ignore a drag that ends on another header.
+TEST_CASE("qt_quick table: dragging a header onto another reports the move", "[qt_quick][table]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
+    table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(10)},
+                             {.label = "Mass", .width = ui::Sizing::fixed(10)},
+                             {.label = "Site", .width = ui::Sizing::fixed(10)}});
+    std::vector<std::pair<std::size_t, std::size_t>> moves;
+    table.table->setOnColumnMove(
+        [&moves](std::size_t column, std::size_t position) { moves.emplace_back(column, position); });
+    scene.settle();
+    QPoint const start = Scene::centreOf(headerOf(*table.table, 0));
+    QPoint const end = Scene::centreOf(headerOf(*table.table, 2));
+    QTest::mousePress(&scene.window(), Qt::LeftButton, {}, start);
+    constexpr int steps = 10;
+    for (int step = 1; step <= steps; ++step) {
+        QTest::mouseMove(&scene.window(), start + ((end - start) * step / steps));
+    }
+    QTest::mouseRelease(&scene.window(), Qt::LeftButton, {}, end);
+    scene.settle();
+    CHECK(moves == std::vector<std::pair<std::size_t, std::size_t>>{{0, 2}});
 }
 
 // Control: ignore the token in MorphTableRow's `place` (the cell's top is the row's top, 0).
@@ -1255,11 +1404,11 @@ TEST_CASE("qt_quick table: a column header follows field.caption.case and its co
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
     scene.settle();
     for (char const* const name : {"header0", "header1"}) {
-        QFont const font = headerOf(name)->property("font").value<QFont>();
+        auto const font = headerOf(name)->property("font").value<QFont>();
         CHECK(font.capitalization() == QFont::AllUppercase);
         CHECK(font.letterSpacing() > 0.0);
     }
-    QFont const font = headerOf("header1")->property("font").value<QFont>();
+    auto const font = headerOf("header1")->property("font").value<QFont>();
     qreal const capitals = QFontMetricsF{font}.horizontalAdvance(QStringLiteral("MIXING PLANT AND SAMPLING POINT"));
     CHECK(tableItem.property("widths").toList().at(1).toReal() >= capitals + columnPadding(scene));
     CHECK(tableItem.property("widths").toList().at(1).toReal() > plainWidth);
@@ -1360,7 +1509,7 @@ TEST_CASE("qt_quick table: a cell whose content is wider than its column keeps i
         {{.label = "Sample", .width = ui::Sizing::fixed(10)}, {.label = "Lot", .width = ui::Sizing::fixed(10)}});
     auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
     table->setRowKey(*row, ui::Key{std::int64_t{1}});
-    auto packed = scene.backend().createStack(row.get(), ui::Axis::Horizontal);
+    auto const packed = scene.backend().createStack(row.get(), ui::Axis::Horizontal);
     auto first = scene.backend().createText(packed.get());
     first->setText("a long sample identifier");
     auto second = scene.backend().createText(packed.get());
@@ -1700,7 +1849,7 @@ TEST_CASE("qt_quick table: a table in a cell settles to the layout a fresh build
 TEST_CASE("qt_quick table: the width-free natural width of runs that wrap is the widest line's advance",
           "[qt_quick][table]") {
     Scene scene;
-    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
     auto text = scene.backend().createText(column.get());
     text->setSpans({{.text = "first line\n"}, {.text = "the second line is longer", .strong = true}});
     scene.window().resize(400, 300);
@@ -1780,7 +1929,7 @@ TEST_CASE("qt_quick table: a spanning cell reaches the foot of the rows it cover
     table.table->setColumns(
         {{.label = "Name", .width = ui::Sizing::fixed(12), .valign = ui::Align::Stretch}, {.label = "Mass"}});
     scene.settle();
-    QQuickItem& tableItem = Scene::itemOf(*table.table);
+    QQuickItem const& tableItem = Scene::itemOf(*table.table);
     QQuickItem const& first = Scene::itemOf(*table.cells.at(0));
     qreal const oneRow = first.height();
     table.table->setRowSpans(*table.rows.at(0), {{.column = 0, .rows = 3}});
@@ -1846,8 +1995,8 @@ TEST_CASE("qt_quick table: hovering the part of a spanning cell over a covered r
     Rows table = makeTable(scene, {ui::Key{1}, ui::Key{2}, ui::Key{3}}, ui::SelectionMode::Single);
     table.table->setRowSpans(*table.rows.at(0), {{.column = 0, .rows = 3}});
     scene.settle();
-    QQuickItem& origin = Scene::itemOf(*table.rows.at(0));
-    QQuickItem& covered = Scene::itemOf(*table.rows.at(1));
+    QQuickItem const& origin = Scene::itemOf(*table.rows.at(0));
+    QQuickItem const& covered = Scene::itemOf(*table.rows.at(1));
     // Away from the table's rows, nothing is hovered.
     QTest::mouseMove(&scene.window(), QPoint{1, 1});
     scene.settle();
@@ -2086,4 +2235,1029 @@ TEST_CASE("qt_quick table: a Ctrl-click in a virtualized table keeps selected ke
     scene.click(*rows.at(0)->item(), Qt::ControlModifier);
     REQUIRE(reported.size() == 1);
     CHECK(reported.back().size() == static_cast<std::size_t>(rowCount - 1));
+}
+
+// ── The column window ───────────────────────────────────────────────────────
+
+namespace {
+
+using morph::testing::FakeRows;
+using ui::CellRef;
+using ui::Key;
+using ui::TableArrangement;
+
+struct QuickWindowOptions {
+    // A cell drawn on more lines than one: the row's text, then a line more for each line past the first.
+    struct Wrapped {
+        std::int64_t row = 0;
+        std::size_t column = 0;
+        int lines = 1;
+    };
+    struct Level {
+        std::size_t column = 0;
+        std::string level;
+    };
+    std::size_t pinned = 0;
+    std::vector<Wrapped> wrapped;
+    bool wrap = true;
+    std::vector<Level> levels;
+    ui::SelectionMode selection = ui::SelectionMode::None;
+    bool selectColumn = false;
+    // Each column's unit, by index; a column past the list has none.
+    std::vector<std::string> units;
+    // Whether the table has a select-all handler, which counts its calls in `selectAlls`.
+    bool selectAllHandler = false;
+    // The cells' menu; empty for none.
+    std::function<std::vector<ui::MenuItem>(ui::Key const&, std::size_t)> cellMenu;
+};
+
+std::string groupedCount(std::int64_t n) {
+    std::string digits = std::to_string(n);
+    for (auto at = static_cast<std::ptrdiff_t>(digits.size()) - 3; at > 0; at -= 3) {
+        digits.insert(static_cast<std::size_t>(at), ",");
+    }
+    return digits;
+}
+
+std::string fieldText(ui::Value const& record, std::string const& field) {
+    ui::Value const* const value = record.field(field);
+    return value != nullptr && value->asString() != nullptr ? *value->asString() : std::string{};
+}
+
+std::int64_t idOf(ui::Value const& record) {
+    ui::Value const* const value = record.field("id");
+    return value != nullptr && value->asInt() != nullptr ? *value->asInt() : -1;
+}
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the column count, then the column left out.
+std::vector<std::size_t> allColumnsBut(std::size_t n, std::size_t left) {
+    std::vector<std::size_t> out;
+    for (std::size_t column = 0; column < n; ++column) {
+        if (column != left) {
+            out.push_back(column);
+        }
+    }
+    return out;
+}
+
+// The recording backend's `WindowFixture` on Qt Quick: one table over `FakeRows` in a 1,280 × 800 window, every
+// column 8 units wide with the default text cell, and the window made twenty columns wide (`column` px each) once the
+// mount has laid the columns out in the table's measure; the status line shows the count.
+struct QuickWindowFixture {
+    QuickWindowFixture(std::int64_t rowCount, std::size_t columnCount, QuickWindowOptions options = {})
+        : rows{std::make_shared<FakeRows>(rowCount, columnCount, scene.owner())},
+          arrangement{scene.runtime(), TableArrangement{.visible = {}, .pinned = options.pinned, .widths = {}}},
+          focus{scene.runtime(), std::nullopt},
+          status{scene.runtime(), ui::TableStatus{.counts = groupedCount(rowCount) + " rows", .shown = true}},
+          accents{scene.runtime(), {}},
+          selected{scene.runtime(), {}},
+          wrapped{std::move(options.wrapped)} {
+        scene.window().resize(1280, 800);
+        std::vector<ui::TableColumn> columns;
+        columns.reserve(columnCount);
+        for (std::size_t index = 0; index < columnCount; ++index) {
+            columns.push_back(
+                ui::TableColumn{.id = "c" + std::to_string(index),
+                                .label = "C" + std::to_string(index),
+                                .width = ui::Sizing::fixed(8),
+                                .unit = index < options.units.size() ? options.units.at(index) : std::string{},
+                                .wrap = options.wrap});
+        }
+        ui::TableSource source;
+        source.rows = rows;
+        source.ownCell.assign(columnCount, false);
+        source.levels.assign(columnCount, std::string{});
+        for (QuickWindowOptions::Level const& level : options.levels) {
+            source.levels.at(level.column) = level.level;
+        }
+        source.defaultCellView = [this](morph::reactive::Signal<std::size_t> const& cellColumn,
+                                        morph::reactive::Signal<ui::Value> const& row) {
+            return ui::accentedCell(
+                ui::text({.text = [this, &cellColumn, &row] { return textOf(row.get(), cellColumn.get()); }}),
+                [this, &cellColumn, &row] {
+                    auto const& all = accents.get();
+                    auto const found = all.find(std::pair{idOf(row.get()), cellColumn.get()});
+                    return found == all.end() ? ui::CellAccent{} : found->second;
+                });
+        };
+        source.cellView = [this](std::size_t cellColumn, morph::reactive::Signal<ui::Value> const& row) {
+            return ui::text({.text = [this, &row, cellColumn] { return textOf(row.get(), cellColumn); }});
+        };
+        ui::TableOptions tableOptions;
+        // A table over a source is a viewport onto rows it does not hold: it takes the window's height.
+        tableOptions.common.layout.height = ui::Sizing::stretch();
+        tableOptions.arrangement = [this] { return arrangement.get(); };
+        tableOptions.focus = [this] { return focus.get(); };
+        tableOptions.status = [this] { return status.get(); };
+        tableOptions.onRetry = [this] { ++retries; };
+        tableOptions.selectionMode = options.selection;
+        tableOptions.selectColumn = options.selectColumn;
+        tableOptions.onSelectRange = [this](std::size_t anchor, std::size_t focusAt, ui::SelectionChange change) {
+            ranges.emplace_back(anchor, focusAt, change);
+        };
+        if (options.selectAllHandler) {
+            tableOptions.onSelectAll = [this] { ++selectAlls; };
+        }
+        // The selection is held here, as a document holds it: each change the user makes is recorded and kept.
+        tableOptions.selection = [this] { return selected.get(); };
+        tableOptions.onSelectionChange = [this](std::vector<ui::Key> keys, ui::SelectionChange change) {
+            selections.emplace_back(keys, change);
+            selected.set(std::move(keys));
+        };
+        tableOptions.cellMenu = std::move(options.cellMenu);
+        view.emplace(scene.runtime(), scene.backend(),
+                     ui::table(std::move(columns), std::move(source), std::move(tableOptions)));
+        settle();
+        column = static_cast<int>(call("columnWidth", 0).toReal());
+        REQUIRE(column > 0);
+        scene.window().resize(20 * column, 800);
+        settle();
+    }
+
+    [[nodiscard]] std::string textOf(ui::Value const& record, std::size_t cellColumn) const {
+        std::string text = fieldText(record, "c" + std::to_string(cellColumn));
+        for (QuickWindowOptions::Wrapped const& cell : wrapped) {
+            if (cell.row == idOf(record) && cell.column == cellColumn) {
+                for (int line = 1; line < cell.lines; ++line) {
+                    text += "\n" + text;
+                }
+            }
+        }
+        return text;
+    }
+
+    void settle() { scene.settle(); }
+
+    [[nodiscard]] QQuickItem* item() const { return &Scene::itemOf(view->root()); }
+    [[nodiscard]] QVariant prop(char const* name) const { return item()->property(name); }
+
+    // Evaluates `name(args…)` on the MorphTable item.
+    template <class... Args>
+    QVariant call(char const* name, Args const&... args) {
+        // NOLINTNEXTLINE(misc-const-correctness): the fold expression below appends to it, which the check does not see.
+        QStringList list;
+        (list.append(QString::number(args)), ...);
+        QQmlExpression expression{
+            scene.engine().rootContext(), item(),
+            QStringLiteral("%1(%2)").arg(QString::fromLatin1(name), list.join(QStringLiteral(",")))};
+        QVariant const result = expression.evaluate();
+        REQUIRE_FALSE(expression.hasError());
+        return result;
+    }
+
+    // The cell items shown in the realized rows.
+    int cellItems() {
+        QQmlExpression expression{scene.engine().rootContext(), item(), QStringLiteral(R"((() => {
+            let shown = 0
+            for (let i = 0; i < rowsHolder.children.length; ++i) {
+                const row = rowsHolder.children[i]
+                if (!row.visible || !row.content)
+                    continue
+                for (let j = 0; j < row.content.children.length; ++j) {
+                    const cell = row.content.children[j]
+                    shown += cell.measuredIndex !== undefined && cell.visible ? 1 : 0
+                }
+            }
+            return shown
+        })())")};
+        QVariant const result = expression.evaluate();
+        REQUIRE_FALSE(expression.hasError());
+        return result.toInt();
+    }
+
+    void scrollRows(std::size_t first) {
+        firstRow = first;
+        static_cast<void>(call("scrollRowToTop", static_cast<qlonglong>(first)));
+        settle();
+    }
+
+    void scrollColumns(int scrollX) {
+        auto* const hflick = item()->findChild<QQuickItem*>(QStringLiteral("hflick"));
+        REQUIRE(hflick != nullptr);
+        hflick->setProperty("contentX", scrollX);
+        settle();
+    }
+
+    // Scrolls down over @p n rows a viewport at a time, one owner turn at a time, and keeps the largest number of
+    // cells built or rebound in one turn.
+    void flingRows(std::size_t n) {
+        auto const work = [this] { return stats().cellsRebound + stats().cellsCreated; };
+        for (std::size_t moved = 0; moved < n; moved += 30) {
+            std::size_t before = work();
+            firstRow += 30;
+            static_cast<void>(call("scrollRowToTop", static_cast<qlonglong>(firstRow)));
+            maxRebindsPerTurn = std::max(maxRebindsPerTurn, work() - before);
+            for (;;) {
+                before = work();
+                if (!scene.owner().runOne()) {
+                    break;
+                }
+                maxRebindsPerTurn = std::max(maxRebindsPerTurn, work() - before);
+            }
+        }
+        settle();
+    }
+
+    [[nodiscard]] ui::MountStats const& stats() const { return view->stats(); }
+
+    Scene scene;
+    std::shared_ptr<FakeRows> rows;
+    morph::reactive::Signal<TableArrangement> arrangement;
+    morph::reactive::Signal<std::optional<CellRef>> focus;
+    morph::reactive::Signal<ui::TableStatus> status;
+    // Each cell's accent, by row id and column; a cell not named has none.
+    morph::reactive::Signal<std::map<std::pair<std::int64_t, std::size_t>, ui::CellAccent>> accents;
+    // The selected keys, and every change the backend reported.
+    morph::reactive::Signal<std::vector<ui::Key>> selected;
+    std::vector<std::pair<std::vector<ui::Key>, ui::SelectionChange>> selections;
+    std::vector<QuickWindowOptions::Wrapped> wrapped;
+    int retries = 0;
+    int selectAlls = 0;
+    std::vector<std::tuple<std::size_t, std::size_t, ui::SelectionChange>> ranges;
+    std::size_t firstRow = 0;
+    std::size_t maxRebindsPerTurn = 0;
+    int column = 0;  ///< A column's width in pixels, the measure of a fixed column of 8 units and its padding.
+    std::optional<ui::Mounted> view;
+};
+
+}  // namespace
+
+// Mutation: MorphTable instantiating a cell per column of a realized row (cellItems is 50 × 300).  Gate F2.
+TEST_CASE("qt_quick table window: cells and header cells alive are the windows'", "[qt_quick][heavy]") {
+    QuickWindowFixture f{100'000, 300, {.pinned = 2}};
+    f.scrollRows(500);
+    f.scrollColumns(100 * f.column);  // columns 100 to 119 in view
+    int const window = 2 + 20 + (2 * 4);
+    CHECK(f.prop("realizedColumnCount").toInt() == window);
+    CHECK(f.prop("pinnedShown").toInt() == 2);
+    CHECK(f.cellItems() == f.prop("realizedCount").toInt() * window);
+    CHECK(f.prop("headerCellCount").toInt() == window);
+}
+
+// Mutation: a pool keyed by column for default cells (a column scrolling in creates 50 cells).  Gate F8.
+TEST_CASE("qt_quick table window: flings create no cell once the pools are warm", "[qt_quick][heavy]") {
+    QuickWindowFixture f{100'000, 300, {.pinned = 2}};
+    // Two flings warm the rows: the first measures the rows it passes, and the mean height they settle at can put one
+    // more row in the window than the estimate did, which only the second fling's pool has to hold.
+    f.flingRows(2'000);
+    f.flingRows(2'000);
+    for (int x = 0; x < 200 * f.column; x += 10 * f.column) {
+        f.scrollColumns(x);  // warm both ways
+    }
+    auto const created = f.stats().cellsCreated;
+    f.flingRows(2'000);
+    for (int x = 200 * f.column; x < 300 * f.column; x += 10 * f.column) {
+        f.scrollColumns(x);
+    }
+    CHECK(f.stats().cellsCreated == created);
+    CHECK(f.maxRebindsPerTurn <= 240);
+}
+
+// Mutation: MorphTable keeping focus on the delegate item, which a recycled row loses.  Gate F10.
+TEST_CASE("qt_quick table window: focus and counts after scrolling far away", "[qt_quick][heavy]") {
+    QuickWindowFixture f{100'000, 300, {.pinned = 2}};
+    f.focus.set(CellRef{.key = Key{std::int64_t{7}}, .column = "c5"});
+    f.settle();
+    f.scrollRows(10'000);
+    f.scrollColumns(200 * f.column);
+    CHECK(f.call("focusedRow").toInt() == 7);
+    CHECK(f.call("focusedColumn").toInt() == 5);
+    CHECK(f.call("cellRealized", 7, 5).toBool());
+    CHECK(f.prop("accessibleRowCount").toInt() == 100'000);
+    CHECK(f.prop("accessibleColumnCount").toInt() == 300);
+}
+
+// Mutation: MorphTable rebuilding its row delegates when the column window changes.  Gate D8, Qt Quick half.
+TEST_CASE("qt_quick table window: hiding and moving a column create no cell items", "[qt_quick][heavy]") {
+    QuickWindowFixture f{100'000, 300, {.pinned = 2}};
+    auto const created = f.stats().cellsCreated;
+    int const items = f.cellItems();
+    TableArrangement hidden = f.arrangement.peek();
+    hidden.visible = allColumnsBut(300, 5);
+    f.arrangement.set(hidden);
+    f.settle();
+    CHECK(f.stats().cellsCreated == created);
+    CHECK(f.cellItems() == items);
+    CHECK_FALSE(f.call("cellRealized", 0, 5).toBool());
+    TableArrangement moved = hidden;
+    std::swap(moved.visible.at(3), moved.visible.at(4));
+    f.arrangement.set(moved);
+    f.settle();
+    CHECK(f.stats().cellsCreated == created);
+    CHECK(f.cellItems() == items);
+}
+
+// Mutation: MorphTable ignoring setStatus (statusText is empty).
+TEST_CASE("qt_quick table: the status line shows counts and Retry", "[qt_quick]") {
+    QuickWindowFixture f{100'000, 30};
+    CHECK(f.prop("statusText").toString() == QStringLiteral("100,000 rows"));
+    CHECK_FALSE(f.prop("retryShown").toBool());
+    f.status.set(ui::TableStatus{
+        .counts = "100,000 rows", .state = "Recipe data could not be loaded.", .retry = true, .shown = true});
+    f.settle();
+    CHECK(f.prop("statusText").toString() == QStringLiteral("100,000 rows  Recipe data could not be loaded."));
+    REQUIRE(f.prop("retryShown").toBool());
+    auto* const retry = f.item()->findChild<QQuickItem*>(QStringLiteral("retry"));
+    REQUIRE(retry != nullptr);
+    f.scene.click(*retry);
+    CHECK(f.retries == 1);
+}
+
+// Mutation: MorphTable ignoring setCellLoad (an unloaded cell draws its empty content: cellLoadAt is 0).
+TEST_CASE("qt_quick table: an unloaded cell is a placeholder and a failed one an error mark", "[qt_quick]") {
+    QuickWindowFixture f{100, 4, {.levels = {{.column = 1, .level = "recipe"}}}};
+    int const widthBefore = f.call("columnWidth", 1).toInt();
+    f.rows->unload(0, "recipe");
+    f.rows->fail(1, "recipe");
+    f.settle();
+    CHECK(f.call("cellLoadAt", 0, 1).toInt() == 1);
+    CHECK(f.call("cellLoadAt", 1, 1).toInt() == 2);
+    CHECK(f.call("cellLoadAt", 2, 1).toInt() == 0);
+    CHECK(f.call("columnWidth", 1).toInt() == widthBefore);  // a placeholder widens nothing
+}
+
+// Mutations: the tint painted opaque over the row's selection fill (its alpha is 1); the slot under the row's
+// background (z -1), where a toned or selected row hides it; `invalid` ignored by
+// MorphTableRow.qml, which draws no error mark (cellLoadAt is 0 and no failedMark exists).
+TEST_CASE(
+    "qt_quick table: a toned cell keeps its selection mark, a tooltip cell is described, a unit header is named "
+    "with its unit",
+    "[qt_quick]") {
+    QuickWindowFixture f{10, 3, {.units = {"kg"}}};
+    auto* const header = itemNamed(*f.item(), QStringLiteral("header0"));
+    REQUIRE(header != nullptr);
+    CHECK(header->property("text").toString() == QStringLiteral("C0 [kg]"));
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface const* const named = QAccessible::queryAccessibleInterface(header);
+    REQUIRE(named != nullptr);
+    CHECK(named->text(QAccessible::Name) == QStringLiteral("C0, kg"));
+
+    f.accents.set({{{0, 0}, ui::CellAccent{.tone = ui::Tone::Warn, .tooltip = "Above limit", .invalid = false}},
+                   {{0, 1}, ui::CellAccent{.tone = {}, .tooltip = "The value could not be read", .invalid = true}}});
+    f.settle();
+    QVariant const accent = f.call("cellAccentAt", 0, 0);
+    REQUIRE(accent.isValid());
+    auto* const tinted = itemNamed(*f.item(), QStringLiteral("cellAccent0"));
+    REQUIRE(tinted != nullptr);
+    auto* const tint = itemNamed(*tinted, QStringLiteral("cellTint"));
+    REQUIRE(tint != nullptr);
+    CHECK(tint->isVisible());
+    CHECK(itemNamed(*tinted, QStringLiteral("moreMark"))->isVisible());
+    QAccessibleInterface const* const described = QAccessible::queryAccessibleInterface(tinted);
+    REQUIRE(described != nullptr);
+    CHECK(described->text(QAccessible::Description) == QStringLiteral("Above limit"));
+    // Half the tone's fill: the row's selection fill and bar show through it.
+    CHECK(tint->property("color").value<QColor>().alphaF() < 1.0F);
+    // Over the row's background, whose tone tint and selection fill are opaque: after it among the row's children, at
+    // no lower z, so a toned cell keeps its tone in a toned or selected row.
+    QQuickItem* const row = tinted->parentItem();
+    REQUIRE(row != nullptr);
+    QQuickItem* layer = itemNamed(*row, QStringLiteral("fill"));
+    while (layer != nullptr && layer->parentItem() != row) {
+        layer = layer->parentItem();
+    }
+    REQUIRE(layer != nullptr);
+    CHECK(tinted->z() >= layer->z());
+    CHECK(row->childItems().indexOf(tinted) > row->childItems().indexOf(layer));
+    CHECK(f.call("cellLoadAt", 0, 1).toInt() == 0);  // the load is the mount's; the mark is the accent's
+    CHECK(itemNamed(*f.item(), QStringLiteral("failedMark")) != nullptr);
+    QAccessible::setActive(wasActive);
+
+    f.accents.set({});
+    f.settle();
+    CHECK(itemNamed(*f.item(), QStringLiteral("cellAccent0")) == nullptr);
+    CHECK(itemNamed(*f.item(), QStringLiteral("failedMark")) == nullptr);
+}
+
+// Mutations: a row's height recomputed from its realized cells each pass (it shrinks when the tall cell leaves);
+// measuring a table whose columns are all wrap:false (rowMeasures grows).
+TEST_CASE("qt_quick table: a row's height only grows while it is realized", "[qt_quick][heavy]") {
+    QuickWindowFixture f{2'000, 300, {.pinned = 0, .wrapped = {{.row = 3, .column = 60, .lines = 2}}}};
+    // Before the first viewport report every column is realized, the wrapped one too; a row that left the row window
+    // and came back has measured only the columns in view.
+    f.scrollRows(1'000);
+    f.scrollRows(0);
+    int const low = f.call("rowHeight", 3).toInt();
+    f.scrollColumns(60 * f.column);
+    int const tall = f.call("rowHeight", 3).toInt();
+    CHECK(tall > low);
+    f.scrollColumns(0);
+    CHECK(f.call("rowHeight", 3).toInt() == tall);  // scrolled out: not shorter
+    f.scrollRows(1'000);
+    f.scrollRows(0);
+    CHECK(f.call("rowHeight", 3).toInt() == low);  // it left the row window: forgotten
+    QuickWindowFixture flat{2'000, 300, {.pinned = 0, .wrap = false}};
+    flat.flingRows(200);
+    CHECK(flat.prop("rowMeasures").toInt() == 0);
+}
+
+// Mutation: MorphTable keeping the view's offset when a row above the first visible row grows (the first visible
+// row moves down by the growth).
+TEST_CASE("qt_quick table: a row growing above the view keeps the rows in view where they are", "[qt_quick][heavy]") {
+    QuickWindowFixture f{2'000, 300, {.pinned = 0, .wrapped = {{.row = 95, .column = 60, .lines = 3}}}};
+    f.scrollRows(100);
+    QQuickItem const* const flick = f.item()->findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    qreal const offsetBefore = flick->property("contentY").toReal() - f.call("rowTop", 100).toReal();
+    f.scrollColumns(60 * f.column);  // row 95, above the view and realized, grows
+    CHECK(f.call("rowHeight", 95).toReal() > f.call("rowHeight", 96).toReal());
+    CHECK(flick->property("contentY").toReal() - f.call("rowTop", 100).toReal() == Catch::Approx(offsetBefore));
+}
+
+// Mutation: the Qt Quick table answering the default measure (a windowed column of 8 units is 8 px plus nothing).
+TEST_CASE("qt_quick table: a windowed fixed column is as wide as an unwindowed one", "[qt_quick][heavy]") {
+    QuickWindowFixture windowed{100'000, 300};
+    REQUIRE(windowed.prop("arranged").toBool());
+    Scene scene;
+    ui::Mounted const plain{
+        scene.runtime(), scene.backend(),
+        ui::table<std::int64_t>(
+            {{.label = "C0", .width = ui::Sizing::fixed(8)}}, [] { return std::vector<std::int64_t>{1, 2}; },
+            [](std::int64_t const& row) { return ui::Key{row}; },
+            [](morph::reactive::Signal<std::int64_t> const& row) {
+                return std::vector<ui::Node>{ui::text({.text = [&row] { return std::to_string(row.get()); }})};
+            })};
+    scene.settle();
+    QVariantList const widths = Scene::itemOf(plain.root()).property("widths").toList();
+    REQUIRE(widths.size() == 1);
+    CHECK(windowed.call("columnWidth", 0).toReal() == Catch::Approx(widths.at(0).toReal()).margin(1.0));
+}
+
+// Mutations: a tap on a row of a source table focusing the row (the table loses `activeFocus`); MorphTable announcing
+// nothing (no announcement event reaches the accessibility handler).
+TEST_CASE("qt_quick table window: a tap keeps the focus on the table, and the status line is announced",
+          "[qt_quick]") {
+    QuickWindowFixture f{100'000, 30};
+    QQuickItem const* const row = f.item()->property("rowsHolder").value<QQuickItem*>()->childItems().value(3);
+    REQUIRE(row != nullptr);
+    f.scene.click(*row);
+    CHECK(f.item()->hasActiveFocus());
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    // Announcements are Qt 6.8's.
+    static std::vector<QString> announced;
+    announced.clear();
+    QAccessible::installUpdateHandler([](QAccessibleEvent* event) {
+        if (event->type() == QAccessible::Announcement) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast): the event type was checked above.
+            announced.push_back(static_cast<QAccessibleAnnouncementEvent*>(event)->message());
+        }
+    });
+    QAccessible::setActive(true);
+    f.status.set(ui::TableStatus{.counts = "100,000 rows", .message = "Copied 2 rows", .shown = true});
+    f.settle();
+    QTest::qWait(700);  // the announcement waits for the text to hold half a second
+    QAccessible::installUpdateHandler(nullptr);
+    CHECK(std::ranges::contains(announced, QStringLiteral("100,000 rows  Copied 2 rows")));
+#endif
+}
+
+// Mutation: the select-all box over a source selecting the realized rows (`TableImpl::selectAll`: no range reaches
+// the mount).
+TEST_CASE("qt_quick table window: the select-all box selects the view through the mount", "[qt_quick]") {
+    QuickWindowFixture f{100'000, 30, {.selection = ui::SelectionMode::Multiple, .selectColumn = true}};
+    auto* const box = itemNamed(*f.item(), QStringLiteral("selectAll"));
+    REQUIRE(box != nullptr);
+    f.scene.click(*box);
+    REQUIRE_FALSE(f.ranges.empty());
+    CHECK(f.ranges.back() == std::tuple{std::size_t{0}, std::size_t{99'999}, ui::SelectionChange::Extend});
+}
+
+// Mutation: Shift with an arrow over a source handled by the realized rows (no range reaches the mount).
+TEST_CASE("qt_quick table window: Shift with an arrow and Ctrl+A select through the mount", "[qt_quick]") {
+    QuickWindowFixture f{100'000, 30, {.selection = ui::SelectionMode::Multiple}};
+    f.item()->forceActiveFocus();
+    f.scene.key(Qt::Key_Down);
+    f.scene.key(Qt::Key_Down, Qt::ShiftModifier);
+    f.scene.key(Qt::Key_Down, Qt::ShiftModifier);
+    REQUIRE_FALSE(f.ranges.empty());
+    CHECK(f.ranges.back() == std::tuple{std::size_t{1}, std::size_t{3}, ui::SelectionChange::Replace});
+    f.scene.key(Qt::Key_A, Qt::ControlModifier);
+    CHECK(f.ranges.back() == std::tuple{std::size_t{0}, std::size_t{99'999}, ui::SelectionChange::Extend});
+}
+
+// Mutation: `TableImpl::setOnSelectAll` not writing `selectAllHandled` (Ctrl+A and the box fire a range, and the
+// handler is never called).
+TEST_CASE("qt_quick table window: a select-all handler takes Ctrl+A and the select-all box over a source",
+          "[qt_quick]") {
+    QuickWindowFixture f{
+        100'000, 30, {.selection = ui::SelectionMode::Multiple, .selectColumn = true, .selectAllHandler = true}};
+    CHECK(f.prop("selectAllHandled").toBool());
+    f.item()->forceActiveFocus();
+    f.scene.key(Qt::Key_A, Qt::ControlModifier);
+    CHECK(f.selectAlls == 1);
+    auto* const box = itemNamed(*f.item(), QStringLiteral("selectAll"));
+    REQUIRE(box != nullptr);
+    f.scene.click(*box);
+    CHECK(f.selectAlls == 2);
+    CHECK(f.ranges.empty());
+}
+
+// Control: leave the menu popup without the focus (the arrows and Enter go to the header, and Escape does not close
+// it).
+TEST_CASE("qt_quick table: a header menu opened from the keyboard takes the arrows, Enter and Escape",
+          "[qt_quick][table]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
+    table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(12)}, {.label = "Mass"}});
+    std::vector<std::pair<std::optional<std::size_t>, std::vector<std::size_t>>> chosen;
+    table.table->setMenu(
+        [](std::optional<std::size_t>) {
+            return std::vector<ui::MenuEntry>{
+                {.label = "Sort ascending"}, {.separator = true}, {.label = "Hide column"}};
+        },
+        [&chosen](std::optional<std::size_t> column, std::vector<std::size_t> path) {
+            chosen.emplace_back(column, std::move(path));
+        });
+    scene.settle();
+    QQuickItem& name = headerOf(*table.table, 0);
+    auto* const menu = Scene::itemOf(*table.table).findChild<QObject*>(QStringLiteral("configMenu"));
+    REQUIRE(menu != nullptr);
+    name.forceActiveFocus();
+    scene.key(Qt::Key_F10, Qt::ShiftModifier);
+    REQUIRE(menu->property("opened").toBool());
+    // Down passes over the separator to Hide column; Enter chooses it.
+    scene.key(Qt::Key_Down);
+    scene.key(Qt::Key_Return);
+    CHECK_FALSE(menu->property("opened").toBool());
+    REQUIRE(chosen.size() == 1);
+    CHECK(chosen.front().first == std::optional<std::size_t>{0});
+    CHECK(chosen.front().second == std::vector<std::size_t>{2});
+    CHECK(name.hasActiveFocus());
+    // Opened with the mouse, Escape closes it and chooses nothing.
+    QTest::mouseClick(&scene.window(), Qt::RightButton, {}, Scene::centreOf(name));
+    scene.settle();
+    REQUIRE(menu->property("opened").toBool());
+    scene.key(Qt::Key_Escape);
+    CHECK_FALSE(menu->property("opened").toBool());
+    CHECK(chosen.size() == 1);
+}
+
+// Control: draw a menu entry's label alone (the checked entry reads `Wrap`, and assistive technology hears no check).
+TEST_CASE("qt_quick table: a header menu shows a checked entry's mark, its chord and its description, and states it",
+          "[qt_quick][table]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
+    table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(12)}, {.label = "Mass"}});
+    table.table->setMenu(
+        [](std::optional<std::size_t>) {
+            return std::vector<ui::MenuEntry>{
+                {.label = "Wrap", .keys = "Ctrl+W", .checked = true, .description = "Long text wraps"},
+                {.separator = true},
+                {.label = "Pin", .checked = false}};
+        },
+        [](std::optional<std::size_t>, std::vector<std::size_t> const&) {});
+    scene.settle();
+    QQuickItem const& name = headerOf(*table.table, 0);
+    QTest::mouseClick(&scene.window(), Qt::RightButton, {}, Scene::centreOf(name));
+    scene.settle();
+    auto* const menu = Scene::itemOf(*table.table).findChild<QObject*>(QStringLiteral("configMenu"));
+    REQUIRE(menu != nullptr);
+    REQUIRE(menu->property("opened").toBool());
+    auto* const entries = menu->property("contentItem").value<QQuickItem*>();
+    REQUIRE(entries != nullptr);
+    QQuickItem* wrap = nullptr;
+    QQuickItem* pin = nullptr;
+    QStringList texts;
+    QList<QQuickItem*> pending{entries};
+    while (!pending.isEmpty()) {
+        QQuickItem* const item = pending.takeLast();
+        if (item->objectName() == QStringLiteral("menuEntry0")) {
+            wrap = item;
+        } else if (item->objectName() == QStringLiteral("menuEntry2")) {
+            pin = item;
+        }
+        if (item->isVisible() && !item->property("text").toString().isEmpty()) {
+            texts.append(item->property("text").toString());
+        }
+        pending.append(item->childItems());
+    }
+    REQUIRE(wrap != nullptr);
+    REQUIRE(pin != nullptr);
+    CHECK(wrap->property("text").toString() == QStringLiteral("\u2713 Wrap    Ctrl+W"));
+    CHECK(pin->property("text").toString() == QStringLiteral("  Pin"));
+    CHECK(texts.contains(QStringLiteral("Long text wraps")));
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface const* const wrapNode = QAccessible::queryAccessibleInterface(wrap);
+    QAccessibleInterface const* const pinNode = QAccessible::queryAccessibleInterface(pin);
+    REQUIRE(wrapNode != nullptr);
+    REQUIRE(pinNode != nullptr);
+    CHECK(wrapNode->role() == QAccessible::MenuItem);
+    CHECK(wrapNode->state().checkable);
+    CHECK(wrapNode->state().checked);
+    CHECK(pinNode->state().checkable);
+    CHECK_FALSE(pinNode->state().checked);
+    QAccessible::setActive(wasActive);
+    scene.key(Qt::Key_Escape);
+}
+
+// Mutation: the menu opened without moving focus (the cell menu's entries not focusing the cell, so the focused row
+// stays -1).
+TEST_CASE("qt_quick table: a right-click opens the cell menu on that cell and selects its row alone",
+          "[qt_quick][table]") {
+    QuickWindowOptions options{.selection = ui::SelectionMode::Multiple};
+    options.cellMenu = [](ui::Key const&, std::size_t) {
+        std::vector<ui::MenuItem> items(2);
+        items.at(0).label = std::string{"Open"};
+        items.at(1).label = std::string{"Close"};
+        return items;
+    };
+    QuickWindowFixture f{10, 3, std::move(options)};
+    f.selected.set({ui::Key{std::int64_t{1}}, ui::Key{std::int64_t{3}}});
+    f.settle();
+    QQmlExpression find{f.scene.engine().rootContext(), f.item(), QStringLiteral(R"((() => {
+        const row = realizedRow(2)
+        if (!row)
+            return null
+        for (let i = 0; i < row.content.children.length; ++i) {
+            const cell = row.content.children[i]
+            if (cell.measuredIndex === 1 && cell.visible)
+                return cell
+        }
+        return null
+    })())")};
+    auto* const cell = qobject_cast<QQuickItem*>(find.evaluate().value<QObject*>());
+    REQUIRE_FALSE(find.hasError());
+    REQUIRE(cell != nullptr);
+    QTest::mouseClick(&f.scene.window(), Qt::RightButton, {}, Scene::centreOf(*cell));
+    f.settle();
+    REQUIRE_FALSE(f.selections.empty());
+    CHECK(f.selections.back() ==
+          std::pair{std::vector<ui::Key>{ui::Key{std::int64_t{2}}}, ui::SelectionChange::Replace});
+    CHECK(f.call("focusedRow").toInt() == 2);
+    CHECK(f.call("focusedColumn").toInt() == 1);
+    auto* const menu = f.item()->findChild<QObject*>(QStringLiteral("configMenu"));
+    REQUIRE(menu != nullptr);
+    REQUIRE(menu->property("opened").toBool());
+    auto const labels = [menu] {
+        QStringList out;
+        for (QVariant const& entry : menu->property("entries").toList()) {
+            out.append(entry.toMap().value(QStringLiteral("label")).toString());
+        }
+        return out;
+    };
+    QStringList const expected{QStringLiteral("Open"), QStringLiteral("Close")};
+    CHECK(labels() == expected);
+    f.scene.key(Qt::Key_Escape);
+    f.settle();
+    REQUIRE_FALSE(menu->property("opened").toBool());
+    // The focus is back on the table, and the menu key on the focused cell opens the same menu.
+    CHECK(f.item()->hasActiveFocus());
+    f.scene.key(Qt::Key_Menu);
+    f.settle();
+    CHECK(menu->property("opened").toBool());
+    CHECK(labels() == expected);
+    f.scene.key(Qt::Key_Escape);
+}
+
+// Written by reading: this tree's Qt Quick build was not configured, so these two cases were not compiled or run.
+// Mutation: `setOnSelectAll` ignored, under which Ctrl+A reports the five keys through `onSelectionChange`.
+TEST_CASE("qt_quick table: select-all asks the handler and marks the view", "[qt_quick]") {
+    Scene scene;
+    std::vector<ui::Key> keys;
+    for (std::int64_t id = 1; id <= 5; ++id) {
+        keys.emplace_back(id);
+    }
+    Rows table = makeTable(scene, keys, ui::SelectionMode::Multiple);
+    table.table->setSelectColumn(true);
+    scene.settle();
+    int asked = 0;
+    std::vector<std::pair<std::vector<ui::Key>, ui::SelectionChange>> reported;
+    table.table->setOnSelectAll([&asked] { ++asked; });
+    table.table->setOnSelectionChange([&reported](std::vector<ui::Key> chosen, ui::SelectionChange change) {
+        reported.emplace_back(std::move(chosen), change);
+    });
+    scene.key(Qt::Key_Tab);
+    scene.key(Qt::Key_A, Qt::ControlModifier);
+    CHECK(asked == 1);
+    scene.click(selectAllOf(*table.table));
+    CHECK(asked == 2);
+    CHECK(reported.empty());
+
+    table.table->setSelectionView({ui::Key{std::int64_t{2}}});
+    scene.settle();
+    for (std::size_t at = 0; at < table.rows.size(); ++at) {
+        CHECK(Scene::itemOf(*table.rows.at(at)).property("selected").toBool() == (at != 1));
+    }
+    scene.click(Scene::itemOf(*table.rows.at(0)), Qt::ControlModifier);
+    REQUIRE(reported.size() == 1);
+    CHECK(reported.back().second == ui::SelectionChange::Extend);
+    CHECK(reported.back().first ==
+          std::vector<ui::Key>{ui::Key{std::int64_t{3}}, ui::Key{std::int64_t{4}}, ui::Key{std::int64_t{5}}});
+    table.table->setSelection({});
+    scene.settle();
+    for (auto const& row : table.rows) {
+        CHECK_FALSE(Scene::itemOf(*row).property("selected").toBool());
+    }
+}
+
+// Mutation: the entries drawn as plain text, under which the click reports nothing.
+TEST_CASE("qt_quick table: a status entry reports its id", "[qt_quick]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::Multiple);
+    std::vector<std::string> chosen;
+    table.table->setOnStatusEntry([&chosen](std::string id) { chosen.push_back(std::move(id)); });
+    table.table->setStatus(ui::TableStatus{
+        .message = "m",
+        .entries = {{.id = "run", .label = "Run on these"}},
+        .standing = "1 row could not be saved",
+        .standingEntries = {{.id = "select", .label = "Select them"}, {.id = "clear", .label = "Clear marks"}},
+        .shown = true});
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*table.table);
+    for (auto const& [id, label] :
+         std::vector<std::pair<QString, QString>>{{QStringLiteral("run"), QStringLiteral("Run on these")},
+                                                  {QStringLiteral("select"), QStringLiteral("Select them")},
+                                                  {QStringLiteral("clear"), QStringLiteral("Clear marks")}}) {
+        auto const* const button = itemNamed(item, QStringLiteral("statusEntry_") + id);
+        REQUIRE(button != nullptr);
+        CHECK(button->property("text").toString() == label);
+    }
+    scene.click(*itemNamed(item, QStringLiteral("statusEntry_clear")));
+    CHECK(chosen == std::vector<std::string>{"clear"});
+}
+
+namespace {
+
+// A grid of two specimens (`morph::test::grid::kSpecimens`) between two text inputs, `before` and `after`, on Qt
+// Quick. Its columns are every member in schema order: label 0, mass 1, volume 2, density 3, limit 4, note 5.
+struct QuickGrid {
+    QuickGrid() {
+        form = std::make_unique<morph::forms::FormSession>(
+            scene.runtime(), morph::test::formsengine::modelOf("Lims_RecordSpecimens", morph::test::grid::kSpecimens),
+            server.submitter(), server.fetcher(),
+            morph::forms::FormSessionOptions{.locale = ui::localeFacts("de").numeric, .bcp47 = "de"});
+        form->prefill(R"({"sampleId":1,"specimens":[{},{}]})");
+        std::vector<ui::GridColumn> columns;
+        for (morph::forms::FieldSpec const& member : form->field("specimens").spec().children) {
+            columns.push_back(
+                ui::GridColumn{.id = member.name, .label = member.name, .field = member.name, .value = {}});
+        }
+        ui::TableOptions table;
+        table.common.testId = "grid";
+        grid = ui::makeFormGrid(*form, form->field("specimens"), std::move(columns), {}, ui::formatOf(*form),
+                                std::move(table));
+        ui::TextInput before;
+        before.common.testId = "before";
+        ui::TextInput after;
+        after.common.testId = "after";
+        view.emplace(scene.runtime(), scene.backend(),
+                     ui::column(ui::Column{
+                         .children = {ui::textInput(std::move(before)), grid.node, ui::textInput(std::move(after))}}));
+        scene.settle();
+    }
+    QuickGrid(QuickGrid const&) = delete;
+    QuickGrid& operator=(QuickGrid const&) = delete;
+    QuickGrid(QuickGrid&&) = delete;
+    QuickGrid& operator=(QuickGrid&&) = delete;
+    ~QuickGrid() {
+        view.reset();
+        grid = {};
+    }
+
+    [[nodiscard]] QQuickItem& named(QString const& name) {
+        QQuickItem* const found = itemNamed(*scene.window().contentItem(), name);
+        REQUIRE(found != nullptr);
+        return *found;
+    }
+
+    // The row item of view row @p viewRow.
+    [[nodiscard]] QQuickItem& rowAt(int viewRow) {
+        for (QQuickItem* const row : Scene::itemsOf(named(QStringLiteral("grid")), "QQuickItem")) {
+            if (row->property("viewRow").toInt() == viewRow && row->property("cellMarks").isValid()) {
+                return *row;
+            }
+        }
+        FAIL("no row at " << viewRow);
+        throw std::logic_error{"unreachable"};
+    }
+
+    // The cell of view row @p viewRow in column @p column.
+    [[nodiscard]] QQuickItem& cellAt(int viewRow, int column) {
+        for (QQuickItem* const row : Scene::itemsOf(named(QStringLiteral("grid")), "QQuickItem")) {
+            if (row->property("viewRow").toInt() != viewRow || !row->property("cellMarks").isValid()) {
+                continue;
+            }
+            for (QQuickItem* const cell : Scene::itemsOf(*row, "QQuickItem")) {
+                if (cell->property("measuredIndex").isValid() && cell->property("measuredIndex").toInt() == column &&
+                    cell->isVisible()) {
+                    return *cell;
+                }
+            }
+        }
+        FAIL("no cell at " << viewRow << ", " << column);
+        throw std::logic_error{"unreachable"};
+    }
+
+    Scene scene;
+    morph::test::formsengine::FakeServer server{scene.owner()};
+    std::unique_ptr<morph::forms::FormSession> form;
+    ui::FormGrid grid;
+    std::optional<ui::Mounted> view;
+};
+
+}  // namespace
+
+// Mutation: the QML cell ignoring setOnText.
+TEST_CASE("qt_quick grid: typing on a focused cell opens its editor, Tab walks and leaves", "[qt_quick][grid]") {
+    QuickGrid g;
+    g.grid.grid->focusCell(morph::test::grid::at(1, "mass"));
+    g.scene.settle();
+    QQuickItem& table = g.named(QStringLiteral("grid"));
+    table.forceActiveFocus();
+    g.scene.type(QStringLiteral("5"));
+    CHECK(g.grid.grid->editing() == morph::test::grid::at(1, "mass"));
+    QList<QQuickItem*> const fields = Scene::itemsOf(table, "QQuickTextField");
+    REQUIRE(fields.size() == 1);
+    CHECK(fields.front()->property("text").toString() == QStringLiteral("5"));
+    g.scene.key(Qt::Key_Tab);
+    CHECK(g.form->field("specimens[0].mass").draft() == "5");
+    CHECK(g.grid.grid->focus() == morph::test::grid::at(1, "volume"));
+    g.grid.grid->focusCell(morph::test::grid::at(2, "note"));
+    g.scene.settle();
+    table.forceActiveFocus();
+    g.scene.key(Qt::Key_Tab);
+    QQuickItem const* const focused = g.scene.window().activeFocusItem();
+    REQUIRE(focused != nullptr);
+    CHECK(focused->objectName() == QStringLiteral("after"));
+}
+
+// Mutation: the QML cell sending a double click as two single clicks (no editor opens).
+TEST_CASE("qt_quick grid: a double click opens the editor in the cell and focus leaving commits", "[qt_quick][grid]") {
+    QuickGrid g;
+    QQuickItem const& cell = g.cellAt(1, 1);
+    // The cell's slot: its column's span across the row's height. A cell draws only as tall as its text, which a wide
+    // font leaves shorter than the editor that replaces it.
+    QRectF const area =
+        cell.parentItem()->mapRectToScene(QRectF{cell.x(), 0, cell.width(), cell.parentItem()->height()});
+    g.scene.doubleClick(cell);
+    CHECK(g.grid.grid->editing() == morph::test::grid::at(2, "mass"));
+    QList<QQuickItem*> const fields = Scene::itemsOf(g.named(QStringLiteral("grid")), "QQuickTextField");
+    REQUIRE(fields.size() == 1);
+    QPointF const centre =
+        fields.front()->mapToScene(QPointF{fields.front()->width() / 2, fields.front()->height() / 2});
+    CHECK(area.contains(centre));
+    CHECK(fields.front()->hasActiveFocus());
+    g.scene.type(QStringLiteral("7"));
+    g.scene.click(g.named(QStringLiteral("after")));
+    CHECK(g.form->field("specimens[1].mass").draft() == "7");
+    CHECK(Scene::itemsOf(g.named(QStringLiteral("grid")), "QQuickTextField").empty());
+}
+
+// Mutation: the column's field resolved once for every row (row 2's editor is a ComboBox too).
+TEST_CASE("qt_quick grid: a column's kind follows its row", "[qt_quick][grid]") {
+    Scene scene;
+    morph::test::formsengine::FakeServer server{scene.owner()};
+    auto form = std::make_unique<morph::forms::FormSession>(
+        scene.runtime(), morph::test::formsengine::modelOf("Lims_RecordRows", morph::test::grid::kKindPerRow),
+        server.submitter(), server.fetcher(),
+        morph::forms::FormSessionOptions{.locale = ui::localeFacts("de").numeric, .bcp47 = "de"});
+    form->prefill(R"({"rows":[{"isChoice":true},{"isChoice":false}]})");
+    ui::TableOptions options;
+    options.common.testId = "grid";
+    ui::FormGrid grid = ui::makeFormGrid(*form, form->field("rows"), morph::test::grid::kindPerRowColumns(), {},
+                                         ui::formatOf(*form), std::move(options));
+    std::optional<ui::Mounted> view;
+    view.emplace(scene.runtime(), scene.backend(), grid.node);
+    scene.settle();
+    QQuickItem* const table = itemNamed(*scene.window().contentItem(), QStringLiteral("grid"));
+    REQUIRE(table != nullptr);
+    grid.grid->activate(morph::test::grid::at(1, "value"));
+    scene.settle();
+    CHECK(Scene::itemsOf(*table, "QQuickComboBox").size() == 1);
+    CHECK(Scene::itemsOf(*table, "QQuickTextField").empty());
+    grid.grid->press("Escape");
+    grid.grid->activate(morph::test::grid::at(2, "value"));
+    scene.settle();
+    CHECK(Scene::itemsOf(*table, "QQuickComboBox").empty());
+    CHECK(Scene::itemsOf(*table, "QQuickTextField").size() == 1);
+    view.reset();
+    grid = {};
+}
+
+// Mutation: the QML table reporting the drag as a row selection (the rectangle is not selected and a row is).
+TEST_CASE("qt_quick grid: a drag selects a rectangle of cells and a row header click its row", "[qt_quick][grid]") {
+    QuickGrid g;
+    QQuickItem& table = g.named(QStringLiteral("grid"));
+    CHECK(table.property("selectsCells").toBool());
+    QPoint const start = Scene::centreOf(g.cellAt(0, 1));  // (1, mass)
+    QPoint const end = Scene::centreOf(g.cellAt(1, 2));    // (2, volume)
+    QTest::mousePress(&g.scene.window(), Qt::LeftButton, {}, start);
+    constexpr int steps = 10;
+    for (int step = 1; step <= steps; ++step) {
+        QTest::mouseMove(&g.scene.window(), start + ((end - start) * step / steps));
+    }
+    QTest::mouseRelease(&g.scene.window(), Qt::LeftButton, {}, end);
+    g.scene.settle();
+    CHECK(g.grid.grid->selection() ==
+          ui::CellRange{morph::test::grid::at(1, "mass"), morph::test::grid::at(2, "volume")});
+    QVariantList const rect = table.property("cellRect").toList();
+    REQUIRE(rect.size() == 4);
+    CHECK(rect.at(0).toInt() == 0);
+    CHECK(rect.at(1).toInt() == 2);
+    CHECK(rect.at(2).toInt() == 1);
+    CHECK(rect.at(3).toInt() == 2);
+    QQuickItem const& box = g.named(QStringLiteral("cellSelection"));
+    CHECK(box.isVisible());
+    for (QQuickItem const* const row : Scene::itemsOf(table, "QQuickItem")) {
+        if (row->property("cellMarks").isValid()) {
+            CHECK_FALSE(row->property("selected").toBool());
+        }
+    }
+    // A click on a row's header, the leading strip before its first cell, selects the row's cells.
+    qreal const lead = table.property("lead").toReal();
+    REQUIRE(lead > 0);
+    QQuickItem const& row = g.rowAt(1);
+    QPointF const header = row.mapToScene(QPointF{lead / 2, row.height() / 2});
+    QTest::mouseClick(&g.scene.window(), Qt::LeftButton, {}, header.toPoint());
+    g.scene.settle();
+    CHECK(g.grid.grid->selection() ==
+          ui::CellRange{morph::test::grid::at(2, "label"), morph::test::grid::at(2, "note")});
+}
+
+// Mutation: the header's sort handler taking only a Shift-click in a table that selects cells (the plain click reports
+// no sort).
+TEST_CASE("qt_quick grid: a header click sorts, a Shift-click adds, a Ctrl-click selects the column",
+          "[qt_quick][grid]") {
+    Scene scene;
+    morph::test::formsengine::FakeServer server{scene.owner()};
+    auto form = std::make_unique<morph::forms::FormSession>(
+        scene.runtime(), morph::test::formsengine::modelOf("Lims_RecordSpecimens", morph::test::grid::kSpecimens),
+        server.submitter(), server.fetcher(),
+        morph::forms::FormSessionOptions{.locale = ui::localeFacts("de").numeric, .bcp47 = "de"});
+    form->prefill(R"({"sampleId":1,"specimens":[{},{}]})");
+    std::vector<ui::GridColumn> columns;
+    std::vector<ui::TableColumn> shown;
+    for (morph::forms::FieldSpec const& member : form->field("specimens").spec().children) {
+        columns.push_back(ui::GridColumn{.id = member.name, .label = member.name, .field = member.name, .value = {}});
+        shown.push_back(ui::TableColumn{.id = member.name, .label = member.name, .sortable = member.name == "mass"});
+    }
+    std::vector<std::pair<std::size_t, ui::HeaderClick>> sorts;
+    ui::TableOptions options;
+    options.common.testId = "grid";
+    options.onSort = [&sorts](std::size_t column, ui::HeaderClick click) { sorts.emplace_back(column, click); };
+    ui::FormGrid grid = ui::makeFormGrid(*form, form->field("specimens"), std::move(columns), {}, ui::formatOf(*form),
+                                         std::move(options), std::move(shown));
+    std::optional<ui::Mounted> view;
+    view.emplace(scene.runtime(), scene.backend(), grid.node);
+    scene.settle();
+    QQuickItem* const table = itemNamed(*scene.window().contentItem(), QStringLiteral("grid"));
+    REQUIRE(table != nullptr);
+    QQuickItem const* const header = itemNamed(*table, QStringLiteral("header1"));  // mass
+    REQUIRE(header != nullptr);
+    scene.click(*header);
+    REQUIRE(sorts.size() == 1);
+    CHECK(sorts.back() == std::pair{std::size_t{1}, ui::HeaderClick::Plain});
+    scene.click(*header, Qt::ShiftModifier);
+    REQUIRE(sorts.size() == 2);
+    CHECK(sorts.back() == std::pair{std::size_t{1}, ui::HeaderClick::Shift});
+    scene.click(*header, Qt::ControlModifier);
+    CHECK(sorts.size() == 2);  // a Ctrl-click sorts nothing
+    CHECK(grid.grid->selection() == ui::CellRange{morph::test::grid::at(1, "mass"), morph::test::grid::at(2, "mass")});
+    view.reset();
+    grid = {};
+}
+
+// Mutation: the QML band item placed from its first run's x to its last run's end (one item, as wide as columns 1 to
+// 4).
+TEST_CASE("qt_quick table: a band draws over each run of its columns", "[qt_quick][bands]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
+    table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(8)},
+                             {.label = "M8", .width = ui::Sizing::fixed(8)},
+                             {.label = "M2", .width = ui::Sizing::fixed(8)},
+                             {.label = "Total", .width = ui::Sizing::fixed(8)},
+                             {.label = "M4", .width = ui::Sizing::fixed(8)}});
+    table.table->setBands(
+        {{.level = 0, .label = "Mass retained", .unit = "g", .first = 1, .count = 2, .pinned = false},
+         {.level = 0, .label = "Mass retained", .unit = "g", .first = 4, .count = 1, .pinned = false}});
+    scene.settle();
+    QQuickItem& tableItem = Scene::itemOf(*table.table);
+    auto* const first = itemNamed(tableItem, QStringLiteral("band0"));
+    auto* const second = itemNamed(tableItem, QStringLiteral("band1"));
+    REQUIRE(first != nullptr);
+    REQUIRE(second != nullptr);
+    QQuickItem const& m8 = headerOf(*table.table, 1);
+    QQuickItem const& m2 = headerOf(*table.table, 2);
+    QQuickItem const& m4 = headerOf(*table.table, 4);
+    auto const left = [&first](QQuickItem const& item) { return item.mapToItem(first->parentItem(), QPointF{}).x(); };
+    CHECK(first->x() == Catch::Approx(left(m8)));
+    CHECK(first->x() + first->width() == Catch::Approx(left(m2) + m2.width()));
+    CHECK(second->x() == Catch::Approx(left(m4)));
+    CHECK(second->width() == Catch::Approx(m4.width()));
+}
+
+// Mutation: `setRowSummary` writing nothing (the row's summary surface stays hidden).
+TEST_CASE("qt_quick table: a summary row is drawn on the summary surface", "[qt_quick][summary]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}, ui::Key{std::int64_t{2}}}, ui::SelectionMode::Single);
+    table.table->setRowSummary(*table.rows.at(1));
+    scene.settle();
+    auto const fill = [](ui::Widget& row) {
+        return Scene::itemOf(row).findChild<QQuickItem*>(QStringLiteral("summaryFill"));
+    };
+    REQUIRE(fill(*table.rows.at(1)) != nullptr);
+    CHECK(fill(*table.rows.at(1))->isVisible());
+    CHECK_FALSE(fill(*table.rows.at(0))->isVisible());
 }

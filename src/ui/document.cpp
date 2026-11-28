@@ -13,7 +13,11 @@
 #include <map>
 #include <memory>
 #include <morph/core/wire.hpp>
+#include <morph/forms/engine/field_model.hpp>
 #include <morph/forms/version.hpp>
+#include <morph/table/bands.hpp>
+#include <morph/table/filter.hpp>
+#include <morph/table/query.hpp>
 #include <morph/ui/control_shape.hpp>
 #include <morph/ui/date_pattern.hpp>
 #include <morph/ui/document.hpp>
@@ -105,9 +109,11 @@ constexpr std::array<std::string_view, 2> kSelectValues = {"selected", "selected
 /// @brief The element values of a tabs node: the id of the tab shown.
 constexpr std::array<std::string_view, 1> kTabsValues = {"selected"};
 /// @brief The element values of a table.
-constexpr std::array<std::string_view, 14> kTableValues = {
-    "selection", "activeKey", "sort",       "filters", "viewCount", "sourceCount", "selectedCount",
-    "pending",   "error",     "hoveredKey", "page",    "pageCount", "pageFirst",   "pageLast"};
+constexpr std::array<std::string_view, 24> kTableValues = {
+    "selection",         "activeKey", "sort",          "filters",        "viewCount",   "sourceCount",
+    "selectedCount",     "pending",   "error",         "hoveredKey",     "page",        "pageCount",
+    "pageFirst",         "pageLast",  "layout",        "visibleColumns", "hiddenCount", "selectionSet",
+    "selectedCountKind", "busyCount", "modifiedCount", "modifiedRows",   "errorCount",  "editing"};
 /// @brief The element values of a dialog or drawer.
 constexpr std::array<std::string_view, 3> kDialogValues = {"open", "ready", "submitted"};
 /// @brief The element values of a form, beside its fields.
@@ -293,50 +299,144 @@ constexpr std::array<KeySpec, 7> kForEachKeys = {{{"rows", Shape::Expr, {}, kReq
                                                   {"divided", Shape::Flag},
                                                   {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-constexpr std::array<KeySpec, 28> kTableKeys = {{{"rows", Shape::Expr},
-                                                 {"key", Shape::Expr, {}, kInner},
-                                                 {"model", Shape::Name},
-                                                 {"action", Shape::Text},
-                                                 {"body", Shape::Expr},
-                                                 {"mode", Shape::Expr},
-                                                 {"columns", Shape::PartsOrExpr, "column"},
-                                                 {"showHeader", Shape::Flag},
-                                                 {"virtualizeThreshold", Shape::Expr},
-                                                 {"virtualizeOverscan", Shape::Expr},
-                                                 {"selectionMode", Shape::Expr},
-                                                 {"selection", Shape::Expr},
-                                                 {"onSelectionChange", Shape::Commands},
-                                                 {"selectColumn", Shape::Flag},
-                                                 {"selectAllLabel", Shape::Expr},
-                                                 {"rowLabel", Shape::Expr, {}, kInner},
-                                                 {"sort", Shape::Expr},
-                                                 {"onSortChange", Shape::Commands},
-                                                 {"pageSize", Shape::Expr},
-                                                 {"page", Shape::Expr},
-                                                 {"group", Shape::Part, "group"},
-                                                 {"filters", Shape::Expr},
-                                                 {"rowTone", Shape::Expr, {}, kInner},
-                                                 {"rowSpans", Shape::Expr, {}, kInner},
-                                                 {"highlightKey", Shape::Expr},
-                                                 {"onActivate", Shape::Commands, {}, kInner},
-                                                 {"valign", Shape::Text},
-                                                 {"empty", Shape::Nodes}}};
-/// @brief The keys of a `table` column part.
-constexpr std::array<KeySpec, 11> kColumnKeys = {{{"id", Shape::Name},
+constexpr auto kTableKeys = std::to_array<KeySpec>({{"rows", Shape::Expr},
+                                                    {"form", Shape::Text},
+                                                    {"field", Shape::Text},
+                                                    {"enterMoves", Shape::Text},
+                                                    {"walk", Shape::Text},
+                                                    {"editMode", Shape::Text},
+                                                    {"appendRows", Shape::Flag},
+                                                    {"rowsFixed", Shape::Flag},
+                                                    {"key", Shape::Expr, {}, kInner},
+                                                    {"model", Shape::Name},
+                                                    {"table", Shape::Name},
+                                                    {"action", Shape::Text},
+                                                    {"status", Shape::Flag},
+                                                    {"retainChanged", Shape::Flag},
+                                                    {"persist", Shape::Expr},
+                                                    {"body", Shape::Expr},
+                                                    {"mode", Shape::Expr},
+                                                    {"columns", Shape::PartsOrExpr, "column"},
+                                                    {"showHeader", Shape::Flag},
+                                                    {"virtualizeThreshold", Shape::Expr},
+                                                    {"virtualizeOverscan", Shape::Expr},
+                                                    {"selectionMode", Shape::Expr},
+                                                    {"selection", Shape::Expr},
+                                                    {"onSelectionChange", Shape::Commands},
+                                                    {"selectColumn", Shape::Flag},
+                                                    {"selectAllLabel", Shape::Expr},
+                                                    {"rowLabel", Shape::Expr, {}, kInner},
+                                                    {"sort", Shape::Expr},
+                                                    {"onSortChange", Shape::Commands},
+                                                    {"maxSortKeys", Shape::Expr},
+                                                    {"layout", Shape::Expr},
+                                                    {"onLayoutChange", Shape::Commands},
+                                                    {"configurable", Shape::Expr},
+                                                    {"onFiltersChange", Shape::Commands},
+                                                    {"pageSize", Shape::Expr},
+                                                    {"page", Shape::Expr},
+                                                    {"group", Shape::Part, "group"},
+                                                    {"groups", Shape::Parts, "columnGroup"},
+                                                    {"filters", Shape::Expr},
+                                                    {"rowTone", Shape::Expr, {}, kInner},
+                                                    {"rowSpans", Shape::Expr, {}, kInner},
+                                                    {"highlightKey", Shape::Expr},
+                                                    {"onActivate", Shape::Commands, {}, kInner},
+                                                    {"valign", Shape::Text},
+                                                    {"empty", Shape::Nodes},
+                                                    {"cellMenu", Shape::Parts, "menuItem", kInner},
+                                                    {"headerMenu", Shape::Parts, "menuItem"},
+                                                    {"headerEnabled", Shape::Condition},
+                                                    {"bands", Shape::Parts, "band"},
+                                                    {"summaries", Shape::Parts, "summary"},
+                                                    {"layoutRows", Shape::Parts, "layoutRow"}});
+/// @brief The keys of a `table` column part; `tone` and `tooltip` are read in the row's scope.
+constexpr std::array<KeySpec, 29> kColumnKeys = {{{"id", Shape::Name},
+                                                  {"field", Shape::Text},
+                                                  {"value", Shape::Expr, {}, kInner},
+                                                  {"kind", Shape::Text},
                                                   {"label", Shape::Expr},
                                                   {"width", Shape::Expr},
                                                   {"role", Shape::Expr},
                                                   {"align", Shape::Text},
                                                   {"valign", Shape::Text},
                                                   {"sortable", Shape::Flag},
+                                                  {"locked", Shape::Flag},
+                                                  {"filterable", Shape::Flag},
                                                   {"wrap", Shape::Flag},
                                                   {"shrink", Shape::Flag},
                                                   {"sortBy", Shape::Expr, {}, kInner},
-                                                  {"cell", Shape::Nodes, {}, kInner}}};
+                                                  {"cell", Shape::Nodes, {}, kInner},
+                                                  {"decimals", Shape::Expr},
+                                                  {"rounding", Shape::Text},
+                                                  {"padPlaces", Shape::Flag},
+                                                  {"grouping", Shape::Flag},
+                                                  {"empty", Shape::Text},
+                                                  {"unit", Shape::Text},
+                                                  {"date", Shape::Text},
+                                                  {"labels", Shape::Expr},
+                                                  {"tone", Shape::Expr, {}, kInner},
+                                                  {"tooltip", Shape::Expr, {}, kInner},
+                                                  {"readonly", Shape::Expr},
+                                                  {"options", Shape::Expr},
+                                                  {"placeholder", Shape::Expr}}};
+/// @brief The keys of a form field overlay's `grid` part: the keys a `table` over a `form` takes beyond its `form` and
+///        `field`, its columns, walk and activation, its layout, menus and filters.
+constexpr auto kGridPartKeys = std::to_array<KeySpec>({{"columns", Shape::Parts, "column"},
+                                                       {"enterMoves", Shape::Text},
+                                                       {"walk", Shape::Text},
+                                                       {"appendRows", Shape::Flag},
+                                                       {"rowsFixed", Shape::Flag},
+                                                       {"onActivate", Shape::Commands},
+                                                       {"layout", Shape::Expr},
+                                                       {"onLayoutChange", Shape::Commands},
+                                                       {"configurable", Shape::Expr},
+                                                       {"onFiltersChange", Shape::Commands},
+                                                       {"cellMenu", Shape::Parts, "menuItem", kInner},
+                                                       {"headerMenu", Shape::Parts, "menuItem"},
+                                                       {"headerEnabled", Shape::Condition},
+                                                       {"testId", Shape::Text},
+                                                       {"bands", Shape::Parts, "band"},
+                                                       {"summaries", Shape::Parts, "summary"}});
+/// @brief The keys of a `table` column group part: the group's id, its label and its columns' ids, a literal list.
+constexpr std::array<KeySpec, 3> kColumnGroupKeys = {
+    {{"id", Shape::Name, {}, kRequired}, {"label", Shape::Expr}, {"columns", Shape::Expr, {}, kRequired}}};
+/// @brief The keys of a fixed grid's `layoutRows` part: a row, `{key, label, cells}`, or a block, `{forEach, rows}`,
+///        whose rows repeat for each row of the form's collection `forEach` names.
+constexpr auto kLayoutRowKeys = std::to_array<KeySpec>({{"key", Shape::Text},
+                                                        {"label", Shape::Expr},
+                                                        {"cells", Shape::ExprRecord, "layoutCells"},
+                                                        {"forEach", Shape::Text},
+                                                        {"rows", Shape::Parts, "layoutRow"}});
+/// @brief The keys of a fixed grid's cell part, by the column id it is given under: the form field it edits, the
+///        expression or the text it shows, the rows and columns it spans, and its overlays, a grid column's.
+constexpr auto kLayoutCellKeys = std::to_array<KeySpec>({{"field", Shape::Text},
+                                                         {"value", Shape::Expr},
+                                                         {"text", Shape::Text},
+                                                         {"rows", Shape::Expr},
+                                                         {"columns", Shape::Expr},
+                                                         {"decimals", Shape::Expr},
+                                                         {"unit", Shape::Expr},
+                                                         {"readonly", Shape::Expr},
+                                                         {"options", Shape::Expr},
+                                                         {"placeholder", Shape::Expr}});
 /// @brief The keys of a `table` group part: the value its rows are grouped by, and the heading drawn before each
-///        group, both read in the row scope.
-constexpr std::array<KeySpec, 2> kTableGroupKeys = {
-    {{"by", Shape::Expr, {}, kInner | kRequired}, {"heading", Shape::Nodes, {}, kInner | kRequired}}};
+///        group, both read in the row scope, and the summary rows drawn after each group.
+constexpr auto kTableGroupKeys = std::to_array<KeySpec>({{"by", Shape::Expr, {}, kInner | kRequired},
+                                                         {"heading", Shape::Nodes, {}, kInner | kRequired},
+                                                         {"summaries", Shape::Parts, "summary"}});
+/// @brief The keys of a header band part: its text, its unit, its columns' ids (a literal list) and the bands one
+///        level down.
+constexpr auto kBandKeys = std::to_array<KeySpec>({{"label", Shape::Text},
+                                                   {"unit", Shape::Text},
+                                                   {"columns", Shape::Expr, {}, kRequired},
+                                                   {"bands", Shape::Parts, "band"}});
+/// @brief The keys of a summary row part: its key, its label, where it is drawn, and its cells' expressions by column
+///        id, read in a scope with `rows` and `column`.
+constexpr auto kSummaryKeys = std::to_array<KeySpec>({{"key", Shape::Text, {}, kRequired},
+                                                      {"label", Shape::Expr},
+                                                      {"position", Shape::Text},
+                                                      {"cells", Shape::ExprRecord}});
 /// @brief The keys of `dateTimeInput`.
 constexpr std::array<KeySpec, 6> kDateTimeKeys = {{{"value", Shape::Expr},
                                                    {"mode", Shape::Expr},
@@ -469,7 +569,7 @@ constexpr std::array<KeySpec, 1> kCustomizeKeys = {{{"point", Shape::Name, {}, k
 constexpr std::array<KeySpec, 3> kBoundaryKeys = {
     {{"loading", Shape::Nodes}, {"error", Shape::Nodes, {}, kBoundaryError}, {"children", Shape::Nodes}}};
 /// @brief The keys of `form`.
-constexpr std::array<KeySpec, 16> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
+constexpr std::array<KeySpec, 18> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
                                                 {"action", Shape::Text, {}, kRequired},
                                                 {"prefill", Shape::Expr},
                                                 {"key", Shape::Expr},
@@ -484,7 +584,9 @@ constexpr std::array<KeySpec, 16> kFormKeys = {{{"model", Shape::Name, {}, kRequ
                                                 {"showStatus", Shape::Flag},
                                                 {"columns", Shape::Expr},
                                                 {"fieldLayout", Shape::Text},
-                                                {"captionWidth", Shape::Expr}}};
+                                                {"captionWidth", Shape::Expr},
+                                                {"derive", Shape::Text},
+                                                {"deriveDebounce", Shape::Expr}}};
 /// @brief The keys of `collection` and `wizard`: the model and action, and the presentation keys that reach every
 ///        form the view draws.
 constexpr std::array<KeySpec, 8> kCollectionKeys = {{{"model", Shape::Name, {}, kRequired},
@@ -506,7 +608,7 @@ constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {}, kReq
 constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-constexpr std::array<KindSpec, 61> kKinds = {{
+constexpr auto kKinds = std::to_array<KindSpec>({
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -554,7 +656,14 @@ constexpr std::array<KindSpec, 61> kKinds = {{
     {"case", kCaseKeys, kPart | kScope},
     {"tab", kTabKeys, kPart},
     {"column", kColumnKeys, kPart},
+    {"fieldGrid", kGridPartKeys, kPart},
     {"group", kTableGroupKeys, kPart},
+    {"columnGroup", kColumnGroupKeys, kPart},
+    {"band", kBandKeys, kPart},
+    {"summary", kSummaryKeys, kPart},
+    {"layoutRow", kLayoutRowKeys, kPart},
+    {"layoutCells", {}, kPart},
+    {"layoutCell", kLayoutCellKeys, kPart},
     {"track", kTrackKeys, kPart},
     {"action", kActionKeys, kPart},
     {"a11y", kA11yKeys, kPart},
@@ -568,7 +677,7 @@ constexpr std::array<KindSpec, 61> kKinds = {{
     {"fields", {}, kPart},
     {"series", kSeriesKeys, kPart | kRowScope},
     {"line", kLineKeys, kPart},
-}};
+});
 // NOLINTEND(modernize-use-designated-initializers,readability-trailing-comma)
 
 /// @brief A literal length of a page node: an integer count of micrometres.
@@ -1893,6 +2002,14 @@ private:
                 made.scope = ScopeDecl{};
             }
         }
+        // A fixed grid's cells: one cell part per column id, its id the column's.
+        if (made.kind == "layoutCells") {
+            for (auto const& [column, cell] : object) {
+                auto cellNode = std::make_shared<DocNode>(*part(cell, "layoutCell", pointerAppend(path, column)));
+                cellNode->id = column;
+                made.parts["cells"].push_back(std::move(cellNode));
+            }
+        }
         if (made.kind == "fields") {
             for (auto const& [field, overlay] : object) {
                 made.parts["fields"].push_back(fieldOverlay(field, overlay, pointerAppend(path, field)));
@@ -1935,10 +2052,9 @@ private:
         return *text;
     }
 
-    // One field overlay of a form's `fields`: expressions by key, and the host `component` that draws the field with
-    // its `props`.
-    [[nodiscard]] static DocNodePtr fieldOverlay(std::string const& field, Json const& overlay,
-                                                 std::string const& where) {
+    // One field overlay of a form's `fields`: expressions by key, the host `component` that draws the field with its
+    // `props`, and a grid widget's `grid` part.
+    [[nodiscard]] DocNodePtr fieldOverlay(std::string const& field, Json const& overlay, std::string const& where) {
         auto const& settings = objectOf(overlay, where, "a field overlay is an object");
         auto part = std::make_shared<DocNode>();
         part->kind = "field";
@@ -1961,6 +2077,8 @@ private:
                     record->props.emplace(prop, expr(propValue, pointerAppend(keyPath, prop)));
                 }
                 part->parts["props"].push_back(std::move(record));
+            } else if (key == "grid") {
+                part->parts["grid"].push_back(this->part(value, "fieldGrid", keyPath));
             } else {
                 part->props.emplace(key, expr(value, keyPath));
             }
@@ -1982,9 +2100,42 @@ private:
         return made;
     }
 
+    // A table's `filters` written as the literal filter, an object of `columns` and `groups` alone: kept as its
+    // JSON text under the node's names, checked to read as a `table::FilterSpec`. Any other value is an expression.
+    [[nodiscard]] static bool literalFilter(DocNode& made, Json const& value, std::string const& path) {
+        auto const* const object = std::get_if<Json::object_t>(&value.data);
+        if (object == nullptr || object->empty() || !std::ranges::all_of(*object, [](auto const& entry) {
+                return entry.first == "columns" || entry.first == "groups";
+            })) {
+            return false;
+        }
+        std::string const text = glz::write_json(value).value_or(std::string{});
+        table::FilterSpec filter;
+        if (auto const failed = glz::read_json(filter, text)) {
+            refuse(path, "`filters` is not a filter: " + glz::format_error(failed, text));
+        }
+        made.names.emplace("filters", text);
+        return true;
+    }
+
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per shape a key takes.
     void entry(DocNode& made, KeySpec const& key, Json const& value, std::string const& path) {
         std::string const name{key.key};
+        if (made.kind == "table" && name == "filters" && literalFilter(made, value, path)) {
+            return;
+        }
+        if (made.kind == "table" && name == "persist") {
+            auto const* const text = std::get_if<std::string>(&value.data);
+            if (std::get_if<bool>(&value.data) == nullptr && (text == nullptr || text->empty())) {
+                refuse(path, "`persist` is a literal: true, false or a name");
+            }
+        }
+        // A grid column's `field` and `unit` may be expressions in the row's scope; a string stays a name.
+        if (made.kind == "column" && (name == "field" || name == "unit") &&
+            std::get_if<std::string>(&value.data) == nullptr) {
+            made.props.emplace(name, expr(value, path));
+            return;
+        }
         switch (key.shape) {
             case Shape::Expr:
             case Shape::Condition:
@@ -2128,6 +2279,10 @@ struct CheckContext {
     bool onClose = false;
     /// @brief Names bound here: `as` of a sequence step or `each`, `result`, `body`, `props`.
     std::vector<std::pair<std::string, Type>> bindings;
+    /// @brief The column parts of a grid, whose keys take expressions in the row's scope.
+    bool gridColumns = false;
+    /// @brief The rows of a fixed grid's block, whose cells are read with `row` the block's collection row.
+    bool layoutBlock = false;
 };
 
 class DocumentValidator;
@@ -2783,6 +2938,22 @@ private:
         return info;
     }
 
+    // A model-backed table's `table`: its two actions, `Table.<table>` and `Table.<table>.describe`, are in the
+    // catalog and belong to the alias's model type.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the alias, then the table it names, as the node reads.
+    void checkModelTable(CheckContext const& context, std::string const& alias, std::string const& table,
+                         std::string const& path) {
+        std::string const query = "Table." + table;
+        if (_options->catalog.action &&
+            (!_options->catalog.action(query) || !_options->catalog.action(query + ".describe"))) {
+            static_cast<void>(
+                require(context, alias, pointerAppend(path, "model"), {NameCategory::Model}, "a model alias"));
+            refuse(path, "the table `" + table + "` is not in the catalog");
+        }
+        static_cast<void>(checkModelAction(context, alias, query, path));
+        static_cast<void>(checkModelAction(context, alias, query + ".describe", path));
+    }
+
     void checkScope(ScopeDecl const& decl, CheckContext const& context) {
         for (ModelDecl const& model : decl.models) {
             if (model.key) {
@@ -2957,11 +3128,11 @@ private:
         std::set<std::string, std::less<>> arranged;
         for (auto const& [name, point] : _doc->customize) {
             static_cast<void>(name);
-            if (point.kind == "columns" && _doc->view) {
+            if ((point.kind == "columns" || (point.kind == "saved" && !point.of.empty())) && _doc->view) {
                 auto const found = _elements.find(point.of);
                 if (found == _elements.end() || found->second->kind != "table") {
                     refuse(pointerAppend(point.path, "of"),
-                           "a `columns` point names a table; `" + point.of + "` is not one");
+                           "a `" + point.kind + "` point names a table; `" + point.of + "` is not one");
                 }
             }
             if (point.kind == "arrange") {
@@ -3119,6 +3290,7 @@ private:
         }
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): checks one element against its kind: each branch refuses a different malformed shape and reports into the shared context
     void checkElement(DocNode const& node, CheckContext const& outer, bool part) {
         KindSpec const* const spec = findKind(node.kind, part);
         CheckContext const inner = innerContext(node, outer);
@@ -3145,7 +3317,40 @@ private:
             }
         }
         for (auto const& [key, parts] : node.parts) {
-            CheckContext const& context = isInner(spec, key) ? inner : outer;
+            CheckContext context = isInner(spec, key) ? inner : outer;
+            // A table's menu entries read the column they open on, and a cell's entries its row and its value.
+            if ((node.kind == "table" || node.kind == "fieldGrid") && (key == "cellMenu" || key == "headerMenu")) {
+                context.bindings.emplace_back("column", Type::of(TypeKind::String));
+                if (key == "cellMenu") {
+                    context.bindings.emplace_back("row", Type::any());
+                    context.bindings.emplace_back("value", Type::any());
+                }
+            }
+            // A summary's cells read the records of the rows it summarises as `rows`, and their column's id as
+            // `column`.
+            if (key == "summaries") {
+                context.bindings.emplace_back("rows", Type::any());
+                context.bindings.emplace_back("column", Type::of(TypeKind::String));
+            }
+            // A grid's column reads its row's record as `row`: a display column's `value`, and an edit column's
+            // `field` expression and overlays. A grid's group reads its row's record as `row` in its `by`, as its
+            // columns do.
+            if (key == "group" && node.kind == "table" && !node.name("form").empty()) {
+                context.bindings.emplace_back("row", Type::any());
+            }
+            // A block's rows read its collection row as `row` in their cells' `value` and overlays; a row's `label` is
+            // read once, for every collection row, so it reads none.
+            if (key == "rows" && node.kind == "layoutRow") {
+                context.layoutBlock = true;
+            }
+            if (key == "cells" && node.kind == "layoutRow" && context.layoutBlock) {
+                context.bindings.emplace_back("row", Type::any());
+            }
+            if (key == "columns" && (node.kind == "fieldGrid" || (node.kind == "table" && !node.name("form").empty() &&
+                                                                  node.partList("layoutRows").empty()))) {
+                context.bindings.emplace_back("row", Type::any());
+                context.gridColumns = true;
+            }
             for (DocNodePtr const& child : parts) {
                 checkElement(*child, context, true);
             }
@@ -3153,7 +3358,7 @@ private:
         checkPlacements(node);
         checkTabBleed(node);
         if (part) {
-            checkPartNode(node);
+            checkPartNode(node, outer.gridColumns);
         } else {
             checkFlags(node);
             checkLayoutKeys(node);
@@ -3164,12 +3369,12 @@ private:
         }
     }
 
-    static void checkPartNode(DocNode const& node) {
+    static void checkPartNode(DocNode const& node, bool gridColumn) {
         if (node.kind == "column" || node.kind == "track") {
             checkNoPercentWidth(node);
         }
         if (node.kind == "column") {
-            checkColumnPart(node);
+            checkColumnPart(node, gridColumn);
         } else if (node.kind == "track") {
             checkCellPlace(node, "align");
         } else if (isMenuEntry(node.kind)) {
@@ -3275,6 +3480,7 @@ private:
         }
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one rule per element kind, each reading the same node and reporting to the shared check context in document order
     void checkKindRules(DocNode const& node, CheckContext const& context) {
         if (node.kind == "custom") {
             checkCustomProps(node);
@@ -3294,21 +3500,389 @@ private:
         checkKindValues(node);
         checkSheet(node);
         std::string_view const model = node.name("model");
-        if (!model.empty()) {
+        std::string_view const table = node.kind == "table" ? node.name("table") : std::string_view{};
+        bool const fixedGrid = node.kind == "table" && !node.partList("layoutRows").empty();
+        if (fixedGrid && (!model.empty() || !table.empty())) {
+            refuse(pointerAppend(node.path, "layoutRows"),
+                   "a fixed grid's rows are its `layoutRows`; a model's table takes none");
+        }
+        if (!table.empty()) {
+            if (model.empty()) {
+                refuse(node.path, "`table` names one of a model's tables; give the table its `model`");
+            }
+            if (!node.name("action").empty()) {
+                refuse(node.path, "a table names a `table` or an `action`, not both");
+            }
+            checkModelTable(context, std::string{model}, std::string{table}, node.path);
+        } else if (!model.empty()) {
             if (node.name("action").empty()) {
                 refuse(node.path, "a `" + node.kind + "` with a `model` names its `action`");
             }
             checkModelAction(context, std::string{model}, std::string{node.name("action")}, node.path);
+            if (node.kind == "form") {
+                checkFormDerive(context, node);
+            }
+        } else if (fixedGrid) {
+            checkFixedGrid(node);
+        } else if (node.kind == "table" && !node.name("form").empty()) {
+            checkFormGrid(node);
         } else if (node.kind == "table" && !node.prop("rows")) {
             refuse(node.path, "a table takes `rows`, or a `model` and `action`");
         }
         if (node.kind == "table") {
+            checkCellSelection(node);
             checkTableSelection(node);
             checkSelectColumn(node);
             checkTableSort(node);
             checkTablePaging(node);
+            checkTableSortBound(node);
+            checkTableConfigurable(node);
+            checkBandParts(node);
+            checkSummaryParts(node);
             checkTableGroup(node);
+            checkEditMode(node);
+            checkColumnGroups(node);
             checkRowsTableKeys(node);
+            checkColumnKinds(node);
+            if (!model.empty() && table.empty()) {
+                checkActionTable(node);
+            }
+        }
+    }
+
+    // A form's derive action is an action of the form's model; `deriveDebounce` is a literal count of milliseconds.
+    // The debounce times a round's evaluation as well as its derive call, so a form that names no `derive` takes it
+    // too.
+    void checkFormDerive(CheckContext const& context, DocNode const& node) {
+        if (std::string_view const derive = node.name("derive"); !derive.empty()) {
+            static_cast<void>(checkModelAction(context, std::string{node.name("model")}, std::string{derive},
+                                               pointerAppend(node.path, "derive")));
+        }
+        if (ExprPtr const debounce = node.prop("deriveDebounce")) {
+            std::int64_t const* const millis = debounce->kind == ExprKind::Literal
+                                                   ? debounce->literal.asInt()
+                                                   : static_cast<std::int64_t const*>(nullptr);
+            if (millis == nullptr || *millis < 0) {
+                refuse(debounce->path, "`deriveDebounce` is a literal count of milliseconds, 0 or more");
+            }
+        }
+    }
+
+    // A grid of a form: a table over a form node's collection field, in place of `rows`. Each column's `field` names a
+    // member of the field's row type, read from the form action's schema when the catalog has it.
+    void checkFormGrid(DocNode const& node) const {
+        if (node.prop("rows")) {
+            refuse(pointerAppend(node.path, "form"), "a table takes `rows` or a `form`, not both");
+        }
+        std::string_view const field = node.name("field");
+        if (field.empty()) {
+            refuse(node.path, "a table over a `form` names its `field`, the form's collection");
+        }
+        auto const form = _elements.find(node.name("form"));
+        if (form == _elements.end() || form->second->kind != "form") {
+            refuse(pointerAppend(node.path, "form"),
+                   "`" + std::string{node.name("form")} + "` is not a form of this document");
+        }
+        checkGridPart(node, *form->second, field, pointerAppend(node.path, "field"));
+    }
+
+    // A fixed grid: a table whose rows are its `layoutRows`, in place of `rows`, each cell a field of the form `form`
+    // names, an expression or a text. Its rows are fixed, so it takes nothing that orders, groups, adds or summarises
+    // rows. Keys are unique in the grid, a block's rows included, since a block row's key joins its collection row's
+    // key and its own, and two collections' row keys may meet. A cell's `field` is a path of the form's fields, or in
+    // a block of the collection's row type, read from the form action's schema when the catalog has it.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one refusal per rule of a fixed grid's parts.
+    void checkFixedGrid(DocNode const& node) const {
+        if (node.prop("rows")) {
+            refuse(pointerAppend(node.path, "layoutRows"),
+                   "a fixed grid's `layoutRows` are in place of `rows`; give it one of them");
+        }
+        if (!node.name("field").empty()) {
+            refuse(pointerAppend(node.path, "field"),
+                   "a fixed grid's cells name their own fields; a table with `layoutRows` takes no `field`");
+        }
+        for (std::string_view const key :
+             {std::string_view{"sort"}, std::string_view{"group"}, std::string_view{"summaries"},
+              std::string_view{"rowSpans"}, std::string_view{"appendRows"}, std::string_view{"rowsFixed"},
+              std::string_view{"key"}}) {
+            bool const given = node.prop(key) != nullptr || !node.partList(key).empty() ||
+                               node.flag(key, false) == node.flag(key, true);
+            if (given) {
+                refuse(
+                    pointerAppend(node.path, key),
+                    "a fixed grid's rows are fixed, in the order of its `layoutRows`, and its spans are its cells'; "
+                    "it takes no `" +
+                        std::string{key} + "`");
+            }
+        }
+        if (node.prop("columns") != nullptr) {
+            refuse(pointerAppend(node.path, "columns"), "a fixed grid's `columns` are a list of column parts");
+        }
+        std::span<DocNodePtr const> const columns = node.partList("columns");
+        for (DocNodePtr const& column : columns) {
+            if (!column->name("field").empty() || column->prop("field") != nullptr ||
+                column->prop("value") != nullptr) {
+                refuse(column->path, "a fixed grid's cells name their fields and values; its columns name neither");
+            }
+        }
+        std::string_view const formId = node.name("form");
+        DocNode const* form = nullptr;
+        if (!formId.empty()) {
+            auto const found = _elements.find(formId);
+            if (found == _elements.end() || found->second->kind != "form") {
+                refuse(pointerAppend(node.path, "form"),
+                       "`" + std::string{formId} + "` is not a form of this document");
+            }
+            form = found->second;
+        }
+        std::optional<forms::FormModel> const model = form != nullptr ? fixedGridModel(*form) : std::nullopt;
+        std::set<std::string, std::less<>> keys;
+        for (DocNodePtr const& part : node.partList("layoutRows")) {
+            std::string_view const forEach = part->name("forEach");
+            if (forEach.empty()) {
+                checkLayoutRow(*part, columns, form,
+                               model ? std::span{model->fields()} : std::span<forms::FieldSpec const>{},
+                               model.has_value(), keys);
+                continue;
+            }
+            if (!part->name("key").empty() || !part->partList("cells").empty() || part->prop("label") != nullptr) {
+                refuse(part->path, "a block's `forEach` repeats its `rows`; it takes no `key`, `label` or `cells`");
+            }
+            if (form == nullptr) {
+                refuse(pointerAppend(part->path, "forEach"),
+                       "a block repeats rows of a form's collection; give the table its `form`");
+            }
+            std::span<forms::FieldSpec const> members;
+            if (model) {
+                auto const array = std::ranges::find(model->fields(), forEach, &forms::FieldSpec::name);
+                if (array == model->fields().end() || array->kind != forms::FieldKind::ObjectArray) {
+                    refuse(pointerAppend(part->path, "forEach"),
+                           "`" + std::string{forEach} + "` is not a list of records of the form");
+                }
+                members = array->children;
+            }
+            if (part->partList("rows").empty()) {
+                refuse(pointerAppend(part->path, "rows"), "a block repeats its `rows`, and gives none");
+            }
+            for (DocNodePtr const& row : part->partList("rows")) {
+                if (!row->name("forEach").empty()) {
+                    refuse(pointerAppend(row->path, "forEach"), "a block's rows are rows; a block holds no block");
+                }
+                checkLayoutRow(*row, columns, form, members, model.has_value(), keys);
+            }
+        }
+        if (form == nullptr) {
+            return;
+        }
+        for (DocNodePtr const& part : node.partList("layoutRows")) {
+            std::string_view const forEach = part->name("forEach");
+            std::span<DocNodePtr const> const rows = forEach.empty() ? std::span{&part, 1} : part->partList("rows");
+            for (DocNodePtr const& row : rows) {
+                for (DocNodePtr const& cells : row->partList("cells")) {
+                    for (DocNodePtr const& cell : cells->partList("cells")) {
+                        std::string_view const field = cell->name("field");
+                        ExprPtr const unit = cell->prop("unit");
+                        std::string const* const literal =
+                            unit != nullptr && unit->kind == ExprKind::Literal ? unit->literal.asString() : nullptr;
+                        if (!field.empty() && literal != nullptr) {
+                            noteUnit(
+                                *form,
+                                forEach.empty() ? std::string{field} : std::string{forEach} + "." + std::string{field},
+                                *literal, unit->path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // A literal `unit` overlay on a field of a form: a field is entered in one unit, so two overlays in the document
+    // that give it different literal units are refused. A unit an expression gives is read when it is shown, and not
+    // compared. A field of a collection's rows is named `<collection>.<member>`.
+    void noteUnit(DocNode const& form, std::string const& field, std::string const& unit,
+                  std::string const& where) const {
+        if (unit.empty()) {
+            return;
+        }
+        auto const [given, added] = _unitsGiven.try_emplace(form.id + "\x1F" + field, unit);
+        if (!added && given->second != unit) {
+            refuse(where, "`" + field + "` is given the units `" + given->second + "` and `" + unit +
+                              "` by two overlays; a field is entered in one unit");
+        }
+    }
+
+    // The form model a fixed grid's cells are checked against: its form action's schema, when the catalog has it.
+    [[nodiscard]] std::optional<forms::FormModel> fixedGridModel(DocNode const& form) const {
+        if (!_options->catalog.schema) {
+            return std::nullopt;
+        }
+        std::string const action{form.name("action")};
+        std::optional<std::string> const schema = _options->catalog.schema(action);
+        if (!schema) {
+            return std::nullopt;
+        }
+        auto model = forms::FormModel::fromSchema(action, *schema);
+        return model ? std::optional<forms::FormModel>{std::move(*model)} : std::nullopt;
+    }
+
+    // One row of a fixed grid: its key, unique in the grid, and its cells, each under a column's id and naming one of
+    // `field`, `value` and `text`; a `field` needs the form, and names a field of @p fields when @p known.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one refusal per rule of a cell.
+    static void checkLayoutRow(DocNode const& row, std::span<DocNodePtr const> columns, DocNode const* form,
+                               std::span<forms::FieldSpec const> fields, bool known,
+                               std::set<std::string, std::less<>>& keys) {
+        std::string const key{row.name("key")};
+        if (key.empty()) {
+            refuse(row.path, "a fixed grid's row names its `key`, or repeats `rows` for each row of a `forEach`");
+        }
+        if (!row.partList("rows").empty()) {
+            refuse(pointerAppend(row.path, "rows"), "a row's `rows` repeat for each row of a `forEach`; give it one");
+        }
+        if (key.contains('/')) {
+            refuse(pointerAppend(row.path, "key"),
+                   "the row key `" + key + "` holds a `/`, which joins a block row's keys; give it another");
+        }
+        if (!keys.insert(key).second) {
+            refuse(pointerAppend(row.path, "key"), "the row `" + key + "` is declared twice in the grid");
+        }
+        for (DocNodePtr const& cells : row.partList("cells")) {
+            for (DocNodePtr const& cell : cells->partList("cells")) {
+                if (std::ranges::none_of(columns,
+                                         [&cell](DocNodePtr const& column) { return column->id == cell->id; })) {
+                    refuse(cell->path,
+                           "a fixed grid's cells are named by the table's column ids; `" + cell->id + "` is not one");
+                }
+                std::string_view const field = cell->name("field");
+                int const given = (field.empty() ? 0 : 1) + (cell->prop("value") != nullptr ? 1 : 0) +
+                                  (cell->names.contains("text") ? 1 : 0);
+                if (given != 1) {
+                    refuse(cell->path,
+                           "a fixed grid's cell edits its `field`, or shows its `value` or its `text`: "
+                           "one of them");
+                }
+                if (!field.empty() && form == nullptr) {
+                    refuse(pointerAppend(cell->path, "field"),
+                           "a cell that edits a field names the form's; give the table its `form`");
+                }
+                if (!field.empty() && known && !fieldAt(fields, field)) {
+                    refuse(pointerAppend(cell->path, "field"), "`" + std::string{field} +
+                                                                   "` is not a field of the form of `" +
+                                                                   std::string{form->name("action")} + "`");
+                }
+                for (std::string_view const span : {std::string_view{"rows"}, std::string_view{"columns"}}) {
+                    if (ExprPtr const count = cell->prop(span)) {
+                        std::int64_t const* const literal = count->kind == ExprKind::Literal
+                                                                ? count->literal.asInt()
+                                                                : static_cast<std::int64_t const*>(nullptr);
+                        if (literal == nullptr || *literal < 1) {
+                            refuse(count->path, "a cell's `" + std::string{span} + "` is a literal count, 1 or more");
+                        }
+                    }
+                }
+                for (std::string_view const overlay : {std::string_view{"decimals"}, std::string_view{"unit"},
+                                                       std::string_view{"options"}, std::string_view{"placeholder"}}) {
+                    if (ExprPtr const set = cell->prop(overlay); set != nullptr && field.empty()) {
+                        refuse(set->path, "`" + std::string{overlay} +
+                                              "` is an overlay of the field a cell edits; "
+                                              "this cell edits no field");
+                    }
+                }
+            }
+        }
+    }
+
+    // Whether a dotted path names a field below @p fields.
+    [[nodiscard]] static bool fieldAt(std::span<forms::FieldSpec const> fields, std::string_view path) {
+        while (!path.empty()) {
+            std::size_t const dot = path.find('.');
+            std::string_view const name = path.substr(0, dot);
+            path = dot == std::string_view::npos ? std::string_view{} : path.substr(dot + 1);
+            auto const member = std::ranges::find(fields, name, &forms::FieldSpec::name);
+            if (member == fields.end()) {
+                return false;
+            }
+            fields = member->children;
+        }
+        return true;
+    }
+
+    // What a grid takes beyond its table, on a `table` over a form or a field overlay's `grid` part: `enterMoves` and
+    // `walk` by name, and columns that each edit a member, named by `field`, or show a `value`. A `field` must name a
+    // member of the collection's row type, read from the form action's schema when the catalog has it.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): the grid's two options, each column's member or value and the field lookup in one pass over the parts, refusing in document order
+    void checkGridPart(DocNode const& part, DocNode const& form, std::string_view field,
+                       std::string const& where) const {
+        for (std::string_view const key : {std::string_view{"enterMoves"}, std::string_view{"walk"}}) {
+            std::string_view const given = part.name(key);
+            bool const known =
+                given.empty() || (key == "enterMoves" ? given == "down" || given == "right" || given == "none"
+                                                      : given == "rows" || given == "columns");
+            if (!known) {
+                refuse(pointerAppend(part.path, key), key == "enterMoves" ? "`enterMoves` is `down`, `right` or `none`"
+                                                                          : "`walk` is `rows` or `columns`");
+            }
+        }
+        if (part.flag("appendRows") && part.flag("rowsFixed")) {
+            refuse(pointerAppend(part.path, "appendRows"), "a grid with `rowsFixed` adds no rows; drop `appendRows`");
+        }
+        if (part.kind == "fieldGrid") {
+            checkBandParts(part);
+            checkSummaryParts(part);
+        }
+        for (DocNodePtr const& column : part.partList("columns")) {
+            if (column->name("field").empty() && column->prop("field") == nullptr &&
+                column->prop("value") == nullptr) {
+                refuse(column->path, "a grid's column edits the member its `field` names, or shows its `value`");
+            }
+            if (std::string_view const member = column->name("field"); !member.empty()) {
+                noteUnit(form, std::string{field} + "." + std::string{member}, std::string{column->name("unit")},
+                         pointerAppend(column->path, "unit"));
+            }
+        }
+        if (!_options->catalog.schema) {
+            return;
+        }
+        std::string const action{form.name("action")};
+        std::optional<std::string> const schema = _options->catalog.schema(action);
+        if (!schema) {
+            return;
+        }
+        auto const model = forms::FormModel::fromSchema(action, *schema);
+        if (!model) {
+            return;
+        }
+        auto const array = std::ranges::find(model->fields(), field, &forms::FieldSpec::name);
+        if (array == model->fields().end() || array->kind != forms::FieldKind::ObjectArray) {
+            refuse(where, "`" + std::string{field} + "` is not a list of records of the form of `" + action + "`");
+        }
+        for (DocNodePtr const& column : part.partList("columns")) {
+            std::string_view const member = column->name("field");
+            if (!member.empty() && std::ranges::none_of(array->children, [member](forms::FieldSpec const& child) {
+                    return child.name == member;
+                })) {
+                refuse(pointerAppend(column->path, "field"),
+                       "`" + std::string{member} + "` names no member of `" + std::string{field} + "`");
+            }
+        }
+    }
+
+    // A table over a typed list action pages through the one request member marked `x-table`, and builds its
+    // description from its `columns` or the action's view document, since a catalog carries no reply schema.
+    void checkActionTable(DocNode const& node) const {
+        std::string const action{node.name("action")};
+        if (_options->catalog.schema) {
+            std::optional<std::string> const schema = _options->catalog.schema(action);
+            std::vector<std::string> const members = schema ? tableQueryMembers(*schema) : std::vector<std::string>{};
+            if (members.empty()) {
+                refuse(node.path, "a table over an action needs a query member marked x-table");
+            }
+            if (members.size() > 1) {
+                refuse(node.path, "a table over an action needs one query member marked x-table; `" + action +
+                                      "` marks " + std::to_string(members.size()));
+            }
+        }
+        if (_options->catalog.view && node.partList("columns").empty() && !_options->catalog.view(action)) {
+            refuse(node.path, "a table over an action needs its columns, or a view document for the action");
         }
     }
 
@@ -3379,7 +3953,8 @@ private:
 
     // A sortable column is named by its id, which a sort key gives; `sortBy` says how a sortable column orders. A
     // literal `sort` names sortable columns, each once, with a direction, and `onSortChange` needs a header that
-    // sorts. A model-backed table's engine sorts, so none of these belongs on one.
+    // sorts. A model-backed table's engine sorts and its description says which columns do, so neither `sortable`
+    // nor `sortBy` belongs on one.
     static void checkTableSort(DocNode const& node) {
         bool const modelBacked = !node.name("model").empty();
         std::set<std::string, std::less<>> sortable;
@@ -3400,7 +3975,7 @@ private:
                 sortable.insert(column->id);
             }
         }
-        if (node.event("onSortChange") != nullptr && sortable.empty()) {
+        if (node.event("onSortChange") != nullptr && sortable.empty() && !modelBacked) {
             refuse(pointerAppend(node.path, "onSortChange"),
                    "`onSortChange` runs when a header sorts the table; give a column `sortable`");
         }
@@ -3437,11 +4012,181 @@ private:
         }
     }
 
+    // A band part as `BandInfo`: its label, unit, literal list of column ids and the bands one level down.
+    // NOLINTNEXTLINE(misc-no-recursion): a band's bands are bands one level down.
+    static table::BandInfo bandOf(DocNode const& part) {
+        table::BandInfo band{.label = std::string{part.name("label")},
+                             .unit = std::string{part.name("unit")},
+                             .columns = {},
+                             .bands = {}};
+        ExprPtr const members = part.prop("columns");
+        ValueList const* const list =
+            members != nullptr && members->kind == ExprKind::Literal ? members->literal.asList() : nullptr;
+        if (list == nullptr) {
+            refuse(pointerAppend(part.path, "columns"), "a band's `columns` is a literal list of its columns' ids");
+        }
+        for (Value const& member : *list) {
+            std::string const* const columnId = member.asString();
+            if (columnId == nullptr) {
+                refuse(pointerAppend(part.path, "columns"),
+                       "a band's `columns` is a literal list of its columns' ids");
+            }
+            band.columns.push_back(*columnId);
+        }
+        for (DocNodePtr const& child : part.partList("bands")) {
+            band.bands.push_back(bandOf(*child));
+        }
+        return band;
+    }
+
+    // Header bands: nested at most three levels, each over columns of the table, a child over its parent's columns
+    // and a column in one band per level (`table::bandRefusal`). A model's table names its columns in its
+    // description, so only a table that declares its column parts has its ids checked here.
+    static void checkBandParts(DocNode const& node) {
+        auto const parts = node.partList("bands");
+        if (parts.empty()) {
+            return;
+        }
+        std::vector<table::BandInfo> bands;
+        for (DocNodePtr const& part : parts) {
+            bands.push_back(bandOf(*part));
+        }
+        std::vector<std::string> known;
+        if (node.name("model").empty() && node.prop("columns") == nullptr) {
+            for (DocNodePtr const& column : node.partList("columns")) {
+                known.push_back(column->id);
+            }
+        }
+        if (std::optional<std::string> const refused = table::bandRefusal(bands, known)) {
+            refuse(pointerAppend(node.path, "bands"), *refused);
+        }
+    }
+
+    // Summary rows, on a table and on its group part: a summary is a feature of a table over held rows, so a
+    // model-backed table refuses both. Each has a key, unique in its list, a `position` of `bottom` or `top`, and
+    // cells named by the table's column ids.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): checks each summary's key, position and cells in one pass over the list; the uniqueness set is shared
+    static void checkSummaryParts(DocNode const& node) {
+        bool const modelBacked = !node.name("model").empty();
+        auto const check = [&node, modelBacked](std::span<DocNodePtr const> summaries, std::string const& where) {
+            if (summaries.empty()) {
+                return;
+            }
+            if (modelBacked) {
+                refuse(where,
+                       "a summary row summarises rows the client holds; a model-backed table refuses "
+                       "`summaries`, as it refuses `group`");
+            }
+            std::set<std::string, std::less<>> keys;
+            auto const columns = node.partList("columns");
+            for (DocNodePtr const& summary : summaries) {
+                std::string const key{summary->name("key")};
+                if (key.empty() || !keys.insert(key).second) {
+                    refuse(pointerAppend(summary->path, "key"), key.empty()
+                                                                    ? std::string{"a summary names its `key`"}
+                                                                    : "the summary `" + key + "` is declared twice");
+                }
+                std::string_view const position = summary->name("position");
+                if (!position.empty() && position != "bottom" && position != "top") {
+                    refuse(pointerAppend(summary->path, "position"), "a summary's `position` is `bottom` or `top`");
+                }
+                if (node.prop("columns") != nullptr || columns.empty()) {
+                    continue;
+                }
+                for (DocNodePtr const& cells : summary->partList("cells")) {
+                    for (auto const& [column, expr] : cells->props) {
+                        static_cast<void>(expr);
+                        if (std::ranges::none_of(columns,
+                                                 [&column](DocNodePtr const& part) { return part->id == column; })) {
+                            refuse(
+                                pointerAppend(cells->path, column),
+                                "a summary's cells are named by the table's column ids; `" + column + "` is not one");
+                        }
+                    }
+                }
+            }
+        };
+        check(node.partList("summaries"), pointerAppend(node.path, "summaries"));
+        for (DocNodePtr const& group : node.partList("group")) {
+            check(group->partList("summaries"), pointerAppend(group->path, "summaries"));
+        }
+    }
+
     // A table over `rows` draws its own group headings; a model-backed table's engine shapes its rows.
     static void checkTableGroup(DocNode const& node) {
         if (!node.name("model").empty() && !node.partList("group").empty()) {
             refuse(pointerAppend(node.path, "group"),
                    "a model-backed table's engine shapes its rows; `group` is for a table over `rows`");
+        }
+    }
+
+    // When a model's table commits its cells' edits: `cell` or `row`. Only a model's table commits through edit
+    // actions.
+    static void checkEditMode(DocNode const& node) {
+        std::string_view const mode = node.name("editMode");
+        if (mode.empty()) {
+            return;
+        }
+        if (node.name("model").empty() || node.name("table").empty()) {
+            refuse(pointerAppend(node.path, "editMode"),
+                   "`editMode` chooses how a model's table commits its cells; this table is not a model's table");
+        }
+        if (mode != "cell" && mode != "row") {
+            refuse(pointerAppend(node.path, "editMode"),
+                   "`editMode` is `cell` or `row`, not `" + std::string{mode} + "`");
+        }
+    }
+
+    // A table over `rows` declares its column groups: each 2 to 16 of its column parts, of one literal kind, and a
+    // column in at most one group. A model's table has its groups from its description.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): checks each group's size, kind and column membership in one pass; the "column in one group" set is shared
+    static void checkColumnGroups(DocNode const& node) {
+        auto const groups = node.partList("groups");
+        if (groups.empty()) {
+            return;
+        }
+        if (!node.prop("rows")) {
+            refuse(
+                pointerAppend(node.path, "groups"),
+                "a model's table declares its column groups in its description; `groups` is for a table over `rows`");
+        }
+        auto const columns = node.partList("columns");
+        std::set<std::string, std::less<>> grouped;
+        std::set<std::string, std::less<>> ids;
+        for (DocNodePtr const& group : groups) {
+            std::string const where = pointerAppend(group->path, "columns");
+            if (!ids.insert(group->id).second) {
+                refuse(pointerAppend(group->path, "id"), "the group `" + group->id + "` is declared twice");
+            }
+            ExprPtr const members = group->prop("columns");
+            ValueList const* const list =
+                members != nullptr && members->kind == ExprKind::Literal ? members->literal.asList() : nullptr;
+            if (list == nullptr) {
+                refuse(where, "a group's `columns` is a literal list of its columns' ids");
+            }
+            if (list->size() < 2 || list->size() > 16) {
+                refuse(where, "a group has 2 to 16 columns");
+            }
+            std::optional<std::string_view> kind;
+            for (Value const& member : *list) {
+                std::string const* const columnId = member.asString();
+                auto const part = columnId == nullptr
+                                      ? columns.end()
+                                      : std::ranges::find_if(columns, [columnId](DocNodePtr const& column) {
+                                            return column->id == *columnId;
+                                        });
+                if (part == columns.end()) {
+                    refuse(where, "a group's columns are the ids of the table's column parts");
+                }
+                if (!grouped.insert(*columnId).second) {
+                    refuse(where, "the column `" + *columnId + "` is in another group");
+                }
+                std::string_view const named = (*part)->name("kind");
+                if (kind && *kind != named) {
+                    refuse(where, "a group's columns hold one kind of value");
+                }
+                kind = named;
+            }
         }
     }
 
@@ -3465,17 +4210,87 @@ private:
         }
     }
 
+    // A `rows` table's sort bound: a literal 1 to 32. A model's table has its bound from its description.
+    static void checkTableSortBound(DocNode const& node) {
+        ExprPtr const bound = node.prop("maxSortKeys");
+        if (bound == nullptr) {
+            return;
+        }
+        std::string const path = pointerAppend(node.path, "maxSortKeys");
+        if (!node.name("model").empty()) {
+            refuse(path, "`maxSortKeys` is a `rows` table's; a model's table carries its bound in its description");
+        }
+        std::int64_t const* const keys = bound->kind == ExprKind::Literal ? bound->literal.asInt() : nullptr;
+        if (keys == nullptr || *keys < 1 || *keys > 32) {
+            refuse(path, "`maxSortKeys` is 1 to 32");
+        }
+    }
+
+    // What a table lets its user change about its columns: a literal `true`, `false`, or a list of the four.
+    static void checkTableConfigurable(DocNode const& node) {
+        ExprPtr const expr = node.prop("configurable");
+        if (expr == nullptr) {
+            return;
+        }
+        std::string const path = pointerAppend(node.path, "configurable");
+        std::string_view const shape =
+            R"(`configurable` is a literal `true`, `false`, or a list of "reorder", "hide", "pin" and "resize")";
+        if (expr->kind != ExprKind::Literal) {
+            refuse(path, std::string{shape});
+        }
+        if (expr->literal.asBool() != nullptr) {
+            return;
+        }
+        ValueList const* const names = expr->literal.asList();
+        if (names == nullptr) {
+            refuse(path, std::string{shape});
+        }
+        static constexpr std::array<std::string_view, 4> kConfigurable = {"reorder", "hide", "pin", "resize"};
+        for (Value const& item : *names) {
+            std::string const* const name = item.asString();
+            if (name == nullptr) {
+                refuse(path, std::string{shape});
+            }
+            if (!listed(kConfigurable, *name)) {
+                refuse(path, "`configurable` names `" + *name + "`; it lists reorder, hide, pin and resize");
+            }
+        }
+    }
+
     // The keys of a model-backed table that a table over `rows` would accept and ignore.
     static void checkRowsTableKeys(DocNode const& node) {
         if (!node.prop("rows")) {
             return;
         }
-        if (node.prop("filters") != nullptr) {
+        if (node.prop("filters") != nullptr || !node.name("filters").empty()) {
             refuse(pointerAppend(node.path, "filters"),
                    "`filters` belongs to a model-backed table; filter `rows` with `filter`");
         }
         if (node.prop("highlightKey") != nullptr) {
             refuse(pointerAppend(node.path, "highlightKey"), "`highlightKey` links a model-backed table to a chart");
+        }
+        // Its arrangement is kept under the table's id, so a table with none persists nothing, and says so when it
+        // asks to.
+        if (ExprPtr const persist = node.prop("persist"); persist != nullptr && node.id.empty()) {
+            bool const* const flag = persist->kind == ExprKind::Literal ? persist->literal.asBool() : nullptr;
+            if (flag == nullptr || *flag) {
+                refuse(pointerAppend(node.path, "persist"),
+                       "a table over `rows` needs an `id` to persist its arrangement");
+            }
+        }
+    }
+
+    // A column part's literal `kind`, on a table over `rows` or over a typed list action: one of the seven a
+    // document names.
+    static void checkColumnKinds(DocNode const& node) {
+        static constexpr std::array<std::string_view, 7> kColumnKinds = {"text", "integer",  "decimal", "number",
+                                                                         "date", "dateTime", "bool"};
+        for (DocNodePtr const& column : node.partList("columns")) {
+            std::string_view const kind = column->name("kind");
+            if (!kind.empty() && !listed(kColumnKinds, kind)) {
+                refuse(pointerAppend(column->path, "kind"),
+                       "`kind` is one of text, integer, decimal, number, date, dateTime, bool");
+            }
         }
     }
 
@@ -3500,8 +4315,37 @@ private:
         }
     }
 
+    // `selectionMode: "cells"` selects a rectangle of cells, which a grid of a form does by default and only; a
+    // model's table is in server mode and selects rows. `appendRows` and `rowsFixed` say which row operations a grid
+    // offers.
+    static void checkCellSelection(DocNode const& node) {
+        bool const grid = !node.name("form").empty() || !node.partList("layoutRows").empty();
+        ExprPtr const mode = node.prop("selectionMode");
+        std::string const* const literal =
+            mode != nullptr && mode->kind == ExprKind::Literal ? mode->literal.asString() : nullptr;
+        std::string const where = pointerAppend(node.path, "selectionMode");
+        if (literal != nullptr && *literal == "cells" && !node.name("model").empty()) {
+            refuse(where,
+                   "`selectionMode` `cells` selects cells of a table held on the client; a model's table "
+                   "selects rows");
+        }
+        if (literal != nullptr && *literal == "cells" && !grid) {
+            refuse(where, "`selectionMode` `cells` is a grid's; this table is not a grid of a form");
+        }
+        if (grid && mode != nullptr && (literal == nullptr || *literal != "cells")) {
+            refuse(where, "a grid of a form selects cells: its `selectionMode` is `cells`");
+        }
+        for (std::string_view const key : {std::string_view{"appendRows"}, std::string_view{"rowsFixed"}}) {
+            if (node.flag(key, false) == node.flag(key, true) && !grid) {
+                refuse(pointerAppend(node.path, key),
+                       "`" + std::string{key} + "` is a grid's; this table is not a grid of a form");
+            }
+        }
+    }
+
     // A table's `selection` and `onSelectionChange` need rows the user can select, and rows the document holds: a
-    // model-backed table's engine owns its selection.
+    // model-backed table's engine owns its selection. A grid of a form selects cells, so it takes them without a
+    // `selectionMode`.
     static void checkTableSelection(DocNode const& node) {
         std::string_view key;
         if (node.prop("selection") != nullptr) {
@@ -3515,6 +4359,9 @@ private:
         if (!node.name("model").empty()) {
             refuse(where, "a model-backed table's engine owns its selection; `" + std::string{key} +
                               "` is for a table over `rows`");
+        }
+        if (!node.name("form").empty() || !node.partList("layoutRows").empty()) {
+            return;
         }
         ExprPtr const mode = node.prop("selectionMode");
         std::string const* const literal =
@@ -3712,6 +4559,18 @@ private:
             for (DocNodePtr const& field : record->partList("fields")) {
                 if (!field->name("component").empty()) {
                     checkFieldComponent(*field);
+                }
+                if (std::span<DocNodePtr const> const grid = field->partList("grid"); !grid.empty()) {
+                    // A literal `widget: "grid"` only: a grid part on any other control would be dropped silently.
+                    ExprPtr const widget = field->prop("widget");
+                    std::string const* const named =
+                        widget != nullptr && widget->kind == ExprKind::Literal ? widget->literal.asString() : nullptr;
+                    if (named == nullptr || *named != "grid") {
+                        refuse(grid.front()->path,
+                               "a field's `grid` gives a grid widget its columns; give it `widget: \"grid\"`");
+                    }
+                    checkGridPart(*grid.front(), form, field->id, field->path);
+                    checkTableConfigurable(*grid.front());
                 }
             }
         }
@@ -4310,11 +5169,57 @@ private:
     // cell.
     static constexpr std::array<std::string_view, 3> kCellPlaces = {"start", "center", "end"};
 
-    // A table column's closed sets: its default cell's text role, and its cells' places.
-    static void checkColumnPart(DocNode const& node) {
+    // A table column's closed sets: its default cell's text role, and its cells' places; and its display parts,
+    // which are literals: `decimals` 0 to 18, `rounding` one of two names, `date` a pattern, `labels` a list of
+    // `{operand, text}`.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): the column's closed sets and display parts are each checked against their allowed values and report in document order
+    static void checkColumnPart(DocNode const& node, bool gridColumn) {
         checkTextRole(node);
         checkCellPlace(node, "align");
         checkCellPlace(node, "valign");
+        // A grid column's overlays are per row; a table over rows has none of them.
+        if (!gridColumn) {
+            for (std::string_view const key :
+                 {std::string_view{"readonly"}, std::string_view{"options"}, std::string_view{"placeholder"},
+                  std::string_view{"field"}, std::string_view{"unit"}}) {
+                if (ExprPtr const given = node.prop(key)) {
+                    refuse(given->path, "`" + std::string{key} +
+                                            (key == "field" || key == "unit" ? "` as an expression" : "`") +
+                                            " is a grid column's, read per row; this table is not a grid of a form");
+                }
+            }
+        }
+        if (ExprPtr const decimals = node.prop("decimals");
+            decimals && (!gridColumn || decimals->kind == ExprKind::Literal)) {
+            std::int64_t const* const places = decimals->kind == ExprKind::Literal
+                                                   ? decimals->literal.asInt()
+                                                   : static_cast<std::int64_t const*>(nullptr);
+            if (places == nullptr || *places < 0 || *places > 18) {
+                refuse(decimals->path, "`decimals` is a literal integer, 0 to 18");
+            }
+        }
+        if (std::string_view const rounding = node.name("rounding");
+            !rounding.empty() && rounding != "halfEven" && rounding != "halfUp") {
+            refuse(pointerAppend(node.path, "rounding"),
+                   "`" + std::string{rounding} + "` is not one of the values of `rounding`: halfEven or halfUp");
+        }
+        if (std::string_view const date = node.name("date");
+            !date.empty() && !checkDatePattern(date, false) && !checkDatePattern(date, true)) {
+            refuse(pointerAppend(node.path, "date"), checkDatePattern(date, false).error());
+        }
+        if (ExprPtr const labels = node.prop("labels")) {
+            ValueList const* const items =
+                labels->kind == ExprKind::Literal ? labels->literal.asList() : static_cast<ValueList const*>(nullptr);
+            bool const read = items != nullptr && std::ranges::all_of(*items, [](Value const& item) {
+                                  Value const* const operand = item.field("operand");
+                                  Value const* const text = item.field("text");
+                                  return operand != nullptr && operand->asString() != nullptr && text != nullptr &&
+                                         text->asString() != nullptr;
+                              });
+            if (!read) {
+                refuse(labels->path, R"(`labels` is a literal list of `{"operand": text, "text": text}`)");
+            }
+        }
     }
 
     // Only a horizontal `forEach` wraps and only a vertical one is divided; a literal `axis` that says otherwise is
@@ -4907,6 +5812,8 @@ private:
     std::map<DocNode const*, ScopeInfo*> _innerOf;
     std::map<std::string, QueryDecl const*, std::less<>> _queries;
     std::map<std::string, DocNode const*, std::less<>> _elements;
+    // The literal unit each form field is first given by an overlay, by the form's id and the field's path.
+    mutable std::map<std::string, std::string, std::less<>> _unitsGiven;
     std::vector<std::pair<WatchDecl const*, ScopeInfo*>> _watches;
     std::vector<std::pair<MutationDecl const*, ScopeInfo*>> _mutations;
     std::vector<std::pair<QueryDecl const*, ScopeInfo*>> _queryScopes;
@@ -5164,6 +6071,34 @@ std::expected<TourDecl, Refusal> loadTourText(std::string_view text) {
     } catch (detail::DocumentRefused const& refused) {
         return std::unexpected(refused.refusal());
     }
+}
+
+std::vector<std::string> tableQueryMembers(std::string_view schemaJson) {
+    std::vector<std::string> members;
+    auto const json = parseJson(schemaJson);
+    auto const* const schema = json ? std::get_if<Json::object_t>(&json->data) : nullptr;
+    const auto* const properties = schema != nullptr ? schema->find("properties") : Json::object_t::const_iterator{};
+    if (schema == nullptr || properties == schema->end()) {
+        return members;
+    }
+    auto const* const entries = std::get_if<Json::object_t>(&properties->second.data);
+    if (entries == nullptr) {
+        return members;
+    }
+    for (auto const& [name, property] : *entries) {
+        auto const* const fields = std::get_if<Json::object_t>(&property.data);
+        if (fields == nullptr) {
+            continue;
+        }
+        const auto* const marker = fields->find(table::TableQuery::schemaMarker());
+        if (marker == fields->end()) {
+            continue;
+        }
+        if (bool const* const flag = std::get_if<bool>(&marker->second.data); flag != nullptr && *flag) {
+            members.push_back(name);
+        }
+    }
+    return members;
 }
 
 std::vector<std::string_view> nodeKinds() {

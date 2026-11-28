@@ -11,6 +11,7 @@
 //  - Engine::apply ignoring holds under Deferred: "deferred reorder holds an
 //    updated row until the view settles" fails.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <morph/core/executor.hpp>
@@ -22,6 +23,7 @@
 #include "table/table_fixtures.hpp"
 
 using namespace morph::table;
+using morph::table::Unloaded;
 using tabletest::FollowingModel;
 using tabletest::viewKeys;
 
@@ -238,4 +240,119 @@ TEST_CASE("table: updates during a worker job recompute once the job ends", "[ta
     Engine reference{source};
     REQUIRE(reference.setSort({{"n", kAsc}}).has_value());
     CHECK(viewKeys(engine) == viewKeys(reference));
+}
+
+namespace {
+
+// Column `a` at level "slow" holding 1, Unloaded and 3, sorted by `a` and filtered to `a > 0`: rows 0 and 2 are
+// the view, row 1 is undecided.
+struct UndecidedTable {
+    std::shared_ptr<VectorSource> source =
+        tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")},
+                              {{Cell{std::int64_t{1}}}, {Cell{Unloaded{}}}, {Cell{std::int64_t{3}}}});
+    Engine engine;
+
+    explicit UndecidedTable(EngineOptions options = {}) : engine{source, std::move(options)} {
+        REQUIRE(engine.setSort({SortKey{.column = "a"}}));
+        REQUIRE(engine.setFilter(FilterSpec{.columns = {{"a", ColumnFilter{.include = {FilterEntry{.gt = "0"}}}}}}));
+        REQUIRE(engine.undecidedRowCount() == 1);
+    }
+};
+
+}  // namespace
+
+// Mutation: a repair that ignores previousUndecided (an arrived row stays undecided).
+TEST_CASE("table: an undecided row that arrives is one insert and one count change", "[table][changes][unloaded]") {
+    auto const source = tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")},
+                                              {{Cell{std::int64_t{1}}}, {Cell{Unloaded{}}}, {Cell{std::int64_t{3}}}});
+    Engine engine{source};
+    REQUIRE(engine.setSort({SortKey{.column = "a"}}));
+    REQUIRE(engine.setFilter(FilterSpec{.columns = {{"a", ColumnFilter{.include = {FilterEntry{.gt = "0"}}}}}}));
+    CHECK(engine.undecidedRowCount() == 1);
+    std::vector<std::size_t> counts;
+    std::vector<std::string> order;
+    ViewChange last;  // the engine has one view handler: record here rather than through FollowingModel
+    engine.onViewChange([&](ViewChange const& change) {
+        last = change;
+        order.emplace_back("view");
+    });
+    engine.onUndecidedChange([&](std::size_t count) {
+        counts.push_back(count);
+        order.emplace_back("undecided");
+    });
+    source->updateRow(1, {Cell{std::int64_t{2}}});
+    CHECK(tabletest::viewKeys(engine) == std::vector<RowId>{0, 1, 2});
+    REQUIRE(last.ops.size() == 1);
+    CHECK(last.ops[0].kind == ViewOp::Kind::Inserted);
+    CHECK(last.ops[0].first == 1);
+    CHECK(last.ops[0].count == 1);
+    CHECK(counts == std::vector<std::size_t>{0});
+    CHECK(order == std::vector<std::string>{"view", "undecided"});
+}
+
+// Mutation: onUndecidedChange called only with a view change.
+TEST_CASE("table: an undecided row rejected on arrival is no view operation", "[table][changes][unloaded]") {
+    UndecidedTable table;
+    std::size_t views = 0;
+    std::vector<std::size_t> counts;
+    table.engine.onViewChange([&](ViewChange const&) { ++views; });
+    table.engine.onUndecidedChange([&](std::size_t count) { counts.push_back(count); });
+    table.source->updateRow(1, {Cell{std::int64_t{-5}}});
+    CHECK(views == 0);
+    CHECK(counts == std::vector<std::size_t>{0});
+    CHECK(viewKeys(table.engine) == ids({0, 2}));
+}
+
+// Mutation: a repair appending the dirty rows after the clean ones rather than merging them (every dirty row Moved).
+TEST_CASE("table: a displayed row whose level arrives is changed in place", "[table][changes][unloaded]") {
+    for (auto const policy : {ReorderPolicy::Immediate, ReorderPolicy::Deferred}) {
+        auto const source = tabletest::makeSource(
+            {tabletest::col("a", ColumnKind::Integer), tabletest::levelCol("b", ColumnKind::Text, "slow")},
+            {{Cell{std::int64_t{1}}, Cell{std::string{"p"}}},
+             {Cell{std::int64_t{2}}, Cell{Unloaded{}}},
+             {Cell{std::int64_t{3}}, Cell{std::string{"q"}}}});
+        Engine engine{source, EngineOptions{.reorder = policy}};
+        REQUIRE(engine.setSort({SortKey{.column = "a"}}));
+        FollowingModel model{engine};
+        source->updateRow(1, {Cell{std::int64_t{2}}, Cell{std::string{"x"}}});
+        CHECK(viewKeys(engine) == ids({0, 1, 2}));
+        REQUIRE(model.last().ops.size() == 1);
+        CHECK(model.last().ops[0] == ViewOp{.kind = ViewOp::Kind::Changed, .first = 1, .count = 1, .to = 0});
+        CHECK(model.check());
+    }
+}
+
+// Mutation: KeyColumn::set keeping the old key for a cell that became Unloaded.
+TEST_CASE("table: a cell dropped back to unloaded moves to the tail or leaves the view",
+          "[table][changes][unloaded]") {
+    auto const rows = [] {
+        return tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")},
+                                     {{Cell{std::int64_t{1}}}, {Cell{std::int64_t{2}}}, {Cell{std::int64_t{3}}}});
+    };
+    auto const sorted = rows();
+    Engine engine{sorted};
+    REQUIRE(engine.setSort({SortKey{.column = "a"}}));
+    sorted->updateRow(0, {Cell{Unloaded{}}});
+    CHECK(viewKeys(engine) == ids({1, 2, 0}));
+    CHECK(engine.undecidedRowCount() == 0);
+
+    auto const filtered = rows();
+    Engine narrowed{filtered};
+    REQUIRE(narrowed.setSort({SortKey{.column = "a"}}));
+    REQUIRE(narrowed.setFilter(FilterSpec{.columns = {{"a", ColumnFilter{.include = {FilterEntry{.gt = "0"}}}}}}));
+    filtered->updateRow(0, {Cell{Unloaded{}}});
+    CHECK(viewKeys(narrowed) == ids({1, 2}));
+    CHECK(narrowed.undecidedRowCount() == 1);
+}
+
+// Mutation: the repair holding entering rows like updated ones (holdUpdatedRows without the `shown` check).
+TEST_CASE("table: under deferred reorder an undecided row takes its true place at once",
+          "[table][changes][unloaded]") {
+    UndecidedTable const table{EngineOptions{.reorder = ReorderPolicy::Deferred}};
+    CHECK(viewKeys(table.engine) == ids({0, 2}));
+    table.source->updateRow(1, {Cell{std::int64_t{2}}});
+    CHECK(viewKeys(table.engine) == ids({0, 1, 2}));
+    auto const held = table.engine.heldRows();
+    CHECK(std::ranges::find(held, RowId{std::int64_t{1}}) == held.end());
+    CHECK(table.engine.undecidedRowCount() == 0);
 }

@@ -10,6 +10,10 @@
 //    action's table member is marked x-table" fails.
 //  - PageWindow::visible not skipping pages in flight: "the window fetches the
 //    pages around the visible rows" fails.
+//  - PageWindow stopping at an AtLeast total: "a total is exact or a lower
+//    bound, and a lower bound does not end the window" fails.
+//  - apply skipping validate: "apply refuses what validate and compile refuse,
+//    by code" fails (the offset case answers an empty page).
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -22,6 +26,8 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "table/table_fixtures.hpp"
@@ -258,11 +264,6 @@ TEST_CASE("table: a server's filter error is typed and travels as JSON", "[table
     CHECK(json.contains(R"("column":"mass")"));
 }
 
-TEST_CASE("table: LIKE patterns keep % and _ ordinary", "[table][query]") {
-    CHECK(escapeLikePattern("100%_a\\b") == "100\\%\\_a\\\\b");
-    CHECK(escapeLikePattern("50%", '!') == "50!%");
-}
-
 TEST_CASE("table: the window fetches the pages around the visible rows", "[table][query]") {
     PageWindow<int> window{100, 4};
     auto const first = window.visible(250, 30);
@@ -299,7 +300,7 @@ TEST_CASE("table: the window fetches the pages around the visible rows", "[table
     for (auto const& fetch : fetches) {
         auto const page = fetch.request.offset / 100;
         CHECK(window.accept(fetch, Page<int>{.rows = std::vector<int>(100, static_cast<int>(page)),
-                                             .total = 600,
+                                             .total = 700,
                                              .offset = fetch.request.offset}));
     }
     CHECK(window.pagesHeld() == 4);
@@ -402,17 +403,19 @@ TEST_CASE("table: the window ignores a reply it does not await or that no longer
     CHECK(window.row(4) == nullptr);
     CHECK_FALSE(window.accept(first[0], Page<int>{.rows = std::vector<int>(10, 8), .total = 100, .offset = 0}));
 
-    // The rest of page 0 is fetched from where it ends; a stale reply for its
-    // start is taken off the flight but stores nothing.
+    // The rest of page 0 is fetched from where it ends; a late reply to its
+    // start is not the fetch in flight, so it stores nothing and the rest
+    // stays awaited.
     auto const rest = window.visible(0, 5);
     REQUIRE(rest.size() == 1);
     CHECK(rest[0].request == PageRequest{.offset = 4, .limit = 6});
-    CHECK(window.accept(first[0], Page<int>{.rows = std::vector<int>(10, 8), .total = 100, .offset = 0}));
+    CHECK_FALSE(window.accept(first[0], Page<int>{.rows = std::vector<int>(10, 8), .total = 100, .offset = 0}));
     CHECK(*window.row(0) == 7);
     CHECK(window.row(4) == nullptr);
-    auto const again = window.visible(0, 5);
-    REQUIRE(again.size() == 1);
-    CHECK(again[0].request == PageRequest{.offset = 4, .limit = 6});
+    CHECK(window.visible(0, 5).empty());
+    CHECK(window.accept(rest[0], Page<int>{.rows = std::vector<int>(6, 9), .total = 100, .offset = 4}));
+    REQUIRE(window.row(4) != nullptr);
+    CHECK(*window.row(4) == 9);
 }
 
 TEST_CASE("table: the window evicts the page farthest from the visible rows", "[table][query]") {
@@ -463,4 +466,364 @@ TEST_CASE("table: a collator that throws while the filter compiles is a ServiceF
     auto const page = apply(resultRows(10), byId(), query, options);
     REQUIRE_FALSE(page.has_value());
     CHECK(page.error().code == TableErrorCode::ServiceFailed);
+}
+
+namespace {
+
+TableQuery withFilter(std::string column, FilterEntry entry) {
+    TableQuery query;
+    query.filters.columns.emplace(std::move(column),
+                                  ColumnFilter{.combine = Combine::Any, .include = {std::move(entry)}, .exclude = {}});
+    return query;
+}
+
+}  // namespace
+
+TEST_CASE("table: apply refuses what validate and compile refuse, by code", "[table][query]") {
+    auto const source =
+        tabletest::makeSource({tabletest::col("id", ColumnKind::Key), tabletest::col("n", ColumnKind::Integer)},
+                              {{Cell{std::int64_t{1}}, Cell{std::int64_t{5}}}});
+    auto const code = [&](TableQuery const& q) {
+        auto r = apply(*source, q);
+        REQUIRE_FALSE(r.has_value());
+        return std::pair{r.error().code, r.error().column};
+    };
+    TableQuery far;
+    far.page.offset = 10'000'001;
+    CHECK(code(far).first == TableErrorCode::LimitExceeded);
+    CHECK(code(withFilter("n", FilterEntry{.contains = "1"})) ==
+          std::pair{TableErrorCode::UnsupportedOperator, std::string{"n"}});
+    CHECK(code(withFilter("n", FilterEntry{.eq = "1", .ne = "2"})) ==
+          std::pair{TableErrorCode::InvalidSpec, std::string{"n"}});
+    TableQuery group;
+    group.filters.groups.push_back(
+        GroupFilter{.columns = {"n"}, .combine = Combine::Any, .include = {FilterEntry{.contains = "x"}}});
+    CHECK(code(group) == std::pair{TableErrorCode::UnsupportedOperator, std::string{"n"}});
+    // Mutation: apply skipping validate (the offset case answers an empty page).
+}
+
+TEST_CASE("table: a total is exact or a lower bound, and a lower bound does not end the window", "[table][query]") {
+    Page<int> page{.rows = {1, 2}, .total = 100, .offset = 0, .totalKind = TotalKind::AtLeast};
+    auto const json = glz::write_json(page);
+    REQUIRE(json.has_value());
+    Page<int> back;
+    REQUIRE_FALSE(glz::read_json(back, *json));
+    CHECK(back.totalKind == TotalKind::AtLeast);
+    CHECK(back.total == 100);
+    Page<int> without;
+    REQUIRE_FALSE(glz::read_json(without, R"({"rows":[1],"total":1,"offset":0})"));
+    CHECK(without.totalKind == TotalKind::Exact);
+
+    PageWindow<int> bounded{10, 8};
+    auto const first = bounded.visible(0, 5);
+    REQUIRE_FALSE(first.empty());
+    CHECK(bounded.accept(
+        first[0],
+        Page<int>{.rows = std::vector<int>(10, 1), .total = 10, .offset = 0, .totalKind = TotalKind::AtLeast}));
+    CHECK(bounded.totalKind() == TotalKind::AtLeast);
+    // Rows 10.. are fetched although the bound is 10: a lower bound says there are at least that many.
+    auto const next = bounded.visible(10, 5);
+    CHECK_FALSE(next.empty());
+    bounded.reset();
+    CHECK(bounded.totalKind() == TotalKind::Exact);
+
+    PageWindow<int> exact{10, 8};
+    auto const start = exact.visible(0, 5);
+    REQUIRE_FALSE(start.empty());
+    CHECK(exact.accept(start[0], Page<int>{.rows = std::vector<int>(10, 1), .total = 10, .offset = 0}));
+    CHECK(exact.visible(10, 5).empty());
+    // Mutation: PageWindow stopping at an AtLeast total.
+}
+
+TEST_CASE("table: a total kind goes over the wire by name", "[table][query]") {
+    Page<int> page{.rows = {1}, .total = 5, .offset = 0, .totalKind = TotalKind::AtLeast};
+    auto const json = glz::write_json(page);
+    REQUIRE(json.has_value());
+    CHECK(json->contains("\"totalKind\":\"atLeast\""));
+    page.totalKind = TotalKind::Exact;
+    CHECK(glz::write_json(page).value().contains("\"totalKind\":\"exact\""));
+    Page<int> back;
+    REQUIRE_FALSE(glz::read_json(back, R"({"rows":[],"total":3,"offset":0,"totalKind":"atLeast"})"));
+    CHECK(back.totalKind == TotalKind::AtLeast);
+    CHECK(glz::read_json(back, R"({"rows":[],"total":3,"offset":0,"totalKind":1})"));  // a number is refused
+}
+
+// Mutation: levelsNeeded returning every level of the columns.
+// Mutation: levelsNeeded adding every column of a group with no include entry.
+TEST_CASE("table: levelsNeeded names the levels a query sorts, filters and shows", "[table][query][levels]") {
+    using tabletest::levelCol;
+    std::vector<ColumnInfo> const columns{
+        tabletest::col("id", ColumnKind::Integer), levelCol("r1", ColumnKind::Decimal, "recipe"),
+        levelCol("r2", ColumnKind::Text, "recipe"), levelCol("s1", ColumnKind::Text, "stock"),
+        levelCol("p1", ColumnKind::Integer, "price")};
+    auto const needed = [&](TableQuery const& query) { return levelsNeeded(query, columns); };
+    using V = std::vector<std::string>;
+    TableQuery const named{.columns = V{"id", "r2"}};
+    CHECK(needed(named).order.empty());
+    CHECK(needed(named).display == V{"recipe"});
+    TableQuery const sorted{.sort = {SortKey{.column = "s1"}}, .filters = FilterSpec{}, .columns = V{"id"}};
+    CHECK(needed(sorted).order == V{"stock"});
+    CHECK(needed(sorted).display.empty());
+    TableQuery const filtered{.filters = FilterSpec{.columns = {{"p1", ColumnFilter{.include = {{.gt = "1"}}}}}},
+                              .columns = V{"p1"}};
+    CHECK(needed(filtered).order == V{"price"});
+    CHECK(needed(filtered).display == V{"price"});
+    TableQuery const grouped{
+        .filters = FilterSpec{.groups = {GroupFilter{.columns = {"r2", "s1"}, .include = {{.contains = "a"}}}}},
+        .columns = V{}};
+    CHECK(needed(grouped).order == V{"recipe", "stock"});
+    TableQuery const emptyGroup{.filters = FilterSpec{.groups = {GroupFilter{.columns = {"r1", "s1"}}}},
+                                .columns = V{}};
+    CHECK(needed(emptyGroup).order.empty());  // a group with no entry reads no column
+    CHECK(needed(TableQuery{.columns = V{"id"}}).display.empty());
+    CHECK(needed(TableQuery{}).display == V{"price", "recipe", "stock"});  // columns absent: every column
+    CHECK(levelsNeeded(TableQuery{}, columns, [](std::string_view c) { return c != "p1"; }).display ==
+          V{"recipe", "stock"});                                // only what the caller may read
+    CHECK(needed(TableQuery{.columns = V{}}).display.empty());  // columns empty: keys alone
+}
+
+// Mutation: TableQuery's JSON leaving out `keys` (a glz::meta naming every member but `keys`).
+TEST_CASE("table: columns and keys round-trip through glaze", "[table][query][keyed]") {
+    TableQuery query;
+    query.columns = std::vector<std::string>{"id", "name"};
+    query.keys = std::vector<RowId>{RowId{std::int64_t{7}}, RowId{std::string{"A-1"}}};
+    query.retry = true;
+    std::string json;
+    REQUIRE_FALSE(glz::write_json(query, json));
+    TableQuery back;
+    REQUIRE_FALSE(glz::read_json(back, json));
+    CHECK(back.columns == query.columns);
+    CHECK(back.keys == query.keys);
+    CHECK(back.retry);
+    TableQuery bare;
+    REQUIRE_FALSE(glz::read_json(bare, R"({"sort":[],"filters":{},"page":{"offset":0,"limit":200}})"));
+    CHECK_FALSE(bare.columns.has_value());
+    CHECK_FALSE(bare.keys.has_value());
+    CHECK_FALSE(bare.retry);
+}
+
+// Mutation: the keyed checks skipped.
+TEST_CASE("table: validate refuses a keyed query out of bounds", "[table][query][keyed]") {
+    std::vector<ColumnInfo> const columns{tabletest::col("id", ColumnKind::Integer)};
+    auto const code = [&](TableQuery const& query) {
+        auto const result = validate(query, columns);
+        return result ? std::optional<TableErrorCode>{} : std::optional{result.error().code};
+    };
+    TableQuery offset;
+    offset.keys = std::vector<RowId>{RowId{std::int64_t{1}}};
+    CHECK_FALSE(code(offset).has_value());
+    offset.page.offset = 10;
+    CHECK(code(offset) == TableErrorCode::InvalidSpec);
+    TableQuery many;
+    many.keys = std::vector<RowId>(1'001, RowId{std::int64_t{1}});
+    CHECK(code(many) == TableErrorCode::LimitExceeded);
+    many.keys->resize(1'000);
+    CHECK_FALSE(code(many).has_value());
+    TableQuery longKey;
+    longKey.keys = std::vector<RowId>{RowId{std::string(257, 'k')}};
+    CHECK(code(longKey) == TableErrorCode::LimitExceeded);
+    longKey.keys = std::vector<RowId>{RowId{std::string(256, 'k')}};
+    CHECK_FALSE(code(longKey).has_value());
+}
+
+// Mutation: indices filled with positions in the reply instead of view rows.
+TEST_CASE("table: a keyed reply carries the view's totals and each row's view row", "[table][query][keyed]") {
+    using morph::table::Unloaded;
+    auto const source =
+        tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")}, {{Cell{std::int64_t{40}}},
+                                                                                        {Cell{std::int64_t{10}}},
+                                                                                        {Cell{Unloaded{}}},
+                                                                                        {Cell{std::int64_t{30}}},
+                                                                                        {Cell{std::int64_t{-1}}},
+                                                                                        {Cell{std::int64_t{20}}}});
+    TableQuery query{.sort = {SortKey{.column = "a"}},
+                     .filters = FilterSpec{.columns = {{"a", ColumnFilter{.include = {{.gt = "0"}}}}}}};
+    query.keys = std::vector<RowId>{RowId{std::int64_t{3}}, RowId{std::int64_t{1}}, RowId{std::int64_t{2}},
+                                    RowId{std::int64_t{4}}, RowId{std::int64_t{99}}};
+    auto page = apply(*source, query);
+    REQUIRE(page.has_value());
+    CHECK(page->rows == std::vector<std::size_t>{1, 3});  // view order; 2 undecided, 4 rejected, 99 absent
+    CHECK(page->indices == std::vector<std::int64_t>{0, 2});
+    CHECK(page->total == 4);
+    CHECK(page->undecided == 1);
+    CHECK(page->totalKind == TotalKind::AtLeast);
+}
+
+// Mutation: the typed apply not copying indices.
+TEST_CASE("table: a typed keyed reply carries each row's view row", "[table][query][keyed]") {
+    auto const rows = resultRows(10);
+    TableQuery query{.sort = {SortKey{.column = "id", .dir = SortDirection::Descending}}};
+    query.keys = std::vector<RowId>{RowId{std::int64_t{2}}, RowId{std::int64_t{8}}, RowId{std::int64_t{42}}};
+    auto const page = apply(rows, byId(), query);
+    REQUIRE(page.has_value());
+    REQUIRE(page->rows.size() == 2);
+    CHECK(page->rows[0].id == 8);
+    CHECK(page->rows[1].id == 2);
+    CHECK(page->indices == std::vector<std::int64_t>{1, 7});
+    CHECK(page->offset == 0);
+    CHECK(page->total == 10);
+}
+
+namespace {
+
+// A snapshot that counts the row ids read through it.
+class CountingSnapshot final : public RowSnapshot {
+public:
+    explicit CountingSnapshot(std::shared_ptr<RowSnapshot const> base) : _base{std::move(base)} {}
+    [[nodiscard]] std::size_t rowCount() const override { return _base->rowCount(); }
+    [[nodiscard]] RowId rowId(std::size_t row) const override {
+        ++ids;
+        return _base->rowId(row);
+    }
+    [[nodiscard]] Cell cell(std::size_t row, std::size_t column) const override { return _base->cell(row, column); }
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): `ids` counts the row-id reads the case asserts on, and the read is const
+    mutable std::size_t ids = 0;
+
+private:
+    std::shared_ptr<RowSnapshot const> _base;
+};
+
+}  // namespace
+
+// Mutation: pageRows ignoring sourceRowOf.
+TEST_CASE("table: a keyed page uses the lookup it is given", "[table][query][keyed]") {
+    using morph::table::Unloaded;
+    auto const source =
+        tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")}, {{Cell{std::int64_t{40}}},
+                                                                                        {Cell{std::int64_t{10}}},
+                                                                                        {Cell{Unloaded{}}},
+                                                                                        {Cell{std::int64_t{30}}},
+                                                                                        {Cell{std::int64_t{-1}}},
+                                                                                        {Cell{std::int64_t{20}}}});
+    TableQuery query{.sort = {SortKey{.column = "a"}},
+                     .filters = FilterSpec{.columns = {{"a", ColumnFilter{.include = {{.gt = "0"}}}}}}};
+    query.keys = std::vector<RowId>{RowId{std::int64_t{3}}, RowId{std::int64_t{1}}, RowId{std::int64_t{2}},
+                                    RowId{std::int64_t{4}}, RowId{std::int64_t{99}}};
+    auto const validated = validate(query, source->columns());
+    REQUIRE(validated.has_value());
+    auto const view = detail::computeView(*source, *validated, ApplyOptions{});
+    REQUIRE(view.has_value());
+    CountingSnapshot const snapshot{source->snapshot()};
+
+    auto const scanned = detail::pageRows(*view, snapshot, *validated, QueryLimits{});
+    CHECK(scanned.rows == std::vector<std::size_t>{1, 3});
+    CHECK(scanned.indices == std::vector<std::int64_t>{0, 2});
+    CHECK(snapshot.ids > 0);  // the scan reads every row's id once
+
+    std::unordered_map<RowId, std::uint32_t> byKey;
+    for (std::uint32_t row = 0; row < source->snapshot()->rowCount(); ++row) {
+        byKey.emplace(source->snapshot()->rowId(row), row);
+    }
+    detail::SourceRowOf const lookup = [&byKey](RowId const& key) -> std::optional<std::uint32_t> {
+        auto const found = byKey.find(key);
+        return found == byKey.end() ? std::nullopt : std::optional{found->second};
+    };
+    snapshot.ids = 0;
+    auto const looked = detail::pageRows(*view, snapshot, *validated, QueryLimits{}, {}, lookup);
+    CHECK(looked.rows == scanned.rows);
+    CHECK(looked.indices == scanned.indices);
+    CHECK(looked.total == scanned.total);
+    CHECK(looked.undecided == scanned.undecided);
+    CHECK(snapshot.ids == 0);
+}
+
+// Mutation: levelsNeeded adding a group's column on which none of its entries compiles.
+TEST_CASE("table: levelsNeeded leaves out a group's column on which no entry compiles", "[table][query][levels]") {
+    using tabletest::levelCol;
+    std::vector<ColumnInfo> const columns{tabletest::col("id", ColumnKind::Integer),
+                                          levelCol("r1", ColumnKind::Decimal, "recipe"),
+                                          levelCol("s1", ColumnKind::Text, "stock")};
+    using V = std::vector<std::string>;
+    // `contains` is a text operator: it compiles on s1 and not on the decimal r1, so the group reads s1 alone.
+    TableQuery const search{
+        .filters = FilterSpec{.groups = {GroupFilter{.columns = {"r1", "s1"}, .include = {{.contains = "a"}}}}},
+        .columns = V{}};
+    CHECK(levelsNeeded(search, columns).order == V{"stock"});
+    // `gt "5"` parses on the decimal and is no text operator: the group reads r1 alone.
+    TableQuery const above{
+        .filters = FilterSpec{.groups = {GroupFilter{.columns = {"r1", "s1"}, .include = {{.gt = "5"}}}}},
+        .columns = V{}};
+    CHECK(levelsNeeded(above, columns).order == V{"recipe"});
+}
+
+// Mutation: writing an integer key through double (9'007'199'254'740'993 comes back one less).
+TEST_CASE("table: change keys round-trip awkward keys", "[table][query][levels]") {
+    std::vector<RowId> const awkward{RowId{std::string{"a\"b\\c \xC3\xA9"}},
+                                     RowId{std::int64_t{9'007'199'254'740'993}}};
+    auto const written = changeKeys(awkward);
+    REQUIRE(written.size() == 2);
+    CHECK(rowIdOf(written[0]) == std::optional<RowId>{awkward[0]});
+    CHECK(rowIdOf(written[1]) == std::optional<RowId>{awkward[1]});
+    for (std::string const other : {"true", "1.5", "{}"}) {
+        CHECK_FALSE(rowIdOf(glz::raw_json{other}).has_value());
+    }
+    std::vector<RowId> const plain{RowId{std::int64_t{7}}, RowId{std::string{"x"}}};
+    auto const simple = changeKeys(plain);
+    REQUIRE(simple.size() == 2);
+    CHECK(simple[0].str == "7");
+    CHECK(simple[1].str == "\"x\"");
+}
+
+namespace {
+
+// The error code of a refused query, or nothing when it was accepted.
+std::optional<TableErrorCode> codeOf(std::expected<TableQuery, TableError> const& result) {
+    return result ? std::nullopt : std::optional{result.error().code};
+}
+
+// `n` distinct texts of exactly `bytes` bytes each.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): `texts(n, bytes)` is a test helper whose arguments read differently at each call; a swap would fail the case's own assertion
+std::vector<std::string> texts(std::size_t n, std::size_t bytes) {
+    std::vector<std::string> out;
+    out.reserve(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        auto const text = std::to_string(i);
+        out.push_back(std::string(bytes - text.size(), '0') + text);
+    }
+    return out;
+}
+
+// A query with one `oneOf` include entry on each named column.
+TableQuery setQuery(std::vector<std::pair<std::string, std::vector<std::string>>> sets) {
+    TableQuery q;
+    for (auto& [column, values] : sets) {
+        q.filters.columns[column] =
+            ColumnFilter{.combine = Combine::Any, .include = {FilterEntry{.oneOf = std::move(values)}}, .exclude = {}};
+    }
+    return q;
+}
+
+std::vector<ColumnInfo> threeTextColumns() {
+    return {tabletest::col("a", ColumnKind::Text), tabletest::col("b", ColumnKind::Text),
+            tabletest::col("c", ColumnKind::Text)};
+}
+
+}  // namespace
+
+// Mutation: the per-query sum of set values not checked.
+TEST_CASE("table query: value sets are bounded per entry and per query", "[table][query]") {
+    auto const columns = threeTextColumns();
+    CHECK(validate(setQuery({{"a", texts(10'000, 16)}}), columns).has_value());
+    CHECK(codeOf(validate(setQuery({{"a", texts(10'001, 16)}}), columns)) == TableErrorCode::LimitExceeded);
+    auto const overEntry = validate(setQuery({{"a", texts(10'001, 16)}}), columns);
+    REQUIRE_FALSE(overEntry.has_value());
+    CHECK(overEntry.error().column == "a");
+    CHECK(validate(setQuery({{"a", texts(10'000, 16)}, {"b", texts(10'000, 16)}}), columns).has_value());
+    CHECK(codeOf(validate(setQuery({{"a", texts(10'000, 16)}, {"b", texts(10'000, 16)}, {"c", texts(1, 16)}}),
+                          columns)) == TableErrorCode::LimitExceeded);
+    // 1,080,000 bytes, over maxQuerySetBytes
+    CHECK(codeOf(validate(setQuery({{"a", texts(9'000, 120)}}), columns)) == TableErrorCode::LimitExceeded);
+    // over maxTextLength
+    CHECK(codeOf(validate(setQuery({{"a", texts(1, 257)}}), columns)) == TableErrorCode::LimitExceeded);
+}
+
+// Gate D6. Mutation: one set's bound one below maxSetValues, so 10,000 values are refused.
+TEST_CASE("table query: a 10,000-value set fits the wire bound", "[table][query]") {
+    auto const columns = threeTextColumns();
+    auto const q = setQuery({{"a", texts(10'000, 16)}});
+    std::string json;
+    REQUIRE_FALSE(glz::write_json(q, json));
+    CHECK(json.size() <= 250'000);
+    CHECK(json.size() < QueryLimits{}.maxQuerySetBytes);
+    CHECK(validate(q, columns).has_value());
 }

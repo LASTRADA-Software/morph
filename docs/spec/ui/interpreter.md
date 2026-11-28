@@ -192,6 +192,36 @@ canonical body is the body's JSON with record fields in name order.
       `replace: true` set whatever order the owner and the cache acted in, and the cache dropping its
       last entry on the record does not unwatch it. `removeExtraWatch(record)` sends the `unwatch`
       unless an entry still holds the record. Events arrive through `deliverEvent` as any other.
+- **Open, partial and opaque entries.** The catalog's `ActionRecordInfo` carries, beside a record's key
+  field and paths, `open` and `partial` (paths of members a holder of the record's rows declares through
+  `openMembers()` and `partialMember()`, as a table's `Page` declares `awaiting`, `distinct` and
+  `unloadedRows`) and `opaque` (the result holds the record at no path, as `Table.<id>` holds its table's
+  record). A member is set when its value is a non-empty list, a record, `true`, or a number other than zero.
+    - **An open entry is marked by every change of its record**, whatever the keys: while an `open` member is
+      set, a row the entry does not hold may come to belong to it.
+    - **A partial entry is not merged into.** While an `open` or `partial` member is set, an `updates` effect
+      on the record acts as `changes` for that entry: a merge replaces rows by key and cannot update what such
+      a member says about rows by position.
+    - **An opaque entry is both,** always: its rows cannot be found by key. Its reply is read with
+      `detail::tableValueFromJson`, which keeps a JSON number with a fraction or an exponent as the decimal its
+      shortest round-trip text in fixed notation spells (`table::parseDecimal`; `0.0001` stays a decimal), or as
+      its shortest text where no decimal holds it; a page's
+      `Number` cells are such numbers, and the strict `valueFromJson` would refuse the whole page. Every other
+      entry keeps the strict rule.
+- **Reading and watching without an entry.** A page window's fetches are not queries.
+    - `Session::read(channel, action, body, stop)` sends the action and settles with the reply's JSON text,
+      unparsed: a `Value` holds no number with a fraction or an exponent, and a page's `Number` cells are such
+      numbers, so the caller decodes the text against the table's description (`table::readGenericPage`). It
+      makes no entry, reads none and applies no effects. `stop` goes to the channel as `CallOptions::stop`,
+      which sends the wire's `cancel` where the server takes one; a stop settles the read with
+      `core::async::OperationCancelled` and drops the reply.
+    - `Session::watchRecord(record, handler)` counts the record into the watch set as an entry does and
+      resolves with a `WatchHolder` once the server has the watch (at once when it already had it, or there is
+      no watcher). The holder is copyable: the watch lasts while any copy lives, and the last copy's death
+      removes the handler and counts the record out. A `Completion` hands its value as `const&`, so a caller
+      keeps the watch by copying the holder in its `then` handler. The handler hears each `changes` event that
+      names the record, after the entries are marked, and a whole-type change on reconnect and on `resync`. A
+      holder that outlives its session releases nothing.
 - **Invalidation** (`refetch`, a backend switch) marks the entry stale and
   refetches it.
 - **A mark during a fetch is kept.** `Session::markStale` marks an entry stale. While the entry's fetch is
@@ -424,10 +454,19 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   scope and gives the row its tone: `"neutral"`, `"info"`, `"ok"`, `"warn"`, `"err"`, or `null` for
   none; another value shows no tone and is reported once for the table (`rowTone is <v>; a tone is
   neutral, info, ok, warn or err`). `rowSpans` is evaluated in each row's scope as a slot, like `rowTone`, and gives the
-  row its `TableRowView::spans`: a list of `{column, rows}` records, `column` a column's id (a derived column's too)
-  turned into its index and `rows` an integer from 1. A record that is not of that shape, names an id the table has
-  not, or has a `rows` that is no integer of at least 1 is dropped and reported once for the table (`rowSpans is <v>;
-  a span is {column: a column's id, rows: an integer from 1}`); `null` and `[]` give none. What follows from the rows'
+  row its `TableRowView::spans`: a list of `{column, rows, columns}` records, `column` a column's id (a derived column's
+  too) turned into its index, `rows` and `columns` integers from 1, each 1 when absent. A record that is not of that
+  shape, names an id the table has not, or has a `rows` or `columns` that is no integer of at least 1 is dropped and
+  reported once for the table (`rowSpans is <v>; a span is {column: a column's id, rows: an integer from 1, columns: an
+  integer from 1}`); `null` and `[]` give none. A span's `columns` is cut by the table's layout (`cutColumns`): it covers
+  its column, then each next visible column while that is the next declared one, so a span across a column the user
+  moved away or hid stops there, and a span whose own column is hidden is dropped. A table over `rows` with
+  `summaries`, or with a `group` part that has them, is mounted over a `SummaryRows` it keeps over its page's entries:
+  the table's summaries before or after the page's rows and each run's after the run. A summary reads `rows` as every
+  row of the view in view order (a paged table's summary is the same on every page), a run's summary its run's rows,
+  and `column` the column's id; its cell shows the value by the column's display parts, as a default cell does, and
+  its part's `label` names its row. The table's `bands` parts become
+  `TableOptions::bands`. What follows from the rows'
   order (a span past the last row, over a group heading, onto a covered column) is the mount's to refuse. The
   pipeline pages before the table sees its rows, so a span reaching past the page's last row is refused and
   reported. The table's sort is the one `options.sort` carries: while it names a column the table draws no spans. The selection the table shows is a slot over the bound `selection`
@@ -438,52 +477,301 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   The mount re-asserts the slot after the handler, so a bound selection the document does not write back
   snaps back, and a literal one never changes. The element values `selection` and `selectedCount` read the
   bound value when there is one and the table's own otherwise.
-  **The rows' pipeline.** The table's element holds a computed made when the element is wired, beside its
-  `rows`, so every reader of its element values (a pager drawn before the table included) and the table's own
-  lowering see one order, and `rows` is evaluated once per change. It evaluates `rows`, then sorts the list by
-  the table's sort: the bound `sort`, or the table's own (starting at `[]`) when no key binds one. Each key
-  names a sortable column; the column's `sortBy`, or the row's field of the column's `id`, is read once per row
-  with the row bound, in the table's scope, and the rows are ordered by those values as `sort` orders
-  (`expressions.md`, Sorting), key by key. A sort of `null` or `[]` keeps the source order; one that is not a
-  list of `{column, direction}` records naming sortable columns, or whose values cannot be ordered, keeps the
-  source order and is reported once at the table's `sort` path, so a data error does not blank the screen.
-  `sortBy` runs before any row's scope exists, as `key` does, so a row-scope name in it reads `null`. Then it
-  pages the sorted list, so page 2 holds the second page of the whole sorted list: `pageSize` and `page` are read
-  in the table's scope; a `pageSize` of `null` does not page, and one that is no positive integer is reported once
-  at its path and does not page either; a `page` of `null` is the first, one that is negative or no integer is
-  reported once and shows the first, and one past the last shows the last, unreported, since a filter that shrinks
-  the rows under the user is normal. The backend holds the page's rows alone, as it would a short table. On a
-  user's change of the selection, an `Extend` report keeps the selected keys of the rows on other pages, in their
-  order, before the reported keys; a `Replace` report is the whole new selection, so a plain click or a range
-  clears the other pages' keys as it clears the rest of its own, and every `Single` change is one. A key whose row
-  `rows` no longer has drops on any user change. `empty` shows while `rows` is empty, not while a page is.
-  **Groups.** With `group`, the pipeline splits the source rows into runs by `by` (read per row as `sortBy` is,
-  adjacent rows with equal values, `null` equal to `null`), gives each row its run's index, and sorts by that index
-  first and the sort's keys second, so every group keeps its place and its rows are ordered inside it. It pages the
-  data rows, and puts a heading entry before the first row of each run the page holds: the run record of the whole
-  group, computed before paging, so a group split across pages reads the same `count`, `first` and `last` on both,
-  with its key in a reserved field. The row view lowers `heading` for that entry as one cell, in a row scope of its
-  own whose row is the record, and the table makes it a heading row (`TableRowView::heading`). A heading's key is
-  `"\u001Fgroup:"`, the canonical JSON of the run's key, `":"` and its ordinal among runs with an equal key, so
-  groups A, B, A get three headings; a data key equal to one is reported as a duplicate by the mount. Heading keys
-  never reach `onSelectionChange`: the lowering drops them from a report, since a virtualized backend's Ctrl+A or
-  range can name a row it has not realized. `viewCount`, `selectedCount` and the page positions count data rows. A table
-  lowered where names are bound (a component's `props`) sorts its own copy with those names, which its element
-  values cannot see. The mount's keyed reconciliation moves the sorted rows, so each keeps its widget, its
-  native state and its selection. The header marks the sort's first key (`Table::sort`); a header click on a
-  sortable column (`Table::onSort`) makes that column the single key, `desc` when it already is the first key
-  and `asc`, `asc` otherwise, sets the table's own sort when no key binds one, and runs `onSortChange` with
-  `event` the new sort, as a user event, in one batch. The element value `sort` reads the bound sort or the
+  **The rows' pipeline.** The interpreter does not sort or page a table: its element holds, from when it is
+  wired, the table's rows on the engine, so every reader of its element values (a pager drawn before the table
+  included) and the table's own lowering see one order, and `rows` is evaluated once per change. The evaluated list
+  goes to a `ValueRowsSource`, matched by `key`, under a `table::Engine` whose owner is the runtime's, with no worker,
+  owner steps of 4 ms and `ValueRowsCollator` for text, read through an `EngineRows`; a changed row is repaired in
+  place, not sorted again, and a row whose fields changed is drawn again even when no sort reads them. The table's
+  sort, the bound `sort` or the table's own (starting at `[]`), is the engine's sort chain. A key names a sortable
+  column, whose cells the source holds while a key reads it: the column's `sortBy`, read per row in a tracked
+  computation with the row bound in the table's scope, or the row's field of the column's `id`, converted to the
+  column's kind, its literal `kind` or else the kind its cells infer. A quantity reads its unit from a registry of
+  the screen's unit table, each unit in its canonical unit's dimension; a unit the table does not list is its own
+  canonical unit, as an expression reads it: when a row's field brings one, the source and the engine are made
+  again over a registry that holds it (a unit only a `sortBy` produces is not seen, and is an invalid cell). Values of one kind order as `sort` orders
+  them (`expressions.md`, Sorting). A cell not of its column's kind is invalid, sorts last in either direction,
+  and is reported once for the table at its `sort` path. A sort that is not a list of `{column, direction}` records
+  naming sortable columns keeps the source order and is reported at the table's `sort` path, so a data error does
+  not blank the screen. `sortBy` runs before any row's scope exists, as `key` does, so a row-scope name in it reads
+  `null`. A list of more than 20,000 rows, or of more than 1,000,000 cells (rows times the column parts), is still
+  ordered, and reported once for the table: `table <id> holds <n> rows; a table over rows is ordered on the client
+  up to 20,000 rows or 1,000,000 cells — serve it as a model's table`. The page is a slice of the engine's view, so
+  page 2 holds the second page of the whole sorted list: `pageSize` and `page` are read in the table's scope; a
+  `pageSize` of `null` does not page, and one that is no positive integer is reported once at its path and does not
+  page either; a `page` of `null` is the first, one that is negative or no integer is reported once and shows the
+  first, and one past the last shows the last, unreported, since a filter that shrinks the rows under the user is
+  normal. The mount reads the page through a `TableSource` whose `alwaysWindowed` is `false`, the path a
+  model-backed table's mount takes: below the virtualization threshold it realizes every row of the page, as a
+  short table does, and above it the rows in view. A column with its own `cell` content is lowered in its row's
+  one scope, found by its key, and is marked in `rowScopedCells`, so a realized row the mount gives to another key
+  has those cells built again rather than rebound; a plain column's text reads the record alone and is rebound. A
+  change of the engine's view reaches the mount as the engine's
+  own operations when the page is the whole view and the table is not grouped, and as a reset otherwise; the
+  mount rebinds only the rows whose record changed. Each change still costs the lowering a pass over every row: the
+  view's records are read again for `TableView`, the page's entries are rebuilt, each evaluation of `rows` reads
+  every field of every row for a unit the screen does not list, and above the virtualization threshold the mount
+  gives the backend every key (`setExistingKeys`). A `multiple` table's `Ctrl+A` (`Table::onSelectAll`) selects
+  the engine's whole view, every page, through `table::Selection::selectAll`, or clears the selection when every row
+  of the view is selected already; a backend that does not take the handler selects the rows it holds. On a user's change of the selection, an `Extend` report keeps
+  the selected keys of the rows on other pages, in their order, before the reported keys; a `Replace` report is the
+  whole new selection, so a plain click or a range clears the other pages' keys as it clears the rest of its own,
+  and every `Single` change is one. A key whose row `rows` no longer has drops on any user change. `empty` shows
+  while `rows` is empty, not while a page is.
+  **Its state and its status line.** A table over `rows` with an `id`, while the session has a table-state store and
+  its `persist` is not `false`, keeps its sort under the key `{application, model "", table <id>, qualifier <the
+  persist name or the screen's id>, part "state"}`: its sort and its column layout. Its rows are held back (`EngineRows::setRestoring`) until the
+  stored state has been applied and the engine has ordered by it, or until `tableStateTimeout` passes (without a
+  scheduler, once the work the stored sort posted has run), so the first rows drawn are in the stored order, the
+  mount drawing placeholder rows meanwhile; a state that arrives later is applied unless the user changed the table
+  meanwhile. The stored state is fitted to the node's column parts, of the kinds their cells infer, and its layout
+  is in place in the turn the rows are let through. A sort or layout gesture is saved as a model-backed table's is,
+  debounced, and an unmount saves at once. A table with no `id` keeps no
+  state. Its status line shows its counts and the latest message (`ScreenCore::tableMessage`), and takes space only
+  while it has a message; `status: true` shows it always, and `status: false` never, its messages going to the
+  host's notifications.
+  **Saved views.** A table that keeps a state, model-backed or over `rows`, also holds a `TableViews` over the
+  same key: its `views` part, and its `shared` part when the store shares, loaded in the turn its `state` loads, so
+  a store that batches reads every part of a screen in one call, and a second mount reads them from the session's
+  kept copies. A change applies a views operation to the document loaded and saves it with the revision loaded, or
+  `kNoDocument` when nothing was; a `Conflict` reads the document again from the store, applies the operation to it
+  and saves once more, with its revision, or with an empty `expected` when nothing is stored; a second `Conflict`
+  is "Views could not be saved: another window changed them at the same time", and an operation that does not
+  apply to the document read again ("A view named … exists", "No view named …") saves nothing. A mounted table does
+  not follow saves made elsewhere. Views that cannot be read are left unsaid at mount. The table's stored state is
+  applied once both its state and its views have answered: with no stored `state`, the `default` view is applied,
+  its name the state's `view`; with `defaultOnMount`, the default view's sort and filters replace the stored ones
+  and the stored layout still applies (`stateAtMount`). Either is fitted as a stored state is. A default view applied
+  with nothing stored is the table's state from then on (`TableStates::start`), unsaved until the next change, which
+  saves on top of it, so its layout, sort, filters and name outlast that change. Under `defaultOnMount` the stored
+  `view` stays, so the menu marks it modified while its sort or filters differ from the default's. A stored `view`
+  names one of the user's own views: a shared view applied is marked as shared only until the table mounts again.
+  **The `Views` submenu.** The table menu of a table that keeps a state (model-backed, over `rows` with an `id`, or a
+  collection) has `Views` (`viewsMenu`): each of the user's own views, checked while it is the state's `view` and
+  labelled `{name} (modified)` while the arrangement (the layout laid over the table's columns, the sort and the
+  filters) differs from that view as fitted to the table; then "Save view…", "Rename view…", "Remove view", "Set as
+  default" (the last three enabled while the state's `view` is one of the user's own) and "Start from the default
+  view", checked with `defaultOnMount`, which it toggles. Applying a view fits it as a stored state is fitted and sets
+  its layout, sort and filters through the gestures' own paths (held and saved unless the document binds them,
+  `onLayoutChange`, `onSortChange` and `onFiltersChange` run), then writes its name to the state's `view`; a filter or
+  sort key on a column the table lacks is not applied. A table over `rows` knows a column's kind only while the column
+  is in use, and its engine takes the kind in when it next flushes its changes: the columns a stored state or a view
+  sorts and filters by are put in use before it is fitted, and its filters (a view whole) go to the engine a task
+  later. "Save view…", "Rename view…" and "Publish view…" open the view
+  name dialog (`viewNameDialog`, test id `table_view_dialog`: the input `table_view_name`, the buttons
+  `table_view_save`, enabled while the name is not blank, and `table_view_cancel`), whose state lives in the
+  element. Saving under a name the user already has is a `ReplaceView`, any other an `AddView`, decided against the
+  views document the save is applied to (`TableViews::saveView`), so a name another window took after the table
+  loaded, met as a `Conflict` and read again, is replaced too; done, the state's
+  `view` is that name and the status line says "Saved view {name}". A rename onto a taken name is refused in the
+  status line, "A view named {name} exists", and changes nothing. "Remove view" clears the state's `view`. Every
+  refusal or failure of a views change goes to the status line, and a change answering after the table is gone
+  reaches nothing. Every menu choice clears the status line's message first.
+  **Shared views.** While the store's `shared` part holds views, `Views` adds the heading "Shared views" and each
+  shared view, applied as an own view is; while the state's `view` is a shared view so applied, "Save as my view"
+  adds it to the user's views (an `AddView`) and says "Saved view {name}". While the store shares, "Publish view…"
+  names the arrangement and publishes it (`TableViews::publishView`, the model's `publish` action, never `save`): an
+  `AddView`, or a `ReplaceView` over a shared view of that name in the shared document it is applied to, as a save
+  decides; done, "Published view {name}", refused or failed,
+  "This view could not be published: {reason}". Over a store that does not share, neither entry is offered and no
+  shared part is read.
+  **Groups.** With `group`, the source splits its rows into runs by `by` (read per row, untracked: what `by` reads
+  besides the row regroups the rows when it changes; adjacent rows are one run while their `by` is the same element
+  as the run's first row's, by the rule of `runs`, quantities compared through the screen's unit table), holds each
+  row's run index as a hidden leading sort key, and the engine sorts by it first and the sort's keys second, so
+  every group keeps its place and its rows are ordered inside it. The lowering pages the data rows, and puts a
+  heading entry before the first row of each run the page holds: the run record of the whole group, so a group
+  split across pages reads the same `count`, `first` and `last` on both, with its key in a reserved field. The row
+  view lowers `heading` for that entry as one cell, in a row scope of its own whose row is the record, and the table
+  makes it a heading row (`TableRowLook::heading`). A heading's key is `"\u001Fgroup:"`, the canonical JSON of the
+  run's key, `":"` and its ordinal among runs with an equal key, so groups A, B, A get three headings; a data key
+  equal to one is reported as a duplicate. Heading keys never reach `onSelectionChange`: the lowering drops them
+  from a report, since a virtualized backend's Ctrl+A or range can name a row it has not realized. `viewCount`,
+  `selectedCount` and the page positions count data rows. A table lowered where names are bound (a component's
+  `props`) has a source and an engine of its own, read with those names, which its element values cannot see, and
+  keeps no state. A row keeps its widget, its native state and its selection while its key stays on the page. Its
+  header, menus and arrangement are configured as below ("Configuring a table"), its sort bound the node's literal
+  `maxSortKeys`, else 8. The element value `sort` reads the bound sort or the
   table's own, `viewCount` the rows the table orders (every page), and `page`, `pageCount`, `pageFirst` and
-  `pageLast` the page. `filters` and `hoveredKey` are not lowered: the
-  loader refuses `filters` and `highlightKey` on a table over `rows`. With `empty`,
+  `pageLast` the page, and `filters` the filters its user set from the header, which the table holds (and keeps in
+  its persisted state) and does not take from the document: the loader refuses `filters` and `highlightKey` on a
+  table over `rows`. `hoveredKey` is not lowered. Its `groups` parts are the groups its source declares to the
+  engine, by which a group filter and a pooled values list name them. With `empty`,
   the table lowers to a `Column` holding the table and the lowered `empty` content, in the table's own scope:
   while `rows` evaluates to an empty list the table is hidden and the content shown; while it is a non-empty
   list, or `null` (a query not answered yet), the reverse. The column takes the node's `visible` and its layout,
   so it is placed as the table would be, and has no test id; every other common property stays on the table
   (`testId`, the element id `focus` finds, `enabled`, `tooltip`, `a11y`, `keys`, drag and drop). A hidden table
-  keeps its element values. No view-tree kind is added, so both backends draw it with what they have. A
-  model-backed table's `empty` waits for the table engine, as the table does.
+  keeps its element values. No view-tree kind is added, so both backends draw it with what they have.
+- **`table`** of a model's table (`model` and `table`): its rows come by view index from a `WindowRows`
+  ([`../table/table.md`](../table/table.md), "The client table model"), which the element makes when it is wired,
+  together with a query of `Table.<table>.describe` on the model's channel (one per mounted table, an entry of the
+  query cache like any query). The rows send no page before the description, and none before the stored state
+  below. The node lowers to a list of one row keyed by the held description's revision, whose row is the `Table`
+  built from that description (`Table::source`, a `TableSource` over the rows); before a description, and after
+  one that does not read, the row is a `Table` with no columns and no source, so its status line keeps its place
+  and `empty` is not shown. A new revision is a new key, so the table is mounted again from it: the rows, their
+  sort and filters, the selection and the status-line message are the element's and stay; the realized rows, the
+  cells and the scroll offset are the mount's and are built again. A reply that names another revision than the
+  one held asks for the description again, once per revision; the fitting of the new one drops a sort key, a
+  filter and a fetched column that name a column it lacks, and reports a dropped filter once at the table.
+  Columns are the description's columns but its companions, those it does not show hidden by the layout until the
+  user shows them, or the node's `columns` parts, each naming a described column by `id` (one it lacks is reported
+  and left out) and setting its label, width, role, places, `wrap` and `locked`; a column is sortable as the
+  description says. Its header, menus and arrangement are configured as below ("Configuring a table"), its sort
+  bound the description's `capabilities.maxSortKeys`, which its server's `limits` set. A column's `cell` is lowered per cell, in a row scope over the cell's own row
+  signal; without one the cell is a text of the record's field. `rowTone` and `rowLabel` are lowered once per
+  realized row, in a row scope over the row's signal, which `onActivate` runs in. The rows fetch, with every
+  page, the description's key and each field `{"row": "<id>"}` names in `rowTone`, `rowLabel` and `onActivate`; a
+  column's cell's fields (`TableSource::cellReads`) while the column is in the window; and every column when one of
+  them passes `{"row": ""}` on whole (reported once). A column without a `cell` is the default cell, one text that
+  follows the column the mount gives it (`defaultCellView`), so a cell of one role serves any column of it. A
+  path read out of the whole row with `get` is the row's own read: a row scope of a model-backed table has
+  `RtScope::onMissingRowField`, which a read of a field the record lacks calls from inside the binding; it
+  writes nothing there, and one task posted for the turn fetches every missed field that is a described column,
+  once, for the rows in view (a field that is not one is never sent). The read is `null` meanwhile, and the
+  binding runs again when the column arrives. `body` is evaluated once and is the query's fixed part; its
+  `query` member's `sort`, `filters`, `page`, `columns`, `keys` and `retry` are the table's own and replace
+  what the body gives; each the body gives is reported once, at its pointer under `body/query`. A literal `sort` is the default a stored one replaces, any other expression binds it; a
+  literal `filters` object (`columns` and `groups` only) is likewise the default, an expression binds them. The
+  headers of the columns the rows' filter names are marked filtered (`Table::filtered`). **Persisted state.** With a session store and `persist` not `false`,
+  the state's key is `{application, model type, table, persist's name or the screen's id, "state"}`; its load
+  starts when the element is wired, and the rows wait for it at most `tableStateTimeout`. A state that comes in
+  time is read (`readState`), fitted to the description held, and its sort, filters and layout applied where the
+  document binds none of them, before the first query; one that comes later is applied the same way, one more query,
+  unless the user scrolled, selected or sorted the table meanwhile. A state that does not read is reported once
+  (`the stored state of table <id> is not used: …`) and a failed load once (`… could not be loaded: …`); the
+  table starts from its defaults and changes still save. A sort or layout gesture saves its part
+  (`TableStates::changed`, debounced), and unmounting saves a pending change at once. **The status line** (`Table::status`) always takes
+  space, unless `status` is `false`: its counts are `countsText` of the rows' counts and the selection's size; a
+  failed level fills its state with "<Level> data could not be loaded." and a failed fetch with "The rows could
+  not be loaded: <reason>", both with Retry (`WindowRows::retry`). `ScreenCore::tableMessage(table, text)` shows
+  a refusal or notice there for `kStatusMessageHold` (6 s) on the session's scheduler, until the table's next
+  gesture (a header click, a menu choice, a column moved or resized, a selection change, a scroll, Retry) clears
+  it; under `status: false` it goes to
+  `InterpreterHost::notify` as a warning. A table state's save that does not end `Saved` is said there by every
+  mounted table with its key: "The table's arrangement could not be saved: <reason>". `empty` shows once a reply
+  said the view has, exactly, no row and no row is undecided. Its element values are a table's, with
+  `viewCount` the reply's total (`null` before one), `viewCountKind` (`exact` or `atLeast`), `undecided`,
+  `awaiting`, `failed`, `pending` (the description or a fetch in flight) and `error`.
+  **Range selection.** A range the backend reports as two view rows (`Table::onSelectRange`) is resolved
+  through `TableRows::keysOf`: the rows held give their keys, and every page of the range with a row not held is
+  fetched naming no columns (`"columns": []`), so its reply carries keys alone and the window holds none of it.
+  The keys select as the gesture says (`Replace`, or `Extend` with the keys selected), and `onSelectionChange`
+  runs. A range of more than `SessionOptions::maxRangeRows` (10,000) rows is refused in the status line, "A range
+  selects at most 10,000 rows" (the number grouped by the locale), and selects nothing. **`highlightKey`.** Each
+  non-null key, once a description is held, is located by one keyed fetch (`Table.<table>`, or a typed list
+  action itself, `keys` the key, `columns` none, the table's sort and filters; `WindowRows::locate`), which stops
+  the one an earlier key still has in flight; the reply's `indices[0]` is the row's view index, and `Table::highlight` becomes
+  `TableHighlight{key, index}`, which the mount scrolls to and marks. A reply with no row, and a `null` key, set it
+  to nothing. A reset of the rows (a new sort or filter) clears it and locates the key again. It never changes
+  the selection or the keyboard focus. An element in a column's `cell` is focused by the row the cell shows now
+  (`RtScope::rowKeyNow`), since the mount rebinds a pooled cell to other rows.
+- **`table`** over a typed list action (`model` and `action`): lowered as a model's table is, through the same
+  element state, `WindowRows` (`WindowRowsOptions::action`) and `Table`, with no `describe` query: a catalog carries
+  an action's request schema and never its reply's, so the description is built when the element is wired, from
+  the node's `columns` parts (each part's id, its label from the action's view document when that names the
+  column) or else the view document's `v-columns` (its `field`, `label`, and `v-hidden` as not `shown`). The key
+  is the node's `key` when it reads one row field (`{"row": "<id>"}`), else the view document's `v-rowKey`, else
+  `id`. A column's kind is the part's literal `kind`, else its `v-columns` entry's `kind`, else inferred from the
+  first reply that has rows (`readTypedPage`'s vote over the JSON members of its id) and then fixed for the
+  window's life: a later member not of it is an invalid cell, and a fractional number makes the column `Number`
+  where the same number in a document's `rows` is a `Decimal`. The description's revision is empty and never
+  changes, so the table is mounted once. Every fetch is the action itself, with `body` evaluated once as the
+  request and the query written into the request's one member the schema marks `x-table`
+  (`tableQueryMembers`); the reply is a `Page<Row>` read with `readTypedPage`, which turns each row object into
+  cells for every described column, whatever the query named. The rows watch each record the action's catalog
+  entry names; a reconnect or `resync` of the session drops their pages whether they watch one or none
+  (`Session::onReconnected` for a window that watches none). A keyed refetch sends `keys` in the query member; a
+  reply with no `indices` for it drops the window's pages and costs a page refetch. **Units.** A `v-columns`
+  entry's `ExtUnits` is a unit (`unitAscii` its id, `unitUnicode` its symbol, `x-decimalPlaces` its places) and
+  each `x-unitAlternatives` entry another of its dimension (`num`/`den` its factor to the first, 1 when absent; a
+  factor of zero or less is reported and the unit left out), which the description lists; such a `quantity` column
+  is read as `Measure`. Columns that share a unit share its dimension whatever their order: a column one of whose
+  units is listed already joins that unit's dimension, its factors scaled through it, and a unit two columns
+  declare differently is reported and kept as first listed. A unit a reply's member names that the description
+  does not list is its own canonical unit, in a dimension of its own, as an expression reads a unit missing from
+  the screen's table, so the cell is a measure in that unit and not an invalid one; a window lists at most
+  `kMaxUnlistedUnits` (64) such units, the rest staying unknown and their cells invalid. **Filters on
+  inferred columns.** Until the first reply has fixed the inferred kinds, a filter (stored, literal or bound) is
+  held, not compiled against the placeholder: the first query goes without it, and once the kinds are fixed the
+  stored filter is fitted to them (each filter it drops is reported once, "the stored filter on `<id>` is not
+  applied: it does not apply to the column's kind") and the document's is set, or reported as refused; either is a
+  second query, so the first page drawn is unfiltered until the second reply arrives. A filter the user set through
+  the table meanwhile wins over a held literal or stored one; any other gesture (a sort, a scroll) does not, since
+  a stored state held here arrived in time; a bound filter is the document's and is applied. A held literal or
+  bound filter is fitted as a stored one is, so a column filter the inferred kind refuses is reported and dropped
+  and the rest applied, where on a table of known kinds the same filter is refused whole. A filter the rows hold that was compiled against the
+  placeholders, the user's among them, is fitted again to the inferred kinds, each column filter they refuse
+  reported ("the filter on `<id>` is not applied: …") and dropped. A stored state set after the kinds are fixed
+  replaces a filter still held. Persisted state is kept as a model's table's, its `table` the action's id. A node the loader would
+  refuse (no member marked `x-table`, or neither `columns` nor a view document) is reported at the table when a
+  catalog that lacks the lookup let it load, and a `key` that is not one row field is reported and the view
+  document's `v-rowKey`, or `id`, is used.
+- **Configuring a table**, of either kind (`ScreenCore::configureTable`, over the `ui/table_config.hpp` gestures;
+  [`../table/table.md`](../table/table.md), "Configuring a table"). The element keeps the table's columns as its
+  layout knows them (id, label, `locked`, kind), its declared hidden columns, the layout it holds and what
+  `configurable` allows, across every mount. A table over `rows` takes its columns when it is made: a derived
+  `columns` expression is read once there, and a column with no `id` is named `#<n>` by its place, derived columns
+  first, and locked. `Table::sort` is the whole chain, each key marking its column.
+  `Table::onSort` maps a plain click to `SortGesture::Click` and `Shift` to `Extend` and applies
+  `applySortGesture` with the table's bound; a refusal ("A table sorts by at most {n} columns") goes to the status
+  line and keeps the chain; a change sets the table's own sort when no key binds one, saves it, and runs
+  `onSortChange` with `event` the new sort, in one batch. A column move (`Table::onColumnMove`, `MoveColumnTo`)
+  and a resize (`Table::onColumnResize`, `ResizeColumn`, offered only while `resize` is allowed) go through
+  `applyLayoutGesture` with the columns and what the table allows; a refusal ("{label} is locked", "This table's
+  columns cannot be moved", …) goes to the status line; a change sets the table's own layout when `layout` binds
+  none, saves it, and runs `onLayoutChange` with `event` the new layout. `Table::arrangement` follows the layout,
+  so the mount shows the visible columns in order, pinned and at their widths, and fetches the columns it shows;
+  a layout that is the declared one is the default arrangement. Unless `configurable` is `false`, `Table::menu`
+  builds a header's menu (`headerMenu`) or the table's (`tableMenu`) from the chain and the layout of the moment,
+  and `Table::onMenu` builds it again and carries out the chosen entry: the sort entries as sort gestures, "Move
+  left" and "Move right" as `MoveColumn` by one, "Pin column", "Unpin", "Hide column" and "Reset columns" as their
+  layout gestures, and "Columns…" and "Sort…" open the column chooser and the sort dialog (`ui/table_dialogs.hpp`),
+  which the lowering mounts beside the table in a column that takes the table's layout and visibility; their open
+  state and the group being formed live in the element, so a new mount keeps them. The chooser lists the table's
+  columns in the layout's order (a companion is not one of them), and applies `ShowColumn`, `HideColumn`,
+  `MoveColumn` by one, `ResetColumns`, `FormGroup` and `RemoveGroup`, which also drops the group filter that names
+  the removed group's columns, as a user's filter change; the sort dialog applies `applySortEdit`, whose
+  add, remove and direction are the header's sort gestures, so a key past the bound is refused as a Shift-click's
+  is. Each change goes the way the same gesture from the header goes: refused in the status line, or set, saved and
+  run through `onLayoutChange` or `onSortChange`. "Display unit" sets or, for the checked unit, clears
+  `SetDisplayUnit` in the layout. A filterable column (a column part with an id whose `filterable` is not `false`,
+  on a model's table also one its description marks filterable) draws a filter button (`Table::onFilter`) that,
+  like its menu's "Filter…", opens its filter menu (`ui/table_filter_menu.hpp`), a `FilterMenu` the element keeps
+  and a dialog (`table_filter`) mounted beside the chooser; a group, declared or user-formed, is named in its
+  members' header menus and in the table's menu ("Filter {group}, {k} columns…"), and while its columns stand side
+  by side in the layout as a header over them (`Table::columnGroups`, `Table::onGroupFilter`), each opening the
+  group's menu. The menu asks the rows for values (`TableRows::distinctValues`; a table over `rows` keeps the
+  listed columns in use while it is open); a search asks again, and a condition is sent,
+  `SessionOptions::tableFilterDebounce` (250 ms) after the last edit, while ticks apply on Apply. It sets the filters through one
+  path: the rows take them, the table holds them unless the document binds `filters`, they are saved with the
+  table's state, and `onFiltersChange` runs with `event` the new filters; a refusal goes to the status line.
+  "Clear all filters" sets empty filters the same way. `Table::filtered` names every column with a filter, a hidden
+  one included, so the header says so again once it is shown; the filter keeps applying while its column is hidden.
+  A table with `configurable: false` has no menus, and keeps its filter buttons and their menu. A table that keeps
+  a state has `Views` in its table menu (see Saved views above). A menu entry the lowering does not carry out is not
+  offered, and a separator left beside another or at an end goes with it.
+  `Ctrl+C` (`Table::onCopy`) and the table menu's "Copy" put the selected rows on the clipboard through
+  `IViewBackend::copyText`: in view order, by the visible columns in layout order, each cell's text as its column
+  shows it (`formatCell` with the session's formatting and the layout's display units on a model's table; a column
+  with its own `cell` copies its value's text, not the template's), written by `ui::copyText`, so a tab or line
+  break in a cell is a space. "Copy with headers" adds a first line of the columns' headers, each with its unit
+  (`headerText`). With no row selected the focused cell (`Table::onFocusCell`) is copied alone. More than
+  `SessionOptions::maxCopyRows` (10,000) selected keys are refused in the status line, "A copy holds at most
+  10,000 rows", and nothing is copied. A model's table copies the rows its window holds and fetches the others
+  with `TableRows::fetchRows`: keyed queries naming the copied columns, `maxKeys` keys each, through the read that
+  makes no cache entry; a key no reply holds is left out. A cell of a level its row has not loaded is copied empty
+  and counted, and no copy waits for a level. The status line then says "Copied {n} rows", with ", {m} cells were
+  not loaded" when there were any; a failed fetch says "The rows could not be copied: {reason}", and a backend
+  whose `copyText` wrote nothing "The rows could not be copied: there is no clipboard". A copy that finds none of
+  its rows leaves the clipboard and the status line alone, and a copy's rows that arrive after a later copy started
+  are dropped. The slots a mount sets on the table's configuring (its filter targets, display units and copy
+  gathering) are cleared when that mount's handlers go, so a slot may hold the mount's scope without keeping the
+  screen alive. Each
+  gesture the lowering receives clears the status line's message before it acts, so the next gesture on the
+  table clears a refusal. The element values `layout`, `visibleColumns` and `hiddenCount` read the layout the
+  table holds or the document binds, fitted to its columns.
 - **`boundary`** is a `Switch` over loading, error and children. It owns the queries its children read
   (found statically, through `let`s, not inside a nested boundary): loading while one has neither a
   value nor a failure, error when one failed with no value to keep, children otherwise. Inside `error`,
@@ -506,6 +794,110 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   `bool` as a bool and `number` as a double. An event runs the node's `on.<event>` commands with its payload read as
   the declared type: `i:<int>`, `s:<text>`, or JSON text. The fallback is lowered too, with `props` bound, for a
   backend that loads nothing.
+- **A grid of a form.** A `table` with `form` and `field` lowers to `ui::makeFormGrid` over the form element's
+  session and the named collection, made when the table is first lowered and kept in the table's element, so every
+  mount of the table shows the same grid, its focus, its open editor, its layout, its sort and its filters. Its
+  columns are the column parts, each editing the member its `field` names, or a display column showing its `value`,
+  read with `row` bound to the row's record (each member's encoded value, `null` when blank), which the walk skips;
+  each is labelled by its `label` read once; with no parts, every member of the row type in schema order. A `field`
+  expression becomes the column's `GridColumn::fieldOf`, read in the row's scope as `value` is, and a name it gives
+  that is no member is reported once (the cell has no field, so it is read-only); such a column sorts and filters
+  its drafts as text. The column's `decimals`, `unit`, `readonly`, `options` (each value's JSON literal kept) and
+  `placeholder` become its per-row overlays, read in the same scope; `FormGridSource` applies `decimals`, `unit`,
+  `options` and `placeholder` to each row's member (`FieldState::places`, `switchUnit`, `narrowOptions`,
+  `overridePlaceholder`) in an effect that follows them, a row's `unit` only when it first gives one or gives another
+  (converting the draft), so a unit the user picks in the editor stays, and `readonly` is the cell's `CellFacts::overlayReadOnly`.
+  `enterMoves`, `walk`, `appendRows` and `rowsFixed` give its `GridOptions`, with the session's `maxPasteCells`, and
+  `onActivate` runs with `event` the row's key when `Enter` or a double click lands on a read-only cell. The grid
+  selects cells (`Table::cellSelection`, bound to `GridController::selection`); a document's bound `selection` is
+  shown through `GridController::select`, and `onSelectionChange` runs with `event` the range after each change of it
+  (`GridController::onSelectionChange`); the element value `selection` is the range. `Ctrl+C` on the table copies the
+  cell selection (`GridController::copy`) through the backend's clipboard, "Copied 2 rows" in the status line (over
+  `maxCopyRows` rows refused, "A copy holds at most 10,000 rows", by `GridController::copyRefusal`), and
+  with no cell selection the table's copy runs; `Ctrl+V` pastes the backend's `pasteText` (`GridController::useClipboard`).
+  The table menu offers the focused row's `GridController::rowEntries` after its own entries and a separator, and
+  `appendRows` draws "Add row" under the table. What a display column and `onActivate` keep holds the scope weakly.
+  The grid's `bands` parts become `TableOptions::bands`. A `group` part groups the grid's rows by its `by`, read with
+  `row` the row's record, over the array's order (`GridRows::setGroup`, `FormRowsSource::setGroup`): a sort the grid
+  is given is led by `kGroupRunColumn`, so each run keeps its rows, and an empty sort stays empty, since the array's
+  order already keeps a run together. A grid with a `group` or with `summaries` is mounted over a `SummaryRows` built
+  over the grid's rows, which the element keeps: the table's `summaries` before (`position: "top"`) or after its rows,
+  each run's after the run, each run's heading (the group's `heading`, read in the run record's scope, as a `rows`
+  table's) before it. The grid's walk, paste and cell rectangle stay over the grid's own rows: a click, a move or a
+  rectangle's corner that lands on a summary or heading row goes to the nearest data row (`SummaryRows::data`), and
+  the grid's focus is shown at its row's mounted index (`SummaryRows::mounted`). A copy of a rectangle copies the rows
+  between its corners as they are drawn, a summary row's cells as their text (`GridController::copySummaries`), a
+  heading row not at all. A summary cell's text is its part's `cells`
+  expression for the column, read with `rows` the records of the data rows in its scope (`summaryScopeRows` over the
+  grid's view, so a summary follows the filter) and `column` the column's id, shown at its member's places and empty
+  for `null`; a column the part does not name shows an empty cell. A summary cell's test id is `summary_<key>_<column>`,
+  a group's `summary_<run ordinal>_<key>_<column>`. Every column's cells are built per row
+  (`TableSource::rowScopedCells`), so a cell built for a data row is never rebound to a summary row. Its
+  header, menus, cell menu and arrangement are a table's (`configureTable` over a `TableConfig` the grid keeps): an
+  edit column whose part says `sortable` sorts by its header, and the sort orders the grid's rows; every edit column
+  filters unless its part says `filterable: false`, with its header's filter button, its values list, `onFiltersChange`
+  and the table menu's "Clear all filters"; a display column neither sorts nor filters; the layout (the document's
+  `layout` while it binds one, else the grid's own, which the header and the column chooser change) arranges the
+  columns and is fed to `FormGridSource::setLayout`, so the walk follows the visible columns in layout order. The rows'
+  columns are the edit columns by their own ids, so a sort and a filter name a column as the table does. The cell menu
+  shows "Copy", "Copy with headers", "Filter by this value" and "Exclude this value", then the grid's "Revert cell" and
+  "Revert row", then, unless `rowsFixed`, a separator and "Insert row above", "Insert row below" and "Delete row" (or
+  "Delete rows"), then a separator and the document's `cellMenu` entries, read in a row scope with `row`, `column` and
+  `value` bound as a table over `rows` reads them. A copy with no row selected copies the focused cell. The scope's
+  formatting is followed (`FormGridSource::setFormat`). The grid's notices are posted through `tableMessage`, held as
+  a table's messages are, a repeated one posted again, and what stands while its cause lasts is the status line's
+  `standing`. A grid the form cannot make (a column naming no member) is reported and drawn as muted text. The form's
+  `form_submit` submits through `FormSession::submit`, whose before-submit hooks commit the grid's open editor first.
+  Element values `modifiedCount`, `modifiedRows`, `errorCount` and `editing` read the grid. A form field overlay's
+  `widget: grid` (or the schema's `x-widget: grid`) draws the field as a grid of every member inside the form's own
+  view; with a `grid` part, through a `forms::Overrides::byField` for the field, the same table a `table` node with
+  those keys makes, kept in an element of its own on the form's element (`ElementState::fieldGrids`, by the field's
+  name, its node the part) so every mount of the form shows the same grid.
+- **A fixed grid.** A `table` with `layoutRows` lowers to a `ui::FixedGridSource` over the session of the form
+  element `form` names (none without `form`) and a `GridController`, made when the table is first lowered and kept in
+  the table's element as a grid of a form is (`GridTable::fixed`, its controller `GridTable::grid`). Each row part
+  becomes a `FixedRow`, its `label` read once, and each block part a `FixedBlock` of them; a cell's `field` and `text`
+  are kept as given, its `rows` and `columns` as counts, and its `value`, `readonly`, `decimals`, `unit`, `options`
+  (each value's JSON literal kept) and `placeholder` become functions read in the table's scope, with `row` bound to
+  the block's collection row's record (each member's encoded value) in a block. `FixedGridSource` applies
+  `decimals`, `unit`, `options` and `placeholder` to each cell's field in an effect that follows them, as
+  `FormGridSource` applies a grid column's (`detail::applyUnitOverlay` for the unit, given as loaded when first
+  applied, and again after each load of the form, `FormSession::loadGeneration`, to a field the user has not
+  changed), and `readonly` is the cell's `CellFacts::overlayReadOnly`. The source keeps one row per row part and per block row and collection row, in order: a block's rows
+  are expanded again on each change of its collection's rows, keyed `"<row key>/<key>"`, so a row's focus, draft and
+  marks stay with it while collection rows are added above it. Its view is an `EngineRows` over a `table::VectorSource`
+  of the rows' keys, never sorted or filtered. The columns are the column parts, labelled by their `label` read once,
+  each of `TableColumn` and `LayoutColumn` kind text and not sortable; `layout` and the column chooser arrange them and
+  feed `FixedGridSource::setLayout`, so the walk follows the visible columns and a span is cut where they part. Its
+  walk options, `onActivate`, its cell selection, its copy and paste, its status line and its table menu are a grid of
+  a form's (`gridOptions`, `gridTableNode`); its copy writes each cell's text as shown, and each row's accessible name
+  is its label (`TableRowLook::label`). A grid the source cannot make (a field the form lacks at run time) is
+  reported and drawn as muted text. Element values `modifiedCount`, `modifiedRows`, `errorCount` and `editing` read
+  it as they read a grid of a form.
+- **An editable model column.** A model's table whose description gives a shown column an `EditInfo` mounts through
+  `GridController::node(columns, options, base)` over a `ModelGridSource`, `base` the `TableSource` the lowering
+  builds for any model table, so every column keeps its `cell`, tone, tooltip and accent, and each cell draws its
+  marks from its own row (`markedCell`). No default cell is shared across columns, and a plain cell shows the cell's
+  draft while one is held. Each editable column's field is `forms::FormModel::fromSchema` over
+  `Catalog::schema(action)`, `value` of a `CellEdit` and `values.<member>` of a `RowEdit`; a column whose action the
+  catalog has no schema for has no field, so it is read-only, and one whose schema does not read is reported. A
+  column is read-only where `Session::can(action)` does not hold, so a principal the server refuses the action sees
+  it read-only. The rows the mount reads are the source's decorator over the table's rows, which ends a row's
+  modified marks when the window fetches it. The drafts and commits are the element's `table::CellEdits`, made with
+  the table: its commit sends through the model alias's calls, never as a run of the session, so the table's own
+  edits make no row busy, one call per `CellEdit` cell and one per `RowEdit` action with every cell of the request
+  it edits; a reply's `errors` member, a `FailedRow` of the row or a failure's sentence refuses the cells it names,
+  and a success whose `ChangedRows` does not name the row counts the row as fetched at once. A changed row's `from`
+  moves the rows' and the drafts' keys, as a mutation's does, and a keyed refetch that finds a row gone drops its
+  drafts (`WindowRows::onRowsAbsent`). `editMode` (`cell`, the default, or `row`) chooses when a row's edits are sent;
+  `enterMoves` and `walk` give the walk, which follows the layout's visible columns. The grid's refusals reach the
+  status line through `tableMessage` ("This value is not loaded yet", "This row is being saved", a locked row's lock
+  text, "This cell is read-only"), and the rows' busy and failed states, which are not reactive, reach the cells
+  through the table's marks revision. The table keeps its row selection: the grid takes no
+  rectangle of cells, no paste and no fill, and `Delete` blanks the focused cell. Focus follows its row's key through
+  a key change. Where a focused row the window no longer holds is, and which row takes focus when the focused row
+  leaves the view, are the mount's, as for any table: the mount locates the row, and hands the grid the key that
+  took focus. Row mode sends no held cell that became read-only meanwhile. A table with no editable column is lowered as a plain model table.
 - **A form field's component.** A top-level field whose overlay names a `component` is drawn by it: the
   form's view is given a `forms::Overrides::byField` per such field, whose render builds the `custom` node
   `lowerCustom` would, with the field's built-in control as the fallback. The form fills the props it knows:
@@ -524,7 +916,12 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   another model therefore fails its fetch); `prefill` is followed, each non-null
   value loading the form as a programmatic change: the first value, and a value whose `key` equals the
   previous one's, `refill` the form, so a field the user changed keeps what they entered; a new `key`,
-  or any later value of a form without a `key`, `prefill`s every field. It lowers to `forms::formView` inside a column that
+  or any later value of a form without a `key`, `prefill`s every field. A form whose model has a computed member
+  (at any depth), or that names `derive`, makes rounds of derived values (`FormSession::deriveWith`): `evaluate` is
+  the alias's channel `execute(action, body, {.evaluate = true})` while a member is computed, and `derive` is
+  `execute(derive, {"body": body})` when the form names one, on the session's timers, `deriveDebounce` (150 ms when
+  absent) after a grid's last commit; each path a derive reply names that is no derived member is reported once. It
+  lowers to `forms::formView` inside a column that
   carries the node's common properties. `title` (a heading over the fields) and `submitLabel` (the explicit-mode
   button, and the status line's `ready: press <label>`) are bound in the node's scope, so a `t` re-resolves on
   `setLocale`; `showStatus`, `columns`, `fieldLayout` and `captionWidth` are read at load, `columns` setting every group's grid and
@@ -544,8 +941,19 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   does. They lower to `forms::collectionView` and `forms::wizardView`, with the forms' own titles
   left out, inside a column that carries the node's common properties. `submitLabel`, `showStatus`, `columns` and
   `fieldLayout` reach every form the view draws (`options.form`), as on a `form`; `title`, bound in the node's scope, replaces the
-  view's heading (`collection_title`, `wizard_title`). They have no element values
-  and no events. A document the catalog lacks, one for another action, one that does not build, or
+  view's heading (`collection_title`, `wizard_title`). A collection's rows are a table on the
+  engine, over the session's `source()` with the collator every other table uses, kept in the
+  element across mounts: every `v-columns` entry is a column of it (`v-hidden` ones hidden), each
+  sortable and filterable, with the header and table menus, the column chooser, the sort dialog and
+  copy of any table; then a last column of the row's buttons, which no layout arranges. Each cell
+  shows the session's formatted text, with the test id `cell_<field>_<rowKey>`. The engine keys a
+  row by its integer key's value and the session by its text; the master-detail selection and a
+  row's activation are translated between the two, so the open row stays selected through a sort.
+  The arrangement, sort and filters persist under
+  `{application, the model alias's type, the collection's action, the screen's id, "state"}`, and
+  the rows are held back while that state loads, as a `rows` table's are; its saved views load
+  beside that state, and its table menu has `Views`, as every persisted table's do. They have no
+  element values and no events. A document the catalog lacks, one for another action, one that does not build, or
   a wizard step without a schema is reported and shown as a muted text naming the action.
 
 ### Charts
@@ -647,7 +1055,7 @@ stops when its scope is gone.
 
 Reported when met, and shown as a muted text naming the kind:
 
-- The chrome of a `collection` or `wizard` (its header, rows, confirm, editor and navigation drawn
+- The chrome of a `collection` or `wizard` (its header, row, confirm, editor and navigation drawn
   by the host's own kit): C++ code replaces them through `forms::CollectionChrome` and
   `forms::WizardChrome`.
 - A `form` node's subtree overrides (spec 2 §7): document subtrees replacing a field's control. A host
@@ -655,7 +1063,7 @@ Reported when met, and shown as a muted text naming the kind:
   `forms::Overrides`.
 - A `form` node's `showErrors`: a field's error shows on its control as soon as its draft does not
   encode.
-- A `table` declared from a model's list action: the table engine (spec 7).
+- A `table` declared from a model's list action (`model` with `action`) rather than one of its tables.
 - Prefetching on hover: the host starts a screen's `prefetch` queries through `Session::prefetch`.
 
 ## Where a screen says what it holds

@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "../forms/derive.hpp"
 #include "../forms/field_errors.hpp"
 #include "../forms/forms.hpp"
 #include "detail/action_guard_core.hpp"
@@ -498,6 +499,30 @@ inline std::string actionPayloadSchema() {
     }
 }
 
+/// @brief Whether @p Action runs itself: it declares a static `invoke(Model&, Action&)`, as a table's actions
+///        do, instead of the model declaring an `execute` for it.
+template <typename Model, typename Action>
+concept DeclaresInvoke = requires(Model& model, Action& action) { Action::invoke(model, action); };
+
+/// @brief Runs @p action on @p model: the one call every dispatch path makes to a handler.
+///
+/// `Action::invoke(model, action)` when the action declares one, `model.execute(action)` otherwise. An action
+/// that the framework defines for a model, such as a table's query, carries its handler with it, so the model
+/// declares nothing for it.
+/// @tparam Model  The model type.
+/// @tparam Action The action type.
+/// @param model  The model instance.
+/// @param action The action.
+/// @return What the handler returns: a value, or a `core::async::Task` of one.
+template <typename Model, typename Action>
+decltype(auto) invokeExecute(Model& model, Action& action) {
+    if constexpr (DeclaresInvoke<Model, Action>) {
+        return Action::invoke(model, action);
+    } else {
+        return model.execute(action);
+    }
+}
+
 /// @brief The request id of the session installed on the calling thread, or
 ///        empty when there is none: the text that links one dispatch's
 ///        profiler zones across the threads it crosses.
@@ -741,8 +766,9 @@ template <typename A>
 /// @return Reference to the process-lifetime description for `A`.
 template <typename A>
 [[nodiscard]] inline const ActionDescription& actionDescription() {
-    static const ActionDescription kDesc = buildActionDescription<A>();
-    return kDesc;
+    // Named so no name of the including translation unit's global scope hides it (MSVC C4459).
+    static const ActionDescription cachedActionDescription = buildActionDescription<A>();
+    return cachedActionDescription;
 }
 
 class ActionDispatcher;
@@ -838,7 +864,8 @@ public:
         Key key{std::string{modelId}, std::string{actionId}};
         detail::claimId(_actionTypes, "action", key, key.first + "/" + key.second, std::type_index{typeid(Action)});
         ActionEntry& entry = _actions[std::move(key)];
-        if constexpr (isTaskHandler<decltype(std::declval<Model&>().execute(std::declval<Action&>()))>) {
+        if constexpr (isTaskHandler<decltype(detail::invokeExecute(std::declval<Model&>(),
+                                                                   std::declval<Action&>()))>) {
             entry.asyncRunner = &runTaskHandler<Model, Action>;
             entry.runner = [](IModelHolder&, std::string_view) -> std::string {
                 throw std::logic_error{
@@ -894,7 +921,9 @@ private:
         // bypassing every client-side gate. A tampered computed value on
         // the wire is discarded here, before the validator check and
         // Model::execute run. No-op for actions with no computedFields. See
-        // docs/spec/forms/forms.md.
+        // docs/spec/forms/forms.md. A derived member is the model's to set: what the client sent for it is cleared
+        // first, so neither the model nor a computed field over it reads a forged value.
+        ::morph::forms::clearDerived(action);
         ::morph::forms::recomputeAll(action);
         // Enforce the action's validator on the server dispatch path — the
         // one path an untrusted remote client can drive directly with a
@@ -924,6 +953,7 @@ private:
         MORPH_ZONE("ActionDispatcher::evaluateAction");
         auto action = ActionTraits<Action>::fromJson(payloadJson);
         ::morph::forms::reconcileDeclaredPrecision(action);
+        ::morph::forms::clearDerived(action);
         ::morph::forms::recomputeAll(action);
         Evaluation evaluation;
         evaluation.errors = ::morph::forms::fieldErrors(action);
@@ -964,7 +994,7 @@ private:
         detail::runGuardJournaled(holder, model, action, [&] { return std::string{payloadJson}; });
         auto result = [&] {
             try {
-                return model.execute(action);
+                return detail::invokeExecute(model, action);
             } catch (const std::exception& exc [[maybe_unused]]) {
                 if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
                     if (holder.hasActionLog()) {
@@ -1027,7 +1057,7 @@ private:
     static void runTaskHandler(IModelHolder& holder, std::string_view payloadJson,
                                const std::shared_ptr<::morph::exec::detail::TaskResumer>& executor,
                                ::core::async::StopToken token, DispatchDone done) {
-        using R = HandlerResultT<decltype(std::declval<Model&>().execute(std::declval<Action&>()))>;
+        using R = HandlerResultT<decltype(detail::invokeExecute(std::declval<Model&>(), std::declval<Action&>()))>;
         // Owned here and kept by the completion callback: the handler may take
         // the action by reference, and its frame outlives this call.
         std::shared_ptr<Action> action;
@@ -1036,7 +1066,7 @@ private:
             action = std::make_shared<Action>(prepareAction<Model, Action>(payloadJson));
             auto& model = holder.template into<Model>();
             detail::runGuardJournaled(holder, model, *action, [&] { return std::string{payloadJson}; });
-            task = model.execute(*action);
+            task = detail::invokeExecute(model, *action);
         } catch (...) {
             done(std::string{}, std::current_exception());
             return;
@@ -1312,6 +1342,22 @@ public:
             return &iter->second.describe().required;
         } catch (const std::exception&) {
             return nullptr;
+        }
+    }
+
+    /// @brief The schema `(modelId, actionId)` serves, as `schemasJson` lists it.
+    /// @param modelId  Model type-id.
+    /// @param actionId Action type-id.
+    /// @return The schema's JSON text; empty when the pair is unregistered or its description cannot be produced.
+    [[nodiscard]] std::string actionSchema(std::string_view modelId, std::string_view actionId) const {
+        auto iter = _actions.find(detail::PairKeyView{modelId, actionId});
+        if (iter == _actions.end()) {
+            return {};
+        }
+        try {
+            return iter->second.describe().schema;
+        } catch (const std::exception&) {
+            return {};
         }
     }
 
@@ -1641,9 +1687,40 @@ inline bool registerActionResultOnce(std::string_view actionId) noexcept {
         }
         return true;
     }
-    entries.emplace(
-        std::string{actionId},
-        ActionResult{.action = action, .resultSlots = walkResult<typename ActionTraits<Action>::Result>()});
+    entries.emplace(std::string{actionId},
+                    ActionResult{.action = action,
+                                 .resultSlots = walkResult<typename ActionTraits<Action>::Result>(),
+                                 .holders = walkHolders<typename ActionTraits<Action>::Result>()});
+    return true;
+}
+
+/// @brief Static-init helper for `BRIDGE_REGISTER_TABLE`: records that @p Action's result holds @p Record at no
+///        path, beside the slots its walk found.
+///
+/// Runs after the action's `registerActionResultOnce`, in the same translation unit. Idempotent: a repeat adds
+/// nothing. Under an id another action type took, it adds nothing, since that id is already a conflict.
+/// @tparam Action The action type; `ActionTraits<Action>` must be visible.
+/// @tparam Record The record type the result holds.
+/// @param actionId The action's registered type-id.
+/// @return Always true, so the result can initialise a namespace-scope variable.
+template <typename Action, typename Record>
+inline bool registerOpaqueResultOnce(std::string_view actionId) noexcept {
+    // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
+    assert(!::morph::model::registrationPhaseClosed() &&
+           "registerOpaqueResultOnce: registration after the registration phase closed. The process-level "
+           "registries are unsynchronised and are read-only once dispatch begins -- registering now "
+           "races their internals against concurrent lookups. Load and register plugin modules before "
+           "the first dispatch.");
+    auto& entries = mutableActionResultSlots();
+    auto const existing = entries.find(actionId);
+    if (existing == entries.end() || existing->second.action != std::type_index{typeid(Action)}) {
+        return true;
+    }
+    std::type_index const record{typeid(Record)};
+    auto& held = existing->second.resultSlots;
+    if (std::ranges::none_of(held, [&](ResultSlot const& slot) { return slot.opaque && slot.type == record; })) {
+        held.push_back(ResultSlot{.type = record, .path = {}, .opaque = true});
+    }
     return true;
 }
 
@@ -2206,6 +2283,78 @@ void actionSourceRegistrationRequired() {}
 #define BRIDGE_REGISTER_ACTION_SOURCE(M, A)                                                          \
     MORPH_DETAIL_DEFINE_SOURCE_LOCAL(morph::model::detail::actionSourceRegistrationRequired<M, A>()) \
     BRIDGE_DETAIL_ACTION_REGISTRARS(M, A)
+// clang-format on
+
+/// @cond detail
+/// The table's record and its action's opaque holding, suppressed under `MORPH_CLIENT_ONLY` like every
+/// registrar that records facts only a process hosting models serves. The holding is registered after the
+/// action's result slots, which the action registrars before it in the same translation unit record.
+#ifdef MORPH_CLIENT_ONLY
+#define MORPH_DETAIL_REGISTER_TABLE_LOCAL(M, KEY, ID, ...)
+#else
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
+#define MORPH_DETAIL_REGISTER_TABLE_LOCAL(M, KEY, ID, ...)                                 \
+    namespace {                                                                            \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_table_record_reg_, __COUNTER__) = \
+        ::morph::table::detail::registerTableRecord<KEY __VA_OPT__(, ) __VA_ARGS__>(       \
+            std::string{::morph::model::ModelTraits<M>::typeId()} + "." ID);               \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_table_held_reg_, __COUNTER__) =   \
+        ::morph::model::detail::registerOpaqueResultOnce<::morph::table::QueryTable<KEY>,  \
+                                                         ::morph::table::TableOf<KEY>>(    \
+            ::morph::model::ActionTraits<::morph::table::QueryTable<KEY>>::typeId());      \
+    }
+// clang-format on
+#endif
+/// @endcond
+
+/// @brief Registers table @p ID of model @p M, served by @p FN.
+///
+/// @p FN is a member function `table::ServedTable (M::*)(table::TableContext const&)`, or
+/// `morph::table::typed<Row>(&M::fn)` for a function returning `std::shared_ptr<std::vector<Row> const>`, whose
+/// description is built from `Row` and whose key is the key of the record registered for `Row`. The macro emits:
+///
+/// - `morph::table::TableTraits<&M::fn>`, keyed on the member function in both forms, so
+///   `table::TableOf<&M::fn>`, `table::ChangedRows<&M::fn>`, `effects::updatesTable<&M::fn>` and
+///   `effects::changesTable<&M::fn>` name the table by its function;
+/// - the actions `"Table." ID` (`table::QueryTable`, a `TableQuery` in, a `GenericPage` out),
+///   `"Table." ID ".describe"` (`table::DescribeTable`, the `TableDescription`) and `"Table." ID ".resolve"`
+///   (`table::ResolveTable`, a `ResolveRequest` in, the `SelectedRows` out), all `Loggable::No`: they read;
+/// - the table's record, `table::TableOf<&M::fn>`, named `<model type id>.` ID and keyed by `key`;
+/// - that `"Table." ID` holds that record opaquely, at no path: a principal who may run it may watch the
+///   record, and no reader looks for rows in a page.
+///
+/// **A table id is unique in the process**, not only in its model: the action ids carry the id and no model,
+/// and two action types under one id fail every effects lookup of the process ("action `Table.<id>` is
+/// registered by two action types; give each its own id").
+///
+/// `BRIDGE_REGISTER_MODEL(M, ...)` must come before it, and the translation unit must include
+/// `<morph/table/description.hpp>` and `<morph/core/bridge.hpp>`, as for `BRIDGE_REGISTER_ACTION`. Place it where
+/// every translation unit that names the table's `TableOf` or `ChangedRows` sees it, as a model's header.
+/// @param M   Concrete model type.
+/// @param ID  The table's id, a string literal, unique in the process.
+/// @param FN  `&M::fn` or `morph::table::typed<Row>(&M::fn)`.
+/// @param ... Options of the table's record: `morph::table::rowScoped` (its keys are private: callers see
+///            different rows) and `morph::table::derivedFrom<Records...>` (a change of any of them is a change of
+///            the table).
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
+#define BRIDGE_REGISTER_TABLE(M, ID, FN, ...)                                                                \
+    template <>                                                                                              \
+    struct morph::table::TableTraits<::morph::table::detail::tableKey(FN)> {                                 \
+        using model = M;                                                                                     \
+        using row = ::morph::table::detail::TableRow<decltype(FN)>;                                          \
+        static constexpr bool registered = true;                                                             \
+        static constexpr std::string_view id = ID;                                                           \
+        static constexpr auto serve = FN;                                                                    \
+    };                                                                                                       \
+    BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, ::morph::table::QueryTable<::morph::table::detail::tableKey(FN)>,    \
+                                     ::morph::table::GenericPage, "Table." ID, ::morph::model::Loggable::No) \
+    BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, ::morph::table::DescribeTable<::morph::table::detail::tableKey(FN)>, \
+                                     ::morph::table::TableDescription, "Table." ID ".describe",              \
+                                     ::morph::model::Loggable::No)                                           \
+    BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, ::morph::table::ResolveTable<::morph::table::detail::tableKey(FN)>,  \
+                                     ::morph::table::SelectedRows, "Table." ID ".resolve",                   \
+                                     ::morph::model::Loggable::No)                                           \
+    MORPH_DETAIL_REGISTER_TABLE_LOCAL(M, ::morph::table::detail::tableKey(FN), ID __VA_OPT__(, ) __VA_ARGS__)
 // clang-format on
 
 /// @brief Registers a readiness predicate for action @p A.

@@ -790,6 +790,25 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
+      # A full disk kills a hosted runner without leaving a log ("lost communication"), as running out of memory
+      # does. This build's objects and test binaries take much of what the image leaves free, and these preinstalled
+      # toolchains are never used here. The sizes before and after are printed.
+      - name: Free disk space
+        run: |
+          df -h / /mnt
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift
+          df -h / /mnt
+
+      # Instrumented compiles of the heaviest test files need more than the runner's 16 GB and 3 GB of swap can hold
+      # at one compile per CPU. Extra swap costs nothing unless it is needed; the Build step prints the swap used.
+      - name: Add swap for the build's heaviest compiles
+        run: |
+          sudo fallocate -l 12G /mnt/build-swap
+          sudo chmod 600 /mnt/build-swap
+          sudo mkswap /mnt/build-swap
+          sudo swapon /mnt/build-swap
+          free -m
+
       # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
       # catch_discover_tests() runs each Qt-linked test binary once at BUILD
       # time to enumerate its cases, which can abort on this headless runner
@@ -800,15 +819,22 @@ jobs:
       - name: Build
         env:
           QT_QPA_PLATFORM: offscreen
-        run: cmake --build --preset clang-coverage --parallel "$(nproc)"
+        run: |
+          cmake --build --preset clang-coverage --parallel "$(nproc)"
+          free -m
+          df -h /
 
       - name: Test
         env:
           # Required for the ladder tests, which open real Qt widgets/sockets
           # on a runner with no display.
           QT_QPA_PLATFORM: offscreen
+        # %4m, not %p: each test process writes a profile the size of its
+        # binary's counters, and one file per process over every Catch2 case
+        # fills the runner's disk. The merge pool keeps at most four files per
+        # binary and merges into them, under a lock, as processes exit.
         run: |
-          LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage --parallel "$(nproc)" -LE stress
+          LLVM_PROFILE_FILE="build/clang-coverage/%4m.profraw" ctest --preset clang-coverage --parallel "$(nproc)" -LE stress
 
       # Deliberately left on the implicit `success()`, unlike the three test
       # steps that carry `!cancelled()` (ladder-tests' scenario corpus,
@@ -909,6 +935,15 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
+      # A full disk kills a hosted runner without leaving a log ("lost communication"), as running out of memory
+      # does. This build's objects and test binaries take much of what the image leaves free, and these preinstalled
+      # toolchains are never used here. The sizes before and after are printed.
+      - name: Free disk space
+        run: |
+          df -h / /mnt
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift
+          df -h / /mnt
+
       # The build ends with several heavy test files at once, close to what the
       # runner's 16 GB and 3 GB of swap can hold even at one compile per CPU.
       # The likely sign of going past it is the runner's "shutdown signal",
@@ -927,6 +962,7 @@ jobs:
           cmake --build --preset gcc-debug --parallel "$(nproc)"
           free -m
           grep -E '^(pswpin|pswpout) ' /proc/vmstat
+          df -h /
 
       # ── moc output that climbs out of the build tree ─────────────────
       # Runs here rather than alongside the repo's other lint gates because
@@ -1750,6 +1786,29 @@ jobs:
           name: clang-format-report
           path: clang-format-report.txt
           if-no-files-found: ignore
+
+  # ── Table tests in WebAssembly, under Node ────────────────────────────
+  # The table module is header-only and builds without Qt: its tests run
+  # single-threaded under Node, so the count gates and the fixture's pinned
+  # digest are checked on a third standard library and a 32-bit target. The
+  # cases that need threads are tagged [threads] and left out.
+  table-wasm:
+    name: Table tests (WebAssembly, Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build
+      - uses: mymindstorm/setup-emsdk@v14
+        with: { version: 4.0.7 }
+      - name: Configure
+        run: emcmake cmake -S . -B build-wasm -G Ninja -DCMAKE_BUILD_TYPE=Release -DMORPH_BUILD_TESTS=ON -DMORPH_BUILD_EXAMPLES=OFF
+      - name: Build
+        run: cmake --build build-wasm --target morph_table_tests
+      - name: Run
+        run: node build-wasm/tests/morph_table_tests.js "~[threads]"
 
   # ── actionlint (the workflows themselves) ─────────────────────────────
   # The workflows are thousands of lines of YAML and embedded bash that no

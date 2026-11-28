@@ -206,8 +206,9 @@ TEST_CASE("gallery: a model-backed table, which its engine pages, reads page 0 o
     auto const screen = h.mount(R"({
       "vocab": "ui/1", "id": "engine",
       "models": { "sample": { "type": "Lims_SampleModel" } },
-      "view": { "kind": "table", "id": "t", "model": "sample", "action": "Lims_ListResults" } })");
-    CHECK(pages(*screen) == "0/1 0-0 of 0");
+      "view": { "kind": "table", "id": "t", "model": "sample", "action": "Lims_PageResults",
+                "columns": [ { "id": "id" } ] } })");
+    CHECK(pages(*screen) == "0/1 0-0 of null");  // no reply yet: no total
     CHECK(ui::testing::readJson(*screen, R"({ "ref": "t.sourceCount" })") == "0");
 }
 

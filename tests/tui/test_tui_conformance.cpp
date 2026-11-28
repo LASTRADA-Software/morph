@@ -225,8 +225,9 @@ public:
             .type = Type::Release, .button = 0, .x = cell->x + 1, .y = cell->y + 1, .modifiers = modifiers});
         settle();
     }
-    // A mouse click on the header line, over the column's first cell: the header sits on the line above the rows.
-    void clickHeader(ui::Widget& table, std::size_t column) override {
+    // A mouse click on the header line, over the column's first cell: the header sits on the line above the rows. A
+    // Shift-click holds Shift as the terminal reports it in SGR mouse mode.
+    void clickHeader(ui::Widget& table, std::size_t column, ui::HeaderClick click) override {
         settle();
         auto const* const container = dynamic_cast<ui::ContainerWidget*>(&table);
         ui::Widget const* const firstRow = container == nullptr ? nullptr : childAt(*container, 0);
@@ -237,9 +238,117 @@ public:
         if (!at || !top || _fault == Fault::DeadInput) {
             return;
         }
-        send(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = at->x + 1, .y = top->y + 1});
-        send(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = at->x + 1, .y = top->y + 1});
+        Modifier const modifiers = click == ui::HeaderClick::Shift ? Modifier::Shift : Modifier::None;
+        send(core::tui::MouseEvent{
+            .type = Type::Press, .button = 0, .x = at->x + 1, .y = top->y + 1, .modifiers = modifiers});
+        send(core::tui::MouseEvent{
+            .type = Type::Release, .button = 0, .x = at->x + 1, .y = top->y + 1, .modifiers = modifiers});
         settle();
+    }
+
+    // Shift+F10 on the focused header, or a click on the header line's `⋯` for the table's menu; the open list's
+    // entries are read, and Esc closes it.
+    [[nodiscard]] std::vector<ui::MenuEntry> headerMenu(ui::Widget& table,
+                                                        std::optional<std::size_t> column) override {
+        if (!openMenu(table, column)) {
+            return {};
+        }
+        std::vector<ui::MenuEntry> entries = tableOf(table).openMenuEntries();
+        send(special(KeyCode::Escape));
+        settle();
+        return entries;
+    }
+    // The menu opened as `headerMenu` opens it, then a click on each level's row.
+    void chooseHeaderMenuEntry(ui::Widget& table, std::optional<std::size_t> column,
+                               std::vector<std::size_t> const& path) override {
+        if (!openMenu(table, column)) {
+            return;
+        }
+        for (std::size_t const index : path) {
+            auto const* const popup = tableOf(table).openPopup();
+            if (popup == nullptr) {
+                return;
+            }
+            auto const area = popup->screenBounds();
+            int const row = area.y + static_cast<int>(index);
+            send(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = area.x + 1, .y = row + 1});
+            send(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = area.x + 1, .y = row + 1});
+            settle();
+        }
+    }
+    // Ctrl+Shift+Left or Right on the focused header, once per place, while the column moves.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): overrides the conformance suite's `moveColumn`, which documents (`column`, `position`)
+    void moveColumn(ui::Widget& table, std::size_t column, std::size_t position) override {
+        if (!focusHeader(table, column)) {
+            return;
+        }
+        auto const& impl = tableOf(table);
+        for (std::size_t step = 0; step < impl.visibleOrder().size(); ++step) {
+            std::size_t const place = placeOf(impl, column);
+            if (place == position) {
+                return;
+            }
+            send(special(place < position ? KeyCode::Right : KeyCode::Left, Modifier::Ctrl | Modifier::Shift));
+            settle();
+            if (placeOf(impl, column) == place) {
+                return;  // the move is reported; the mount has not rearranged the columns
+            }
+        }
+    }
+    // The header as the last frame drew it: the cells of the column's label on the header line, trimmed.
+    [[nodiscard]] std::string headerText(ui::Widget const& table, std::size_t column) override {
+        settle();
+        if (_fault == Fault::WrongText) {
+            return "?";
+        }
+        auto const area = tableOf(table).headerLabelArea(column);
+        auto const bounds = WidgetBase::of(table).view().screenBounds();
+        std::vector<std::string> const rows = morph::tui::testing::rowsOf(_screen);
+        int const line = bounds.y + (area ? area->y : 0);
+        if (!area || line < 0 || std::cmp_greater_equal(line, rows.size())) {
+            return {};
+        }
+        std::u32string const cells =
+            unicode::convert_to<char32_t>(std::string_view{rows.at(static_cast<std::size_t>(line))});
+        auto const from = static_cast<std::size_t>(std::max(0, bounds.x + area->x));
+        std::u32string label =
+            from < cells.size() ? cells.substr(from, static_cast<std::size_t>(area->width)) : std::u32string{};
+        while (!label.empty() && label.back() == U' ') {
+            label.pop_back();
+        }
+        while (!label.empty() && label.front() == U' ') {
+            label.erase(0, 1);
+        }
+        return unicode::convert_to<char>(std::u32string_view{label});
+    }
+    // A click on the filter button, the last cell of the column's header.
+    void pressFilter(ui::Widget& table, std::size_t column) override {
+        settle();
+        auto const area = tableOf(table).headerLabelArea(column);
+        auto const bounds = WidgetBase::of(table).view().screenBounds();
+        if (area) {
+            clickCell(bounds.x + area->x + area->width + 1, bounds.y + area->y);
+        }
+    }
+    // A click on the group's filter button, the last cell of its span on the group line.
+    void pressGroupFilter(ui::Widget& table, std::size_t group) override {
+        settle();
+        auto const x = tableOf(table).groupFilterX(group);
+        auto const bounds = WidgetBase::of(table).view().screenBounds();
+        if (x) {
+            clickCell(bounds.x + *x, bounds.y);
+        }
+    }
+    [[nodiscard]] std::string headerName(ui::Widget const& table, std::size_t column) override {
+        return _fault == Fault::WrongText ? "?" : tableOf(table).headerName(column);
+    }
+    [[nodiscard]] std::string headerDescription(ui::Widget const& table, std::size_t column) override {
+        return tableOf(table).headerDescription(column);
+    }
+    // What the OSC 52 sequence carried, as the mock terminal decoded it.
+    [[nodiscard]] std::string clipboardText() override {
+        auto const* const output = dynamic_cast<core::tui::MockTerminalOutput const*>(&_terminal.output());
+        return output == nullptr ? std::string{} : output->clipboardText();
     }
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         return tableOf(table).markedRows();
@@ -415,6 +524,62 @@ private:
         core::async::ExecutorScope const scope{_owner.coreExecutor()};
         _screen.setFocus(&view);
         return _screen.focusedComponent() == &view;
+    }
+
+    // The visible place of @p column in the table.
+    static std::size_t placeOf(morph::tui::detail::TableImpl const& table, std::size_t column) {
+        auto const order = table.visibleOrder();
+        return static_cast<std::size_t>(std::distance(order.begin(), std::ranges::find(order, column)));
+    }
+
+    // The focus on the column's header, as a user's keys take it there: Up from the rows to the header, then Left to
+    // the first header and Right to the column.
+    bool focusHeader(ui::Widget& table, std::size_t column) {
+        settle();
+        if (!focus(table) || _fault == Fault::DeadInput) {
+            return false;
+        }
+        auto const& impl = tableOf(table);
+        for (std::size_t step = 0; step <= impl.children().size() && !impl.focusedHeader(); ++step) {
+            send(special(KeyCode::Up));
+        }
+        auto const order = impl.visibleOrder();
+        for (std::size_t step = 0; step < order.size(); ++step) {
+            send(special(KeyCode::Left));
+        }
+        for (std::size_t step = 0; step < order.size() && impl.focusedHeader() != column; ++step) {
+            send(special(KeyCode::Right));
+        }
+        settle();
+        return impl.focusedHeader() == column;
+    }
+
+    // The column's menu by Shift+F10 on its header, or the table's by a click on the header line's last cell.
+    bool openMenu(ui::Widget& table, std::optional<std::size_t> column) {
+        if (column) {
+            if (!focusHeader(table, *column)) {
+                return false;
+            }
+            send(special(KeyCode::F10, Modifier::Shift));
+        } else {
+            settle();
+            auto const bounds = WidgetBase::of(table).view().screenBounds();
+            if (bounds.width <= 0 || _fault == Fault::DeadInput) {
+                return false;
+            }
+            int const x = bounds.x + bounds.width - 1;
+            send(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = x + 1, .y = bounds.y + 1});
+            send(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = x + 1, .y = bounds.y + 1});
+        }
+        settle();
+        return tableOf(table).openPopup() != nullptr;
+    }
+
+    // A left click on a viewport cell, 0-based.
+    void clickCell(int x, int y) {
+        send(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = x + 1, .y = y + 1});
+        send(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = x + 1, .y = y + 1});
+        settle();
     }
 
     void focusByClick(ui::Widget& widget) {

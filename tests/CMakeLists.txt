@@ -20,6 +20,77 @@ morph_generate_pinned_facts_header(
     ${CMAKE_BINARY_DIR}/generated/pinned_facts_generated.hpp
 )
 
+# ── The wide-table fixture ───────────────────────────────────────────────────
+# The column-store source every table measurement runs against (docs/spec/table/table.md, "Performance"). Linked
+# whole, so the registrations it carries are never dropped by a linker that finds nothing referencing them.
+add_library(morph_wide_table_model STATIC table/wide_table_model.cpp)
+target_link_libraries(morph_wide_table_model PUBLIC morph::morph)
+target_include_directories(morph_wide_table_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+apply_warnings(morph_wide_table_model)
+
+# The table tests' sources, one list for the native executable and the WebAssembly one below.
+set(MORPH_TABLE_TEST_SOURCES
+    table/test_table_source.cpp
+    table/test_table_sort.cpp
+    table/test_table_parse.cpp
+    table/test_table_filter.cpp
+    table/test_table_distinct.cpp
+    table/test_table_view_change.cpp
+    table/test_table_engine.cpp
+    table/test_table_changes.cpp
+    table/test_table_query.cpp
+    table/test_table_selection.cpp
+    table/test_table_columns.cpp
+    table/test_table_pending.cpp
+    table/test_table_reentrancy.cpp
+    table/test_table_server.cpp
+    table/test_table_description.cpp
+    table/test_table_unloaded_cells.cpp
+    table/test_table_level_cache.cpp
+    table/test_table_view_cache.cpp
+    table/test_table_cov_c_cells.cpp
+    table/test_table_cov_c_query.cpp
+    table/test_table_cov_c_filter.cpp
+    table/test_table_cov_c_views.cpp
+    table/test_table_cov_c_state.cpp
+    table/test_table_cov_c_edits.cpp
+    table/test_table_cov_c_cell_edits.cpp
+    table/test_table_cov_c_layout.cpp
+    table/test_table_cov_c_parse.cpp
+    table/test_table_cov_c_units.cpp
+    table/test_table_cov_c_selection.cpp
+    table/test_table_cov_c_levels.cpp
+    table/test_table_cov_c_answer.cpp
+    table/test_table_cov_c_view_cache.cpp
+    table/test_table_cov_c_fit.cpp
+    table/test_table_cov_c_pages.cpp
+    table/test_table_cov_f_window.cpp
+    table/test_table_cov_f_levels.cpp
+    table/test_table_cov_f_engine.cpp
+    table/test_table_cov_f_edits.cpp
+    table/test_table_cov_f_selection.cpp
+    table/test_table_cov_f_description.cpp
+    table/test_table_state.cpp
+    table/test_table_measure.cpp
+    table/test_wide_table.cpp
+    table/bench_table.cpp
+)
+
+# ── WebAssembly: the table tests alone, run under Node ──────────────────────
+# The table module builds without Qt, so its tests run in WebAssembly too and the count gates of
+# the single-threaded path are checked there. Nothing else in this directory is built for that target, and Node runs
+# the executable by hand, so no test is registered with ctest.
+if(EMSCRIPTEN)
+    add_executable(morph_table_tests ${MORPH_TABLE_TEST_SOURCES})
+    target_link_libraries(morph_table_tests PRIVATE morph::morph morph_test_main
+                          "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph_wide_table_model>")
+    target_include_directories(morph_table_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    # Emscripten's default heap is a fixed 16 MiB; the 100,000 x 300 column store the baselines sort needs it to grow.
+    target_link_options(morph_table_tests PRIVATE -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=4GB)
+    apply_warnings(morph_table_tests)
+    return()
+endif()
+
 add_executable(morph_tests
     oom_injector.cpp
     test_oom_injector.cpp
@@ -29,11 +100,108 @@ add_executable(morph_tests
     test_example.cpp
     test_push_records.cpp
     test_push_effects.cpp
+    test_cov_c_effects.cpp
+    test_cov_c_forms_values.cpp
+    test_cov_h_forms_rules.cpp
+    test_cov_h_forms_values.cpp
+    test_cov_h_rational.cpp
+    test_cov_h_views_columns.cpp
+    test_cov_c_forms_session.cpp
+    test_cov_f_forms_session.cpp
+    test_cov_c_observability.cpp
+    test_cov_c_ui_document_mutations.cpp
+    test_cov_c_ui_document_grids.cpp
+    test_cov_c_ui_document_tables.cpp
+    test_cov_c_ui_interpreter_inputs.cpp
     test_push_watch_table.cpp
     test_push_catalog.cpp
     test_push_channel.cpp
     test_push_watch.cpp
     test_push_cache.cpp
+    test_ui_interpreter_cache.cpp
+    ui_table_model_support.cpp
+    test_ui_table_model_window_rows.cpp
+    test_ui_table_model_table_catalog.cpp
+    test_ui_table_model_model_table.cpp
+    test_ui_table_model_value_rows.cpp
+    test_ui_table_model_action_table.cpp
+    test_ui_table_model_filter_menu.cpp
+    test_ui_table_model_copy_collection.cpp
+    test_ui_table_model_view_selection.cpp
+    test_ui_table_model_row_changes.cpp
+    test_ui_table_model_model_cells.cpp
+    test_ui_table_model_cell_walk.cpp
+    test_ui_table_model_cell_reads.cpp
+    test_ui_table_model_cell_edits.cpp
+    test_ui_table_model_cell_errors.cpp
+    test_ui_grid.cpp
+    test_ui_cov_grid_form_rows.cpp
+    test_ui_cov_grid_keys.cpp
+    test_ui_cov_expression.cpp
+    test_ui_cov_h_expression.cpp
+    test_ui_cov_h_theme.cpp
+    test_ui_cov_h_page_layout.cpp
+    test_ui_cov_h_navigator.cpp
+    test_ui_cov_h_table_dialogs.cpp
+    test_ui_cov_h_table_state.cpp
+    test_ui_cov_h_interp_download.cpp
+    test_ui_cov_h_interp_lowering.cpp
+    test_ui_cov_interp_lowering.cpp
+    test_ui_cov_interp_elements.cpp
+    test_ui_cov_grid_unknown.cpp
+    test_ui_cov_j_grid_source.cpp
+    test_ui_cov_j_page_mount.cpp
+    test_ui_cov_j_mount_labels.cpp
+    test_ui_cov_j_filter_pages.cpp
+    test_ui_cov_j_explorer_search.cpp
+    test_ui_cov_j_custom_checks.cpp
+    test_ui_cov_j_workspace_head.cpp
+    test_ui_cov_j_filter_menu.cpp
+    test_ui_cov_j_controller.cpp
+    test_ui_cov_j_custom_source.cpp
+    test_ui_cov_j_mount_keys.cpp
+    test_ui_cov_j_explorer.cpp
+    test_ui_cov_grid_paste.cpp
+    test_ui_cov_grid_rows.cpp
+    test_ui_cov_interp_rows.cpp
+    test_ui_cov_grid_model.cpp
+    test_ui_cov_grid_fixed.cpp
+    test_ui_cov_interp_collections.cpp
+    test_ui_cov_interp_forms.cpp
+    test_ui_cov_mount_extents.cpp
+    test_ui_cov_interp_fixed_grid.cpp
+    test_ui_cov_d_form_grid.cpp
+    test_ui_cov_d_fixed_grid.cpp
+    test_ui_cov_d_custom_screen_checks.cpp
+    test_ui_cov_d_custom_screen_words.cpp
+    test_ui_cov_d_shell_parts.cpp
+    test_ui_cov_d_chat_tools.cpp
+    test_ui_cov_d_workspace.cpp
+    test_ui_cov_d_rows_bound.cpp
+    test_ui_cov_g_action_table_view.cpp
+    test_ui_cov_g_document_loader.cpp
+    test_ui_cov_g_table_points.cpp
+    test_ui_cov_g_menu_walk.cpp
+    test_ui_cov_g_rows_decorators.cpp
+    test_ui_cov_g_model_grid.cpp
+    test_ui_cov_g_element_values.cpp
+    test_ui_cov_g_model_table_binds.cpp
+    test_ui_cov_g_host_commands.cpp
+    test_ui_cov_g_typed_table.cpp
+    test_ui_cov_g_filter_menu.cpp
+    test_ui_cov_g_window_fetch.cpp
+    test_ui_cov_g_model_grid_values.cpp
+    test_ui_cov_g_grid_controller.cpp
+    test_ui_cov_g_form_grid_rows.cpp
+    test_ui_cov_g_fixed_grid_source.cpp
+    test_ui_cov_d_rows_state.cpp
+    test_ui_cov_d_chart.cpp
+    test_ui_cov_d_grid_groups.cpp
+    test_ui_cov_d_host.cpp
+    test_ui_cov_d_shell_frame.cpp
+    test_ui_cov_d_grid_bound.cpp
+    forms/test_forms_derive.cpp
+    test_ui_table_state.cpp
     test_push_agent.cpp
     test_mcp_transport.cpp
     test_chat_settle.cpp
@@ -216,10 +384,41 @@ add_executable(morph_tests
     test_ui_structure.cpp
     test_ui_foreach.cpp
     test_ui_table.cpp
+    test_ui_cell_format.cpp
+    test_ui_cov_table_cell_format.cpp
+    test_ui_cov_table_config.cpp
+    test_ui_cov_table_filter_menu.cpp
+    test_ui_cov_table_state.cpp
+    test_ui_cov_table_engine_rows.cpp
+    test_ui_cov_table_window_rows.cpp
+    test_ui_cov_table_views_menu.cpp
+    test_ui_cov_table_filter_dialog.cpp
+    test_ui_cov_table_model_columns.cpp
+    test_ui_cov_table_rows_pure.cpp
+    test_ui_cov_table_window_state.cpp
+    test_ui_cov_table_runs.cpp
+    test_ui_cov_table_mount.cpp
+    test_ui_cov_table_state_model.cpp
+    test_ui_cov_h_table_state_model.cpp
+    test_ui_cov_i_views.cpp
+    test_ui_cov_i_cell_menu.cpp
+    test_ui_cov_i_rows_table.cpp
+    test_ui_cov_i_collection.cpp
+    test_ui_cov_i_rows_columns.cpp
+    test_ui_cov_i_stored_state.cpp
+    test_ui_cov_i_groups.cpp
+    test_ui_cov_i_table_gestures.cpp
+    test_ui_cov_i_views_menu.cpp
+    test_ui_cov_i_sort_dialog.cpp
+    test_ui_table_config.cpp
     bench_interpreter.cpp
     bench_mount.cpp
     test_ui_frontend.cpp
     test_ui_conformance.cpp
+    test_ui_cov_e_conformance_faults.cpp
+    test_ui_cov_e_recording_backend.cpp
+    test_ui_cov_e_interpreter.cpp
+    test_ui_cov_f_interpreter.cpp
     test_ui_spotlight_recording.cpp
     test_ui_common.cpp
     test_ui_custom.cpp
@@ -252,6 +451,7 @@ add_executable(morph_tests
     test_ui_interpreter_table.cpp
     test_ui_interpreter_chart.cpp
     test_ui_chart_scale.cpp
+    test_ui_stretch_columns.cpp
     test_ui_document_rules.cpp
     test_ui_interpreter_gallery.cpp
     test_ui_interpreter_edges.cpp
@@ -316,6 +516,7 @@ target_link_libraries(morph_tests
     PRIVATE
         morph::morph
         morph_test_main
+        "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph_wide_table_model>"
 )
 
 apply_warnings(morph_tests)
@@ -991,24 +1192,9 @@ endif()
 # Its own executable so the threaded engine tests can run alone under a
 # sanitizer preset. The `[.benchmark]` cases are hidden: catch_discover_tests
 # does not list them, and they run only when asked for by tag.
-add_executable(morph_table_tests
-    table/test_table_source.cpp
-    table/test_table_sort.cpp
-    table/test_table_parse.cpp
-    table/test_table_filter.cpp
-    table/test_table_view_change.cpp
-    table/test_table_engine.cpp
-    table/test_table_changes.cpp
-    table/test_table_query.cpp
-    table/test_table_database_pages.cpp
-    table/test_table_selection.cpp
-    table/test_table_columns.cpp
-    table/test_table_pending.cpp
-    table/test_table_reentrancy.cpp
-    table/test_table_server.cpp
-    table/bench_table.cpp
-)
-target_link_libraries(morph_table_tests PRIVATE morph::morph morph_test_main)
+add_executable(morph_table_tests ${MORPH_TABLE_TEST_SOURCES})
+target_link_libraries(morph_table_tests PRIVATE morph::morph morph_test_main
+                      "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph_wide_table_model>")
 target_include_directories(morph_table_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(morph_table_tests PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/bigobj>)
 apply_warnings(morph_table_tests)

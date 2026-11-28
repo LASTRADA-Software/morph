@@ -45,7 +45,9 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   setters (`setReadOnly`, `setRequired`, `setErrors`, `setStale`) only to change them; it
   calls a dialog's `setOpen` at mount whatever the value, `false` included.
 - **Focus.** `focus()` moves keyboard focus to the widget. The mount calls it on the first
-  `autofocus` widget in document order once a mount completes ([view tree](view_tree.md#focus)).
+  `autofocus` widget in document order once a mount completes ([view tree](view_tree.md#focus)), and on the next or
+  the previous control of the focus chain when a table's key handler says focus leaves it (`KeyOutcome::FocusNext`,
+  `FocusPrevious`; [view tree](view_tree.md#the-focus-chain)).
 - **Hover.** `setOnHover(onHover)` calls `onHover` each time the pointer comes to rest over the widget. The
   default does nothing, so a backend without a pointer conforms. Hovering is a hint, such as a prefetch, never
   something a widget relies on. Qt Quick reports it through `MorphWidget`'s `HoverHandler` when a handler is set.
@@ -54,7 +56,8 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   is a hint, used to fetch again options whose fetch failed. Qt Quick reports the combo box's popup opening; the
   TUI reports the list opening, or the attempt to open it when there are no options.
 - **Chords.** `setKeys(chords, onChord)` declares the chords a widget handles while focus is inside
-  it, and `onChord` receives the chord pressed. A chord pressed while focus is inside several
+  it, and `onChord` receives the chord pressed. A widget that declares `Tab` or `Shift+Tab` receives them instead
+  of focus moving: a grid walks its cells with them, and moves focus along the chain itself at its ends. A chord pressed while focus is inside several
   widgets that declare it goes to the innermost of them only, and a chord pressed inside a widget
   that takes no input (below) goes to none. A key pressed with focus on a widget goes, the same on every backend:
   1. to a chord the focused widget declares itself, since declaring it on that very node is how an author says the
@@ -309,7 +312,21 @@ stretch columns share by weight whatever they hold, a deliberate behaviour chang
 content can no longer be said, and a literal `percent` table column stays refused. The terminal cannot wrap, so a text
 cell its column cuts ends in an ellipsis in its last cell, on each line (on one joined line in a column that does not wrap);
 its least width is the widest word of a text cell in a wrapping column and the natural width of any other cell, so the
-terminal never narrows a container's text, which Qt Quick does. A table whose columns are wider than the
+terminal never narrows a container's text, which Qt Quick does. A table over a `TableSource` realizes only the rows and
+columns in or near view, and the mount lays its columns out (`setColumnWindow`) by the same rules, in the backend's
+measure (`tableMeasure`) with each column's padding in every width. A fixed column keeps its width, as does a column
+whose width the user set; a content column is as wide as the larger of its header and its widest cell measured (the backend's estimate until either is measured), which only grows once measured. A stretch column's
+`n` is the larger of its header and the widest cell measured so far: a windowed table cannot see the rows it has not
+realized, so measures only accumulate, and a change of the shown rows can only grow `n`, which is the source-path reading
+of "the widths follow the shown rows". Its `l` is `n` in a column that does not wrap and, in one that wraps, the larger
+of its header and the widest least width a cell reported (`ColumnMeasure::least`); its `f` is its header, or with
+`shrink` `tableMeasure().shrinkFloor` (8 units on Qt Quick, 4 cells and the gap on the terminal), never above its
+header. `L` is the horizontal viewport the backend reports (`setOnHorizontalRange`, which leaves out the select column,
+the row mark and the menu's room) less the widths of the other visible columns. The mount computes the stretch widths
+whenever `L` or a measure changes, so they narrow as well as widen; a table whose viewport is not reported yet keeps a
+stretch column at the estimate. A backend reports each column's header (again when a sort mark or a font changes it)
+and each shown cell's natural and least width through `setOnColumnMeasured`; the mount keeps the largest of each. A
+table whose columns are wider than the
 table scrolls sideways on Qt Quick, with a bar that shows while it can; on the terminal the columns past its edge are cut and cannot be reached.
 
 **Content that does not fit.** A container does not shrink its children on its own: whether a text elides or a row
@@ -389,7 +406,32 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `DialogWidget` | `setOpen`, `setTitle`, `setDescription` (a line under the title in the head, not scrolled with the content, and the overlay's accessible description), `footer()`, `setSheet`, `setDismissLabel`, `setHeadNote` (a muted note on the title's row, trailing), `setFooterNote` (a muted note leading in the footer's row; the footer shows while it is not empty), `setCloseButton` (a dismiss control on the title's row, labelled by `setDismissLabel`; a `DrawerWidget` has the same four) (called only when the document binds or sets them) | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `ToastWidget` | `show(text, tone)` (one call: shows the message and restarts the dismiss interval regardless of whether the toast is already on-screen) | — |
 | `BusyWidget` | `setActive`, `setLabel` | — |
-| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)`, `setSelectColumn(bool)`, `setSelectAllLabel(text)`, `setRowLabel(row, text)`, `setRowHeading(row)` (once, after `setRowKey`: the row is never marked, reported or activated), `setRowSpans(row, vector<RowSpan>)` (after `setRowKey`, and on every change; the spans are resolved ([Row spans](view_tree.md#row-spans)), so once a change settles a backend is told none out of range, overlapping, past the last row or on a heading; while it settles it may see one, so it derives coverage at layout or paint time from the rows' current order, never at this call, and clips a span that runs past its last row or onto a heading; a call with an empty list clears the row's), `setExistingKeys(keys)` (every key, in row order, above the virtualization threshold), `setSort(optional<TableSort>)` (marks the column's header with the direction, or none; only for a table with a sortable column) | `setOnSelectionChange(keys, SelectionChange)`, `setOnActivate(Key)` (Enter or a double click), `setOnSort(column)` (a click on a sortable column's header, or Enter or Space on it where the header takes focus; the index counts the columns `setColumns` gave, which the select column is not one of; another header reports nothing). The backend never reorders rows for a sort: it shows `setSort`, and what a click means is the lowering's |
+| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setRowMarks(row, RowMarks)` (after `setRowKey` for a row whose look carries marks, and on every change: `unmatched` draws the row muted, `busy` with the theme's busy mark, `locked` with its locked mark, and `tooltip` is the row's tooltip, over its own; a busy or locked row whose `tooltip` is empty says why on hover, "Saving this row" or "Locked by another user"; `RowMarks{}` draws an unmarked row; default: ignored), `setSelection(keys)`, `setSelectColumn(bool)`, `setSelectAllLabel(text)`, `setRowLabel(row, text)`, `setRowHeading(row)` (once, after `setRowKey`: the row is never marked, reported or activated), `setRowSpans(row, vector<RowSpan>)` (after `setRowKey`, and on every change; the spans are resolved ([Row spans](view_tree.md#row-spans)), so once a change settles a backend is told none out of range, overlapping, past the last row or on a heading; while it settles it may see one, so it derives coverage at layout or paint time from the rows' current order, never at this call, and clips a span that runs past its last row or onto a heading; a call with an empty list clears the row's), `setExistingKeys(keys)` (every key, in row order, above the virtualization threshold), `setSort(vector<TableSort>)` (the sort chain, most significant first: each key's header draws `sortMarkText(direction, place, count)` after its label — ` ▲` or ` ▼`, and with two or more keys its place from 1, ` ▲2` — and carries `sortDescription` as its accessible description, `sorted ascending` or, with two or more keys, `sorted ascending, key 2 of 3`; a header not in the chain draws no mark and has no description; only for a table with a sortable column), `setMenu(entries, onChoose)` (only for a table with menus: a header's menu opens on a right click on it, or `Shift+F10` or the context-menu key with it focused, and the table's menu, `entries(nullopt)`, from a `⋯` at the header row's trailing end named `Table options`, which keeps room of its own so that it covers no header or filter button; a menu opened from the keyboard is used from the keyboard, and Escape closes it however it was opened; the entries are asked for each time a menu opens; default: no menus), `setCellMenu(entries(row, column), chosen(row, column, path))` (pure: a right click, a long press, or `Shift+F10` or the context-menu key on the focused cell opens the cell's menu at the cell; first the row becomes the selection alone, reported as `Replace`, when it is not selected, a selected row keeping the selection; then `entries` is asked, which focuses the cell (`setFocusCell`) when it is not focused, and the menu shows what it returned; a choice calls `chosen` with the cell and the entry's path, never for a separator, a heading, a disabled entry or one with a submenu; while the table has the focus, a key it does not take itself that is one of the chords `setCellMenuKeys(chords)` gave asks for the focused cell's entries and is matched against their `keys` at every level, the first enabled entry without a submenu whose chord it is running as if chosen and the key stopping there; any other key asks for nothing; default for `setCellMenuKeys`: ignored, and then no key runs an entry), `setVisibleColumns(columns)` (the arrangement's visible columns in layout order, for a table over a `TableSource`, once built and on every change; the places a move and a group count in; untold, every column in its own order; default: ignored), `setFiltered(columns)` (each filterable column's header draws a filter button, filled for these columns, whose headers are then named `{label}, filtered`; default: ignored), `setColumnGroups(vector<TableColumnGroup>)` (a row over the headers: each group's label over the visible places `first` to `first + count - 1`, with its own filter button, filled while `filtered`; empty draws no row; default: ignored), `setStatus(TableStatus)` (the status line: counts, a failed fetch's or level's state with Retry when it offers it, what stands while its cause lasts (`standing`) with its entries, and the latest message with its entries; each entry is drawn as a button with its label, which `setOnStatusEntry` reports by id; one not `shown` takes no space; default: ignored), `setSelectionView(except)` (every row but these keys is marked, rows the backend does not hold included, until the next `setSelection`; in that state a `Ctrl`+click reports `Extend` with the keys now marked among the rows the backend holds, and a plain click `Replace`; default: ignored, which only a backend without `setOnSelectAll` may keep), `setCellLoad(row, column, CellLoad)` (after `setRowKey` and on every change, for a table over a `TableSource`: `Unloaded` a placeholder of a fixed width in the column's alignment, `Failed` an error mark of that width, over the cell's content, neither widening the column; default: ignored), `setCellAccent(row, column, CellAccent)` (after `setRowKey`, on every change, and whenever a cell is attached to a row at a column, for a table over a `TableSource`: `tone` tints the cell with the theme's tone surface under its selection and focus marks; `tooltip` shows on hover after the theme's delay and on keyboard focus at once, is the cell's accessible description and draws the theme's "more here" mark; `invalid` draws the theme's error mark in place of the cell's text; a cell no call names has no accent; default: ignored); a column's `unit` (in `setColumns`) is drawn after its label, as `headerText` writes it ("Mass [kg]") or on a second, muted line, and the header's accessible name is `headerAccessibleName` ("Mass, kg"); for a table over a `TableSource`, each default to nothing: `setColumnWindow(columns, offsets, widths, totalWidth, pinned)` (the columns the mount realizes, pinned first, with their offsets and widths and the full width; the header shows these only), `setHorizontalOffset(x)` (anchoring: the scroll moves without a report), `setFocusCell(viewRow, column)`, `setCounts(optional rows, columns)` (rows nothing under a lower bound), `scrollToRow(viewRow)`, `setHighlightedRow(optional viewRow)`, `setCellColumn(row, cell, optional column)` (places a cell; nothing pools it: not drawn, no place, its column blank; a backend places cells by this call, never by their order in the row), `setRowIndex(row, viewRow)` (a realized row's view index, once it is realized and whenever it changes; the focused row stays realized outside `setRealizedWindow`'s range, so a backend places each row by its index; `setRealizedWindow` names the contiguous range only; it is told to every source table after each pass, one that realizes every row, a document's `rows` table below its threshold, as `(0, count, count)`, since a backend takes the view's count from it), `tableMeasure()` (the backend's horizontal measure: one `Sizing` unit, one monospace character, a content column's starting width, the padding a column takes beyond its content, added to a fixed or user width, and the narrowest a `shrink` column goes, padding included, in the measure its scroll, viewport, measured widths and `setColumnWindow` use; default 1, 1, 100, 0, 8) | `setOnSelectionChange(keys, SelectionChange)`, `setOnActivate(Key)` (Enter or a double click), `setOnSort(column, HeaderClick)` (a click on a sortable column's header, or Enter or Space on it where the header takes focus, `Plain`; a `Shift`+click, `Shift+Enter` or `Shift+Space`, `Shift`; the index counts the columns `setColumns` gave, which the select column is not one of; another header reports nothing), `setOnColumnMove(column, position)` (dragging a header onto another, or `Ctrl+Shift+Left` and `Ctrl+Shift+Right` on a focused header, with the column's new visible place; a backend that draws no drag reports the keys only; default: ignored), `setOnColumnResize(column, optional units)` (only for a table whose columns resize: dragging a header's trailing edge, its width in `Sizing` units, and a double click on the edge none; a backend that draws no edge ignores it), `setOnFilter(column)` (a filterable column's filter button), `setOnGroupFilter(group)` (a group's filter button), `setOnCopy()` (`Ctrl+C` on the focused table), each defaulting to nothing, `setOnRetry()` (the status line's Retry; default: ignored), `setOnStatusEntry(id)` (a status line entry chosen, by its id; default: ignored), and for a `TableSource` table `setOnHorizontalRange(scrollX, viewport)`, `setOnColumnMeasured(column, ColumnMeasure{header, natural, least})`, `setOnFocusMove(FocusMove)`, `setOnSelectRange(anchorRow, focusRow, SelectionChange)`; and for an editable table,
+each defaulting to nothing: `setOnText(text)` (printable text typed while a cell has focus and no editor is open),
+`setOnCellClick(viewRow, column, doubleClick)` (a click on a cell, `false`; the second click of a double click calls it
+again with `true`), `setOnFocusOut()` (focus moved to a widget outside the table, its cell editor and its popups: focus in a popup a
+widget inside the table opened, a dropdown's list or a date picker, is not focus out, though the popup is drawn
+outside the table),
+`setCellEditor(row, column, editor)` (draws `editor`, a child of `row`, over the cell's area in place of its content,
+and null draws the cell again; an editor that holds the focus when it closes gives it back to the table), `setCellMarks(row, column, CellMarks)` (after `setRowKey`, on every change, and
+whenever a cell is attached to a row at a column: `readOnly` the theme's read-only cell surface, `modified` its
+modified mark, `error` its error mark, `stale` and `muted` the stale and muted looks; a cell no call names has none)
+and `setRowModified(row, bool)` (the row header's modified mark), `setCellSelection(optional<array<size_t, 4>>)`
+(`{firstRow, rowCount, firstPosition, positionCount}` in view rows and visible places, the places of the layout and
+not indices into the columns; empty draws none; it never calls the handler) and `setOnCellSelect(anchorRow,
+anchorPosition, focusRow, focusPosition)` (the table selects cells: it draws no row selection and reports no
+`onSelectionChange`; a drag from cell to cell, a `Shift`+click from the focused cell, a click on a row's header (anchor
+`(row, 0)`, focus `(row, last position)`) and a column header's selection gesture (anchor `(0, position)`, focus
+`(last row, position)`) report the rectangle; `Shift` with an arrow and `Ctrl+A` are the table's own chords, declared
+with `setKeys`). The terminal marks the rows a rectangle spans with `*` in the gutter, as it marks selected rows, and
+draws no column of it; a click in a row's gutter selects the row's cells and a `Ctrl`+click on a header the column's.
+Qt Quick draws the rectangle over the cells it spans and gives each row a header, a leading strip before the first
+column, whose click selects the row's cells; a `Ctrl`+click on a header selects the column's and does not sort, while
+a plain click and a `Shift`+click sort as on any table. Its drag selection is a mouse's: a touch drag scrolls the rows,
+so a grid past the window threshold still scrolls under a finger. The terminal draws an error mark `!` and a
+modified one `+` at a cell's trailing edge, a modified row `+` in its selection mark's cell while it is not selected,
+an open editor in its cell's slot, and reports focus leaving before the frame after the one that found it outside.
+The backend never reorders rows for a sort: it shows `setSort`, and what a click means is the lowering's |
 | `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field), `setCaption(label, shown)`; the calendar opens under the field, at the field's start when it fits in the window, else ending at the field's end, and always inside the window | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
 | `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)`, `setOnCommit(value)` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |
@@ -413,6 +455,18 @@ A page asks its container for a natural width of the sheet, a least width of 0 a
 recording backend records `size`, `margins`, `scale` and `displayed` on a `Page`, and `anchor`, `rect` and `overflow` on a
 `PageRegion`, and logs a change of the derived `scale`, `displayed`, `rect` and `overflow` (`setPageAvailableWidth`,
 `setRegionContentHeight`).
+
+**The clipboard.** `IViewBackend::copyText(text)` puts text on the system clipboard and says whether it did: Qt Quick
+through `QGuiApplication::clipboard()`, the terminal through an OSC 52 sequence written to its output (whether the
+terminal honours it cannot be known, so it answers true), and `RecordingBackend` by recording it for `clipboardText()`.
+The default answers false: a backend without a clipboard copies nothing. `IViewBackend::pasteText()` reads the
+clipboard's text, what a grid's `Ctrl+V` pastes: Qt Quick from `QGuiApplication::clipboard()`, `RecordingBackend` the
+text `copyText` last recorded, nothing while `setClipboard(false)`; the default, which the terminal keeps, answers
+nothing.
+
+**Column indices.** The `column` of every `TableWidget` call and handler above is an index into the columns
+`setColumns` gave, which hold every column, hidden ones included, and do not change when the layout does. Only a move's
+`position` and a group's `first` are visible places of the arrangement.
 
 **The width class.** `IViewBackend::widthClass()` is the class of the surface the backend draws on, now, and
 `setOnWidthClass(listener)` registers the one listener told of each later change, on the owner and outside any layout
@@ -456,6 +510,11 @@ the list it refers to may arrive in either order.
   | Shift+Up, Shift+Down | as Up and Down | move the current row and select from the anchor to it | `Replace` |
   | Ctrl+A | goes on outwards | selects every row; with every row selected already, clears them | `Extend` |
   | Enter | activates the current row | activates the current row | — |
+
+  A table given `setOnSelectAll` calls it for Ctrl+A, and for its header box, in place of selecting and reporting:
+  the caller selects its whole view, rows the backend does not hold included, and sets the selection back. The
+  recording, terminal and Qt Quick backends take it, over a `TableSource` too, where it stands in for the range
+  through `setOnSelectRange`; a backend that does not, selects as the table above says.
 
   A **select column** (`setSelectColumn(true)`) draws the same selection as a leading column of check boxes. A row's
   box is checked while the row is selected, and toggling it is a Ctrl-click on the row. The header box is checked
@@ -558,7 +617,7 @@ The headless reference backend and the test double for everything above the cont
   `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title`, `description` (Dialog); `active`, `label` (Busy);
   `columns` (each `label:width`, then `;align=` and `;valign=` for a place other than the default),
   `selectionMode`, `selection` (the requested keys it marks, in the order requested),
-  `rowKey`, and `rowSpans` on a row (`column:rows` pairs joined by commas in column order, as `0:2,3:2`, `none` after a call with an empty list, and absent until the first call; Table); `mode`, `offset`, `value`, `pattern` (DateTimeInput); `range`, `value`
+  `rowKey`, and `rowSpans` on a row (`column:rows` pairs joined by commas in column order, as `0:2,3:2`, a span across columns as `column:rowsxcolumns`, as `0:2x3`, `none` after a call with an empty list, and absent until the first call; Table), `summary` (`true`) on a summary row, and `bands` on the table (each run `level:label|unit@first+count`, `;pinned` for a pinned run, `|unit` only with a unit); `mode`, `offset`, `value`, `pattern` (DateTimeInput); `range`, `value`
   (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `spans`, `actionLabel`, `dismissible` (Banner);
   `tone`, `text`, `icon`, `style`, and `removable` (the remove control's name) of a removable one (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
   `captions` and `captionWidth` (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title`, `description` (Drawer);
@@ -610,8 +669,14 @@ The headless reference backend and the test double for everything above the cont
   collapsible section), `dismiss` (a dialog, a drawer, a dismissible banner, or a removable badge, whose `onRemove` it runs), `resize(id,
   sizes)`, `dropFiles(id, paths)` (true when the zone took the drop), `selectRows` (reported as `Replace`, its last
   key the anchor), `clickRow(id, key, RowClick)` (a click with its modifiers, as the selection model has it),
-  `clickHeader(id, column)` (a sortable column's index reaches `onSort`; another header does nothing, as a
-  user's click on it does), `activateRow`,
+  `clickHeader(id, column, click = Plain)` (a sortable column's index reaches `onSort` with `click`; another
+  header does nothing, as a user's click on it does), `menuOf(id, optional column)` (a header's menu, or the
+  table's for none, as a user opening it sees it), `chooseMenu(id, optional column, labels)` (an entry by its labels
+  from the top, resolved to its path; nothing for a disabled entry, one inside a disabled entry or one with a
+  submenu), `moveColumn(id, column, position)` (nothing for the place the column holds or one past the last visible
+  column), `resizeColumn(id, column,
+  optional units)`, `clickFilter(id, column)` (a filterable column's), `clickGroupFilter(id, group)`, `pressCopy(id)`
+  (as `Ctrl+C`, which `press` also takes on a table that copies), `activateRow`,
   `setDateTime`, `slide`, `pick` and `drag`. A helper first changes what the native widget would
   change by itself — the field's text and cursor, the box's check mark, the marked option or rows,
   the highlighted tab, the collapsed or open state, a dismissed dialog's or drawer's `open`, the
@@ -634,7 +699,8 @@ The headless reference backend and the test double for everything above the cont
     destroys `id` stops the key there. `press` returns whether any step took the key. It changes no recorded
     focus.
   - A helper used on a kind it does not apply to throws `std::logic_error`, and so does an action
-    no user could take: choosing a key the Select does not offer, collapsing a panel that is not
+    no user could take: a header helper given a column whose header is not drawn (one the visible columns leave
+    out), a menu label its level does not have, a group the table does not draw, choosing a key the Select does not offer, collapsing a panel that is not
     collapsible, selecting a key with no row, a row twice, any row in a `None` table or more than
     one in a `Single` one, activating a key with no row, dragging a widget onto itself, clicking a
     banner or empty state that shows no action button, dismissing a banner that is not
@@ -644,6 +710,13 @@ The headless reference backend and the test double for everything above the cont
     and the target's predicate accepted the key; then `onDrop` has run. An empty predicate accepts
     nothing here, so a drop that lands on a mounted target without `accepts` shows the mount's
     accept-everything default at work.
+
+- **Configuring a table.** A table records `sort` as its chain (`0:Ascending,2:Descending`, `none` when empty),
+  `filtered` as its columns (`[0,2]`) and `columnGroups` as `label:first+count` (`[Company:0+3]`, with
+  `;filtered=true` for a filtered group, and `:`, `+` and `;` in a label escaped); a filterable column's entry in
+  `columns` carries `;filterable=true`; `headerText(id, column)`, `headerName(id, column)` and
+  `headerDescription(id, column)` read a header as a terminal or a screen reader would, and `clipboardText()` is the
+  last text `copyText` was given, empty before any.
 
 - **Text cursor.** A TextInput keeps a cursor, a byte offset into its text, read with `cursor(id)`.
   `edit` and `submit` leave it at the end of the new text, `moveCursor(id, position)` moves it
@@ -751,7 +824,7 @@ after it; its reading operations report what the widget shows now.
 | `dismiss(dialog)` | Dismisses a dialog or drawer (Esc on the TUI), or a dismissible banner; removes a removable badge with its remove control |
 | `selectRows(table, rows)` | Selects rows by position, in the order the user picks them — at least one, and only one in a `Single` table — so the user's selection is exactly those rows |
 | `clickRow(table, row, click)` | Clicks a row by position as a user would, plain (`RowClick::Only`), with Ctrl (`Toggle`) or with Shift (`Range`) |
-| `clickHeader(table, column)` | Clicks a column's header as a user would |
+| `clickHeader(table, column, click)` | Clicks a column's header as a user would, with Shift held for `HeaderClick::Shift`; `click` defaults to `Plain` |
 | `selectedRows(table)` | The positions of the rows the table shows as selected, ascending |
 | `moveCursor(field, position)` | Moves a text field's cursor as the arrow keys or a click would, without changing the text |
 | `cursorOf(field)` | Where a text field's cursor is, as a byte offset into its text |
@@ -762,6 +835,18 @@ after it; its reading operations report what the widget shows now.
 | `dropFiles(zone, paths)` | Drops files from the operating system onto a drop zone |
 | `boundsOf(widget)` | Where the widget is drawn, in the backend's units, for the layout cases; none by default, for a probe that reads no geometry |
 | `textExtentOf(text)` | The box around the lines a Text draws, in the units `boundsOf` uses; none by default, and a layout case that reads it then fails as one that reads no bounds does |
+| `headerMenu(table, column)` | Opens a header's menu, or the table's for none, as a user would, reads its top level's entries and closes it |
+| `chooseHeaderMenuEntry(table, column, path)` | Opens a header's or the table's menu and chooses an entry by its path |
+| `moveColumn(table, column, position)` | Moves a column as a user would: a header drag, or the keys on a focused header |
+| `headerText(table, column)` | The text a header draws: its label and its sort mark |
+| `headerName(table, column)` | A header's accessible name |
+| `headerDescription(table, column)` | A header's accessible description |
+| `pressFilter(table, column)` | Presses a filterable column's filter button |
+| `pressGroupFilter(table, group)` | Presses a column group's filter button in the group row |
+| `clipboardText()` | What `copyText` put on the clipboard, read back from where the backend wrote it |
+
+The operations from `headerMenu` on have default bodies that drive nothing and read nothing, as `descriptionOf` and
+`boundsOf` have: a probe that keeps them fails the cases that use them.
 
 A case reaches widgets only through `Mounted::root()`, `childAt` and further roots it mounts, or
 through widgets it makes with `backend()` itself, so a probe needs no lookup by name.
@@ -862,6 +947,20 @@ Each case is named by the rule it checks:
 56. In that table, with the spanning column's cells placed at the top of their rows, a click in the spanning cell's
     column at the third row's line, below the cell's content, selects the first row's key: a click anywhere on the
     span's height is a click on the span.
+57. A `Shift`-click on a sortable header reports `Shift`, and a plain click `Plain`.
+58. With the chain `Mass` descending, `Name` ascending, `Site` ascending, the headers read `Name ▲2`, `Mass ▼1` and
+    `Site ▲3`, and `Name`'s description is `sorted ascending, key 2 of 3`; with `Name` descending alone it reads
+    `Name ▼`, described `sorted descending`, and `Mass` has no description.
+59. A header's menu of `Sort ascending`, a separator and `Hide column` shows those three, and choosing `[2]` in column
+    1's menu reports column 1 and the path `[2]`.
+60. The table's menu is the menu with no column: choosing its first entry reports none and `[0]`.
+61. Moving column 0 to place 1 reports `(0, 1)`.
+62. With `filtered = {0}` over two filterable columns, the first header is named `Name, filtered` and the second
+    `Mass`.
+63. `Ctrl+C` on a focused table reports a copy once.
+64. `copyText("a\tb")` answers true, and the clipboard then reads `a\tb`.
+65. Pressing the filter button of a filterable column reports that column once.
+66. Pressing a column group's filter button reports the group once.
 
 ### What the probe cannot reach
 

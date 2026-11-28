@@ -151,14 +151,14 @@ std::string refusal(std::vector<RecordInfo> records, ActionResultSlotMap const& 
 
 TEST_CASE("records_of_list_action", "[push][records]") {
     auto const records = effects::recordsOf("T_WalkerListRows");
-    REQUIRE(records == std::vector<effects::ActionRecord>{{"T_Row", "id", {"rows"}}});
+    REQUIRE(records == std::vector<effects::ActionRecord>{{.record = "T_Row", .keyField = "id", .paths = {"rows"}}});
 }
 
 TEST_CASE("registration_order_irrelevant", "[push][records]") {
     // Static initialisers ran in link order: this file's before push_records_late.cpp's.
     REQUIRE_FALSE(lateRecordSeenEarly);
     REQUIRE(effects::recordsOf("T_EffectsListLate") ==
-            std::vector<effects::ActionRecord>{{"T_LateRow", "id", {"rows"}}});
+            std::vector<effects::ActionRecord>{{.record = "T_LateRow", .keyField = "id", .paths = {"rows"}}});
     REQUIRE(effects::effectsOf("T_EffectsListLate") ==
             std::vector<effects::Effect>{{effects::Kind::Updates, "T_LateRow"}});
 }
@@ -170,7 +170,8 @@ TEST_CASE("effects_declared_are_read_back", "[push][records]") {
     REQUIRE(effects::effectsOf("T_EffectsOpen") == std::vector<effects::Effect>{{effects::Kind::None, ""}});
     REQUIRE(effects::effectsOf("T_EffectsPost") ==
             std::vector<effects::Effect>{{effects::Kind::ChangesInstance, ""}, {effects::Kind::Changes, "T_EItem"}});
-    REQUIRE(effects::recordsOf("T_EffectsEdit") == std::vector<effects::ActionRecord>{{"T_EItem", "id", {"items"}}});
+    REQUIRE(effects::recordsOf("T_EffectsEdit") ==
+            std::vector<effects::ActionRecord>{{.record = "T_EItem", .keyField = "id", .paths = {"items"}}});
 }
 
 TEST_CASE("unregistered_action_reads", "[push][records]") {
@@ -217,10 +218,12 @@ TEST_CASE("matching_stops_at_first_record_on_a_path", "[push][records]") {
         {record("V_Row", typeid(VRow)), record("V_Inner", typeid(VInner)), record("V_Header", typeid(VHeader), {})},
         slots, {});
 
-    REQUIRE(resolved.recordsOf("A_Nested") == std::vector<morph::effects::ActionRecord>{
-                                                  {"V_Header", std::nullopt, {"header"}}, {"V_Row", "id", {"loose"}}});
-    REQUIRE(resolved.recordsOf("A_Root") ==
-            std::vector<morph::effects::ActionRecord>{{"V_Header", std::nullopt, {""}}});
+    REQUIRE(resolved.recordsOf("A_Nested") ==
+            std::vector<morph::effects::ActionRecord>{
+                {.record = "V_Header", .keyField = std::nullopt, .paths = {"header"}},
+                {.record = "V_Row", .keyField = "id", .paths = {"loose"}}});
+    REQUIRE(resolved.recordsOf("A_Root") == std::vector<morph::effects::ActionRecord>{
+                                                {.record = "V_Header", .keyField = std::nullopt, .paths = {""}}});
     REQUIRE(resolved.actionsHolding("V_Row") == std::vector<std::string>{"A_Nested"});
     REQUIRE(resolved.actionsHolding("V_Header") == std::vector<std::string>{"A_Nested", "A_Root"});
     REQUIRE(resolved.actionsHolding("V_Inner").empty());
@@ -489,7 +492,37 @@ TEST_CASE("identical_record_registrations_are_one", "[push][records]") {
         {record("V_Row", typeid(VRow)), record("V_Row", typeid(VRow))}, slots, {});
     REQUIRE(resolved.records.size() == 1);
     REQUIRE(resolved.recordNamed("V_Row") != nullptr);
-    REQUIRE(resolved.recordsOf("A_List") == std::vector<morph::effects::ActionRecord>{{"V_Row", "id", {"rows"}}});
+    REQUIRE(resolved.recordsOf("A_List") ==
+            std::vector<morph::effects::ActionRecord>{{.record = "V_Row", .keyField = "id", .paths = {"rows"}}});
+}
+
+TEST_CASE("a_holder_above_a_record_names_its_open_and_partial_members", "[push][records][holders]") {
+    using morph::model::detail::HolderMembers;
+    ActionResultSlotMap slots;
+    ActionResult held = result({{.type = typeid(VOther), .path = "", .opaque = true},
+                                {.type = typeid(VOther), .path = "", .opaque = true},
+                                {.type = typeid(VRow), .path = "page.rows"},
+                                {.type = typeid(VRow), .path = "rows"}});
+    // The result's own holder is above both paths; a second copy of it adds nothing. The page's holder is above only
+    // "page.rows" and names no partial member. A holder at "rows" holds the rows themselves and one at "other" holds
+    // none of them, so neither is above the record.
+    held.holders = {HolderMembers{.path = "", .open = {"awaiting"}, .partial = "unloadedRows"},
+                    HolderMembers{.path = "", .open = {"awaiting"}, .partial = "unloadedRows"},
+                    HolderMembers{.path = "page", .open = {"distinct"}, .partial = {}},
+                    HolderMembers{.path = "rows", .open = {"rowsOpen"}, .partial = "rowsPartial"},
+                    HolderMembers{.path = "other", .open = {"otherOpen"}, .partial = "otherPartial"}};
+    slots.emplace("A_Held", std::move(held));
+    auto const resolved = morph::effects::detail::resolveForTesting(
+        {record("V_Row", typeid(VRow)), record("V_Other", typeid(VOther))}, slots, {});
+
+    REQUIRE(resolved.recordsOf("A_Held") == std::vector<morph::effects::ActionRecord>{
+                                                {.record = "V_Other", .keyField = "id", .paths = {}, .opaque = true},
+                                                {.record = "V_Row",
+                                                 .keyField = "id",
+                                                 .paths = {"page.rows", "rows"},
+                                                 .opaque = false,
+                                                 .open = {"awaiting", "page.distinct"},
+                                                 .partial = {"unloadedRows"}}});
 }
 
 TEST_CASE("record_same_type_different_options_throws", "[push][records]") {

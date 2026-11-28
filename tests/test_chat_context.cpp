@@ -177,6 +177,13 @@ TEST_CASE("an_alias_of_a_nested_scope_is_left_out", "[chat][context]") {
     }
 }
 
+// GCC at -O3 devirtualizes `facts()` speculatively to the scripted dispatcher's channel, a type the queueing
+// wrapper's channel is not, and reports the dead branch as an out-of-bounds read. The branch is guarded by a
+// dynamic-type check and never runs; the warning is silenced for this test only.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
 TEST_CASE("the_queueing_dispatcher_passes_facts_through", "[chat][context]") {
     Harness harness;
     morph::ui::QueueingDispatcher queueing{harness.dispatcher, &harness.owner};
@@ -184,6 +191,10 @@ TEST_CASE("the_queueing_dispatcher_passes_facts_through", "[chat][context]") {
     CHECK(channel->facts().instanceId == 1001);
     CHECK(channel->facts().primary == "S-1");
 }
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 TEST_CASE("a_bridge_channel_reports_the_instance_it_bound", "[chat][context]") {
     morph::testing::StepExecutor owner;

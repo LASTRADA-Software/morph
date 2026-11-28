@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
-#include <format>
 #include <memory>
 #include <morph/core/action_guard.hpp>
 #include <morph/session/session.hpp>
@@ -118,14 +117,6 @@ public:
 [[nodiscard]] inline morph::time::DateTime at(int year, unsigned month, unsigned day, int hour = 9) {
     return morph::time::DateTime{std::chrono::year{year},  std::chrono::month{month}, std::chrono::day{day},
                                  std::chrono::hours{hour}, std::chrono::minutes{0},   std::chrono::seconds{0}};
-}
-
-/// @brief The whole UTC second of @p at as ISO 8601 text, the form the table engine's date parser reads; an operand
-///        built from it falls exactly on the second the engine floors the instant to.
-/// @param at The instant.
-/// @return For example `2026-11-10T09:00:00Z`.
-[[nodiscard]] inline std::string isoSecond(morph::time::Timestamp const& at) {
-    return std::format("{:%Y-%m-%dT%H:%M:%SZ}", std::chrono::floor<std::chrono::seconds>((*at).value));
 }
 
 /// @brief A signed session for @p principal.

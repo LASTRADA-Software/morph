@@ -12,10 +12,12 @@
 #include <chrono>
 #include <compare>
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <memory>
 #include <morph/table/edits.hpp>
 #include <morph/table/engine.hpp>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -23,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "table/row_commits.hpp"
 #include "table/table_fixtures.hpp"
 
 using namespace morph::table;
@@ -824,4 +827,177 @@ TEST_CASE("table: updates after an unapplied structural change recompute in full
     REQUIRE(reference.setSort({{"n", kAsc}}).has_value());
     CHECK(viewKeys(engine) == viewKeys(reference));
     CHECK(engine.rowIdAt(0) == key(19));
+}
+
+// ── Cells of a model's table: row commits, drafts by key ────────────────────
+
+namespace {
+
+namespace table = morph::table;
+using morph::test::RowCommits;
+
+table::RowId const k1{std::int64_t{1}};
+
+}  // namespace
+
+// Mutation: rowFetched clearing a stale cell's draft.
+TEST_CASE("cell edits: stale until the reply, modified until the next fetch", "[table][edits]") {
+    RowCommits c;
+    table::CellEdits edits{c.commit()};
+    edits.setDraft(k1, "count", "9", std::nullopt);
+    edits.commitRow({.row = k1, .cells = {{.column = "count", .json = "9"}}});
+    CHECK(edits.stale(k1, "count"));
+    c.done.at(0)(std::expected<void, std::vector<table::FieldError>>{});
+    CHECK_FALSE(edits.stale(k1, "count"));
+    CHECK(edits.modified(k1, "count"));
+    CHECK(edits.draft(k1, "count") == "9");
+    edits.rowFetched(k1);
+    CHECK_FALSE(edits.modified(k1, "count"));
+    CHECK_FALSE(edits.draft(k1, "count").has_value());
+}
+
+// Mutation: rowFetched ending stale edits too.
+TEST_CASE("cell edits: a fetch before the reply keeps the cell stale", "[table][edits]") {
+    RowCommits c;
+    table::CellEdits edits{c.commit()};
+    edits.setDraft(k1, "count", "9", std::nullopt);
+    edits.commitRow({.row = k1, .cells = {{.column = "count", .json = "9"}}});
+    edits.rowFetched(k1);  // the change event's refetch, before the reply
+    CHECK(edits.stale(k1, "count"));
+    CHECK(edits.draft(k1, "count") == "9");
+    c.done.at(0)(std::expected<void, std::vector<table::FieldError>>{});
+    CHECK(edits.modified(k1, "count"));
+    edits.rowFetched(k1);
+    CHECK_FALSE(edits.modified(k1, "count"));
+}
+
+// Mutation: a row's second request started before the first settles.
+TEST_CASE("cell edits: a row's edits run one at a time, a refusal lands on each cell", "[table][edits]") {
+    RowCommits c;
+    table::CellEdits edits{c.commit()};
+    edits.commitRow(
+        {.row = k1, .cells = {{.column = "label", .json = R"("a")"}, {.column = "note", .json = R"("b")"}}});
+    edits.commitRow({.row = k1, .cells = {{.column = "note", .json = R"("c")"}}});
+    CHECK(c.sent.size() == 1);
+    c.done.at(0)(std::unexpected(std::vector<table::FieldError>{{.column = "label", .message = "taken"},
+                                                                {.column = "note", .message = "too long"}}));
+    CHECK(edits.error(k1, "label") == "taken");
+    CHECK(edits.error(k1, "note") == "too long");
+    CHECK(c.sent.size() == 2);
+    CHECK(edits.errorCount() == 2);
+}
+
+// Mutation: settle filing an error under FieldError::column as given (the error sits on a column "value" or
+// "remarkText" that the table does not have, and the cells show none).
+TEST_CASE("cell edits: a refusal lands on the cell whose member it names", "[table][edits]") {
+    RowCommits c;
+    table::CellEdits edits{c.commit()};
+    edits.commitRow({.row = k1, .cells = {{.column = "count", .json = "11", .member = "value"}}});
+    c.done.at(0)(
+        std::unexpected(std::vector<table::FieldError>{{.column = "value", .message = "must be at most 10"}}));
+    CHECK(edits.error(k1, "count") == "must be at most 10");
+    CHECK_FALSE(edits.error(k1, "value").has_value());
+    table::RowId const k2{std::int64_t{2}};
+    edits.commitRow({.row = k2,
+                     .cells = {{.column = "label", .json = R"("a")", .member = "label"},
+                               {.column = "remark", .json = R"("b")", .member = "remarkText"}}});
+    c.done.at(1)(std::unexpected(std::vector<table::FieldError>{{.column = "remarkText", .message = "too long"}}));
+    CHECK(edits.error(k2, "remark") == "too long");
+    CHECK_FALSE(edits.error(k2, "label").has_value());  // no error reached it
+    table::RowId const k3{std::int64_t{3}};
+    edits.commitRow({.row = k3,
+                     .cells = {{.column = "label", .json = R"("a")", .member = "label"},
+                               {.column = "remark", .json = R"("b")", .member = "remarkText"}}});
+    c.done.at(2)(std::unexpected(std::vector<table::FieldError>{{.column = "", .message = "The row is closed"}}));
+    CHECK(edits.error(k3, "label") == "The row is closed");  // names no cell: every cell of the request
+    CHECK(edits.error(k3, "remark") == "The row is closed");
+}
+
+// Mutation: moveRow moving only drafts (the error stays on the old key).
+TEST_CASE("cell edits: drafts are held by key and follow a key change", "[table][edits]") {
+    table::CellEdits edits{[](auto const&, auto const&) {}};
+    edits.setDraft(table::RowId{std::int64_t{5}}, "count", "abc", "Not a number");
+    CHECK(edits.errorCount() == 1);
+    edits.moveRow(table::RowId{std::int64_t{5}}, table::RowId{std::int64_t{9}});
+    CHECK_FALSE(edits.draft(table::RowId{std::int64_t{5}}, "count").has_value());
+    CHECK(edits.draft(table::RowId{std::int64_t{9}}, "count") == "abc");
+    CHECK(edits.errorCount() == 1);
+    CHECK(edits.error(table::RowId{std::int64_t{9}}, "count") == "Not a number");
+}
+
+// Mutation: moveRow leaving the queued edits on the old key (the in-flight edit's settle marks the old key modified).
+TEST_CASE("cell edits: an edit in flight settles on the row's new key", "[table][edits]") {
+    RowCommits c;
+    table::CellEdits edits{c.commit()};
+    table::RowId const k9{std::int64_t{9}};
+    edits.setDraft(k1, "count", "4", std::nullopt);
+    edits.commitRow({.row = k1, .cells = {{.column = "count", .json = "4"}}});
+    edits.commitRow({.row = k1, .cells = {{.column = "note", .json = R"("n")"}}});
+    edits.moveRow(k1, k9);
+    CHECK(edits.stale(k9, "count"));
+    CHECK(edits.stale(k9, "note"));
+    CHECK_FALSE(edits.stale(k1, "count"));
+    c.done.at(0)(std::expected<void, std::vector<table::FieldError>>{});
+    REQUIRE(c.sent.size() == 2);
+    CHECK(c.sent.at(1).row == k9);  // the queued edit names the new key
+    CHECK(edits.modified(k9, "count"));
+    CHECK_FALSE(edits.modified(k1, "count"));
+}
+
+// Mutation: keepColumns dropping drafts but not their errors.
+TEST_CASE("cell edits: a new revision drops drafts of a removed column", "[table][edits]") {
+    table::CellEdits edits{[](auto const&, auto const&) {}};
+    edits.setDraft(k1, "count", "abc", "Not a number");
+    edits.setDraft(k1, "note", "kept", std::nullopt);
+    std::vector<std::string> const kept{"label", "note"};
+    edits.keepColumns(kept);
+    CHECK_FALSE(edits.draft(k1, "count").has_value());
+    CHECK(edits.draft(k1, "note") == "kept");
+    CHECK(edits.errorCount() == 0);
+}
+
+// Mutation: rowAbsent ignored (the deleted row's draft and error stay, errorCount 1).
+TEST_CASE("cell edits: a row absent from a refetch loses its drafts", "[table][edits]") {
+    RowCommits c;
+    table::CellEdits edits{c.commit()};
+    edits.setDraft(k1, "count", "abc", "Not a number");
+    edits.setDraft(table::RowId{std::int64_t{2}}, "count", "7", std::nullopt);
+    edits.rowAbsent(k1);
+    CHECK_FALSE(edits.draft(k1, "count").has_value());
+    CHECK_FALSE(edits.error(k1, "count").has_value());
+    CHECK(edits.errorCount() == 0);
+    CHECK(edits.draft(table::RowId{std::int64_t{2}}, "count") == "7");  // other rows untouched
+}
+
+// Mutation: rowAbsent dropping the edit in flight from the queue (its settle then finds nothing to pop, and the
+// queued edit behind it is sent).
+TEST_CASE("cell edits: a row absent while an edit is in flight sends nothing more and keeps nothing",
+          "[table][edits]") {
+    RowCommits c;
+    table::CellEdits edits{c.commit()};
+    edits.setDraft(k1, "count", "4", std::nullopt);
+    edits.commitRow({.row = k1, .cells = {{.column = "count", .json = "4"}}});
+    edits.commitRow({.row = k1, .cells = {{.column = "note", .json = R"("n")"}}});
+    edits.rowAbsent(k1);
+    c.done.at(0)(std::unexpected(std::vector<table::FieldError>{{.column = "", .message = "gone"}}));
+    CHECK(c.sent.size() == 1);
+    CHECK(edits.errorCount() == 0);
+    CHECK(edits.modifiedCount() == 0);
+    CHECK_FALSE(edits.stale(k1, "count"));
+    CHECK_FALSE(edits.draft(k1, "count").has_value());
+}
+
+// Mutation: a success settling whatever draft the cell holds (the draft typed after the commit is dropped by the
+// next fetch).
+TEST_CASE("cell edits: a draft typed after the commit outlives the commit's fetch", "[table][edits]") {
+    RowCommits c;
+    table::CellEdits edits{c.commit()};
+    edits.setDraft(k1, "count", "9", std::nullopt);
+    edits.commitRow({.row = k1, .cells = {{.column = "count", .json = "9"}}});
+    edits.setDraft(k1, "count", "7", std::nullopt);
+    c.done.at(0)(std::expected<void, std::vector<table::FieldError>>{});
+    CHECK(edits.modified(k1, "count"));
+    edits.rowFetched(k1);
+    CHECK_FALSE(edits.modified(k1, "count"));
+    CHECK(edits.draft(k1, "count") == "7");
 }

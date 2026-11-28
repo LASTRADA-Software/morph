@@ -314,6 +314,18 @@ state, so its look follows the selection alone; its `clicked` fires the row's `t
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
 
+A summary row (`setRowSummary`) is `MorphTableRow.summary`: a `summaryFill` rectangle in `Theme.tableSummary`
+(`color.table.summary`) over its background, and its tap, context and long-press handlers off, so it is never
+selected, activated or given a cell menu. A span across columns (`RowSpan::columns`) is a `spanPlan` entry's
+`columns`: the spanning cell and its backdrop are laid out across that many columns from its own
+(`MorphTableRow.spanWidth`), and the cells it covers in its row and the rows below are hidden.
+
+Header bands (`setBands`) are the QML property `bands`, `[{level, text, first, count, pinned}]` with `text` the label
+and its unit (`ui::headerText`): one item per run (`band<index>`), at its level's line above the group line, from the
+left edge of the first column at the visible places it names to the right edge of its last, so a band moved apart is
+two items and never covers a foreign column. `groupRowHeight` is everything above the column headers: the band lines,
+then the group line.
+
 A spanning cell (`setRowSpans`; `TableImpl::planSpans` resolves it against the rows as they stand, each time a row
 comes, goes, moves or is told its spans) stays a cell of its origin row, left out of that row's `tallest` and
 `implicitHeight`, and overflows the row downward: `MorphTableRow.spanPlan` (`[{column, rows}]`, the spans clipped to the
@@ -339,6 +351,88 @@ document hid): it takes no focus and no tap, has no accessible node, and is left
 caches as a hidden cell is. `Accessible` has no cell extent, so assistive technology reads the cell in its origin
 row.
 
+**A table over a `TableSource`** draws what the mount realizes ([table.md, The renderer](../table/table.md#the-renderer)).
+The mount gives it a horizontal-range handler before any row, and `TableImpl::setOnHorizontalRange` sets
+`sourceRows`: the rows then go into a plain item (`rowsPlane`), not the column layout, and each is placed at the top
+of its view row (`setRowIndex` writes `viewRow`), whatever its place among the children, since the focused row stays
+realized outside the row window; a row is striped by its view row's parity, not its place. **The measure.**
+`tableMeasure` answers pixels: a unit is `Theme.unitWidth`, a monospace character `Theme.monoAdvance`, a column's
+padding `table.cellPaddingX` a side and a content column's start twelve units, so the mount gives a windowed fixed
+column the width `measure` gives it unwindowed. **Cells by column.** `setCellColumn` writes the cell's `measuredIndex` (the column it
+is placed in and reports its widths for) and pools a cell with none through `ItemBase::cover`, so a pooled cell is
+hidden and placed nowhere; a row never places a source table's cells by their order, and places them once per event
+loop turn however many a pass moves (`schedulePlace`). **The column window.**
+`setColumnWindow` writes `windowColumns` (`[{column, offset, width}]`, pixels, pinned first), `windowTotalWidth` and
+`pinnedShown`, and sets `arranged`: from then on no width is worked out over every column (`widths` is empty and the
+caches are not scanned), the header has a label for each window column only (`headerCellCount`), at its offset, and a
+row places each cell at its column's offset and width. A pinned column's header label and cells are held at the
+leading edge (`x` plus `hflick.contentX`), above the rest: a header label on the surface colour, and a row's pinned
+cells over an opaque backdrop the row makes in `cells` for a table with pinned columns only (`pinnedBackdrop`: the
+surface, then a further instance of the row's `background` cut to the pinned columns, so the row's state shows there
+too), which the scrolled cells pass beneath. Only they follow a sideways scroll (`placePinned`). `hflick` reports its `contentX` and the viewport less the select column (`hscroll`), unless
+`setHorizontalOffset` moved it; a cell reports its natural width and its least width (`shrinkWidth` within its natural width), each
+plus the padding, the first time either is larger than what the column was told (`measured`), and the table reports
+each header's width the same way, again when a font or a sort mark changes it; the mount grows a content column by them
+and fits the stretch columns to the viewport (`tableMeasure().shrinkFloor` is 8 units). **Row height.** A row's `measuredHeight` is its tallest placed cell's plus the padding,
+counted in `rowMeasures`, or the one-line height when every column keeps one line, which measures nothing.
+`layoutRows`, once per event loop turn, sets each realized row's height to what it measures, but no lower than the
+height it had when the column window (`windowColumns`: its columns or their widths, counted in `windowEpoch`) last
+changed; a row measured again in the same window takes what it measures, so one measured while a pooled row still
+held another row's cells settles to its own height (a row that left is forgotten), takes their mean as the height of every row not realized, places each row
+at `rowTop(viewRow)`, and moves `flick.contentY` so the first visible row keeps its place: a row above it that grows,
+or a mean that changes, moves the view by as much (the mount holds no row heights, so this anchoring is
+`MorphTable`'s). The rows in view (`rowAtY` over the top and bottom of the viewport) are what the table reports.
+**Focus** is the table's own: over a source, `activeFocus` stays on `MorphTable`, never on a row, which a recycled
+slot would take away, and a tap gives it to the table; the arrows, Home, End, PageUp, PageDown, Ctrl+Home and Ctrl+End
+fire `focusMove` with the `FocusMove`, Space and Enter act on the focused row when it is realized, and `setFocusCell`
+writes `focusedRowIndex` and `focusedColumnIndex`, brings them into view (`showFocusCell`) and makes that row
+`current`. A tap does not move the mount's focused cell: no seam carries a pointer's cell. **Ranges.** Shift with Up
+or Down moves the focus and fires `selectRange` from the anchor (`anchorRowIndex`: the row last tapped or toggled, or
+the one the focus left) to the focused row; a Shift-tap fires it to the tapped row; Ctrl+A and the select-all box
+fire it over every row of the view, as `Extend`, unless the table has a `setOnSelectAll` handler
+(`selectAllHandled`), when they fire `selectAll` instead, which `TableImpl` passes to the handler. `TableImpl` passes them to `setOnSelectRange`, which resolves them over rows not realized and
+refuses one past `maxRangeRows`; each is `multiple` only. `setSelectionView(except)` marks every row but those keys until the
+next `setSelection`; in that state a Ctrl-tap reports `Extend` with the keys now marked among the rows the table
+holds, the tapped one toggled. `setCounts` writes
+`accessibleRowCount` (-1 for a lower bound) and `accessibleColumnCount`; `Accessible` has no row or column count to
+put them in, so they are properties only. **Load states.** `setCellLoad` writes the row's `cellLoads`; a cell not
+loaded keeps its content bound at opacity 0 under a mark (`loadMarks`): a rounded bar 3 em wide for `Unloaded`, a
+`!` of the same width for `Failed`, whose tooltip and accessible name say "Could not be loaded", each in the
+column's alignment and neither measured into its width. **Cell accents.** `setCellAccent` writes the row's
+`cellAccents` (`{tone, tooltip, invalid}` by column, the tone -1 for none); the row draws each accented cell's slot
+(`accentMarks`, item `cellAccent<column>`): the tone's fill at half strength (`cellTint`, `toneBgOf`) over the row's
+background and under the cells, so a cell keeps its tone in a toned or selected row and the selection fill and bar
+show through it (a pinned cell's slot is the pinned backdrop's, over its copy of the background and under the pinned
+cells, so it lies between the same layers); for a tooltip a small accent square at the slot's top end (`moreMark`), a `ToolTip` on
+hover after the style's press-and-hold interval and at once while the cell holds the keyboard focus, and an
+accessible `ToolTip` named by the text, ignored while there is none. An `invalid` cell draws the `!` mark of a failed
+load, with the accent's tooltip as its tooltip and accessible name. **Cell marks and editors.** `setCellMarks`
+writes the row's `cellMarks` (`{readOnly, modified, error, stale, muted}` by column); the row draws each marked
+cell's slot (`cellMarkSlots`, item `cellMark<column>`): a read-only cell's wash of the scheme's muted colour at 12%
+(`readOnlyWash`), a modified cell's accent square at the slot's top start (`modifiedMark`), an error outline in the
+scheme's error colour (`errorOutline`), and a stale or muted cell at the theme's muted opacity. `setRowModified`
+writes the row's `modified`, an accent bar at the row's leading edge (`rowModifiedMark`). `setCellEditor` gives the
+editor's item the cell's column (`measuredIndex`) and covers the cells of that column, so the row places the editor
+over the cell's rectangle; null uncovers them, and gives the focus back to the table when the window's active
+focus item was inside the closing editor; the row's `editorColumn` says which column it is, -1 for none, and
+`editorItem` the editor's item: focus inside an open popup the editor owns (a control's `popup`, such as a combo
+box's list, or a `Popup` among the data of the editor or a control inside it) counts as inside the table, though
+the popup is drawn in the window's overlay; focus in any other popup or dialog is outside it. While a
+table takes text (`setOnText`, MorphTable's `takesText`), printable text on the focused cell is its `text` event; a
+table that takes cell clicks (`reportsCellClicks`) has each tap on a cell reported as its row's `cellClick`
+(`{column, double}`), the second tap of a double tap with `double`; and one that reports focus leaving
+(`reportsFocusOut`) watches the window's active focus item and fires `focusOut` once it leaves the table and every
+item in it. **Headers with a unit.** A column's `unit` is written after
+its label, `Mass [kg]`, the column is measured to that text, and the header's `Accessible.name` is
+`headerAccessibleName`, `Mass, kg`. **The status line** (`setStatus`) is one `Text` under the
+rows and outside the sideways scroll (`statusText`: the counts, the state, what stands and the message, two spaces
+apart), with a "Retry" `Button` while the state offers it (`retryShown`), firing `retry`, and a `Button` for each of
+its entries (`statusEntries`, `{id, label}`, the standing ones first; `objectName` `statusEntry_<id>`), firing
+`statusEntry` with the id, which `TableImpl` passes to `setOnStatusEntry`; while not shown it takes no height. It is a
+polite live region: once its text has held for half a second it is announced (`Accessible.announce`, from Qt 6.8,
+polite by default), so a message is read out once and a count when it settles; before Qt 6.8 the text is the line's
+accessible name (`StaticText`) and nothing is announced.
+
 A heading row (`setRowHeading`, the row's `heading`) places its one cell from the first inset across the select
 column and every column, less two insets; its `TapHandler`, Enter and select box are off, and `shownRows` (the rows the
 current row, Ctrl+A and the select-all box run over) leaves it out, as does a content column's width scan. Its
@@ -346,17 +440,96 @@ background gets `heading` only when the part declares it, so a `tableRow` restyl
 the stock `MorphTableRowBackground` fills a heading with `scheme.tableHeader`, as the header row is filled, which is
 clear until a theme sets `color.table.header`, so in the stock theme a heading stands out by its content alone.
 
-A sortable column's header label (`header<index>`) is a Tab stop, and a tap, Enter or Space on it fires `sort` with
-the column's index, which reaches `setOnSort`; another header takes neither. The table never sorts: `setSort` writes
-`sortColumn` (−1 for none) and `sortDescending`, and the sorted column's label shows ` ▲` or ` ▼` after its text.
-Every sortable header keeps room for the mark in its column's floor, so the columns do not move when the sort does.
-Qt's accessibility has no sort state, so the header (a `ColumnHeader` named by its label) states the order in its
-`Accessible.description`, "Sorted ascending" or "Sorted descending".
+A column's header label (`header<index>`) is a Tab stop while it is sortable, or the table has menus or moves its
+columns. A tap, Enter or Space on a sortable one fires `sort` with `{column, shift}`, `shift` while Shift is held
+(`HeaderClick::Shift`; Ctrl, on a tap or a key, sorts as `Plain`), which reaches `setOnSort`; another header takes neither. The table never sorts: `setSort` writes
+`sortMarks` and `sortDescriptions`, each by column, from `ui::sortMarkText` and `ui::sortDescription`, and a header in the
+chain shows its mark after its text (` ▲`, or ` ▲2` with two or more keys). Every sortable header keeps room for a
+one-key mark in its column's floor, so the columns do not move when such a sort does, and for the mark it draws now,
+so a header of a chain of two or more keys widens to hold its place (` ▲2`) rather than cutting it. Qt's accessibility has no sort
+state, so the header (a `ColumnHeader` named by its label, and `{label}, filtered` while `filteredColumns` names it)
+states the order in its `Accessible.description`, `sorted ascending` or `sorted ascending, key 2 of 3`, and nothing out
+of the chain.
+
+**Header menus.** With menus (`hasMenu`), a right click on a header, or Shift+F10 or the menu key on a focused one, fires
+`menu` with its column, and the `⋯` (`tableMenuButton`, named `Table options`) at the header's trailing end, held in view
+over the sideways scroll, fires it with −1. The `⋯` has a width of its own (`menuReserve`, a touch target) that the
+columns leave free, so it covers no header or filter button. C++ reads the entries then and calls
+`showMenu(column, entries)`, which opens `configMenu`, a `Popup` placed under that header (or the `⋯`), at its start
+where it fits. The popup takes the focus: Up and Down move among the entries that can be chosen, passing over
+separators and headings, Right or Enter opens a submenu and Left or Backspace goes back up, Enter or Space chooses, and
+Escape or a press outside closes it and gives the focus back to the header. An entry is drawn as a button-style
+`MorphMenu` draws it (`menuEntryText`): a checkable entry's `✓` (or room for one), an icon the theme names drawn as its
+icon (one it does not, written as its name), the label, `›` for a submenu, the chord after it, and the description as
+a muted line under it; a separator is a `MenuSeparator` line. Each entry is an `Accessible.MenuItem` with its
+description, and a checkable one is a checkable button whose `checked` follows its mark: the state is on the button, which is what assistive technology reads, and a click puts the binding back before it is acted on. A choice comes back as `menuChoose` with
+the column and the path. A closed popup is not shown, so it is neither a Tab stop nor an
+accessible node.
+
+**Cell menus.** With a cell menu (`hasCellMenu`, from `setCellMenu`), a right click or a long press on a row's cell
+(`MorphTableRow.columnAt` names the column under the pointer, a pinned column before the scrolled ones under it) fires
+the row's `cellMenu` with the column, as Shift+F10 or the menu key does on the focused cell of a table over a source.
+`TableImpl::openCellMenu` makes the row the selection alone, reported as `Replace`, when it is not marked, asks for the
+entries, which focuses the cell, and calls `showCellMenu(anchor, entries)` with the cell's item: the same `configMenu`
+opens under the cell, with the column −2, named `Cell options` for assistive technology, and the choice comes back as
+`menuChoose` with that column, which C++ routes to the cell whose menu is open; closing it gives the focus back to the
+table. Over a source, a key the table leaves is asked of C++ as `cellKey`: one that is none of the chords
+`setCellMenuKeys` gave answers false at once, and one that is runs the focused cell's first enabled entry without a
+submenu whose chord it is.
+
+**The column chooser and the sort dialog.** "Columns…" and "Sort…" in the table's menu open dialogs the interpreter
+builds from widgets the backend already has (`ui/table_dialogs.hpp`), so the backend adds nothing for them: each is a
+`MorphDialog` (test ids `table_columns` and `table_sort`, titled `Columns` and `Sort`), mounted beside the table in a
+column that takes the table's place, layout and visibility. The column has no gap, so the dialogs' zero-sized
+placeholders add no space. Inside it the table fills the column across, and along it unless its height is fixed or a
+stretch: a row offers to fill its height to the column, and a share of the row is the column's to take. The chooser holds,
+per column in the layout's order, a `MorphCheckbox` and two `MorphButton`s (`Move up`, `Move down`), then `Reset
+columns`, `Group columns…` with its form (a `MorphTextInput`, a check box per column, `Create group`), a line and a
+`Remove group` button per user-formed group, and `Done`; the sort dialog, per key, two `MorphSelect`s (the column, and
+`ascending` or `descending`) and `Move up`, `Move down` and `Remove`, then `Add key` and `Done`. Escape or a press
+outside dismisses either, which closes it as `Done` does. Each change applies as it is made; a refusal goes to the
+table's status line, under the dialog.
+
+**The filter menu.** A filter button, "Filter…" and a group's "Filter {group}, {k} columns…" open a third dialog the
+interpreter builds from the same widgets (`ui/table_filter_menu.hpp`): a `MorphDialog` (test id `table_filter`, titled
+with the column's or the group's label) beside the other two. A values list is a `MorphTextInput` search, a
+`MorphCheckbox` per value (`{text} ({count})`, `(Select all)`, `(Blanks)`), a muted `MorphText` heading per dimension
+of a `Measure` column, a `▸` `MorphButton` on a date bucket that opens, and `More values`; a muted note says the list
+may grow, how many cells could not be read, or why Apply applied nothing. The conditions are `MorphSelect`s (the
+condition, `and` or `or`, a `Measure` column's unit, a group's match line) and `MorphTextInput`s, a date column's
+operand a `MorphDateTimeInput`; an operand that does not read draws its field's error. `Apply` and `Clear filter`
+end it. Escape or a press outside closes it; a condition waiting for its debounce is dropped with it. The backend adds
+nothing for it.
+
+**Moving and resizing.** While the table moves its columns (`movable`), dragging a header and releasing it over
+another fires `columnMove` with the dragged column and the other's visible place (`visibleColumns`, or the column's own
+index when every column shows), and Ctrl+Shift+Left and Ctrl+Shift+Right on a focused header fire it with the place one
+over. While it resizes them (`resizable`), each header ends in a `MorphTableHeaderEdge` (`edge<index>`, six pixels, a
+split cursor): dragging it fires `columnResize` with the header's new width in pixels, from which C++ takes the cell
+padding on both sides (`measurePadding`, which the mount adds back) and rounds the rest to units of `Theme.unitWidth`,
+and a double click on it fires the column with no width. A tap on the edge does not also sort. A sort tap reads Shift
+from its handler's point, which carries the modifiers.
+
+**Filters and groups.** A filterable column's header ends in a filter `ToolButton` (`filter<index>`), `▿`, or `▾` while
+`filteredColumns` names the column, which fires `filter`. With `columnGroups`, a row `groupRowHeight` tall sits above
+the headers: each group's label spans the headers at the visible places it names, worked out from the widths and the
+column window the header is laid out by (`columnBox`), so it follows order, hidden and pinned columns, widths and the
+sideways scroll; it ends in its own filter button (`groupFilter<index>`), filled while the group is `filtered`, which
+fires `groupFilter`. A filterable header keeps room for its button in its column's floor, and is named
+`{label}, filtered` only while it is filterable and filtered. Ctrl+C on the table or a focused header, while the table
+copies (`copies`), fires `copy`.
+
+The clipboard is `QGuiApplication::clipboard()`: `copyText` sets its text.
 
 A row draws its background part (`background`, the `tableRow` part restyle) under its cells and hands it its state:
 `selected`, `hovered` (the pointer over the row), `current` (keyboard focus within the row), `alternate` (an odd
 position, which C++ writes on every row after each append, destroy and move), `tone` (`setRowTone`: −1 for none,
 else the `ui::Tone` index), `selectColumn` (whether the table's select column shows the selection) and its `scheme`.
+`setRowMarks` writes the row's own `busy`, `locked`, `unmatched` and `marksTooltip`: an unmatched row draws at
+`Theme.mutedOpacity`, a busy one shows `busyMark` (a 3 px bar in `Theme.tableBusy` just inside the selection's bar,
+anchored so that it follows a right-to-left layout), a locked one `lockedWash` (a `Theme.tableLocked` wash over its
+cells), and a non-empty `marksTooltip` is the row's `tooltipText`; without one a locked row says "Locked by another
+user" and a busy one "Saving this row", over the row's own `tooltip`.
 The row's height is the larger of its cells' and the background's `implicitHeight`; the stock background draws
 three marks that compose, then the hairline between rows, and its implicit height is a dense row's,
 `Theme.targetHeight - 8`. A toned row is tinted (`tint`: the tone's `bg` colour at half strength over `scheme.surface`)
@@ -645,6 +818,14 @@ software scene graph:
   6.8, as the accessible identifier, and every input kind as one node found by its name and role, the same node as
   its test id, that a driver focuses and types into (a text input) or sets (a slider), with a radio select's options
   as radio buttons.
+- **The column window** (`test_qt_quick_table.cpp`, `QuickWindowFixture`: a table over `FakeRows` in a 1,280 × 800
+  window, every column 64 px): the cells and header cells alive are the windows' (F2); flings create no cell once the
+  pools are warm (F8); the focused cell survives a scroll of 10,000 rows and 200 columns, with the view's counts (F10);
+  hiding and moving a column create no cell items (D8); the status line shows the counts and "Retry"; an unloaded
+  cell draws its placeholder and a failed one its mark, neither widening the column; a row's height does not shrink
+  when the column window moves and is forgotten when the row leaves the row window, and a table of one-line columns measures none; a row growing above the view keeps the rows in view
+  where they are; a windowed fixed column is as wide as an unwindowed one; a tap keeps the focus on the table and the
+  status line is announced (from Qt 6.8); Shift with an arrow, Ctrl+A and the select-all box select through the mount.
 - **qmllint** over every `MorphUi` component, through the module's lint target, failing on any warning
   (`tests/qt_quick/run_qmllint.cmake`).
 

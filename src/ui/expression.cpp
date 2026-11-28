@@ -1227,6 +1227,10 @@ public:
             case ExprKind::Runs:
                 return grouped(expr);
             case ExprKind::Get:
+                // A path out of the whole row is the row's own read, so the environment sees which field it is.
+                if (Expr const& source = *expr.args.at(0); source.kind == ExprKind::Row && source.fieldPath.empty()) {
+                    return _env->row(expr.fieldPath);
+                }
                 return walk(eval(*expr.args.at(0)), expr.fieldPath);
             case ExprKind::Call:
             default:
@@ -1705,70 +1709,17 @@ private:
     /// Orders two values of one comparable kind: numbers exactly (quantities converted), timestamps, strings, and
     /// booleans with `false` before `true`.
     std::optional<std::strong_ordering> order(Value const& lhs, Value const& rhs) {
-        auto const lhsNumber = numeric(lhs);
-        auto const rhsNumber = numeric(rhs);
-        if (lhsNumber && rhsNumber) {
-            if ((lhsNumber->unit == nullptr) != (rhsNumber->unit == nullptr)) {
-                return std::nullopt;
-            }
-            math::Rational right = rhsNumber->value;
-            if (lhsNumber->unit != nullptr) {
-                auto converted = convertUnit(right, *rhsNumber->unit, *lhsNumber->unit, _env->formatting().units);
-                if (!converted) {
-                    return std::nullopt;
-                }
-                right = *converted;
-            }
-            return lhsNumber->value <=> right;
-        }
-        if (time::DateTime const* const lhsTime = lhs.asTimestamp()) {
-            if (time::DateTime const* const rhsTime = rhs.asTimestamp()) {
-                return *lhsTime <=> *rhsTime;
-            }
-            return std::nullopt;
-        }
-        if (std::string const* const lhsText = lhs.asString()) {
-            if (std::string const* const rhsText = rhs.asString()) {
-                return *lhsText <=> *rhsText;
-            }
-        }
-        if (bool const* const lhsFlag = lhs.asBool()) {
-            if (bool const* const rhsFlag = rhs.asBool()) {
-                return static_cast<int>(*lhsFlag) <=> static_cast<int>(*rhsFlag);
-            }
-        }
-        return std::nullopt;
+        return ::morph::ui::detail::valueOrder(lhs, rhs, _env->formatting().units);
     }
 
     /// Equality over non-null values: numbers by value, lists and records element-wise, other kinds by identity.
     bool equal(Value const& lhs, Value const& rhs) {
-        if (numeric(lhs) && numeric(rhs)) {
-            auto const ordering = order(lhs, rhs);
-            return ordering.has_value() && *ordering == std::strong_ordering::equal;
-        }
-        if (lhs.kind() != rhs.kind()) {
-            return false;
-        }
-        if (ValueList const* const lhsItems = lhs.asList()) {
-            return std::ranges::equal(*lhsItems, *rhs.asList(), [this](Value const& left, Value const& right) {
-                return sameElement(left, right);
-            });
-        }
-        if (ValueRecord const* const lhsFields = lhs.asRecord()) {
-            // Records are ordered by field name, so equal records have equal sequences of fields.
-            return std::ranges::equal(*lhsFields, *rhs.asRecord(), [this](auto const& left, auto const& right) {
-                return left.first == right.first && sameElement(left.second, right.second);
-            });
-        }
-        return lhs == rhs;
+        return ::morph::ui::detail::valuesEqual(lhs, rhs, _env->formatting().units);
     }
 
     /// Equality of two elements of a list or record, where `null` equals only `null`.
     bool sameElement(Value const& left, Value const& right) {
-        if (left.isNull() || right.isNull()) {
-            return left.isNull() && right.isNull();
-        }
-        return equal(left, right);
+        return ::morph::ui::detail::sameElement(left, right, _env->formatting().units);
     }
 
     /// The display text of a value, as `format` shows an argument.
@@ -2507,6 +2458,75 @@ std::optional<Number> numeric(Value const& value) {
         return Number{.value = quantity->value, .integer = false, .unit = &quantity->unit};
     }
     return std::nullopt;
+}
+
+std::optional<std::strong_ordering> valueOrder(Value const& lhs, Value const& rhs, UnitTable const& units) {
+    auto const lhsNumber = numeric(lhs);
+    auto const rhsNumber = numeric(rhs);
+    if (lhsNumber && rhsNumber) {
+        if ((lhsNumber->unit == nullptr) != (rhsNumber->unit == nullptr)) {
+            return std::nullopt;
+        }
+        math::Rational right = rhsNumber->value;
+        if (lhsNumber->unit != nullptr) {
+            auto converted = convertUnit(right, *rhsNumber->unit, *lhsNumber->unit, units);
+            if (!converted) {
+                return std::nullopt;
+            }
+            right = *converted;
+        }
+        return lhsNumber->value <=> right;
+    }
+    if (time::DateTime const* const lhsTime = lhs.asTimestamp()) {
+        if (time::DateTime const* const rhsTime = rhs.asTimestamp()) {
+            return *lhsTime <=> *rhsTime;
+        }
+        return std::nullopt;
+    }
+    if (std::string const* const lhsText = lhs.asString()) {
+        if (std::string const* const rhsText = rhs.asString()) {
+            return *lhsText <=> *rhsText;
+        }
+    }
+    if (bool const* const lhsFlag = lhs.asBool()) {
+        if (bool const* const rhsFlag = rhs.asBool()) {
+            return static_cast<int>(*lhsFlag) <=> static_cast<int>(*rhsFlag);
+        }
+    }
+    return std::nullopt;
+}
+
+// NOLINTNEXTLINE(misc-no-recursion): a list or a record compares its elements, which are values.
+bool valuesEqual(Value const& lhs, Value const& rhs, UnitTable const& units) {
+    if (numeric(lhs) && numeric(rhs)) {
+        auto const ordering = valueOrder(lhs, rhs, units);
+        return ordering.has_value() && *ordering == std::strong_ordering::equal;
+    }
+    if (lhs.kind() != rhs.kind()) {
+        return false;
+    }
+    if (ValueList const* const lhsItems = lhs.asList()) {
+        // NOLINTNEXTLINE(misc-no-recursion): equality over lists recurses into the items, one level per nesting of the document's value; the depth is the data's
+        return std::ranges::equal(*lhsItems, *rhs.asList(), [&units](Value const& left, Value const& right) {
+            return sameElement(left, right, units);
+        });
+    }
+    if (ValueRecord const* const lhsFields = lhs.asRecord()) {
+        // Records are ordered by field name, so equal records have equal sequences of fields.
+        // NOLINTNEXTLINE(misc-no-recursion): equality over records recurses into the fields, one level per nesting of the document's value; the depth is the data's
+        return std::ranges::equal(*lhsFields, *rhs.asRecord(), [&units](auto const& left, auto const& right) {
+            return left.first == right.first && sameElement(left.second, right.second, units);
+        });
+    }
+    return lhs == rhs;
+}
+
+// NOLINTNEXTLINE(misc-no-recursion): see valuesEqual.
+bool sameElement(Value const& left, Value const& right, UnitTable const& units) {
+    if (left.isNull() || right.isNull()) {
+        return left.isNull() && right.isNull();
+    }
+    return valuesEqual(left, right, units);
 }
 
 std::optional<math::Rational> convertUnit(math::Rational const& value, std::string_view from, std::string_view target,

@@ -473,7 +473,7 @@ ui::Node resultTable(Worksheet const& sheet) {
     return ui::table(
                sheet.lines,
                {.key = ui::row("id"),
-                .columns = columns,
+                .columns = layout::unfiltered(columns),
                 // Each sample's results under a heading across the worksheet: its id and its lot.
                 .group =
                     ui::TableGroup{

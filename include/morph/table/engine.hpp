@@ -44,7 +44,9 @@
 #include <exception>
 #include <expected>
 #include <functional>
+#include <iterator>
 #include <limits>
+#include <map>
 #include <memory>
 #include <morph/core/callback_scope.hpp>
 #include <morph/core/executor.hpp>
@@ -57,6 +59,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -110,6 +113,8 @@ struct EngineStats {
     std::size_t keyBuilds = 0;
     /// @brief Repairs of updated rows.
     std::size_t repairs = 0;
+    /// @brief Filter runs over a candidate list; a repair evaluates its dirty rows alone and runs none.
+    std::size_t filterRuns = 0;
     /// @brief Results dropped because a newer request superseded them.
     std::size_t dropped = 0;
     /// @brief Steps run on the owner thread (one-step runs included).
@@ -118,14 +123,45 @@ struct EngineStats {
     std::size_t maxOwnerStepMicros = 0;
 };
 
-/// @brief Column order and visibility, kept apart from the engine's view.
+/// @brief A column layout as it is stored: `{"order", "hidden", "pinned", "widths", "groups", "units"}`.
 ///
-/// At least one column stays visible.
+/// Read with glaze's reflection; a member the stored text leaves out reads as its default.
+struct ColumnLayoutValue {
+    /// @brief The columns in display order.
+    std::vector<std::string> order;
+    /// @brief The hidden columns, in display order.
+    std::vector<std::string> hidden;
+    /// @brief How many of the first visible columns are pinned.
+    std::size_t pinned = 0;
+    /// @brief Column widths in units, by column id; every width is above zero.
+    std::map<std::string, int> widths;
+    /// @brief The groups the user formed.
+    std::vector<ColumnGroupInfo> groups;
+    /// @brief Display units: by column id, a unit id per dimension.
+    std::map<std::string, std::map<std::string, std::string>> units;
+
+    /// @brief Member-wise equality.
+    /// @param other The layout to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(ColumnLayoutValue const& other) const = default;
+};
+
+/// @brief Column order, visibility, widths and pinning, kept apart from the engine's view.
+///
+/// At least one column stays visible. A stored layout is fitted to the table's declared columns (`apply`): a
+/// column the table no longer has is dropped from every part of it, and a column the layout does not name takes its
+/// declared visibility and its declared place, right after the nearest column declared before it that the layout
+/// places, or first when there is none. A user-formed group keeps the columns no earlier group holds; one left with
+/// fewer than 2 or more than 16 columns, or repeating an earlier group's id, is dropped.
 class ColumnLayout {
 public:
-    /// @brief A layout of @p ids, all visible, in that order.
-    /// @param ids Column ids, the document's default order.
-    explicit ColumnLayout(std::vector<std::string> ids) : _defaults{std::move(ids)} { reset(); }
+    /// @brief A layout of @p ids in that order, @p declaredHidden hidden.
+    /// @param ids            Column ids, the declared order.
+    /// @param declaredHidden The columns hidden until the user shows them.
+    explicit ColumnLayout(std::vector<std::string> ids, std::vector<std::string> declaredHidden = {})
+        : _defaults{std::move(ids)}, _declaredHidden{std::move(declaredHidden)} {
+        reset();
+    }
 
     /// @brief The columns in display order.
     /// @return Column ids.
@@ -143,9 +179,9 @@ public:
         return out;
     }
 
-    /// @brief Shows or hides a column.
-    /// @param columnId   Column columnId.
-    /// @param show `true` to show.
+    /// @brief Shows or hides a column; the pinned count follows the visible columns.
+    /// @param columnId The column.
+    /// @param show     `true` to show.
     /// @return `false` when the column is unknown, or hiding it would leave none visible.
     bool setVisible(std::string const& columnId, bool show) {
         if (std::ranges::find(_order, columnId) == _order.end()) {
@@ -159,11 +195,12 @@ public:
             return false;
         }
         _hidden.insert(columnId);
+        clampPinned();
         return true;
     }
 
     /// @brief Moves a column to a display position.
-    /// @param columnId Column columnId.
+    /// @param columnId The column.
     /// @param position Position in `order()`, clamped to the end.
     /// @return `false` when the column is unknown.
     bool move(std::string const& columnId, std::size_t position) {
@@ -178,43 +215,327 @@ public:
         return true;
     }
 
-    /// @brief Restores the default order with every column visible.
+    /// @brief Sets or clears a column's width.
+    /// @param columnId The column.
+    /// @param width    The width in units, above zero; nothing clears it.
+    /// @return `false` when the column is unknown or the width is not above zero.
+    bool setWidth(std::string const& columnId, std::optional<int> width) {
+        if (std::ranges::find(_order, columnId) == _order.end() || (width && *width <= 0)) {
+            return false;
+        }
+        if (width) {
+            _widths[columnId] = *width;
+        } else {
+            _widths.erase(columnId);
+        }
+        return true;
+    }
+
+    /// @brief The widths set, by column id.
+    /// @return The widths.
+    [[nodiscard]] std::map<std::string, int> const& widths() const noexcept { return _widths; }
+
+    /// @brief Pins the first @p n visible columns.
+    /// @param n The count; clamped to the visible columns.
+    void setPinned(std::size_t n) {
+        _pinned = n;
+        clampPinned();
+    }
+
+    /// @brief How many of the first columns of `visible()` are pinned.
+    /// @return The count.
+    [[nodiscard]] std::size_t pinned() const noexcept { return _pinned; }
+
+    /// @brief Forms a group of columns under a label, as the user does in the column chooser.
+    /// @param label   The group's label.
+    /// @param columns The columns, 2 to 16, each a column of the layout and in no other user-formed group.
+    /// @return The new group's id, the first of `g1`, `g2`, … no group has; `InvalidSpec` when @p columns breaks the
+    ///         rule above or repeats a column.
+    std::expected<std::string, TableError> formGroup(std::string label, std::vector<std::string> columns) {
+        auto const refuse = [](std::string message) {
+            return std::unexpected(
+                TableError{.code = TableErrorCode::InvalidSpec, .column = {}, .message = std::move(message)});
+        };
+        if (columns.size() < 2 || columns.size() > kMaxUserGroupColumns) {
+            return refuse("a group has 2 to 16 columns, not " + std::to_string(columns.size()));
+        }
+        for (std::size_t at = 0; at < columns.size(); ++at) {
+            auto const& columnId = columns[at];
+            if (std::ranges::find(_order, columnId) == _order.end()) {
+                return refuse("unknown column: " + columnId);
+            }
+            if (std::ranges::find(columns.begin(), columns.begin() + static_cast<std::ptrdiff_t>(at), columnId) !=
+                columns.begin() + static_cast<std::ptrdiff_t>(at)) {
+                return refuse("column " + columnId + " is named twice");
+            }
+            for (auto const& group : _groups) {
+                if (std::ranges::find(group.columns, columnId) != group.columns.end()) {
+                    return refuse("column " + columnId + " is already in group " + group.label);
+                }
+            }
+        }
+        std::string groupId;
+        for (std::size_t number = 1;; ++number) {
+            groupId = "g" + std::to_string(number);
+            if (std::ranges::none_of(_groups, [&](ColumnGroupInfo const& group) { return group.id == groupId; })) {
+                break;
+            }
+        }
+        _groups.push_back({.id = groupId, .label = std::move(label), .columns = std::move(columns)});
+        return groupId;
+    }
+
+    /// @brief Removes a user-formed group.
+    /// @param groupId The group's id.
+    /// @return `false` when no group has that id.
+    bool removeGroup(std::string const& groupId) {
+        return std::erase_if(_groups, [&](ColumnGroupInfo const& group) { return group.id == groupId; }) != 0;
+    }
+
+    /// @brief The groups the user formed, in the order they were formed.
+    /// @return The groups.
+    [[nodiscard]] std::span<ColumnGroupInfo const> groups() const noexcept { return _groups; }
+
+    /// @brief Sets or clears the unit a column shows one of its dimensions in.
+    /// @param columnId  The column.
+    /// @param dimension The dimension, such as `mass`.
+    /// @param unit      The unit's id; `nullopt` clears it, and the cells show their own units.
+    /// @return `false` when the column is unknown, or @p dimension or @p unit is empty.
+    bool setUnit(std::string const& columnId, std::string const& dimension, std::optional<std::string> unit) {
+        if (std::ranges::find(_order, columnId) == _order.end() || dimension.empty() || (unit && unit->empty())) {
+            return false;
+        }
+        if (unit) {
+            _units[columnId][dimension] = std::move(*unit);
+            return true;
+        }
+        if (auto const found = _units.find(columnId); found != _units.end()) {
+            found->second.erase(dimension);
+            if (found->second.empty()) {
+                _units.erase(found);
+            }
+        }
+        return true;
+    }
+
+    /// @brief The display units: by column id, a unit id per dimension.
+    /// @return The units.
+    [[nodiscard]] std::map<std::string, std::map<std::string, std::string>> const& units() const noexcept {
+        return _units;
+    }
+
+    /// @brief The layout as it is stored.
+    /// @return Order, hidden columns in display order, pinned count, widths, groups and units.
+    [[nodiscard]] ColumnLayoutValue value() const {
+        ColumnLayoutValue out;
+        out.order = _order;
+        for (auto const& columnId : _order) {
+            if (_hidden.contains(columnId)) {
+                out.hidden.push_back(columnId);
+            }
+        }
+        out.pinned = _pinned;
+        out.widths = _widths;
+        out.groups = _groups;
+        out.units = _units;
+        return out;
+    }
+
+    /// @brief Adopts a stored layout, fitted to the declared columns (see the class).
+    /// @param value The stored layout.
+    void apply(ColumnLayoutValue const& value) { fit(value); }
+
+    /// @brief Restores the declared order and hidden columns, and clears widths and pinning; groups and units stay.
     void reset() {
         _order = _defaults;
         _hidden.clear();
-    }
-
-    /// @brief Adopts a new column list: kept columns keep their place and
-    ///        visibility, new ones are appended visible, vanished ones dropped.
-    /// @param ids The new columns, as the new default order.
-    void rebuild(std::vector<std::string> ids) {
-        std::vector<std::string> order;
-        for (auto const& columnId : _order) {
-            if (std::ranges::find(ids, columnId) != ids.end()) {
-                order.push_back(columnId);
+        for (auto const& columnId : _declaredHidden) {
+            if (std::ranges::find(_order, columnId) != _order.end()) {
+                _hidden.insert(columnId);
             }
         }
-        for (auto const& columnId : ids) {
-            if (std::ranges::find(order, columnId) == order.end()) {
-                order.push_back(columnId);
-            }
-        }
-        std::erase_if(_hidden,
-                      [&](std::string const& hiddenId) { return std::ranges::find(ids, hiddenId) == ids.end(); });
-        _defaults = std::move(ids);
-        _order = std::move(order);
         if (!_order.empty() && visible().empty()) {
             _hidden.erase(_order.front());
         }
+        _widths.clear();
+        _pinned = 0;
+    }
+
+    /// @brief Adopts a new declared column list and fits the current layout to it.
+    /// @param ids            The new columns, in their declared order.
+    /// @param declaredHidden The new declared hidden columns.
+    void rebuild(std::vector<std::string> ids, std::vector<std::string> declaredHidden = {}) {
+        auto const current = value();
+        _defaults = std::move(ids);
+        _declaredHidden = std::move(declaredHidden);
+        fit(current);
     }
 
 private:
+    // The fitting rule: every part of `value` filtered to the declared columns, each declared column it lacks placed
+    // after its nearest declared predecessor that is placed, one column kept visible, and the pin count clamped.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
+    void fit(ColumnLayoutValue const& value) {
+        // Sets, not scans: a stored layout of a few hundred columns is fitted in one pass over each of its parts.
+        std::unordered_set<std::string_view> const declaredIds{_defaults.begin(), _defaults.end()};
+        auto const declared = [&declaredIds](std::string const& columnId) { return declaredIds.contains(columnId); };
+        std::vector<std::string> order;
+        std::unordered_set<std::string_view> placed;
+        order.reserve(_defaults.size());
+        for (auto const& columnId : value.order) {
+            if (declared(columnId) && placed.insert(columnId).second) {
+                order.push_back(columnId);
+            }
+        }
+        std::vector<std::string> unmentioned;
+        for (std::size_t at = 0; at < _defaults.size(); ++at) {
+            auto const& columnId = _defaults[at];
+            if (placed.contains(columnId)) {
+                continue;
+            }
+            auto place = order.begin();
+            for (std::size_t before = at; before-- > 0;) {
+                if (auto const found = std::ranges::find(order, _defaults[before]); found != order.end()) {
+                    place = std::next(found);
+                    break;
+                }
+            }
+            order.insert(place, columnId);
+            unmentioned.push_back(columnId);
+        }
+        _order = std::move(order);
+        _hidden.clear();
+        for (auto const& columnId : value.hidden) {
+            if (declared(columnId)) {
+                _hidden.insert(columnId);
+            }
+        }
+        // A column the stored layout predates keeps its author's visibility, so a column declared hidden is not
+        // shown, nor its level fetched, for every user who has a layout.
+        for (auto const& columnId : unmentioned) {
+            if (std::ranges::find(_declaredHidden, columnId) != _declaredHidden.end()) {
+                _hidden.insert(columnId);
+            }
+        }
+        _widths.clear();
+        for (auto const& [columnId, width] : value.widths) {
+            if (declared(columnId) && width > 0) {
+                _widths.emplace(columnId, width);
+            }
+        }
+        _groups.clear();
+        std::unordered_set<std::string> grouped;
+        for (auto group : value.groups) {
+            if (std::ranges::any_of(_groups, [&](ColumnGroupInfo const& kept) { return kept.id == group.id; })) {
+                continue;
+            }
+            std::vector<std::string> columns;
+            for (auto& columnId : group.columns) {
+                if (declared(columnId) && !grouped.contains(columnId) &&
+                    std::ranges::find(columns, columnId) == columns.end()) {
+                    columns.push_back(std::move(columnId));
+                }
+            }
+            if (columns.size() >= 2 && columns.size() <= kMaxUserGroupColumns) {
+                grouped.insert(columns.begin(), columns.end());
+                group.columns = std::move(columns);
+                _groups.push_back(std::move(group));
+            }
+        }
+        _units.clear();
+        for (auto const& [columnId, units] : value.units) {
+            if (declared(columnId)) {
+                _units.emplace(columnId, units);
+            }
+        }
+        if (!_defaults.empty() && visible().empty()) {
+            _hidden.erase(_defaults.front());
+        }
+        _pinned = value.pinned;
+        clampPinned();
+    }
+
+    void clampPinned() { _pinned = std::min(_pinned, visible().size()); }
+
+    // A group's column bound, `QueryLimits::maxGroupColumns`, which `query.hpp` holds and this header cannot include.
+    static constexpr std::size_t kMaxUserGroupColumns = 16;
+
     std::vector<std::string> _defaults;
+    std::vector<std::string> _declaredHidden;
     std::vector<std::string> _order;
     std::unordered_set<std::string> _hidden;
+    std::map<std::string, int> _widths;
+    std::size_t _pinned = 0;
+    std::vector<ColumnGroupInfo> _groups;
+    std::map<std::string, std::map<std::string, std::string>> _units;
 };
 
 namespace detail {
+
+/// @brief A view with retained rows merged in, as `mergeRetainedOrder` returns it.
+struct RetainedOrder {
+    /// @brief Source rows, in view order: the base order with the admitted rows at their sorted places.
+    std::vector<std::uint32_t> order;
+    /// @brief The view rows of the admitted rows whose match is `No`, ascending.
+    std::vector<std::int64_t> unmatched;
+    /// @brief The retained rows the base order lacked, which the merge admitted, ascending by source row.
+    std::vector<std::uint32_t> admitted;
+    /// @brief How many of `admitted` the filter could not decide (`Match::Unknown`).
+    std::int64_t undecided = 0;
+};
+
+/// @brief Merges the retained rows a base order lacks into it, each at the place the sort gives it.
+///
+/// The base order must be sorted by @p before, which is a strict total order (ties to the lower source row, as
+/// `RowOrder` breaks them), so the result is the order the sort gives the base rows and the admitted rows together.
+/// Every admitted row is in the result whatever its match. Costs the scan of @p baseOrder for the retained rows it
+/// holds, and a binary search of it for each admitted row.
+/// @param baseOrder    The view without retained rows: source rows, sorted by @p before.
+/// @param retainedRows The retained rows, as source rows; a row named twice is admitted once.
+/// @param before       Whether one source row orders before another.
+/// @param match        What the filter says of a source row.
+/// @return The merged order, the unmatched view rows, the admitted rows and how many of those were undecided.
+[[nodiscard]] inline RetainedOrder mergeRetainedOrder(std::span<std::uint32_t const> baseOrder,
+                                                      std::span<std::uint32_t const> retainedRows,
+                                                      std::function<bool(std::uint32_t, std::uint32_t)> const& before,
+                                                      std::function<Match(std::uint32_t)> const& match) {
+    RetainedOrder out;
+    std::unordered_set<std::uint32_t> lacking(retainedRows.begin(), retainedRows.end());
+    for (auto const row : baseOrder) {
+        if (lacking.empty()) {
+            break;
+        }
+        lacking.erase(row);
+    }
+    out.admitted.assign(lacking.begin(), lacking.end());
+    std::ranges::sort(out.admitted);
+    std::vector<std::pair<std::uint32_t, Match>> placed;
+    placed.reserve(out.admitted.size());
+    for (auto const row : out.admitted) {
+        auto const decided = match(row);
+        if (decided == Match::Unknown) {
+            ++out.undecided;
+        }
+        placed.emplace_back(row, decided);
+    }
+    std::ranges::sort(placed,
+                      [&before](auto const& left, auto const& right) { return before(left.first, right.first); });
+    out.order.reserve(baseOrder.size() + placed.size());
+    auto from = baseOrder.begin();
+    for (auto const& [row, decided] : placed) {
+        auto const last =
+            std::upper_bound(from, baseOrder.end(), row,
+                             [&before](std::uint32_t left, std::uint32_t right) { return before(left, right); });
+        out.order.insert(out.order.end(), from, last);
+        from = last;
+        if (decided == Match::No) {
+            out.unmatched.push_back(static_cast<std::int64_t>(out.order.size()));
+        }
+        out.order.push_back(row);
+    }
+    out.order.insert(out.order.end(), from, baseOrder.end());
+    return out;
+}
 
 /// @brief Everything one view job reads. Immutable once the job starts.
 struct JobInput {
@@ -246,12 +567,17 @@ struct JobInput {
     std::vector<std::uint32_t> dirty;
     /// @brief Repair: the sorted, filtered order, without holds, that the dirty rows merge into.
     std::vector<std::uint32_t> previousTrueView;
+    /// @brief Repair: the rows the filter could not decide, source rows ascending. A dirty row may have been here
+    ///        or in the view, so a repair reads both.
+    std::vector<std::uint32_t> previousUndecided;
     /// @brief The job repairs updated rows rather than recomputing.
     bool repair = false;
     /// @brief Every surviving row may have new content (a reset).
     bool allChanged = false;
     /// @brief More operations than this make the change a reset.
     std::size_t resetThreshold = 5000;
+    /// @brief Keys of rows the view keeps whatever the filter says of them; a key the snapshot lacks is ignored.
+    std::vector<RowId> retained;
 };
 
 /// @brief What a finished job hands back to the owner.
@@ -262,6 +588,8 @@ struct JobResult {
     std::shared_ptr<std::vector<std::uint32_t> const> sorted;
     /// @brief The sorted, filtered view.
     std::vector<std::uint32_t> view;
+    /// @brief The rows the filter could neither admit nor reject, source rows ascending. They are in no view.
+    std::vector<std::uint32_t> undecided;
     /// @brief From `JobInput::previousView` to `view`.
     ViewChange change;
     /// @brief Every source row was sorted.
@@ -270,9 +598,30 @@ struct JobResult {
     bool subsetSort = false;
     /// @brief Updated rows were merged into the previous order.
     bool repaired = false;
+    /// @brief A filter ran over a candidate list.
+    bool filtered = false;
     /// @brief Key columns built from scratch.
     std::size_t keyBuilds = 0;
+    /// @brief The retained rows in `view` the filter rejects, source rows ascending.
+    std::vector<std::uint32_t> unmatched;
 };
+
+/// @brief The error of an unloaded cell in a base-level column: no level names that cell, so no load would
+///        resolve it, and a view or a values list built on it would never settle.
+/// @param info The column.
+/// @return A `SourceContract` error naming the column.
+[[nodiscard]] inline TableError unloadedInBaseLevel(ColumnInfo const& info) {
+    return TableError{.code = TableErrorCode::SourceContract,
+                      .column = info.id,
+                      .message = "an unloaded cell in a base-level column"};
+}
+
+/// @brief The error of a job an injected service failed.
+/// @param what The message of the exception the service threw.
+/// @return A `ServiceFailed` error.
+[[nodiscard]] inline TableError serviceFailed(std::string const& what) {
+    return TableError{.code = TableErrorCode::ServiceFailed, .column = {}, .message = "a service failed: " + what};
+}
 
 /// @brief One recomputation of a view, runnable in steps.
 ///
@@ -292,7 +641,9 @@ public:
     /// @brief Runs until done, the deadline, or a stop request.
     ///
     /// An exception from an injected service (a collator, date parser or
-    /// comparator) ends the job: it is done, with `failure()` set.
+    /// comparator) ends the job: it is done, with `failure()` set to
+    /// `ServiceFailed`. So does an unloaded cell in a base-level column, with
+    /// `SourceContract` naming the column.
     /// @param deadline When to yield.
     /// @param stop     A stop request ends the step.
     /// @return `true` when the job is done.
@@ -300,9 +651,9 @@ public:
         try {
             return run(deadline, stop);
         } catch (std::exception const& error) {
-            _failure = error.what();
+            _failure = serviceFailed(error.what());
         } catch (...) {
-            _failure = "unknown exception";
+            _failure = serviceFailed("unknown exception");
         }
         _phase = Phase::Done;
         return true;
@@ -323,9 +674,9 @@ public:
     /// @return `true` when done.
     [[nodiscard]] bool done() const noexcept { return _phase == Phase::Done; }
 
-    /// @brief Why the job failed: the message of the exception that ended it.
-    /// @return The message, or nothing when the job did not fail.
-    [[nodiscard]] std::optional<std::string> const& failure() const noexcept { return _failure; }
+    /// @brief Why the job failed.
+    /// @return The error that ended it, or nothing when the job did not fail.
+    [[nodiscard]] std::optional<TableError> const& failure() const noexcept { return _failure; }
 
     /// @brief What the job reads.
     /// @return The input.
@@ -363,6 +714,10 @@ private:
             if (!finished) {
                 return false;
             }
+            if (_failure) {
+                _phase = Phase::Done;
+                return true;
+            }
             advance();
             if (_onPhase) {
                 auto const [doneUnits, total] = progress();
@@ -391,9 +746,19 @@ private:
         }
     }
 
+    // Fails the job when a base-level column holds an unloaded cell (`detail::unloadedInBaseLevel`).
+    bool refuseUnloaded(std::size_t column, CellState state) {
+        if (state != CellState::Unloaded || !_in.columns[column].level.empty()) {
+            return false;
+        }
+        _failure = unloadedInBaseLevel(_in.columns[column]);
+        return true;
+    }
+
     // Builds every needed column that has no keys, and patches the dirty rows
     // of every column that has them (on a copy: the old keys may still be
     // read by the owner or another job).
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one sequential pass whose steps share its running state; splitting it would thread that state through parameters.
     bool buildKeys(Deadline deadline, ::core::async::StopToken const& stop) {
         MORPH_ZONE("table.keyBuild");
         auto const rows = _in.snapshot->rowCount();
@@ -405,6 +770,9 @@ private:
                 auto copy = std::make_shared<KeyColumn>(*_result.keys[column]);
                 for (auto const row : _in.dirty) {
                     copy->set(row, _in.snapshot->cell(row, column), _in.columns[column], _in.services);
+                    if (refuseUnloaded(column, copy->states[row])) {
+                        return true;
+                    }
                 }
                 _result.keys[column] = std::move(copy);
             }
@@ -427,6 +795,12 @@ private:
                 _rowAt = end;
                 if (_rowAt < rows && detail::shouldYield(deadline, stop)) {
                     return false;
+                }
+            }
+            if (_in.columns[column].level.empty()) {
+                if (auto const found = std::ranges::find(_building->states, CellState::Unloaded);
+                    found != _building->states.end() && refuseUnloaded(column, *found)) {
+                    return true;
                 }
             }
             _result.keys[column] = std::move(_building);
@@ -471,26 +845,6 @@ private:
         return out;
     }
 
-    [[nodiscard]] bool passesFilter(std::uint32_t row) const {
-        if (_in.filter == nullptr) {
-            return true;
-        }
-        for (auto const& column : _in.filter->columns()) {
-            if (!CompiledFilter::passes(column, *_result.keys[column.column], row)) {
-                return false;
-            }
-        }
-        for (auto const& group : _in.filter->groups()) {
-            bool const any = std::ranges::any_of(group.columns, [&](CompiledFilter::Column const& column) {
-                return CompiledFilter::passes(column, *_result.keys[column.column], row);
-            });
-            if (!any) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     // Merges the dirty rows back into an order the clean rows still satisfy.
     [[nodiscard]] std::vector<std::uint32_t> repairOrder(std::span<std::uint32_t const> previous,
                                                          std::vector<std::uint32_t> dirtyRows,
@@ -513,16 +867,28 @@ private:
     }
 
     // Merges the re-keyed dirty rows into the previous order (and the cached
-    // full order), without sorting the rest.
+    // full order), without sorting the rest. Each dirty row is evaluated
+    // again, wherever it was before: admitted rows merge into the view,
+    // undecided ones join the undecided rows, rejected ones join neither. The
+    // clean undecided rows are kept as they were, with no filter run over them.
     void repair() {
         MORPH_ZONE("table.change");
         auto const orderBy = rowOrder();
+        auto const keys = keyPointers();
         std::vector<std::uint32_t> passing;
+        std::vector<std::uint32_t> undecided;
         for (auto const row : _in.dirty) {
-            if (passesFilter(row)) {
+            auto const match = _in.filter == nullptr ? Match::Yes : _in.filter->evaluateRow(keys, row);
+            if (match == Match::Yes) {
                 passing.push_back(row);
+            } else if (match == Match::Unknown) {
+                undecided.push_back(row);
             }
         }
+        std::vector<std::uint32_t> clean;
+        std::ranges::set_difference(_in.previousUndecided, _in.dirty, std::back_inserter(clean));
+        _result.undecided.resize(clean.size() + undecided.size());
+        std::ranges::merge(clean, undecided, _result.undecided.begin());
         _result.view = repairOrder(_in.previousTrueView, std::move(passing), orderBy);
         if (_in.cachedSorted != nullptr) {
             _result.sorted =
@@ -559,12 +925,14 @@ private:
         }
         if (filtering && (_sorted || _sort == std::nullopt)) {
             _filterRun.emplace(*_in.filter, keyPointers(), std::move(_base));
+            _result.filtered = true;
         }
     }
 
     bool order(Deadline deadline, ::core::async::StopToken const& stop) {
         if (_in.repair) {
             repair();
+            admitRetained();
             return true;
         }
         if (!_started) {
@@ -576,6 +944,8 @@ private:
             if (!_filterRun->run(deadline, stop)) {
                 return false;
             }
+            _result.undecided = std::move(*_filterRun).takeUndecided();
+            std::ranges::sort(_result.undecided);
             _base = std::move(*_filterRun).take();
             _filterRun.reset();
             if (!_sorted) {
@@ -598,7 +968,39 @@ private:
             }
         }
         _result.view = std::move(_base);
+        admitRetained();
         return true;
+    }
+
+    // Merges the retained rows the filter left out into the view at their sorted places; those it could not decide
+    // leave the undecided rows, and those it rejects are listed in `unmatched`.
+    void admitRetained() {
+        if (_in.retained.empty()) {
+            return;
+        }
+        std::unordered_set<RowId> const wanted(_in.retained.begin(), _in.retained.end());
+        std::vector<std::uint32_t> rows;
+        for (std::size_t row = 0; row < _in.snapshot->rowCount() && rows.size() < wanted.size(); ++row) {
+            if (wanted.contains(_in.snapshot->rowId(row))) {
+                rows.push_back(static_cast<std::uint32_t>(row));
+            }
+        }
+        auto const orderBy = rowOrder();
+        auto const keys = keyPointers();
+        auto merged = mergeRetainedOrder(
+            _result.view, rows, [&orderBy](std::uint32_t left, std::uint32_t right) { return orderBy(left, right); },
+            [this, &keys](std::uint32_t row) {
+                return _in.filter == nullptr ? Match::Yes : _in.filter->evaluateRow(keys, row);
+            });
+        _result.view = std::move(merged.order);
+        std::vector<std::uint32_t> undecided;
+        std::ranges::set_difference(_result.undecided, merged.admitted, std::back_inserter(undecided));
+        _result.undecided = std::move(undecided);
+        _result.unmatched.clear();
+        for (auto const column : merged.unmatched) {
+            _result.unmatched.push_back(_result.view[static_cast<std::size_t>(column)]);
+        }
+        std::ranges::sort(_result.unmatched);
     }
 
     void diff() {
@@ -648,11 +1050,14 @@ private:
     std::optional<FilterRun> _filterRun;
     std::optional<ChunkedMergeSort> _sort;
     // outcome
-    std::optional<std::string> _failure;
+    std::optional<TableError> _failure;
     std::function<void(std::size_t, std::size_t)> _onPhase;
 };
 
 }  // namespace detail
+
+struct DistinctRequest;
+struct DistinctValues;
 
 /// @brief Sorts, filters and maps the view of one table.
 ///
@@ -694,12 +1099,18 @@ public:
     /// shows once the view computed with them is applied.
     /// @param chain The keys, most significant first.
     /// @return `UnknownColumn` when a key names no column; `ServiceFailed` when
-    ///         the sort ran inside the call and an injected service threw. The
-    ///         sort is then unchanged.
+    ///         the sort ran inside the call and an injected service threw;
+    ///         `SourceContract` when it ran inside the call and a base-level
+    ///         column holds an unloaded cell, or when a key's column is `Measure` and the services have no unit
+    ///         registry. The sort is then unchanged.
     std::expected<void, TableError> setSort(SortChain chain) {
         for (auto const& key : chain) {
-            if (!detail::findColumn(_columns, key.column)) {
+            auto const index = detail::findColumn(_columns, key.column);
+            if (!index) {
                 return std::unexpected(detail::unknownColumn(key.column));
+            }
+            if (auto missing = detail::unitsMissing(_columns[*index], _options.services)) {
+                return std::unexpected(std::move(*missing));
             }
         }
         if (chain == _sort) {
@@ -710,18 +1121,55 @@ public:
     }
 
     /// @brief Sets the filter.
+    ///
+    /// A group filter's `group` resolves through the source's declared groups, which are checked first
+    /// (`detail::checkGroups`).
     /// @param spec The filter; an empty spec shows every row.
-    /// @return The compile error, naming its column; or `ServiceFailed` when
-    ///         the filter ran inside the call and an injected service threw.
-    ///         The filter is then unchanged.
+    /// @return `SourceContract` when the source's declared groups are malformed; the compile error, naming its
+    ///         column; or `ServiceFailed` or `SourceContract`, as for `setSort`, when the filter ran inside the
+    ///         call. The filter is then unchanged.
     std::expected<void, TableError> setFilter(FilterSpec spec) {
+        if (auto error = detail::checkGroups(_columns, _source->groups())) {
+            return std::unexpected(std::move(*error));
+        }
         auto compiled = compile(spec);
         if (!compiled) {
             return std::unexpected(std::move(compiled.error()));
         }
         _filterSpec = std::move(spec);
         _filter = std::make_shared<CompiledFilter const>(std::move(*compiled));
+        // The retained rows are of the filter they no longer matched.
+        if (!_retained.empty()) {
+            _retained.clear();
+            ++_retainedVersion;
+        }
         return schedule();
+    }
+
+    /// @brief Replaces the retained rows: rows the view keeps, at their sorted places, whatever the filter says of
+    ///        them. `setFilter` clears them.
+    /// @param keys The rows' keys; a key the source lacks is ignored.
+    /// @return `ServiceFailed` or `SourceContract`, as for `setSort`, when the view was computed inside the call; the
+    ///         retained rows are then those of the view shown.
+    std::expected<void, TableError> retain(std::vector<RowId> keys) {
+        if (keys == _retained) {
+            return {};
+        }
+        _retained = std::move(keys);
+        ++_retainedVersion;
+        return schedule();
+    }
+
+    /// @brief The retained rows asked for.
+    /// @return Their keys, as `retain` last set them.
+    [[nodiscard]] std::span<RowId const> retained() const noexcept { return _retained; }
+
+    /// @brief Whether the row at a view row is retained and rejected by the filter.
+    /// @param viewRow View row index.
+    /// @return `true` for such a row; `false` past the end.
+    [[nodiscard]] bool isUnmatched(std::size_t viewRow) const {
+        auto const row = sourceRowOf(viewRow);
+        return row && std::ranges::binary_search(_unmatched, static_cast<std::uint32_t>(*row));
     }
 
     /// @brief The current sort chain.
@@ -802,6 +1250,15 @@ public:
     /// @return The snapshot.
     [[nodiscard]] std::shared_ptr<RowSnapshot const> const& viewSnapshot() const noexcept { return _viewSnapshot; }
 
+    /// @brief Rows the filter can neither admit nor reject until an unloaded
+    ///        cell loads. They are in no view row.
+    /// @return The count.
+    [[nodiscard]] std::size_t undecidedRowCount() const noexcept { return _undecided.size(); }
+
+    /// @brief The undecided rows.
+    /// @return Source rows of `viewSnapshot()`, ascending.
+    [[nodiscard]] std::span<std::uint32_t const> undecidedRows() const noexcept { return _undecided; }
+
     /// @brief Whether a computation is in flight.
     /// @return `true` from an asynchronous request until its result is applied.
     [[nodiscard]] bool pending() const noexcept { return _pending; }
@@ -811,20 +1268,37 @@ public:
     /// @param handler The receiver; empty to stop receiving.
     void onViewChange(std::function<void(ViewChange const&)> handler) { _onViewChange = std::move(handler); }
 
+    /// @brief Sets the receiver of `undecidedRowCount()` changes, called on the
+    ///        owner with the new count: after `onViewChange` when the same
+    ///        result changed the view, and on its own when it changed nothing else.
+    /// @param handler The receiver; empty to stop receiving.
+    void onUndecidedChange(std::function<void(std::size_t)> handler) { _onUndecidedChange = std::move(handler); }
+
     /// @brief Sets the receiver of `pending()` changes.
     /// @param handler The receiver; empty to stop receiving.
     void onPending(std::function<void(bool)> handler) { _onPending = std::move(handler); }
 
     /// @brief Sets the receiver of errors no call could return: an injected
-    ///        service that threw in a job that did not run inside the call
-    ///        that asked for it. The sort and filter go back to those of the
-    ///        view shown.
+    ///        service that threw, or a source that broke its contract, in a job
+    ///        that did not run inside the call that asked for it. The sort and
+    ///        filter go back to those of the view shown.
     /// @param handler The receiver; empty to stop receiving.
     void onError(std::function<void(TableError const&)> handler) { _onError = std::move(handler); }
 
     /// @brief Counters.
     /// @return The engine's counters so far.
     [[nodiscard]] EngineStats const& stats() const noexcept { return _stats; }
+
+    /// @brief The distinct values of a column over the rows the engine's other filters leave: client mode's
+    ///        `distinctValues`.
+    ///
+    /// Runs on the calling thread over the engine's latest snapshot, with the filter `filter()` returns less the
+    /// column's own entry. The key columns the engine holds for that snapshot are read; one it does not hold is built
+    /// for the call and not kept. The request is checked as `validate` checks it, with default `QueryLimits` and
+    /// every column readable. Defined in `table/query.hpp`, which declares the request and the reply.
+    /// @param request The column, search, bucket and page of values.
+    /// @return The values, or the request's error.
+    [[nodiscard]] std::expected<DistinctValues, TableError> distinctValues(DistinctRequest const& request) const;
 
     /// @brief Marks a row as being edited: with `Deferred` reorder it keeps its
     ///        place through updates until `endEdit`.
@@ -855,6 +1329,11 @@ public:
         relayout();
     }
 
+    /// @brief Takes in every change the source notified at once, rather than at the owner's next turn: what a
+    ///        caller that changed the source and reads the view in the same turn calls. Nothing notified, nothing
+    ///        done.
+    void flush() { flushChanges(); }
+
     /// @brief Rows currently held in place by `Deferred` reorder.
     /// @return Their keys.
     [[nodiscard]] std::vector<RowId> heldRows() const { return {_holds.begin(), _holds.end()}; }
@@ -874,15 +1353,17 @@ private:
     // What the engine's state was when a job's input was taken, to tell on
     // the job's return whether a later change made its result useless.
     struct Ticket {
-        std::uint64_t epoch = 0;           // structural changes absorbed
-        std::uint64_t changeSeq = 0;       // notifications absorbed
-        std::uint64_t columnsVersion = 0;  // column sets adopted
+        std::uint64_t epoch = 0;            // structural changes absorbed
+        std::uint64_t changeSeq = 0;        // notifications absorbed
+        std::uint64_t columnsVersion = 0;   // column sets adopted
+        std::uint64_t retainedVersion = 0;  // retained sets asked for
     };
 
     // What applying a result calls out with.
     struct Applied {
         ViewChange change;
         bool armSettle = false;
+        std::optional<std::size_t> undecided;  // the new count, when it changed
     };
 
     // ── changes ─────────────────────────────────────────────────────────────
@@ -977,11 +1458,18 @@ private:
         std::erase_if(_sort, [&](SortKey const& key) { return !detail::findColumn(_columns, key.column); });
         std::erase_if(_filterSpec.columns,
                       [&](auto const& entry) { return !detail::findColumn(_columns, entry.first).has_value(); });
+        // A filter on a declared group stays while the source still declares the group.
+        auto const declared = _source->groups();
+        std::erase_if(_filterSpec.groups, [&declared](GroupFilter const& group) {
+            return !group.group.empty() &&
+                   std::ranges::find(declared, group.group, &ColumnGroupInfo::id) == declared.end();
+        });
         for (auto& group : _filterSpec.groups) {
             std::erase_if(group.columns,
                           [&](std::string const& columnId) { return !detail::findColumn(_columns, columnId); });
         }
-        std::erase_if(_filterSpec.groups, [](GroupFilter const& group) { return group.columns.empty(); });
+        std::erase_if(_filterSpec.groups,
+                      [](GroupFilter const& group) { return group.columns.empty() && group.group.empty(); });
         auto compiled = compile(_filterSpec);
         if (compiled) {
             _filter = std::make_shared<CompiledFilter const>(std::move(*compiled));
@@ -994,11 +1482,7 @@ private:
 
     // The shared guarded compile: an exception from the collator or date parser is an error.
     [[nodiscard]] std::expected<CompiledFilter, TableError> compile(FilterSpec const& spec) const {
-        return compileFilterGuarded(spec, _columns, _options.services);
-    }
-
-    [[nodiscard]] static TableError serviceFailed(std::string const& what) {
-        return TableError{.code = TableErrorCode::ServiceFailed, .column = {}, .message = "a service failed: " + what};
+        return compileFilterGuarded(spec, _columns, _options.services, _source->groups());
     }
 
     // ── scheduling ──────────────────────────────────────────────────────────
@@ -1006,22 +1490,24 @@ private:
     // Whether the shown view is out of date with the requested state.
     [[nodiscard]] bool hasWork() const {
         return !_dirty.empty() || _epoch != _viewEpoch || _sort != _appliedSort || _filter != _appliedFilter ||
-               _columnsVersion != _viewColumnsVersion;
+               _columnsVersion != _viewColumnsVersion || _retainedVersion != _appliedRetainedVersion;
     }
 
     // A repair merges the dirty rows into the shown order: only the rows'
     // contents changed since that order was computed. (A structural change
     // advances the epoch; every row is owed a `Changed` exactly while the
-    // epoch is ahead of the view's.)
+    // epoch is ahead of the view's.) A view with retained rows is computed whole: a repair merges into an order the
+    // filter made, which retained rows are not part of.
     [[nodiscard]] bool canRepair() const {
         return !_dirty.empty() && _epoch == _viewEpoch && _sort == _appliedSort && _filter == _appliedFilter &&
-               _columnsVersion == _viewColumnsVersion;
+               _columnsVersion == _viewColumnsVersion && _retained.empty() &&
+               _retainedVersion == _appliedRetainedVersion;
     }
 
     // Whether a change since @p input was taken makes its result useless.
     [[nodiscard]] bool supersedes(detail::JobInput const& input, Ticket const& ticket) const {
         return _sort != input.sort || _filter != input.filter || _epoch != ticket.epoch ||
-               _columnsVersion != ticket.columnsVersion;
+               _columnsVersion != ticket.columnsVersion || _retainedVersion != ticket.retainedVersion;
     }
 
     // Starts the work the requested state needs. While a job runs, a request
@@ -1082,11 +1568,16 @@ private:
         input.dirty.erase(dupFirst, dupLast);
         if (input.repair) {
             input.previousTrueView = _trueView;
+            input.previousUndecided = _undecided;
         }
         input.allChanged = _obligeAll;
         _obligeAll = false;
         input.resetThreshold = _options.resetThreshold;
-        ticket = Ticket{.epoch = _epoch, .changeSeq = _absorbedSeq, .columnsVersion = _columnsVersion};
+        input.retained = _retained;
+        ticket = Ticket{.epoch = _epoch,
+                        .changeSeq = _absorbedSeq,
+                        .columnsVersion = _columnsVersion,
+                        .retainedVersion = _retainedVersion};
         return input;
     }
 
@@ -1103,6 +1594,10 @@ private:
         _sort = _appliedSort;
         _filterSpec = _appliedFilterSpec;
         _filter = _appliedFilter;
+        if (_retainedVersion != _appliedRetainedVersion) {
+            _retained = _appliedRetained;
+            _retainedVersion = _appliedRetainedVersion;
+        }
         if (_columnsVersion != _viewColumnsVersion) {
             fitToColumns();
         }
@@ -1118,7 +1613,7 @@ private:
             recordOwnerStep(began);
             giveBack(job.input(), ticket);
             revert();
-            return std::unexpected(serviceFailed(*job.failure()));
+            return std::unexpected(*job.failure());
         }
         auto const applied = install(job.input(), job.takeResult(), ticket);
         recordOwnerStep(began);
@@ -1188,7 +1683,7 @@ private:
         if (job->failure()) {
             giveBack(input, _runningTicket);
             revert();
-            afterJob(serviceFailed(*job->failure()));
+            afterJob(job->failure());
             return;
         }
         auto const began = std::chrono::steady_clock::now();
@@ -1240,6 +1735,7 @@ private:
         _stats.fullSorts += result.fullSort ? 1 : 0;
         _stats.subsetSorts += result.subsetSort ? 1 : 0;
         _stats.repairs += result.repaired ? 1 : 0;
+        _stats.filterRuns += result.filtered ? 1 : 0;
         _keys = std::move(result.keys);
         _keysSnapshot = input.snapshot;
         if (result.sorted != nullptr) {
@@ -1262,12 +1758,20 @@ private:
         _appliedSort = input.sort;
         _appliedFilter = input.filter;
         _appliedFilterSpec = _filterSpec;
+        _appliedRetained = input.retained;
+        _appliedRetainedVersion = ticket.retainedVersion;
+        _unmatched = std::move(result.unmatched);
         _trueView = std::move(result.view);
+        auto const undecidedBefore = _undecided.size();
+        _undecided = std::move(result.undecided);
         _viewSnapshot = input.snapshot;
         _relayoutPending = false;
         _viewIndexValid = false;
         _keyIndexValid = false;
-        Applied out{.change = std::move(result.change), .armSettle = false};
+        Applied out{
+            .change = std::move(result.change),
+            .armSettle = false,
+            .undecided = _undecided.size() != undecidedBefore ? std::optional{_undecided.size()} : std::nullopt};
         if (_options.reorder == ReorderPolicy::Deferred) {
             // An ended edit's token stands for the notifications up to its own
             // count: one the shown view had already taken in has no use.
@@ -1354,7 +1858,7 @@ private:
         _view = std::move(displayed);
         _viewIndexValid = false;
         _keyIndexValid = false;
-        deliver(Applied{.change = change, .armSettle = false});
+        deliver(Applied{.change = change, .armSettle = false, .undecided = std::nullopt});
     }
 
     // ── calling out ─────────────────────────────────────────────────────────
@@ -1379,6 +1883,13 @@ private:
             // A copy: the handler may replace itself or destroy the engine.
             auto const handler = _onViewChange;
             handler(applied.change);
+            if (alive.expired()) {
+                return false;
+            }
+        }
+        if (applied.undecided && _onUndecidedChange) {
+            auto const handler = _onUndecidedChange;
+            handler(*applied.undecided);
         }
         return !alive.expired();
     }
@@ -1447,6 +1958,8 @@ private:
     std::shared_ptr<CompiledFilter const> _filter;
     std::uint64_t _columnsVersion = 0;
     std::uint64_t _epoch = 0;
+    std::vector<RowId> _retained;
+    std::uint64_t _retainedVersion = 0;
     // applied state: what the shown view was computed from
     std::vector<ColumnInfo> _viewColumns;
     std::shared_ptr<RowSnapshot const> _viewSnapshot;
@@ -1455,9 +1968,13 @@ private:
     std::shared_ptr<CompiledFilter const> _appliedFilter;
     std::uint64_t _viewColumnsVersion = 0;
     std::uint64_t _viewEpoch = 0;
-    std::uint64_t _viewChangeSeq = 0;      // notifications the view took in
-    std::vector<std::uint32_t> _view;      // displayed
-    std::vector<std::uint32_t> _trueView;  // sorted and filtered, without holds
+    std::uint64_t _viewChangeSeq = 0;       // notifications the view took in
+    std::vector<std::uint32_t> _view;       // displayed
+    std::vector<std::uint32_t> _trueView;   // sorted and filtered, without holds
+    std::vector<std::uint32_t> _undecided;  // neither admitted nor rejected, source rows ascending
+    std::vector<RowId> _appliedRetained;
+    std::uint64_t _appliedRetainedVersion = 0;
+    std::vector<std::uint32_t> _unmatched;  // retained rows of the view the filter rejects, source rows ascending
     // caches, valid for `_keysSnapshot`
     std::shared_ptr<RowSnapshot const> _keysSnapshot;
     std::vector<std::shared_ptr<KeyColumn const>> _keys;
@@ -1488,6 +2005,7 @@ private:
     Ticket _runningTicket;
     ::core::async::StopSource _jobStop;
     std::function<void(ViewChange const&)> _onViewChange;
+    std::function<void(std::size_t)> _onUndecidedChange;
     std::function<void(bool)> _onPending;
     std::function<void(TableError const&)> _onError;
     EngineStats _stats;

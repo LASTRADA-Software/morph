@@ -95,4 +95,14 @@ inline void plainPageWhenCompact(ui::Scope& screen, ui::AnyHandle const& width) 
                     quietTag(priority).visible(!(stat || urgent))});
 }
 
+/// @brief @p columns with no filter button on any header: the designs filter through the screen's own controls.
+/// @param columns The table's columns.
+/// @return The columns, none filterable.
+[[nodiscard]] inline std::vector<ui::TableColumn> unfiltered(std::vector<ui::TableColumn> columns) {
+    for (ui::TableColumn& column : columns) {
+        column.filterable = false;
+    }
+    return columns;
+}
+
 }  // namespace lims_gallery::layout

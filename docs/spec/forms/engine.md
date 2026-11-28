@@ -21,6 +21,7 @@ which is the host's contract ([../ui/host.md](../ui/host.md)).
 - [Submitters and typed forms](#submitters-and-typed-forms)
 - [The field overlay](#the-field-overlay)
 - [Rendering](#rendering)
+- [Derived values](#derived-values)
 - [Collections](#collections)
 - [Wizards](#wizards)
 - [Rendering collections and wizards](#rendering-collections-and-wizards)
@@ -36,7 +37,7 @@ Header-only, in the base `morph` target:
 | `field_model.hpp` | `FieldKind`, `SubmitMode`, `FieldSpec`, `FieldGroupSpec`, `FormModel` |
 | `rules.hpp` | `SchemaError`, `Tri`, `RuleOperand`, `RuleExpr`, the gating and presentation verdicts |
 | `values.hpp` | `FieldError`, `WireValue`, `Encoding`, `ValueContext`, `encodeScalar`, `decodeScalar`, `convertDraft`, `parseOptions` |
-| `form_session.hpp` | `Submitter`, `ChoiceFetcher`, `FormSessionOptions`, `FieldState`, `RowState`, `FormSession` |
+| `form_session.hpp` | `Submitter`, `ChoiceFetcher`, `FormSessionOptions`, `FieldState`, `RowState`, `FormSession`; its rounds of derived values use `forms/derive.hpp`'s `DeriveOptions`, `DeriveRound`, `DeriveLoad` and `DeriveState` |
 | `handler_submitter.hpp` | `handlerSubmitter`, `handlerChoiceFetcher` |
 | `typed_form.hpp` | `Form<A, M, S>`, and the definition of `FormModel::forAction<A>()` |
 | `overrides.hpp` | `FieldView`, `Overrides` |
@@ -82,7 +83,7 @@ the text does not matter).
 | `ObjectArray` | an array of objects | an array of nested objects |
 
 A `FieldSpec` also carries the label, help, placeholder and i18n key; `required` and `x-blankAs`; `x-readonly`,
-`x-hidden`, `x-computed`'s inputs; exact bounds (`minimum`, `maximum`, `multipleOf`, `x-exactMinimum`,
+`x-hidden`, `x-computed` and its inputs, `x-derived`; exact bounds (`minimum`, `maximum`, `multipleOf`, `x-exactMinimum`,
 `x-exactMaximum`) and instance bounds (`x-minimum`, `x-maximum`); places; the units with their exact factors;
 the enum options; the Choice descriptor; the section and column span; the slider range; and the children of an
 `Object` or `ObjectArray`. Nesting is described to `kMaxNestingDepth` (4) levels and stops where a `$ref` chain
@@ -225,6 +226,17 @@ it. A view mounted on it is destroyed first.
   fetch, keep the selection. A failed fetch is not repeated on its own: `retryOptions()` fetches again, and opening
   the field's dropdown in `formView` runs it, so options that failed when the form was built (an action that needs
   the screen's own setup first) are fetched once the user asks for them.
+- **A Choice member of a collection row** looks up each `x-optionsDependsOn` name among its row's members first, then
+  among the top-level fields, so a grade can depend on its row's material and the form's site. Its options are not
+  fetched until an editor of it opens (`FieldState::openOptions()`, which a grid's cell editor calls as it opens), so
+  a column of 300 rows fetches nothing until a user opens a cell. Every row member's fetch goes through one cache of
+  the session (`SessionCore::sharedChoices`): identical `(optionsAction, request)` pairs share one fetch for the
+  session's life, a second ask joining the fetch in flight or taking its reply, and a failed fetch is not kept, so
+  the next ask fetches again. A column of rows over five materials makes five requests. A top-level Choice keeps its
+  own query, unshared.
+- **Options narrowed per row.** `FieldState::narrowOptions(values)` keeps only the options whose JSON literal is
+  listed (a grid column's `options` overlay); `options()` offers the narrowed list, and nothing restores every option.
+  `overridePlaceholder(text)` replaces the placeholder the same way (a column's `placeholder` overlay).
 - **Automatic submission waits for options in flight.** While any top-level Choice is fetching, its selection is
   unjudged — a parent just changed — so the automatic Effect does not submit; the settled query wakes it, after
   a stale selection has been cleared.
@@ -282,7 +294,7 @@ before it.
 | Slider | `Slider` over `x-min`..`x-max` by `x-step` |
 | Array | `TextInput`, comma-separated |
 | Object | `Panel` of its members' cells |
-| ObjectArray | a `forEach` of row panels, each with Remove, and an Add button |
+| ObjectArray | a `forEach` of row panels, each with Remove, and an Add button; with `x-widget: grid` (or an overlay's `widget: grid`), a grid of its rows (`ui::formGrid`, [../table/editing.md](../table/editing.md#a-grid-of-a-form)), one column per member in schema order |
 
 - **A cell** is the label (a `ui::TextRole::Label` text, so the theme's `field.caption.case` shapes it) and the control (which marks a required field, live, and describes itself with the help),
   visible while the field is. The cell owns the caption, and the control owns the required mark and the unit: the mark is the
@@ -325,9 +337,94 @@ before it.
   ([../ui/interpreter.md](../ui/interpreter.md#lowering)): the interpreter adds it as a field-path override, and the cell
   around it (caption, help, visibility) is drawn as for every override.
 
-**Not supported:** the grid widget (`x-widget: grid` on an `ObjectArray`), whose keyboard model needs a way for the
-view tree to move focus, which it does not have (a kit's grid is reached through a host component); and a
-document's subtree overrides.
+The scalar controls (every kind but an Object and an ObjectArray) are `detail::engine::scalarControl(session,
+field)` in `forms/engine/field_control.hpp`, which a grid's cell editor draws too; `form_view.hpp` includes it and
+`ui/grid.hpp`, and neither of those includes `form_view.hpp`.
+
+**Not supported:** a document's subtree overrides.
+
+## What changed, and edits not yet committed
+
+- **The load record.** For every scalar field, the members of an Object and of each row of an `ObjectArray`
+  included, the session keeps the draft and the unit it held when the form was last loaded, by
+  `FieldState::path()` (`specimens#3.mass`), and each row of a collection then. Construction, `prefill`, `reset`,
+  a `refill` that loads a field and a successful submission that ends a field's edit write it, for the fields they
+  load.
+- **`modified(path)`** (tracked) is true when the field's draft or unit differs from the record, or the field is a
+  member of a row added since the load. A computed member (`FieldSpec::computed`, from `x-computed`) and a derived
+  one (`FieldSpec::derived`, from `x-derived`) are never modified: only a round writes them. Any other member stays modified whatever freezes it after the user typed in it.
+  **`rowModified(arrayPath, key)`** is true when a member of the row is modified or the row was added since.
+- **`loadGeneration()`** (tracked) is a count that moves with each load: each write through `FieldState::load`,
+  which sets the fields it writes afresh, their units included. Construction, `prefill`, `reset`, a `refill` that
+  loads a field, a successful submission that ends a field's edit and a round of derived values (`loadDerived`)
+  that writes a member are loads. A switch of units as loaded alone (`switchUnitsAsLoaded`) is not, and nor is a
+  `revert`. What follows loads, such as a fixed grid's `unit` overlay giving a field its unit again after a load,
+  reads it; since a switch as loaded moves it not, one grid's switch is never another's load.
+- **`revert(path)`** restores the record's draft and unit, programmatically; a row's path (`specimens#3`) reverts
+  each member, and reverting a row added since the load removes it.
+- **`field(path)`** takes a row by key too: `rows#<key>.member`, as `FieldState::path()` writes it, beside
+  `rows[i].member` by position.
+- **Before-submit hooks.** `addBeforeSubmit(hook)` returns an id for `removeBeforeSubmit`; `submit()` runs every
+  hook, in the order added, before it reads the body, so an edit not committed yet (a grid's open cell editor)
+  is sent with the rest.
+- **A refused submission's fields.** A reply's `errors` member names them: an object from a field's path
+  (`specimens[1].mass`, read as `field(path)` reads it) to a message, or to a list of messages of which the first is
+  shown. Each is that field's refusal: `refusal(path)` (tracked) gives it while the field keeps the draft it had then;
+  a path the form has no field for is not shown. Such a reply did not save the record, so what it sent stays an
+  edit. The next reply replaces them, and a failure clears them. A failure names no field: a
+  `model::ActionRefusal`'s arguments fill its sentence, and an argument whose name happens to be a field's path is
+  not that field's error. A reply member named `errors` is reserved for field errors: an action whose reply carries
+  a domain member of that name has it read as field errors, and the record taken as not saved.
+- A field is frozen (`readonly()`) by `x-readonly`, `x-computed`, `x-derived`, a frozen parent or a `readonlyWhen`
+  naming it.
+
+## Derived values
+
+A form asks for the values it cannot compute from what it holds in **rounds**
+([../table/editing.md](../table/editing.md#derived-values)): an evaluation of the action, whose recomputed body gives
+the computed members (`x-computed`, on the action and on a row type), and a call of the form's derive action, whose
+`forms::Derived` reply gives the derived members (`x-derived`, `FieldSpec::derived`). Neither is a member the user can
+edit, so a round never replaces a draft the user typed.
+
+- **`deriveWith(DeriveOptions)`** turns rounds on: `evaluate` sends the body to the action's evaluation (the UI
+  service's `ui-evaluate`), `derive` sends `{"body": <body>}` to the derive action, `scheduler` runs the debounce,
+  `debounce` is how long a commit waits for a further one (**150 ms** by default), and `refused` is told the paths a
+  derive reply named that are no derived member. Until it is called a session makes no round.
+- **`noteCommit()`** is what a committed edit runs (a grid's `FormGridSource::committed`). With a round in flight
+  it marks the round stale; otherwise it restarts the debounce timer, whose expiry starts a round; with no scheduler
+  a round starts at once.
+- **A round** captures itself (`captureRound()`: the next sequence, `partialBody()`, and the row keys of every
+  collection by `FieldState::path()`), sets `deriveState()` to `Running`, and sends the evaluation and the derive call,
+  each when set, with that body. At most one round is in flight.
+- **`partialBody()`** is the body as far as it encodes: every top-level field that encodes; an Object or a collection
+  member by member, a blank member or one that does not encode left out; every row written, in order, `{}` for a row
+  with nothing. A left-out member decodes to its default on the server.
+- **Loading.** `loadDerived(round, Derived)` writes the derived members a reply names, and
+  `loadDerived(round, evaluatedBody)` the computed members of the recomputed body (a computed member the body leaves
+  out of an object it holds is blank; its `errors` and `ready` are not read). Both resolve `name[i]` through
+  `round.rowKeys[name][i]` and the row's current position by key, so a value lands on the row it was computed for
+  after rows were inserted or removed, and a value for a row removed since is dropped (not refused). A path that
+  names no member of the reply's kind is refused and returned in `DeriveLoad::refused`. A load is programmatic and no
+  edit, as `assign` is: nothing is submitted, what the user typed stays an edit, and a member it writes that held its
+  loaded value holds the new one as loaded. A field's snapshot (`FieldState::snapshot`, what `refill` and a save's
+  settle compare) leaves computed and derived members out, so a round never makes a top-level field look edited or
+  different from what a submission sent: a save the round overlaps still ends the edit of what it sent, and a later
+  `refill` still reaches the collection. A computed or derived member is never `modified`.
+- **`switchUnitsAsLoaded(switches)`** switches units the same way, converting each draft: what the first unit a grid's
+  per-row `unit` overlay gives each loaded row is, so the cell is not modified by it and a revert returns to it. It
+  takes unit switches only, so nothing beyond the cells it names is recorded as loaded.
+- **Order.** Each kind of reply keeps the sequence it last loaded; a reply of an older round loads nothing, so derived
+  values never go back to an older result. When both replies of a round settle, `deriveState()` is `Failed` if
+  either failed (the values stay as they were), else `Current`; a stale round then starts one more at once, with the
+  newer body. `recalculate()` starts a round unless one is in flight. `deriveFailing()` is true from a round that
+  failed until a round succeeds, a retry in flight included: a grid's stale marks and its standing "Derived values could
+  not be recalculated" with "Recalculate" follow it, so they stay while the retry runs.
+- **`insertRow(position)`** inserts a blank row before `position` (past the end appends), a user action like
+  `addRow`.
+- **`removeRows(keys)`** removes rows by key in one change and returns them as `RemovedRow{position, row}`, each with
+  the position it stood at, ascending; **`restoreRows(rows)`** puts them back, each at its position, in one change, the
+  rows whole (their keys, drafts and units), so a grid's "Undo" of a deletion restores what was typed. An array's
+  `minItems` and `maxItems` are `FieldSpec::minItems` and `maxItems`, the bounds a grid's row operations keep.
 
 ## Collections
 
@@ -398,14 +495,17 @@ to every form they draw, so `Overrides` reach the editor's and every step's fiel
   built-in header (`collection_title`; the wizard's before the step's position); empty shows the schema's. A
   header chrome draws its own.
 - **Chrome.** `CollectionChrome` and `WizardChrome` replace the view's own parts with a host's: the collection's
-  header, each row (the rows are then a list of the chrome's nodes rather than a table), the confirm (mounted only
-  while an action waits) and the editor dialog (handed the editor's form view to place); the wizard's header and
-  navigation. A chrome is handed the session and drives it through the same calls the built-in parts make, so its
-  gates are the session's: a chrome's Next does nothing until `canNext()`. A master-detail view has no editor
-  dialog to replace.
+  header, each row (the rows are then a list of the chrome's nodes rather than a table), the rows table whole
+  (`rows`, handed the session and what draws a row's Open and row-action buttons for its key text, empty when the
+  view has neither; unused while `row` is set), the confirm (mounted only while an action waits) and the editor
+  dialog (handed the editor's form view to place); the wizard's header and navigation. A chrome is handed the
+  session and drives it through the same calls the built-in parts make, so its gates are the session's: a chrome's
+  Next does nothing until `canNext()`. A master-detail view has no editor dialog to replace.
 - **Through a document.** The interpreter lowers a `collection` or `wizard` node to these views over sessions it
   builds from `Catalog::view` or `Catalog::wizard` and its model alias
-  ([../ui/interpreter.md](../ui/interpreter.md#lowering)).
+  ([../ui/interpreter.md](../ui/interpreter.md#lowering)). It sets the collection's `rows` chrome: the rows are a
+  table on the engine over `source()`, sorted, filtered, arranged, copied and persisted as every other table of
+  the screen ([../table/table.md](../table/table.md#collections-and-master-detail)).
 
 ## Corpora
 

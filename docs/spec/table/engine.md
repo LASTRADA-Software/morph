@@ -49,10 +49,9 @@ or the reactive runtime.
 | `filter.hpp` | `FilterEntry`, `Combine`, `ColumnFilter`, `GroupFilter`, `FilterSpec`, `CompiledFilter`, `compileFilter`, `compileFilterGuarded`, `FilterRun` |
 | `view_change.hpp` | `ViewOp`, `ViewChange`, `diffViews`, `applyViewChange` |
 | `engine.hpp` | `Engine`, `EngineOptions`, `EngineStats`, `ReorderPolicy`, `ColumnLayout` |
-| `query.hpp` | `PageRequest`, `TableQuery`, `Page<Row>`, `TotalKind`, `QueryLimits`, `validate`, `escapeLikePattern`, `ApplyOptions`, `PageRows`, `apply`, `QueryPlan`, `planQuery`, `RowsSource<Row>`, `PageWindow<Row>` |
-| `plan_conformance.hpp` | `ModelPage`, `PlanModel`, `ConformanceOptions`, `standardCorpus`, `conformanceFailures` |
+| `query.hpp` | `PageRequest`, `TableQuery`, `Page<Row>`, `TotalKind`, `QueryLimits`, `validate`, `ApplyOptions`, `PageRows`, `apply`, `RowsSource<Row>`, `PageWindow<Row>` |
 | `selection.hpp` | `TableMode`, `SelectionMode`, `Selection`, `TableCounts`, `counts` |
-| `edits.hpp` | `EditRequest`, `FieldError`, `EditCommit`, `CellEdits` |
+| `edits.hpp` | `EditRequest`, `FieldError`, `EditCommit`, `CellEdits`; a model's table's `CellEdit`, `RowEdit`, `EditCell`, `RowEditRequest`, `RowEditCommit`, `checkEdits` |
 
 ## Rows: sources and snapshots
 
@@ -194,6 +193,24 @@ for its lifetime. The initial view is every row in source order.
 one column stays visible, `reset` restores the defaults, and `rebuild` adopts a
 new column list keeping what remains.
 
+It also holds what the user forms over the columns, in the same members
+`value()` writes and `apply` reads:
+
+- **Groups.** `formGroup(label, columns)` forms a group of 2 to 16 of the
+  layout's columns, none already in a user-formed group, and returns its id,
+  the first of `g1`, `g2`, … no group has (`InvalidSpec` otherwise);
+  `removeGroup(id)` removes one; `groups()` lists them. Whether the columns
+  are of one kind is the caller's check: the layout knows only ids.
+- **Display units.** `setUnit(column, dimension, unit)` sets the unit a
+  column shows one dimension in, and `nullopt` clears it; `units()` maps a
+  column to a unit id per dimension.
+
+`apply` and `rebuild` fit both as they fit the rest: a column the table lacks
+leaves its group and loses its units, a column stays only in the first group
+that holds it, a group left with fewer than two or more than 16 columns, or
+repeating an earlier group's id, is dropped, and `reset` keeps groups and
+units.
+
 ## Execution and threading
 
 Every recomputation is a `detail::ViewJob`: a snapshot, the key columns it may
@@ -248,7 +265,8 @@ order, then diff) it runs in steps. A job never names the engine.
 
 Notifications are coalesced: the first one in an owner turn posts a flush; the
 flush takes the source's new snapshot and handles everything notified since.
-With no owner executor the flush runs inside the notification.
+With no owner executor the flush runs inside the notification. `Engine::flush()` runs it at once, for a caller
+that changed the source and reads the view in the same turn (a grid of a form, which takes in its rows when it walks).
 
 - **Updated** rows are repaired: their keys are rebuilt on copies of the key
   columns, they are filtered, sorted among themselves and merged into the
@@ -297,15 +315,14 @@ edited included; the next repair holds them again.
   `apply(rows, key, query, options, kinds)` does the same over typed rows and
   returns a `Page<Row>`. Text order is the server's collator; a client in
   server mode does not re-sort a page.
-- A model that holds its rows in a database pages them there: `planQuery(query, columns, limits, mayRead, services,
-  translatable)` is `validate`, the model's own refusals, the guarded compile and a projection of the compiled filter
-  into a `QueryPlan` the model translates into its query, and `Page::totalKind` says whether a total is the count or a
-  lower bound (`AtLeast`). `apply` stays the reference: `conformanceFailures` runs a corpus through `apply` and the
-  model's translation and reports every disagreement. `compileFilterGuarded` is the one compile step `apply`,
-  `Engine` and `planQuery` share, so a collator or date parser that throws is `ServiceFailed` in all three. The
-  design is [`database_pages.md`](database_pages.md).
-- `escapeLikePattern` is for a database-backed server that maps `contains` to
-  SQL `LIKE`: it keeps `%` and `_` ordinary.
+- A model whose rows live in a database reads them as a `DataSource`, whole or lazily by column, and the server
+  sorts, filters, pages and counts them with `apply`; `Page::totalKind` says whether a total is the count or a lower
+  bound (`AtLeast`). `compileFilterGuarded` is the one compile step `apply` and `Engine` share, so a collator or date
+  parser that throws is `ServiceFailed` in both.
+- A table whose rows are cheap and whose slow columns load later marks the unloaded cells `Unloaded`: an unloaded cell
+  sorts after the empties, a filter over it is three-valued, and its row is undecided rather than rejected. A column
+  names the data level its cells need, a query names the columns it shows, and a `Page` says which of its cells are
+  still coming. The design is [`table.md`](table.md).
 - `TableError` serialises with its code by name (`"unsupportedOperator"`), so a
   server returns it as the action's typed error.
 - `PageWindow<Row>` is the client's view of a server-mode table: `visible(first,
@@ -351,6 +368,36 @@ an error stays on its cell until an edit of that cell succeeds. A success
 patches the row through the `RowPatcher`. With an engine, a row is held
 (`beginEdit`) from its first commit until its last edit settles. A completion
 after the `CellEdits` is destroyed is ignored.
+
+`CellEdits(RowEditCommit)` is a model's table's committer, with no patcher and
+no engine (`editing.md`, "Cells of a model's table"). `commitRow` sends a
+`RowEditRequest`, the cells of one row, through the injected commit; a row's
+requests run one at a time in order, and a cell is `stale` while a request
+naming it is queued or out. A success marks each cell of the request
+`modified` until `rowFetched` says the window fetched the row again, which also
+drops the drafts that success sent; a cell still stale keeps its marks, since
+the row fetched does not hold its edit yet. A refusal is a list of
+`FieldError`s: one whose `column` is a cell's `EditCell::member` (its column
+when the member is empty) lands on that cell, one that names no cell of the
+request, or nothing, on every cell of the request that no named error reached,
+and a cell no error reached takes none. A success settles a cell's draft only
+while it is the draft the request was made with: one typed since stays.
+
+Drafts and their errors are held by row key and column (`setDraft`, `draft`,
+`clearDraft`), not by the window: a row that scrolls out and back finds them.
+`moveRow` moves a row's drafts, errors, marks and queued requests to its new
+key; `rowAbsent` drops them, and the requests not yet sent, for a row a keyed
+refetch found gone, while the one out settles unheard; `keepColumns` drops
+every column a new description lacks. `errorCount` and `modifiedCount` count
+across rows. `onRowSettled` hears each settled request with the row's key and
+whether it was refused.
+
+`checkEdits(description, schemaOf)` checks each column's `EditInfo` against its
+action's input schema: the field (`value` of a `CellEdit`, the member of a
+`RowEdit`'s `values`) must exist and be of a kind the column's kind is edited
+with. `Table.<id>.describe` runs it over the schemas the server serves
+(`TableRuntime::schemaOf`), and refuses a description that does not pass with
+`SourceContract`.
 
 ## Schema integration
 
@@ -436,6 +483,8 @@ against `wire::decode` both ways.
 | A reset that removes a sorted or filtered column | That sort key or filter entry is dropped. |
 | A server query over a bound | `LimitExceeded` (the limit itself is clamped). |
 | A commit's completion after its `CellEdits` is gone | Ignored; the destructor ended the row's engine edit. |
+| A row commit's completion after its row went absent | Settles unheard: no mark, error or draft is left. |
+| A column's edit field missing, or of a kind its column is not edited with | `SourceContract` from `checkEdits`; `describe` is refused. |
 
 ## Design decisions
 
@@ -457,19 +506,19 @@ against `wire::decode` both ways.
 
 - With no worker, a recompute's diff is one owner step (about 30 ms for an
   insert into 100,000 rows), and applying a `Deferred` repair lays out and
-  diffs on the owner (10 to 55 ms at 100,000 rows).
+  diffs on the owner (10 to 55 ms at 100,000 rows). A document's `rows`
+  table runs its engine this way, in owner steps of 4 ms, so these single
+  steps are where it can miss a frame.
 - `RowsSource` cannot name a date column's text format.
 - There is no `QueryRowsSource` (a source over a `morph::reactive` query's
   rows, diffing a refetch by key). It is the one header of this module that
   would include the reactive runtime.
-- The document interpreter does not yet lower a model-backed `table` node onto
-  this engine ([`../ui/interpreter.md`, "Not yet lowered"](../ui/interpreter.md#not-yet-lowered));
-  the engine's renderer list model and its mounting measurement belong there.
 
 ## Cross-references
 
 - `docs/superpowers/specs/2026-10-08-table-engine-design.md` — the
   program-level design this module implements.
+- [table.md](table.md) — the one table every surface uses: descriptions, the pipeline, unloaded cells, caches, configuration and budgets.
 - [../core/callback_scope.md](../core/callback_scope.md) — the lifetime gate on
   every completion.
 - [../core/executor.md](../core/executor.md) — owner and worker executors.
