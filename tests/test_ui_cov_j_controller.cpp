@@ -15,6 +15,7 @@
 #include <morph/ui/host.hpp>
 #include <morph/ui/json_source.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -449,4 +450,188 @@ TEST_CASE("covj custom controller: Discard of a screen whose document went and c
     rig.controller->discard(tab);
     REQUIRE(rig.pump([&rig, tab] { return !rig.controller->message(tab).empty(); }));
     CHECK(rig.controller->drafted(tab));
+}
+
+namespace {
+
+/// The tab id the workspace issued to a tab that has since closed.
+WorkspaceTabId closedTab(ControllerRig& rig) {
+    WorkspaceTabId const tab = rig.open("notes.edit", note(1));
+    rig.guardChoice = morph::ui::CloseChoice::Discard;
+    std::optional<bool> closed;
+    rig.workspace->close(0, [&closed](bool outcome) { closed = outcome; });
+    REQUIRE(rig.pump([&closed] { return closed.has_value(); }));
+    return tab;
+}
+
+}  // namespace
+
+TEST_CASE("covj custom controller: options it cannot work without are refused at construction",
+          "[covj][ui][custom-screens][controller]") {
+    ControllerRig rig;
+    auto options = rig.controllerOptions();
+    SECTION("no runtime") { options.runtime = nullptr; }
+    SECTION("no host") { options.host = nullptr; }
+    SECTION("no sync") { options.sync = nullptr; }
+    SECTION("no documents") { options.documents = nullptr; }
+    SECTION("no sourceOf") { options.sourceOf = nullptr; }
+    SECTION("no catalog") { options.catalog = nullptr; }
+    SECTION("no openTab") { options.openTab = nullptr; }
+    CHECK_THROWS_AS(morph::ui::CustomScreenController{std::move(options)}, std::invalid_argument);
+}
+
+TEST_CASE("covj custom controller: a list change is announced, and a controller with no announcer is as quiet",
+          "[covj][ui][custom-screens][controller]") {
+    ControllerRig rig;
+    int announced = 0;
+    auto options = rig.controllerOptions();
+    options.onListChanged = [&announced] { ++announced; };
+    options.titleOf = nullptr;
+    options.onOutcome = nullptr;
+    morph::ui::CustomScreenController plain{std::move(options)};
+    plain.setOffered(true);
+    CHECK(announced == 1);
+    plain.listed(morph::ui::CustomScreensListed{});
+    CHECK(announced == 2);
+    CHECK(plain.offered());
+    CHECK(plain.titleOf("notes.edit") == "notes.edit");
+    // An outcome nobody listens for is dropped without a call.
+    std::optional<morph::ui::CustomScreenSource> source;
+    plain.storedSource("custom:nobody", [&source](morph::ui::CustomScreenSource shown) { source = std::move(shown); });
+    CHECK_FALSE(source.has_value());
+}
+
+TEST_CASE("covj custom controller: every question about a tab that closed has the empty answer",
+          "[covj][ui][custom-screens][controller]") {
+    ControllerRig rig;
+    WorkspaceTabId const tab = closedTab(rig);
+    CHECK_FALSE(rig.controller->drafted(tab));
+    CHECK_FALSE(rig.controller->saving(tab));
+    CHECK(rig.controller->message(tab).empty());
+    CHECK_FALSE(rig.controller->draftOf(tab).has_value());
+    CHECK_FALSE(rig.controller->screenOf(tab).has_value());
+
+    bool called = false;
+    rig.controller->source(tab, [&called](morph::ui::CustomScreenSource /*shown*/) { called = true; });
+    CHECK_FALSE(called);
+
+    Checked previewed;
+    rig.controller->preview(tab, std::string{kEdit}, [&previewed](morph::ui::CustomScreenCheckResult answer) {
+        previewed = std::move(answer);
+    });
+    REQUIRE(previewed.has_value());
+    CHECK(previewed->status == CustomScreenCheckStatus::Refused);
+    CHECK(previewed->refusal.reason == "the screen is closed");
+
+    CHECK_FALSE(rig.controller->proposeDraft(tab, "notes.edit", std::string{kEdit}));
+    rig.controller->save(tab);
+    rig.controller->discard(tab);
+    rig.controller->openAs(tab, "notes.home");
+    CHECK(rig.outcomes.empty());
+}
+
+TEST_CASE("covj custom controller: a controller over no workspace holds no tab",
+          "[covj][ui][custom-screens][controller]") {
+    ControllerRig rig;
+    WorkspaceTabId const tab = rig.open("notes.edit", note(1));
+    rig.controller->attach(nullptr);
+    CHECK_FALSE(rig.controller->drafted(tab));
+    CHECK_FALSE(rig.controller->screenOf(tab).has_value());
+    rig.controller->openAs(tab, "notes.home");
+    rig.controller->remove("custom:nobody", {});
+    rig.harness.owner.runAll();
+    CHECK(rig.outcomes.empty());
+    CHECK(rig.screenOf(0) == "notes.edit");
+}
+
+TEST_CASE("covj custom controller: a draft the assistant proposes is shown, or refused with the reason",
+          "[covj][ui][custom-screens][controller]") {
+    ControllerRig rig;
+    WorkspaceTabId const tab = rig.open("notes.edit", note(1));
+    SECTION("another screen's tab") {
+        CHECK_FALSE(rig.controller->proposeDraft(tab, "notes.home", std::string{kHome}));
+        CHECK_FALSE(rig.controller->drafted(tab));
+    }
+    SECTION("text that does not load") {
+        CHECK_FALSE(rig.controller->proposeDraft(tab, "notes.edit", "{not json"));
+        REQUIRE_FALSE(rig.outcomes.empty());
+        CHECK(rig.outcomes.back().event == morph::ui::CustomScreenEvent::ProposalNotShown);
+        CHECK_FALSE(rig.outcomes.back().detail.empty());
+    }
+    SECTION("a document under another id") {
+        CHECK_FALSE(rig.controller->proposeDraft(
+            tab, "notes.edit", screens_test::replaced(std::string{kEdit}, "\"notes.edit\"", "\"notes.other\"")));
+        REQUIRE_FALSE(rig.outcomes.empty());
+        CHECK(rig.outcomes.back().event == morph::ui::CustomScreenEvent::ProposalNotShown);
+        CHECK_FALSE(rig.controller->drafted(tab));
+    }
+    SECTION("a document of the screen") {
+        CHECK(rig.controller->proposeDraft(tab, "notes.edit", ControllerRig::headed("Proposed")));
+        CHECK(rig.controller->drafted(tab));
+        CHECK(rig.harness.text("heading") == "Proposed");
+    }
+}
+
+TEST_CASE("covj custom controller: Save does nothing without a draft of a screen of mine",
+          "[covj][ui][custom-screens][controller]") {
+    ControllerRig rig;
+    WorkspaceTabId const tab = rig.open("notes.edit", note(1));
+    REQUIRE(rig.preview(tab, ControllerRig::headed("Draft")).status == CustomScreenCheckStatus::Done);
+    // An application screen's draft is saved as a new screen, never over the application's.
+    rig.controller->save(tab);
+    CHECK_FALSE(rig.controller->saving(tab));
+    CHECK(rig.controller->drafted(tab));
+    rig.controller->discard(tab);
+    REQUIRE(rig.pump([&rig, tab] { return !rig.controller->drafted(tab); }));
+    // No draft: nothing to save or discard.
+    rig.controller->save(tab);
+    rig.controller->discard(tab);
+    CHECK_FALSE(rig.controller->saving(tab));
+    CHECK(rig.sync->listed().screens.empty());
+}
+
+TEST_CASE("covj custom controller: Open as the screen already shown does nothing",
+          "[covj][ui][custom-screens][controller]") {
+    ControllerRig rig;
+    WorkspaceTabId const tab = rig.open("notes.edit", note(1));
+    rig.controller->openAs(tab, "notes.edit");
+    rig.harness.owner.runAll();
+    CHECK(rig.screenOf(0) == "notes.edit");
+    CHECK(rig.outcomes.empty());
+}
+
+TEST_CASE("covj custom controller: removing a screen opens the base only in the tabs that showed it",
+          "[covj][ui][custom-screens][controller]") {
+    ControllerRig rig;
+    StoredScreen const stored{rig};
+    rig.open("notes.home", ParamMap{});
+    rig.open(stored.id, note(2));
+    Answer removed;
+    rig.controller->remove(stored.id, [&removed](std::expected<void, std::string> answer) { removed = answer; });
+    REQUIRE(rig.pump([&rig] { return rig.screenOf(1) == "notes.edit"; }));
+    CHECK(rig.screenOf(0) == "notes.home");
+    REQUIRE(removed.has_value());
+    CHECK(removed->has_value());
+}
+
+TEST_CASE("covj custom controller: removing a screen that is not listed names it by its id",
+          "[covj][ui][custom-screens][controller]") {
+    ControllerRig rig;
+    Answer removed;
+    rig.controller->remove("custom:nobody", [&removed](std::expected<void, std::string> answer) { removed = answer; });
+    REQUIRE(rig.pump([&removed] { return removed.has_value(); }));
+    CHECK_FALSE(removed->has_value());
+    CHECK(rig.outcomes.empty());
+}
+
+TEST_CASE("covj custom controller: the stored source of a screen the server lacks is told as unreadable",
+          "[covj][ui][custom-screens][controller]") {
+    ControllerRig rig;
+    std::optional<morph::ui::CustomScreenSource> source;
+    rig.controller->storedSource("custom:nobody",
+                                 [&source](morph::ui::CustomScreenSource shown) { source = std::move(shown); });
+    REQUIRE(rig.pump([&rig] { return !rig.outcomes.empty(); }));
+    CHECK(rig.outcomes.back().event == morph::ui::CustomScreenEvent::StoredSourceUnreadable);
+    CHECK(rig.outcomes.back().title == "custom:nobody");
+    CHECK_FALSE(source.has_value());
 }
