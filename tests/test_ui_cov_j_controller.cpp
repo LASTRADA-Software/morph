@@ -635,3 +635,53 @@ TEST_CASE("covj custom controller: the stored source of a screen the server lack
     CHECK(rig.outcomes.back().title == "custom:nobody");
     CHECK_FALSE(source.has_value());
 }
+
+TEST_CASE("covj custom controller: a stored screen that does not load has no changes to take over, and no update",
+          "[covj][ui][custom-screens][controller]") {
+    ControllerRig rig;
+    std::string const id = custom_client::customId('2');
+    morph::ui::CustomScreenKey key{.person = "ann", .app = "notes", .id = id};
+    auto completion = rig.server.store->put(
+        std::move(key),
+        morph::ui::CustomScreen{.id = id,
+                                .title = "Old",
+                                .basedOn = "notes.edit",
+                                .document = R"({"vocab":"ui/1","id":")" + id + R"(","view":{"kind":"hologram"}})",
+                                .savedAt = {},
+                                .savedBy = "ann"});
+    REQUIRE(rig.pump([&rig, &id] {
+        return rig.server
+                   .call(morph::ui::kCustomScreensGet, R"({"app":"notes","id":)" + screens_test::quoted(id) + "}",
+                         "ann")
+                   .kind == "ok";
+    }));
+    rig.sync->relist();
+    REQUIRE(rig.pump([&rig, &id] { return rig.controller->summaryOf(id).has_value(); }));
+
+    std::optional<std::expected<morph::ui::LayoutChanges, std::string>> changes;
+    rig.controller->layoutChangesOf(id, [&changes](auto answer) { changes = std::move(answer); });
+    REQUIRE(rig.pump([&changes] { return changes.has_value(); }));
+    CHECK_FALSE(changes->has_value());
+
+    Checked applied;
+    rig.controller->applyLayoutChoices(
+        id, morph::ui::LayoutChoices{},
+        [&applied](morph::ui::CustomScreenCheckResult answer) { applied = std::move(answer); });
+    REQUIRE(rig.pump([&applied] { return applied.has_value(); }));
+    CHECK(applied->status == CustomScreenCheckStatus::Refused);
+    CHECK(rig.outcomes.empty());
+}
+
+TEST_CASE("covj custom controller: an update of a screen the server no longer has is refused with the server's words",
+          "[covj][ui][custom-screens][controller]") {
+    ControllerRig rig;
+    StoredScreen const stored{rig};
+    stored.removeOnServer();
+    Checked applied;
+    rig.controller->applyLayoutChoices(
+        stored.id, morph::ui::LayoutChoices{},
+        [&applied](morph::ui::CustomScreenCheckResult answer) { applied = std::move(answer); });
+    REQUIRE(rig.pump([&applied] { return applied.has_value(); }));
+    CHECK(applied->status == CustomScreenCheckStatus::Refused);
+    CHECK(applied->refusal.reason.contains("no such custom screen"));
+}
