@@ -31,7 +31,9 @@ TEST_CASE("a real is the whole text, never NaN, by either reader", "[covc][table
         CHECK_FALSE(parse(" 1"));
     }
     CHECK_FALSE(detail::parseRealClassic("+1"));
-    CHECK(std::isinf(*detail::parseReal("inf")));
+    auto const inf = detail::parseReal("inf");
+    REQUIRE(inf.has_value());
+    CHECK(std::isinf(*inf));
 }
 
 TEST_CASE("a measure operand is a decimal with at most one unit id", "[covc][table][parse]") {

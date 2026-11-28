@@ -5,6 +5,7 @@
 // runs in, so the test installs a global locale whose decimal point is `,`.
 
 #include <catch2/catch_test_macros.hpp>
+#include <limits>
 #include <locale>
 #include <morph/table/sort.hpp>
 #include <optional>
@@ -61,5 +62,21 @@ TEST_CASE("table parse: a real is read with a point, in either parser, whatever 
         CHECK_FALSE(parse("+1.5").has_value());
         CHECK_FALSE(parse("abc").has_value());
         CHECK_FALSE(parse("nan").has_value());
+    }
+}
+
+// Mutation: drop the classic reader's infinity, so a filter on "inf" matches only where from_chars exists.
+TEST_CASE("table parse: both readers read infinity as from_chars spells it", "[table][parse]") {
+    double const inf = std::numeric_limits<double>::infinity();
+    for (auto const parse : {&parseReal, &parseRealClassic}) {
+        CHECK(parse("inf") == inf);
+        CHECK(parse("INF") == inf);
+        CHECK(parse("Infinity") == inf);
+        CHECK(parse("-inf") == -inf);
+        CHECK(parse("-infinity") == -inf);
+        CHECK_FALSE(parse("+inf").has_value());
+        CHECK_FALSE(parse("infx").has_value());
+        CHECK_FALSE(parse("in").has_value());
+        CHECK_FALSE(parse("-").has_value());
     }
 }

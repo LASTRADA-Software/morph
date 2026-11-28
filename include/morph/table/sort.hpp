@@ -31,6 +31,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <ios>
+#include <limits>
 #include <locale>
 #include <memory>
 #include <morph/table/data_source.hpp>
@@ -132,12 +133,25 @@ inline constexpr std::size_t kCheckEvery = 2048;
 ///        `parseReal` for a standard library without floating-point `from_chars`.
 ///
 /// The classic locale, not the global one: a filter value is the wire's text, so its decimal point is `.` whatever
-/// locale the process runs in.
+/// locale the process runs in. Infinity is read as `from_chars` reads it, `inf` or `infinity` in any case with an
+/// optional `-`, which a stream does not do itself; so a filter means the same with either reader.
 /// @param text The text.
 /// @return The value, or nothing when @p text is not exactly a number or is NaN.
 [[nodiscard]] inline std::optional<double> parseRealClassic(std::string_view text) {
     if (text.empty() || text.front() == '+' || std::isspace(static_cast<unsigned char>(text.front())) != 0) {
         return std::nullopt;
+    }
+    {
+        bool const negative = text.front() == '-';
+        std::string_view const magnitude = negative ? text.substr(1) : text;
+        auto const spells = [magnitude](std::string_view word) {
+            return std::ranges::equal(magnitude, word, [](char got, char want) {
+                return std::tolower(static_cast<unsigned char>(got)) == want;
+            });
+        };
+        if (spells("inf") || spells("infinity")) {
+            return negative ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
+        }
     }
     std::istringstream stream{std::string{text}};
     stream.imbue(std::locale::classic());
