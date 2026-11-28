@@ -68,7 +68,9 @@ TEST_CASE("cov rows pure: exactPlacesOf counts the places a denominator needs", 
 }
 
 TEST_CASE("cov rows pure: measureOf reads a quantity or a three-field record and nothing else", "[ui][table][cov]") {
-    auto const quantity = detail::measureOf(Value{ui::Quantity{.value = dec("2.5"), .unit = "kg"}});
+    // The parts point into the value read, so it outlives them.
+    Value const kilos{ui::Quantity{.value = dec("2.5"), .unit = "kg"}};
+    auto const quantity = detail::measureOf(kilos);
     REQUIRE(quantity.has_value());
     CHECK(quantity->amount == dec("2.5"));
     CHECK(*quantity->unit == "kg");
