@@ -149,6 +149,11 @@ add_executable(morph_tests
     test_ui_cov_interp_lowering.cpp
     test_ui_cov_interp_elements.cpp
     test_ui_cov_grid_unknown.cpp
+    test_ui_cov_j_grid_source.cpp
+    test_ui_cov_j_controller.cpp
+    test_ui_cov_j_custom_source.cpp
+    test_ui_cov_j_mount_keys.cpp
+    test_ui_cov_j_explorer.cpp
     test_ui_cov_grid_paste.cpp
     test_ui_cov_grid_rows.cpp
     test_ui_cov_interp_rows.cpp
