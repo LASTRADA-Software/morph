@@ -180,9 +180,8 @@ TEST_CASE("covi rows table: a bound sort with entries that name no column or dir
           "[covi][ui][table]") {
     TableHarness h;
     std::string doc = rowsDoc(kThree, R"(,"sort":{"ref":"s"})");
-    doc.insert(doc.find(R"("state":{)") + 9,
-               R"("s":{"init":{"lit":[{"column":"name"},{"column":5,"direction":"asc"},)"
-               R"({"column":"id","direction":7}]}},)");
+    doc.insert(doc.find(R"("state":{)") + 9, R"("s":{"init":{"lit":[{"column":"name"},{"column":5,"direction":"asc"},)"
+                                             R"({"column":"id","direction":7}]}},)");
     auto const screen = h.mount(doc);
     int const table = tableOf(h);
     std::vector<std::string> const labels = labelsOf(morph::ui::testing::menuOf(h, table, 1));

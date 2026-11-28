@@ -309,7 +309,8 @@ TEST_CASE("covi cell menu: a locked column is not hidden by its header menu and 
 TEST_CASE("covi cell menu: a bound filter is the document's, the gesture only tells it", "[covi][ui][table][menu]") {
     TableHarness h;
     std::string doc = cellDoc(R"("filters":{"ref":"f"},"onFiltersChange":[{"set":"seen","value":{"ref":"event"}}])");
-    doc.replace(doc.find(R"("state":{)") + 9, 0, R"("f":{"init":{"lit":{"columns":{}}}},"seen":{"init":{"lit":null}},)");
+    doc.replace(doc.find(R"("state":{)") + 9, 0,
+                R"("f":{"init":{"lit":{"columns":{}}}},"seen":{"init":{"lit":null}},)");
     auto const screen = h.mount(doc);
     replyDescribe(h, describeJson(cellDescription()));
     replyPage(h, cellPageOf(lastQuery(h).columns.value_or(std::vector<std::string>{})));
@@ -330,8 +331,9 @@ TEST_CASE("covi cell menu: a level that failed is named by its first letter capi
                                               {"~raw", "~raw data could not be loaded."}}) {
         INFO(item.level);
         TableHarness h;
-        auto const screen = h.mount(R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
-                                    R"("view":{"kind":"table","id":"t","testId":"t","model":"sample","table":"samples"}})");
+        auto const screen =
+            h.mount(R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
+                    R"("view":{"kind":"table","id":"t","testId":"t","model":"sample","table":"samples"}})");
         replyDescribe(h, morph::ui::testing::withLevel(morph::ui::testing::samplesDescription(3), "c3", item.level));
         replyPage(h, morph::ui::testing::pageJsonUnloaded(
                          h.described.revision, 0, 20, 20, h.columns,
@@ -343,8 +345,8 @@ TEST_CASE("covi cell menu: a level that failed is named by its first letter capi
 TEST_CASE("covi cell menu: a field a cell reads only through the whole row is fetched once it is read",
           "[covi][ui][table]") {
     TableHarness h;
-    auto const screen = h.mount(cellDoc(
-        R"("columns":[{"id":"id"},{"id":"mass","tooltip":{"get":{"row":""},"path":"companyA"}}])"));
+    auto const screen =
+        h.mount(cellDoc(R"("columns":[{"id":"id"},{"id":"mass","tooltip":{"get":{"row":""},"path":"companyA"}}])"));
     replyDescribe(h, describeJson(cellDescription()));
     std::vector<std::string> const first = lastQuery(h).columns.value_or(std::vector<std::string>{});
     CHECK_FALSE(std::ranges::contains(first, std::string{"companyA"}));
@@ -361,8 +363,8 @@ TEST_CASE("covi cell menu: a field a cell reads only through the whole row is fe
 TEST_CASE("covi cell menu: a field the rows still lack after it was asked for is not asked for twice",
           "[covi][ui][table]") {
     TableHarness h;
-    auto const screen = h.mount(cellDoc(
-        R"("columns":[{"id":"id"},{"id":"mass","tooltip":{"get":{"row":""},"path":"companyA"}}])"));
+    auto const screen =
+        h.mount(cellDoc(R"("columns":[{"id":"id"},{"id":"mass","tooltip":{"get":{"row":""},"path":"companyA"}}])"));
     replyDescribe(h, describeJson(cellDescription()));
     std::vector<std::string> const first = lastQuery(h).columns.value_or(std::vector<std::string>{});
     replyPage(h, cellPageOf(first));

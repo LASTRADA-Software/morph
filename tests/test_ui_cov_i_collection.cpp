@@ -14,12 +14,12 @@ namespace {
 
 using morph::ui::FocusMove;
 using morph::ui::testing::clipboardText;
-using table_model_support::kFourSamples;
 using morph::ui::testing::kMixedSamplesView;
 using morph::ui::testing::kSamplesCollection;
 using morph::ui::testing::pressCopy;
 using morph::ui::testing::statusOf;
 using morph::ui::testing::TableHarness;
+using table_model_support::kFourSamples;
 
 }  // namespace
 

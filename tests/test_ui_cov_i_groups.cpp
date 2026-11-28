@@ -77,7 +77,8 @@ TEST_CASE("covi groups: the group's header button opens its filter, and removing
     CHECK(h.backend.prop(table, "columnGroups") == "[]");
 }
 
-TEST_CASE("covi groups: removing a group that has no filter leaves the filters as they were", "[covi][ui][table][config]") {
+TEST_CASE("covi groups: removing a group that has no filter leaves the filters as they were",
+          "[covi][ui][table][config]") {
     TableHarness h;
     auto const screen = h.mount(kGrouped);
     int const table = h.byTestId("Table", "t");
@@ -89,7 +90,8 @@ TEST_CASE("covi groups: removing a group that has no filter leaves the filters a
     CHECK(h.backend.prop(table, "columnGroups") == "[]");
 }
 
-TEST_CASE("covi groups: removing one group leaves another's filter and its open dialog alone", "[covi][ui][table][config]") {
+TEST_CASE("covi groups: removing one group leaves another's filter and its open dialog alone",
+          "[covi][ui][table][config]") {
     TableHarness h;
     auto const screen = h.mount(R"({
   "vocab": "ui/1", "id": "grouped",

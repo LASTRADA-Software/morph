@@ -40,20 +40,21 @@ TEST_CASE("covi gestures: sorting by the key already held, and resetting the def
     CHECK(elementValue(*screen, "list", "visibleColumns") == R"(["id","name","weight"])");
 }
 
-TEST_CASE("covi gestures: a bound layout that names columns the table lacks arranges the ones it has, in the order it gives",
-          "[covi][ui][table]") {
+TEST_CASE(
+    "covi gestures: a bound layout that names columns the table lacks arranges the ones it has, in the order it gives",
+    "[covi][ui][table]") {
     TableHarness h;
-    auto const screen = h.mount(rowsDoc(
-        kThree, R"(,"layout":{"lit":{"order":["name","zz","id","weight"],"hidden":[],"pinned":0,)"
-                R"("widths":{"zz":9,"name":12}}})"));
+    auto const screen =
+        h.mount(rowsDoc(kThree, R"(,"layout":{"lit":{"order":["name","zz","id","weight"],"hidden":[],"pinned":0,)"
+                                R"("widths":{"zz":9,"name":12}}})"));
     CHECK(elementValue(*screen, "list", "visibleColumns") == R"(["name","id","weight"])");
 }
 
 TEST_CASE("covi gestures: a group's header stands only while its columns stand side by side and shown",
           "[covi][ui][table][config]") {
     TableHarness h;
-    auto const screen = h.mount(rowsDoc(
-        kThree, R"(,"groups":[{"id":"g","label":"Both","columns":{"lit":["id","name"]}}])"));
+    auto const screen =
+        h.mount(rowsDoc(kThree, R"(,"groups":[{"id":"g","label":"Both","columns":{"lit":["id","name"]}}])"));
     int const table = tableOf(h);
     REQUIRE(h.backend.prop(table, "columnGroups") == "[Both:0+2]");
     SECTION("moved apart") {
@@ -68,9 +69,10 @@ TEST_CASE("covi gestures: a group's header stands only while its columns stand s
     }
 }
 
-TEST_CASE("covi gestures: a table that lets its user hide columns only, with a header that may be disabled, offers no "
-          "resizing",
-          "[covi][ui][table][menu]") {
+TEST_CASE(
+    "covi gestures: a table that lets its user hide columns only, with a header that may be disabled, offers no "
+    "resizing",
+    "[covi][ui][table][menu]") {
     TableHarness h;
     auto const screen = h.mount(rowsDoc(kThree, R"(,"configurable":{"lit":["hide"]},"headerEnabled":true)"));
     std::vector<std::string> const labels = labelsOf(menuOf(h, tableOf(h), 1));

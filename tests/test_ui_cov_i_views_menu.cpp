@@ -40,14 +40,12 @@ table::SavedView viewA() {
     table::ColumnLayoutValue layout;
     layout.order = {"c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9"};
     table::FilterSpec filters;
-    filters.columns["c2"] = table::ColumnFilter{.combine = table::Combine::Any,
-                                                .include = {table::FilterEntry{.eq = std::string{"1"}}},
-                                                .exclude = {}};
-    return table::SavedView{
-        .name = "A",
-        .layout = std::move(layout),
-        .sort = {table::SortKey{.column = "c1", .dir = table::SortDirection::Ascending}},
-        .filters = std::move(filters)};
+    filters.columns["c2"] = table::ColumnFilter{
+        .combine = table::Combine::Any, .include = {table::FilterEntry{.eq = std::string{"1"}}}, .exclude = {}};
+    return table::SavedView{.name = "A",
+                            .layout = std::move(layout),
+                            .sort = {table::SortKey{.column = "c1", .dir = table::SortDirection::Ascending}},
+                            .filters = std::move(filters)};
 }
 
 void seedViews(TableHarness& h, RecordingTableStateStore& store) {
@@ -62,8 +60,7 @@ void seedViews(TableHarness& h, RecordingTableStateStore& store) {
 
 // The label the views menu gives the view A.
 std::string labelOfA(TableHarness& h, int table) {
-    for (std::string const& label :
-         labelsOf(entryOf(menuOf(h, table, std::nullopt), "Views").items)) {
+    for (std::string const& label : labelsOf(entryOf(menuOf(h, table, std::nullopt), "Views").items)) {
         if (label.starts_with("A")) {
             return label;
         }
