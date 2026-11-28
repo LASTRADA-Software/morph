@@ -810,17 +810,21 @@ std::string ModelGridSource::wireOf(Value const& value, forms::FieldSpec const& 
         std::string const* const text = value.asString();
         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): `text->size() == 10` is the previous operand of this condition, so indices 4 and 7 are in range
         if (text != nullptr && text->size() == 10 && (*text)[4] == '-' && (*text)[7] == '-') {
-            int year = 0;
+            unsigned year = 0;
             unsigned month = 0;
             unsigned day = 0;
+            // Each part is all digits: a part read only in its leading digits ("20xx") is not a date.
+            auto const whole = [](char const* first, char const* last, unsigned& out) {
+                auto const [end, error] = std::from_chars(first, last, out);
+                return error == std::errc{} && end == last;
+            };
             char const* const cursor = text->data();
             // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic): from_chars takes a pointer range; the ranges are fixed offsets into the 10-character `YYYY-MM-DD` text the size and separator checks above validated
-            bool const read = std::from_chars(cursor, cursor + 4, year).ec == std::errc{} &&
-                              std::from_chars(cursor + 5, cursor + 7, month).ec == std::errc{} &&
-                              std::from_chars(cursor + 8, cursor + 10, day).ec == std::errc{};
+            bool const read = whole(cursor, cursor + 4, year) && whole(cursor + 5, cursor + 7, month) &&
+                              whole(cursor + 8, cursor + 10, day);
             // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-            std::chrono::year_month_day const date{std::chrono::year{year}, std::chrono::month{month},
-                                                   std::chrono::day{day}};
+            std::chrono::year_month_day const date{std::chrono::year{static_cast<int>(year)},
+                                                   std::chrono::month{month}, std::chrono::day{day}};
             if (read && date.ok()) {
                 return std::to_string(std::chrono::sys_days{date}.time_since_epoch().count());
             }
