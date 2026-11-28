@@ -179,6 +179,7 @@ add_executable(morph_tests
     test_ui_cov_g_filter_menu.cpp
     test_ui_cov_g_window_fetch.cpp
     test_ui_cov_g_model_grid_values.cpp
+    test_ui_cov_g_grid_controller.cpp
     test_ui_cov_d_rows_state.cpp
     test_ui_cov_d_chart.cpp
     test_ui_cov_d_grid_groups.cpp
