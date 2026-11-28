@@ -277,3 +277,52 @@ TEST_CASE("covj workspace: with no tab open the head reads as an empty page", "[
     CHECK(shell->activePageInset());
     CHECK_FALSE(shell->activeHeadShown());
 }
+
+TEST_CASE("covj workspace: the tab bar's chords move between tabs and close the active one, and need a tab to close",
+          "[covj][ui][workspace]") {
+    Harness h;
+    Host host{h};
+    ScreenHostRegistry hosts;
+    auto const shell = workspaceOf<Plain>(h, host, hosts);
+    REQUIRE(h.backend.all("Tabs").size() == 1);
+    int const bar = h.backend.all("Tabs").front();
+    // With no tab there is nothing for Ctrl+W to close.
+    CHECK(h.backend.press(bar, "Ctrl+W"));
+    CHECK(shell->tabs().empty());
+
+    REQUIRE(shell->open("native", {}).has_value());
+    REQUIRE(shell->openTab("native", {}).has_value());
+    h.settle();
+    REQUIRE(shell->tabs().size() == 2);
+    REQUIRE(shell->active() == std::optional<std::size_t>{1});
+    CHECK(h.backend.press(bar, "Ctrl+Shift+Tab"));
+    h.settle();
+    CHECK(shell->active() == std::optional<std::size_t>{0});
+    CHECK(h.backend.press(bar, "Ctrl+Tab"));
+    h.settle();
+    CHECK(shell->active() == std::optional<std::size_t>{1});
+    CHECK(h.backend.press(bar, "Ctrl+W"));
+    h.settle();
+    CHECK(shell->tabs().size() == 1);
+}
+
+TEST_CASE("covj workspace: activating a place with no tab changes nothing, and a closed screen takes its tab along",
+          "[covj][ui][workspace]") {
+    Harness h;
+    Host host{h};
+    ScreenHostRegistry hosts;
+    auto const shell = workspaceOf<Plain>(h, host, hosts);
+    REQUIRE(shell->open("native", {}).has_value());
+    REQUIRE(shell->openTab("native", {}).has_value());
+    h.settle();
+    shell->activate(7);
+    CHECK(shell->active() == std::optional<std::size_t>{1});
+
+    Plain stray{h.runtime, h.backend.createText(nullptr)};
+    shell->screenClosed(stray);
+    CHECK(shell->tabs().size() == 2);
+
+    shell->screenClosed(*shell->handleOf(0));
+    h.settle();
+    CHECK(shell->tabs().size() == 1);
+}

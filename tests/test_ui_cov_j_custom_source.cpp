@@ -110,3 +110,31 @@ TEST_CASE("covj custom screen chrome: Save as and Remove of a tab that closed, o
     CHECK_FALSE(rig.find("Dialog", "remove_dialog").has_value());
     CHECK(rig.notices.empty());
 }
+
+TEST_CASE("covj custom screen chrome: Save as with no name saves nothing and keeps the dialog",
+          "[covj][ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    custom_client::draftHeading(rig, "notes.edit", "Edited by hand");
+    rig.click("draft_save_as_notes.edit");
+    rig.type("save_as_title", "");
+    rig.click("save_as_confirm");
+    rig.harness.settle();
+    CHECK(rig.find("Dialog", "save_as_dialog").has_value());
+    CHECK(rig.sync->listed().screens.empty());
+    CHECK(rig.shown("Row", "draft_bar_notes.edit"));
+}
+
+TEST_CASE(
+    "covj custom screen chrome: Open as the screen already shown, and Remove of an application screen, do nothing",
+    "[covj][ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    morph::ui::WorkspaceTabId const tab = rig.tabAt(0);
+    rig.chrome->openAs(tab, "notes.edit");
+    rig.chrome->askRemove(tab);
+    rig.harness.settle();
+    CHECK(rig.screenOf(0) == "notes.edit");
+    CHECK_FALSE(rig.find("Dialog", "remove_dialog").has_value());
+    CHECK(rig.notices.empty());
+}

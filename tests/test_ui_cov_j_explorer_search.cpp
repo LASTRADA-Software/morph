@@ -175,3 +175,21 @@ TEST_CASE("covj explorer: a search shows what it names and hides the rest", "[co
     CHECK(visible("Collapsible", "explorer_model_Lims_SampleModel") == sampleModel);
     CHECK(visible("Collapsible", "explorer_model_Lims_SecretModel") == secretModel);
 }
+
+TEST_CASE("covj explorer: an action that sends a credential and names list fields says so", "[covj][ui][explorer]") {
+    Fixture f;
+    auto const explorer = f.explorer([](ExplorerOptions& options) {
+        ActionInfo& confirm = options.catalog.actions->at("Lims_ConfirmSample");
+        confirm.credential = true;
+        confirm.listFields = std::vector<std::string>{"rows", "notes"};
+    });
+    REQUIRE(explorer->select("Lims_ConfirmSample"));
+    f.harness.settle();
+    CHECK(f.shows("Text", "yes"));
+    CHECK(f.shows("Text", "list fields"));
+    CHECK(f.shows("Text", "rows, notes"));
+    REQUIRE(explorer->select("Lims_CaptureConcentration"));
+    f.harness.settle();
+    CHECK(f.shows("Text", "no"));
+    CHECK_FALSE(f.shows("Text", "list fields"));
+}
