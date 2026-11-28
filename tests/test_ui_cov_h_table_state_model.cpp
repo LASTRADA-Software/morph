@@ -63,6 +63,7 @@ struct Harness {
         return *reply;
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a test helper; the names say which text is which.
     morph::wire::Envelope call(std::string_view action, std::string body, std::string const& token = kPerson) {
         morph::wire::Envelope request;
         request.kind = "execute";

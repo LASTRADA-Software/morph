@@ -3,6 +3,7 @@
 // A model table's document properties and the state it restores at mount: a literal or bound sort, filters and
 // selection, a `persist` that names or refuses a store, and a stored state that names columns the table lacks.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <string>
@@ -38,12 +39,8 @@ struct Mounted {
         h.settle();
     }
     bool reported(std::string_view text) const {
-        for (auto const& line : reportsOf(h)) {
-            if (line.contains(text)) {
-                return true;
-            }
-        }
-        return false;
+        auto const lines = reportsOf(h);
+        return std::ranges::any_of(lines, [text](std::string const& line) { return line.contains(text); });
     }
 };
 }  // namespace

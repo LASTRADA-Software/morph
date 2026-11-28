@@ -49,10 +49,12 @@ struct Mounted {
     std::unique_ptr<ui::Screen> screen;
     forms::FormSession* form = nullptr;
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a test rig; the names say which text is which.
     explicit Mounted(std::string_view tableKeys, std::string_view prefill = R"({"rows":[{},{}]})",
                      std::string_view state = "null") {
         addRows(h);
         screen = h.mount(gridDocument(tableKeys, state));
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): the screen must be mounted before its form can be found.
         form = ui::testing::elementOf(*screen, "rec").form.get();
         form->prefill(prefill);
         h.settle();

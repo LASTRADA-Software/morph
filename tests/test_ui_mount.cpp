@@ -2502,6 +2502,7 @@ ui::MenuItem dividerItem() {
 
 std::vector<std::string> labelsOfEntries(std::vector<ui::MenuEntry> const& entries) {
     std::vector<std::string> labels;
+    labels.reserve(entries.size());
     for (ui::MenuEntry const& entry : entries) {
         labels.push_back(entry.separator ? std::string{"-"} : entry.label);
     }

@@ -22,7 +22,6 @@ using morph::ui::Value;
 using morph::ui::testing::addAction;
 using morph::ui::testing::describeJson;
 using morph::ui::testing::elementValue;
-using morph::ui::testing::fireEvent;
 using morph::ui::testing::refuseMutation;
 using morph::ui::testing::replyDescribe;
 using morph::ui::testing::replyPage;
@@ -44,6 +43,7 @@ constexpr std::string_view kMutations = R"({
 
 std::vector<SelRow> tenRows() {
     std::vector<SelRow> rows;
+    rows.reserve(10);
     for (std::int64_t key = 0; key < 10; ++key) {
         rows.push_back(SelRow{.key = key, .status = key < 6 ? "open" : "closed", .lockedBy = {}});
     }
@@ -55,13 +55,23 @@ std::string document(TableHarness& h, std::string_view tableNode) {
     h.mutationActions.insert_or_assign("touch", "Lims_TouchRow");
     std::string children{tableNode};
     for (std::string const name : {"save", "touch"}) {
-        children += R"(,{"kind":"button","testId":"run-)" + name + R"(","label":")" + name +
-                    R"(","onClick":[{"run":")" + name + R"("}]})";
+        children += R"(,{"kind":"button","testId":"run-)";
+        children += name;
+        children += R"(","label":")";
+        children += name;
+        children += R"(","onClick":[{"run":")";
+        children += name;
+        children += R"("}]})";
     }
     for (int const key : {2, 4}) {
         std::string const text = std::to_string(key);
-        children += R"(,{"kind":"button","testId":"pick-)" + text + R"(","label":"pick )" + text +
-                    R"(","onClick":[{"set":"picked","value":{"lit":)" + text + "}}]}";
+        children += R"(,{"kind":"button","testId":"pick-)";
+        children += text;
+        children += R"(","label":"pick )";
+        children += text;
+        children += R"(","onClick":[{"set":"picked","value":{"lit":)";
+        children += text;
+        children += "}}]}";
     }
     return R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
            R"("state":{"picked":{"init":{"lit":null}}},"mutations":)" +

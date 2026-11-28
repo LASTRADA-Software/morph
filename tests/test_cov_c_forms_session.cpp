@@ -147,7 +147,7 @@ TEST_CASE("an evaluation's computed values land on the fields and rows it was se
     form->field("boxes").addRow();
     harness.settle();
     auto const round = form->captureRound();
-    auto const body = R"({"sum":3,"crate":{"area":16},"boxes":[{"total":1},{"total":2},{"total":99}]})";
+    auto const* const body = R"({"sum":3,"crate":{"area":16},"boxes":[{"total":1},{"total":2},{"total":99}]})";
     auto const load = form->loadDerived(round, std::string_view{body});
     CHECK(load.loaded == 4);
     CHECK(form->field("sum").text().peek() == "3");

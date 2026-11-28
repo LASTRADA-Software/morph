@@ -42,6 +42,7 @@ struct Mounted {
     std::unique_ptr<ui::Screen> screen;
     int table = 0;
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a test rig; the names say which text is which.
     Mounted(std::string_view by, std::string_view heading, std::string_view rows) {
         ui::testing::addAction(h, "Lims_RecordSpecimens", std::string{morph::test::grid::kSpecimens},
                                ui::ActionInfo{.modelType = "Lims_SampleModel"});
@@ -49,6 +50,7 @@ struct Mounted {
         forms::FormSession& form = *ui::testing::elementOf(*screen, "rec").form;
         form.prefill(std::string{R"({"sampleId":4,"specimens":)"} + std::string{rows} + "}");
         h.settle();
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): the table exists only after the screen is mounted and settled.
         table = h.byTestId("Table", "grid");
     }
 
@@ -84,7 +86,7 @@ TEST_CASE("covd grid groups: rows whose value repeats apart make a run each, and
         Case{R"({"fn":"concat","args":["same"]})",
              R"(H["group:\"same\":0"]R[1]R[2]R[3]R[4]R[5]R["summary:0/m"]R["summary:all"])"});
     CAPTURE(by);
-    Mounted m{by, R"({"ref":"row.key"})", R"([{"label":"A"},{"label":"B"},{"label":"A"},{},{"label":""}])"};
+    Mounted const m{by, R"({"ref":"row.key"})", R"([{"label":"A"},{"label":"B"},{"label":"A"},{},{"label":""}])"};
     CHECK(m.dump() == expected);
 }
 

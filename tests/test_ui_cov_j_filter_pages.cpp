@@ -36,8 +36,10 @@ class HeldRows final : public ui::TableRows {
 public:
     explicit HeldRows(morph::exec::IExecutor& owner) : _owner{&owner} {}
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): a test double the test steers directly.
     std::vector<table::DistinctRequest> requests;
     std::vector<Pending> held;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
     [[nodiscard]] ui::TableTotal total() const override { return {}; }
     [[nodiscard]] std::optional<ui::TableRowRef> row(std::int64_t) const override { return std::nullopt; }

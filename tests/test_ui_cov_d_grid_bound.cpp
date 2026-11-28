@@ -44,6 +44,7 @@ struct Mounted {
         forms::FormSession& form = *ui::testing::elementOf(*screen, "rec").form;
         form.prefill(R"({"sampleId":4,"specimens":[{"note":"b"},{"note":"c"},{"note":"a"}]})");
         h.settle();
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): the table exists only after the screen is mounted and settled.
         table = h.byTestId("Table", "grid");
     }
 

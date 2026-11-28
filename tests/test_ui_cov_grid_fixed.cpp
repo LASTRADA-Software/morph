@@ -153,5 +153,6 @@ TEST_CASE("cov fixed source: a part that names no form, no field or no collectio
     CHECK_THAT(refusal(std::move(unknown), true), ContainsSubstring("`limits.nosuch` is not a field of the form"));
     Parts fine;
     fine.emplace_back(fixedRow("density", {{"min", textCell("x")}}));
-    CHECK(refusal(std::move(fine), false).empty());  // a text cell needs no form
+    auto const refused = refusal(std::move(fine), false);
+    CHECK(refused.empty());  // a text cell needs no form
 }

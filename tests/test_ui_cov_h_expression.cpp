@@ -21,6 +21,7 @@ namespace {
 
 // An expression's value as JSON text, then ` | ` and the reason of each report; `refused: ` and the reason when the
 // parser refuses it. The names' `$row` member is the environment's row and `$refusals` its action refusals.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a test helper; the names say which text is which.
 std::string run(std::string_view expr, std::string_view names = "{}") {
     auto const json = ui::parseJson(expr);
     REQUIRE(json.has_value());

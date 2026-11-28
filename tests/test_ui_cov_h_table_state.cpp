@@ -33,6 +33,7 @@ using morph::ui::testing::RowsFixture;
 namespace table = morph::table;
 namespace ui = morph::ui;
 
+// NOLINTNEXTLINE(cert-err58-cpp,bugprone-throwing-static-initialization): a test table; an allocation failure at start-up ends the run either way.
 table::TableStateKey const kKey{
     .application = "lims", .model = "Lims_SampleModel", .table = "samples", .qualifier = "samples", .part = "state"};
 
@@ -117,9 +118,11 @@ public:
         return refusePublish(*_owner);
     }
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): a test double the test steers directly.
     std::vector<morph::async::Completion<std::optional<table::StoredTableState>>::Promise> loads;
     std::vector<morph::async::Completion<table::SaveResult>::Promise> saves;
     std::vector<std::string> saved;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
     morph::exec::IExecutor* _owner;

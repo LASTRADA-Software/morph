@@ -57,6 +57,7 @@ public:
         return std::move(completion);
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): an override of the store interface; the types are fixed.
     [[nodiscard]] morph::async::Completion<table::SaveResult> save(table::TableStateKey const& key, std::string json,
                                                                    std::string expected = {}) override {
         savedExpected.push_back(std::move(expected));
@@ -80,11 +81,13 @@ public:
         return answer();
     }
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): a test double the test steers directly.
     std::map<std::string, std::optional<table::StoredTableState>> stored;
     std::map<std::string, std::exception_ptr> loadFailures;
     std::deque<Reply> replies;
     std::vector<std::string> savedExpected;
     int loads = 0;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
     morph::async::Completion<table::SaveResult> answer() {

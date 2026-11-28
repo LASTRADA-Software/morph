@@ -49,6 +49,7 @@ ServedTable served(std::shared_ptr<DataSource const> source) {
 
 std::shared_ptr<VectorSource> numbered() {
     std::vector<std::vector<Cell>> rows;
+    rows.reserve(6);
     for (std::int64_t at = 0; at < 6; ++at) {
         rows.push_back({Cell{at}, Cell{std::string{at % 2 == 0 ? "even" : "odd"}}});
     }

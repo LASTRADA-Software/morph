@@ -3,6 +3,7 @@
 // A table over rows that keeps its arrangement in a store: what a stored state that fits, one that names what the
 // table lacks, one that is not a state and a store that fails each leave of the table and what they report.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <memory>
@@ -40,12 +41,8 @@ struct Mounted {
     }
 
     [[nodiscard]] bool reported(std::string_view text) const {
-        for (std::string const& line : morph::ui::testing::reportsOf(h)) {
-            if (line.contains(text)) {
-                return true;
-            }
-        }
-        return false;
+        auto const lines = morph::ui::testing::reportsOf(h);
+        return std::ranges::any_of(lines, [text](std::string const& line) { return line.contains(text); });
     }
 
     [[nodiscard]] std::string order() const { return morph::ui::testing::rowOrder(h); }

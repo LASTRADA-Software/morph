@@ -19,7 +19,8 @@ namespace ui = morph::ui;
 
 std::vector<ui::LayoutColumn> columnsOf(const std::vector<std::string>& ids) {
     std::vector<ui::LayoutColumn> out;
-    for (auto& id : ids) {
+    out.reserve(ids.size());
+    for (auto const& id : ids) {
         out.push_back(
             ui::LayoutColumn{.id = id, .label = "Label " + id, .locked = false, .kind = table::ColumnKind::Text});
     }

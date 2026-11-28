@@ -97,7 +97,8 @@ TEST_CASE("a successor registry keeps its predecessor's units and lineage", "[co
     CHECK(before->contains(*before->find("kg")));
     CHECK(after->find("m"));
     UnitRegistryBuilder fromNothing{std::shared_ptr<UnitRegistry const>{}};
-    CHECK(std::move(fromNothing).build()->size() == 1);
+    auto const fromNothingBuilt = std::move(fromNothing).build();
+    CHECK(fromNothingBuilt->size() == 1);
     CHECK(after->dimensions().size() >= 2);
 }
 
@@ -105,7 +106,9 @@ namespace covunits {
 
 enum class Unit : std::uint8_t { kg, g, mg, t, lb, l, ml, cl };
 
-static std::string_view dimensionOf(Unit unit) {
+namespace {
+
+std::string_view dimensionOf(Unit unit) {
     switch (unit) {
         case Unit::l:
         case Unit::ml:
@@ -120,6 +123,8 @@ static std::string_view dimensionOf(Unit unit) {
             return "mass";
     }
 }
+
+}  // namespace
 
 }  // namespace covunits
 
@@ -202,5 +207,6 @@ TEST_CASE("a dimension the builder holds with no unit of factor one refuses ever
         .id = "kg", .symbol = {}, .dimension = "mass", .toBase = Rational{1, DecimalPlaces{0}}, .decimals = 0}));
     std::vector<Unit> const rest{Unit::g, Unit::kg, Unit::t};
     REQUIRE(addUnitsOf<Unit>(held, rest, &covunits::dimensionOf));
-    CHECK(std::move(held).build()->find("t"));
+    auto const heldBuilt = std::move(held).build();
+    CHECK(heldBuilt->find("t"));
 }

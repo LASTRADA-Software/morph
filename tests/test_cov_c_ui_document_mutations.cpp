@@ -74,6 +74,7 @@ LoadOptions catalogOptions() {
 
 using Path = std::vector<std::string>;
 
+// NOLINTNEXTLINE(misc-no-recursion): a JSON tree nests, and the walk follows it.
 void collect(Json const& node, Path& here, std::vector<Path>& out) {
     out.push_back(here);
     if (auto const* const object = std::get_if<Json::object_t>(&node.data)) {
@@ -96,7 +97,7 @@ Json* nodeAt(Json& root, Path const& path, std::size_t steps) {
     Json* node = &root;
     for (std::size_t at = 0; at < steps; ++at) {
         if (auto* const object = std::get_if<Json::object_t>(&node->data)) {
-            auto const found = object->find(path.at(at));
+            Json::object_t::iterator const found = object->find(path.at(at));
             if (found == object->end()) {
                 return nullptr;
             }
@@ -158,6 +159,7 @@ TEST_CASE("a corrupted document loads or is refused with a pointer, a reason and
         collect(original, here, paths);
         for (Path const& path : paths) {
             std::vector<Json const*> variants;
+            variants.reserve(replacements.size() + 1);
             for (Json const& replacement : replacements) {
                 variants.push_back(&replacement);
             }

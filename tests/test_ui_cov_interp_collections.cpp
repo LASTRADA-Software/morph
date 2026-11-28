@@ -20,6 +20,7 @@ using morph::ui::testing::TableHarness;
 using table_model_support::kFourSamples;
 namespace table = morph::table;
 
+// NOLINTNEXTLINE(cert-err58-cpp,bugprone-throwing-static-initialization): a test table; an allocation failure at start-up ends the run either way.
 table::TableStateKey const kCollectionKey{.application = "lims",
                                           .model = "Lims_SampleModel",
                                           .table = "Lims_ListSamples",

@@ -3,6 +3,7 @@
 // Source of a custom screen the client's cache dropped and the server no longer has: the person is told it could not
 // be read, and no source view opens.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <morph/ui/custom_screen_chrome.hpp>
@@ -32,12 +33,8 @@ TEST_CASE("covj custom screen source: a dropped document the server no longer ha
     REQUIRE(removed.kind == "ok");
     rig.click("source_button_" + id);
     REQUIRE(rig.pump([&rig] {
-        for (std::string const& line : rig.notices) {
-            if (line.contains("could not be read")) {
-                return true;
-            }
-        }
-        return false;
+        return std::ranges::any_of(rig.notices,
+                                   [](std::string const& line) { return line.contains("could not be read"); });
     }));
     CHECK(rig.notices.back().contains("Mine"));
     CHECK_FALSE(rig.find("TextInput", "source_text").has_value());

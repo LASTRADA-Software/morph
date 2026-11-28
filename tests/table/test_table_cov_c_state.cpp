@@ -41,14 +41,17 @@ TableDescription sampleDescription() {
 
 StateDocument stored(std::string_view json) { return readState(json).value(); }
 
-morph::testing::StepExecutor executor;
+morph::testing::StepExecutor& executor() {
+    static morph::testing::StepExecutor instance;
+    return instance;
+}
 
 template <typename Call>
 SaveResult settled(Call&& call) {
     std::optional<SaveResult> delivered;
     auto completion = std::forward<Call>(call)();
     completion.thenDetached([&delivered](SaveResult const& result) { delivered = result; });
-    executor.runAll();
+    executor().runAll();
     REQUIRE(delivered.has_value());
     return *delivered;
 }
@@ -196,7 +199,7 @@ TEST_CASE("fitting a state reports what it carries and what it drops, key by key
 
 TEST_CASE("a views document is published only to the shared part, over a document that reads",
           "[covc][table][state]") {
-    MemoryTableStateStore store{executor, Sharing::Shared};
+    MemoryTableStateStore store{executor(), Sharing::Shared};
     TableStateKey const own{.application = "a", .model = "m", .table = "t", .qualifier = "q", .part = "views"};
     TableStateKey const shared{.application = "a", .model = "m", .table = "t", .qualifier = "q", .part = "shared"};
     AddView const add{SavedView{.name = "v", .layout = {}, .sort = {}, .filters = {}}};
@@ -225,7 +228,7 @@ TEST_CASE("a views document is published only to the shared part, over a documen
 }
 
 TEST_CASE("a private store refuses to publish", "[covc][table][state]") {
-    MemoryTableStateStore store{executor};
+    MemoryTableStateStore store{executor()};
     CHECK_FALSE(store.shares());
     TableStateKey const shared{.application = "a", .model = "m", .table = "t", .qualifier = "q", .part = "shared"};
     auto const result = settled([&] { return store.publish(shared, SetDefaultOnMount{.on = true}, {}); });

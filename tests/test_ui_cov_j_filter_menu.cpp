@@ -42,8 +42,10 @@ class ScriptedRows final : public ui::TableRows {
 public:
     explicit ScriptedRows(morph::exec::IExecutor& owner) : _owner{&owner} {}
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): a test double the test steers directly.
     std::function<DistinctReply(table::DistinctRequest const&)> answer;
     std::vector<table::DistinctRequest> requests;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
     [[nodiscard]] ui::TableTotal total() const override { return {}; }
     [[nodiscard]] std::optional<ui::TableRowRef> row(std::int64_t) const override { return std::nullopt; }

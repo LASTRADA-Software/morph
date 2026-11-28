@@ -115,8 +115,8 @@ TEST_CASE("a scope keeps its rows of the shared source and follows the source's 
 
 TEST_CASE("a cell that is an array but not a quantity's pair of pairs is kept as the text it was written as",
           "[covf][table][description]") {
-    auto const bad = GENERATE("[99999999999999999999,1]", "[1,10,[1,0]]", "[1,10,[1,10]", "[1,10,[1,10]]x",
-                              "[1,10,[1]]", "[1,0]", "[1,-5]", "[1.5,10]");
+    auto const* const bad = GENERATE("[99999999999999999999,1]", "[1,10,[1,0]]", "[1,10,[1,10]", "[1,10,[1,10]]x",
+                                     "[1,10,[1]]", "[1,0]", "[1,-5]", "[1.5,10]");
     CAPTURE(bad);
     auto const cell = detail::cellFromJson(bad, std::nullopt);
     REQUIRE(std::holds_alternative<std::string>(cell));

@@ -52,8 +52,10 @@ class ScriptedRows final : public ui::TableRows {
 public:
     explicit ScriptedRows(morph::exec::IExecutor& owner) : _owner{&owner} {}
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): a test double the test steers directly.
     std::function<DistinctReply(table::DistinctRequest const&)> answer;
     std::vector<table::DistinctRequest> requests;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
     [[nodiscard]] ui::TableTotal total() const override { return {}; }
     [[nodiscard]] std::optional<ui::TableRowRef> row(std::int64_t) const override { return std::nullopt; }
@@ -336,7 +338,7 @@ TEST_CASE("cov filter menu: states differ by each field and a target finds its g
     CHECK(differs([](ui::FilterMenuState& s) { s.listedOnce = true; }));
     CHECK(differs([](ui::FilterMenuState& s) { s.ticks.ticked = false; }));
     CHECK(differs([](ui::FilterMenuState& s) { s.ticks.blanks = true; }));
-    CHECK(differs([](ui::FilterMenuState& s) { s.ticks.ops.push_back({}); }));
+    CHECK(differs([](ui::FilterMenuState& s) { s.ticks.ops.emplace_back(); }));
     CHECK(differs([](ui::FilterMenuState& s) { s.dates.push_back("x"); }));
     CHECK(differs([](ui::FilterMenuState& s) { s.conditions.at(1).operand = "x"; }));
     CHECK(differs([](ui::FilterMenuState& s) { s.matchCase = true; }));

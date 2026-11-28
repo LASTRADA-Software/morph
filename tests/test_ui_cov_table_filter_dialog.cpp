@@ -24,7 +24,6 @@ using namespace table_model_support;
 using namespace std::chrono_literals;
 using morph::ui::testing::clickFilter;
 using morph::ui::testing::clickGroupFilter;
-using morph::ui::testing::lastQuery;
 using morph::ui::testing::readJson;
 using morph::ui::testing::TableHarness;
 
@@ -35,7 +34,7 @@ morph::time::Timestamp instant(std::int64_t days, std::int64_t seconds) {
 }
 
 void pick(TableHarness& h, std::string_view testId, std::optional<morph::time::Timestamp> value) {
-    h.backend.setDateTime(h.byTestId("DateTimeInput", testId), std::move(value));
+    h.backend.setDateTime(h.byTestId("DateTimeInput", testId), value);
     h.settle();
 }
 

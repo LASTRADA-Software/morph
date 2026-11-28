@@ -161,22 +161,22 @@ struct Rig {
         options.navigator.entries = std::move(navigated);
         options.onSignOut = [this] { ++signedOut; };
         frame = std::make_unique<ui::ShellFrame>(h.backend, nullptr, std::move(options));
-        ui::ShellBindingOptions binding_options;
-        binding_options.model.screenListed = std::move(facts.screenListed);
-        binding_options.model.moduleListed = std::move(facts.moduleListed);
-        binding_options.model.replyIsRecord = std::move(facts.replyIsRecord);
-        binding_options.model.moduleLabel = std::move(facts.moduleLabel);
-        binding_options.model.screenTitle = std::move(facts.screenTitle);
-        binding_options.model.catalogueLocales = std::move(facts.catalogueLocales);
-        binding_options.model.dirtyTabs = [this] { return dirty; };
-        binding_options.model.closeDirtyTabs = [this] { ++closedDirty; };
-        binding_options.model.onProblem = [this](std::string const& message) { problems.push_back(message); };
-        binding_options.open = [this](ui::ShellPartsModel::Target const& target) { opened.push_back(target); };
-        binding_options.openAll = [this](std::vector<ui::ShellPartsModel::Target> const& targets) {
+        ui::ShellBindingOptions bindingOptions;
+        bindingOptions.model.screenListed = std::move(facts.screenListed);
+        bindingOptions.model.moduleListed = std::move(facts.moduleListed);
+        bindingOptions.model.replyIsRecord = std::move(facts.replyIsRecord);
+        bindingOptions.model.moduleLabel = std::move(facts.moduleLabel);
+        bindingOptions.model.screenTitle = std::move(facts.screenTitle);
+        bindingOptions.model.catalogueLocales = std::move(facts.catalogueLocales);
+        bindingOptions.model.dirtyTabs = [this] { return dirty; };
+        bindingOptions.model.closeDirtyTabs = [this] { ++closedDirty; };
+        bindingOptions.model.onProblem = [this](std::string const& message) { problems.push_back(message); };
+        bindingOptions.open = [this](ui::ShellPartsModel::Target const& target) { opened.push_back(target); };
+        bindingOptions.openAll = [this](std::vector<ui::ShellPartsModel::Target> const& targets) {
             openedAll.push_back(targets);
         };
         binding = std::make_unique<ui::ShellPartsBinding>(h.session, *root, *document->shell, *frame,
-                                                          std::move(binding_options));
+                                                          std::move(bindingOptions));
         h.settle();
     }
 
@@ -314,6 +314,7 @@ struct Searched {
 
     Searched() {
         r.reply("Lims_ClientScopes", kScopes);
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): the field exists only after the scopes reply has been delivered.
         search = r.id("TextInput", "shell_search");
         r.h.backend.edit(search, "x");
         r.h.settle();
@@ -484,6 +485,7 @@ TEST_CASE("covd shell parts: the person's menu reads the name, the roles of ever
     CHECK(person.name == name);
     CHECK(person.initials == initials);
     std::vector<std::string> labels;
+    labels.reserve(person.roles.size());
     for (ui::ShellRoleView const& role : person.roles) {
         labels.push_back(role.label);
     }

@@ -3,6 +3,7 @@
 // A table over rows whose sort and selection a document binds: the keys of a sort that name a sortable column order
 // the rows, every other shape is left out, and a selection that is no list is reported once.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <string>
@@ -39,12 +40,8 @@ struct Mounted {
     }
 
     [[nodiscard]] bool reported(std::string_view text) const {
-        for (std::string const& line : morph::ui::testing::reportsOf(h)) {
-            if (line.contains(text)) {
-                return true;
-            }
-        }
-        return false;
+        auto const lines = morph::ui::testing::reportsOf(h);
+        return std::ranges::any_of(lines, [text](std::string const& line) { return line.contains(text); });
     }
 };
 

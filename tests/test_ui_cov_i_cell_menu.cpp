@@ -125,6 +125,7 @@ struct Mounted {
     explicit Mounted(std::string_view tableKeys) : screen{h.mount(cellDoc(tableKeys))} {
         replyDescribe(h, describeJson(cellDescription()));
         replyPage(h, cellPageOf(lastQuery(h).columns.value_or(std::vector<std::string>{})));
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): the table exists only after the screen is mounted and answered.
         table = h.byTestId("Table", "t");
     }
 

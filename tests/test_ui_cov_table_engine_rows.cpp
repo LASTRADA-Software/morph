@@ -56,7 +56,8 @@ struct Fixture {
         entry.eq = std::move(name);
         table::FilterSpec spec;
         spec.columns["name"] = table::ColumnFilter{.combine = table::Combine::Any, .include = {entry}, .exclude = {}};
-        REQUIRE(rows->setFilter(std::move(spec)));
+        auto const applied = rows->setFilter(std::move(spec));
+        REQUIRE(applied);
         h.settle();
     }
 };

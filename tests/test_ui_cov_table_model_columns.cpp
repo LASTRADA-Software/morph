@@ -19,7 +19,6 @@ using morph::ui::testing::cellAccent;
 using morph::ui::testing::describeJson;
 using morph::ui::testing::replyDescribe;
 using morph::ui::testing::replyPage;
-using morph::ui::testing::reportsOf;
 using morph::ui::testing::TableHarness;
 
 constexpr std::string_view kColumns =

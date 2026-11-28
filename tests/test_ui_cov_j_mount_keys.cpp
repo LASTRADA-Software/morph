@@ -36,7 +36,9 @@ struct KeyedScreen {
         screen = h.mount(kKeyedGrid);
         ui::testing::elementOf(*screen, "rec").form->prefill(R"({"sampleId":4,"specimens":[{},{}]})");
         h.settle();
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): the table exists only after the screen is mounted and settled.
         table = h.byTestId("Table", "grid");
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): the text exists only after the screen is mounted and settled.
         out = h.byTestId("Text", "out");
     }
 

@@ -60,6 +60,7 @@ std::shared_ptr<VectorSource> twoColumns(KindCase const& kind) {
     constexpr std::array<std::size_t, 4> kX{0, 1, 2, 0};
     constexpr std::array<std::size_t, 4> kY{1, 0, 2, 2};
     std::vector<std::vector<Cell>> rows;
+    rows.reserve(kX.size());
     for (std::size_t row = 0; row < kX.size(); ++row) {
         rows.push_back({kind.cells.at(kX.at(row)), kind.cells.at(kY.at(row))});
     }

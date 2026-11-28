@@ -41,6 +41,7 @@ std::vector<std::string> visibleOf(table::ColumnLayout const& layout) { return l
 
 std::vector<std::string> labelsOf(std::vector<ui::TableMenuEntry> const& entries) {
     std::vector<std::string> out;
+    out.reserve(entries.size());
     for (auto const& entry : entries) {
         out.push_back(entry.entry.separator ? "-" : entry.entry.label);
     }
@@ -253,6 +254,7 @@ TEST_CASE("cov config: resizing, resetting, units and groups through gestures", 
     }
     table::ColumnLayout wideLayout{ids};
     std::vector<ui::LayoutColumn> wideColumns;
+    wideColumns.reserve(ids.size());
     for (auto const& id : ids) {
         wideColumns.push_back({.id = id, .label = id, .locked = false, .kind = table::ColumnKind::Text});
     }
@@ -689,7 +691,7 @@ TEST_CASE("cov config: a menu choice is a leaf the user can act on", "[ui][table
     CHECK(ui::chosen(entries, std::vector<std::size_t>{4}) == nullptr);  // the separator
     CHECK(ui::chosen(entries, std::vector<std::size_t>{5}) == nullptr);  // Move left, disabled at index 0
     CHECK(ui::chosen(entries, std::vector<std::size_t>{entries.size() - 1}) == nullptr);  // a submenu, not a leaf
-    auto const leaf = ui::chosen(entries, std::vector<std::size_t>{entries.size() - 1, 0});
+    auto const* const leaf = ui::chosen(entries, std::vector<std::size_t>{entries.size() - 1, 0});
     REQUIRE(leaf != nullptr);
     CHECK(leaf->entry.label == "mass: kg");
     CHECK(ui::chosen(entries, std::vector<std::size_t>{entries.size() - 1, 5}) == nullptr);

@@ -14,14 +14,13 @@
 namespace {
 
 using morph::ui::testing::elementValue;
-using morph::ui::testing::GatedTableStateStore;
 using morph::ui::testing::kModelTable;
 using morph::ui::testing::replyDescribe;
 using morph::ui::testing::reportsOf;
-using morph::ui::testing::storeExecutor;
 using morph::ui::testing::TableHarness;
 using morph::ui::testing::withTableKey;
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a test helper; the names say which text is which.
 std::string bound(std::string_view state, std::string_view keys) {
     std::string text = withTableKey(kModelTable, keys);
     text.insert(text.find(R"("models":)"), R"("state":{)" + std::string{state} + "},");

@@ -21,7 +21,6 @@ namespace {
 namespace table = morph::table;
 namespace ui = morph::ui;
 using morph::ui::WindowRows;
-using morph::ui::testing::pageJson;
 using morph::ui::testing::RowsFixture;
 
 using Keys = std::expected<std::vector<table::RowId>, table::TableError>;
@@ -129,8 +128,16 @@ TEST_CASE("cov window rows: a long key list is fetched in chunks of maxKeys and 
             keys += (keys.empty() ? "" : ",") + std::to_string(key);
             cells += (cells.empty() ? "" : ",") + ("[" + std::to_string(key) + "]");
         }
-        h.replyPage(R"({"revision":")" + h.described.revision + R"(","columns":["id"],"keys":[)" + keys +
-                    R"(],"rows":[)" + cells + R"(],"indices":[)" + keys + R"(],"total":5})");
+        std::string page = R"({"revision":")";
+        page += h.described.revision;
+        page += R"(","columns":["id"],"keys":[)";
+        page += keys;
+        page += R"(],"rows":[)";
+        page += cells;
+        page += R"(],"indices":[)";
+        page += keys;
+        page += R"(],"total":5})";
+        h.replyPage(page);
     }
     REQUIRE(got.has_value());
     INFO((got->has_value() ? std::string{} : got->error().message));

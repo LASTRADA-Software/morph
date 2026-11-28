@@ -92,9 +92,11 @@ public:
         promise.reject(std::make_exception_ptr(std::runtime_error{"disk full"}));
     }
 
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): a test double the test steers directly.
     std::vector<LoadPromise> loads;
     std::vector<SavePromise> saves;
     std::vector<std::string> saved;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
 private:
     morph::exec::IExecutor* _owner;

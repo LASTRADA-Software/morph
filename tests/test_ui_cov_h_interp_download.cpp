@@ -3,6 +3,7 @@
 // `download` of bytes a document holds: which text decodes, which list is a byte list, what the cap refuses, and
 // what reaches the host. Each case is the `download` command's value, and the file the host saved or the report.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <string>
@@ -21,12 +22,8 @@ std::string documentOf(std::string_view download) {
 }
 
 bool reported(ui::testing::Harness const& h, std::string_view text) {
-    for (ui::Refusal const& refusal : h.diagnostics) {
-        if (refusal.reason.contains(text)) {
-            return true;
-        }
-    }
-    return false;
+    return std::ranges::any_of(h.diagnostics,
+                               [text](ui::Refusal const& refusal) { return refusal.reason.contains(text); });
 }
 
 }  // namespace

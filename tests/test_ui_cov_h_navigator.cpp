@@ -17,7 +17,6 @@
 namespace {
 
 using morph::ui::CatalogEntry;
-using morph::ui::MenuEntry;
 using morph::ui::Navigator;
 using morph::ui::NavigatorBadge;
 using morph::ui::NavigatorCustomEntry;

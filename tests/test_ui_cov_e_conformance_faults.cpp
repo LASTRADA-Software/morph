@@ -28,41 +28,41 @@ using morph::testing::conformance_probe::RecordingProbe;
 // How a probe misreads or mis-drives the backend behind it. Each distortion corrupts one family of probe operations;
 // a case that depends on that family must report it.
 enum class Distort : std::uint8_t {
-    ZeroCounts,       // every container reports no children
-    NullChildren,     // every container hands out null in place of each child
-    FewerChildren,    // every container reports one child fewer than it has
-    MoreChildren,     // every container reports one child more than it has
-    InvertVisible,    // every widget's visibility reads inverted
-    InvertEnabled,    // every widget's enabled flag reads inverted
-    WrongText,        // every widget shows "?"
-    EmptyText,        // every widget shows nothing
-    DropInput,        // every driving operation does nothing
-    NoSelection,      // a table shows no rows selected
-    ExtraSelection,   // a table shows row 0 selected as well
-    CursorOff,        // a field's cursor reads one byte further
-    FocusNowhere,     // no widget has focus
-    FocusEverywhere,  // every widget has focus
-    BoundsNone,       // the probe reads no geometry
-    BoundsZero,       // every widget is drawn with no size
-    BoundsRamp,       // widgets are drawn at places and sizes that grow with the order they are asked about
-    BoundsStack,      // every widget is drawn in the same place, 12 by 3
-    BoundsNarrow,     // every widget is 3 wide and 1 high, side by side
-    BoundsWide,       // every widget is 80 wide and 1 high, one below the other
-    ExtentOffset,     // a text's lines are drawn 5 units right of the widget
-    TargetNowhere,    // a spotlight rings nothing
-    HeadersEmpty,     // every header reads empty
-    HeadersWrong,     // every header reads another text
-    MenuEmpty,        // a header's menu has no entries
-    ClipboardEmpty,   // the clipboard reads empty
-    DescriptionNone,  // no description is read
-    NullSecond,       // a container hands out null for its second child
-    NullThird,        // a container hands out null for its third child
-    NullFourth,       // a container hands out null for its fourth child
-    NullFirst,        // a container hands out null for its first child
-    MenuRelabelled,   // a header menu's first entry carries another label
-    MenuNoSeparator,  // a header menu's second entry is no separator
+    ZeroCounts,          // every container reports no children
+    NullChildren,        // every container hands out null in place of each child
+    FewerChildren,       // every container reports one child fewer than it has
+    MoreChildren,        // every container reports one child more than it has
+    InvertVisible,       // every widget's visibility reads inverted
+    InvertEnabled,       // every widget's enabled flag reads inverted
+    WrongText,           // every widget shows "?"
+    EmptyText,           // every widget shows nothing
+    DropInput,           // every driving operation does nothing
+    NoSelection,         // a table shows no rows selected
+    ExtraSelection,      // a table shows row 0 selected as well
+    CursorOff,           // a field's cursor reads one byte further
+    FocusNowhere,        // no widget has focus
+    FocusEverywhere,     // every widget has focus
+    BoundsNone,          // the probe reads no geometry
+    BoundsZero,          // every widget is drawn with no size
+    BoundsRamp,          // widgets are drawn at places and sizes that grow with the order they are asked about
+    BoundsStack,         // every widget is drawn in the same place, 12 by 3
+    BoundsNarrow,        // every widget is 3 wide and 1 high, side by side
+    BoundsWide,          // every widget is 80 wide and 1 high, one below the other
+    ExtentOffset,        // a text's lines are drawn 5 units right of the widget
+    TargetNowhere,       // a spotlight rings nothing
+    HeadersEmpty,        // every header reads empty
+    HeadersWrong,        // every header reads another text
+    MenuEmpty,           // a header's menu has no entries
+    ClipboardEmpty,      // the clipboard reads empty
+    DescriptionNone,     // no description is read
+    NullSecond,          // a container hands out null for its second child
+    NullThird,           // a container hands out null for its third child
+    NullFourth,          // a container hands out null for its fourth child
+    NullFirst,           // a container hands out null for its first child
+    MenuRelabelled,      // a header menu's first entry carries another label
+    MenuNoSeparator,     // a header menu's second entry is no separator
     MenuLastRelabelled,  // a header menu's last entry carries another label
-    TargetOther,      // a spotlight rings a widget other than its target
+    TargetOther,         // a spotlight rings a widget other than its target
 };
 
 constexpr std::size_t kAll = static_cast<std::size_t>(-1);
@@ -70,6 +70,7 @@ constexpr std::size_t kAll = static_cast<std::size_t>(-1);
 // A reference probe decorated with one distortion applied to a window of the calls of its family.
 class DistortedProbe final : public ui::testing::ConformanceProbe {
 public:
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the window is a first call and a count, named as such.
     DistortedProbe(Distort mode, std::size_t from, std::size_t count) : _mode{mode}, _from{from}, _count{count} {}
 
     // How many calls of the distorted family the case made.
@@ -386,22 +387,22 @@ std::vector<ui::testing::ConformanceCase> allCases() {
 
 }  // namespace
 
-
 namespace {
 
-const std::set<std::string> kZeroSized{
-    "a row centres a child across it",
-    "a table's heading row spans every column",
-    "a table cell that spans three rows is drawn over all three",
-    "a stretching scroll above a bar keeps the bar at its column's end",
-    "a sheet fills the surface",
-    "a slot showing a one-row ForEach whose holder stretches fills the slot",
-    "a wrapping row starts a line only when out of room",
-    "a column with wrap: false keeps its cells to one line",
-    "a badge given a fixed width below its label is raised to its natural width",
-    "a badge given a percent width below its label is raised to its natural width",
-    "a stretch push button keeps its label's width"};
+// NOLINTNEXTLINE(cert-err58-cpp,bugprone-throwing-static-initialization): a test table; an allocation failure at start-up ends the run either way.
+const std::set<std::string> kZeroSized{"a row centres a child across it",
+                                       "a table's heading row spans every column",
+                                       "a table cell that spans three rows is drawn over all three",
+                                       "a stretching scroll above a bar keeps the bar at its column's end",
+                                       "a sheet fills the surface",
+                                       "a slot showing a one-row ForEach whose holder stretches fills the slot",
+                                       "a wrapping row starts a line only when out of room",
+                                       "a column with wrap: false keeps its cells to one line",
+                                       "a badge given a fixed width below its label is raised to its natural width",
+                                       "a badge given a percent width below its label is raised to its natural width",
+                                       "a stretch push button keeps its label's width"};
 
+// NOLINTNEXTLINE(cert-err58-cpp,bugprone-throwing-static-initialization): a test table; an allocation failure at start-up ends the run either way.
 const std::set<std::string> kStacked{
     "a table's heading row spans every column",
     "a stretching scroll above a bar keeps the bar at its column's end",

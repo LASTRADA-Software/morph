@@ -225,7 +225,7 @@ TEST_CASE("cov cell format: dateText falls back to ISO and shows an unspellable 
     // Inside that margin the zone decides: the last second of 9999 shifted east leaves the range.
     auto east = bare;
     east.utcOffsetMinutes = 120;
-    std::int64_t const lastSecond = (2'932'896 + 1) * kDay - 1;
+    std::int64_t const lastSecond = ((2'932'896 + 1) * kDay) - 1;
     CHECK(cells::dateText(lastSecond, stamp, bare) == "9999-12-31 23:59");
     CHECK(cells::dateText(lastSecond, stamp, east) == std::to_string(lastSecond));
     auto west = bare;

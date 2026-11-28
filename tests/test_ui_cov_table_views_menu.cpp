@@ -116,6 +116,7 @@ TEST_CASE("cov views menu: a view is renamed, made the default, removed and the 
     auto const afterRename = storedViews(h, *store, "views");
     REQUIRE(afterRename.views.size() == 2);
     std::vector<std::string> names;
+    names.reserve(afterRename.views.size());
     for (auto const& view : afterRename.views) {
         names.push_back(view.name);
     }

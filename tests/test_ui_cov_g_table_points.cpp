@@ -17,7 +17,6 @@
 namespace {
 
 namespace table = morph::table;
-using morph::ui::Value;
 using morph::ui::testing::chooseMenu;
 using morph::ui::testing::GatedTableStateStore;
 using morph::ui::testing::kModelTable;

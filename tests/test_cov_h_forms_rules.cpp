@@ -73,7 +73,7 @@ TEST_CASE("cov h rules: a rule's when clause and conditions are those of its kin
         CHECK((rule.when() != nullptr) == item.hasWhen);
         CHECK(rule.conditions().size() == item.conditions);
         CHECK(rule.gates() == item.gates);
-        CHECK(rule.names("a") == (rule.fields().size() > 0));
+        CHECK(rule.names("a") == (!rule.fields().empty()));
         CHECK_FALSE(rule.names("z"));
     }
     RuleExpr const visible = ruleOf(R"({"kind":"visibleWhen","fields":["a"],)" + when + "}");

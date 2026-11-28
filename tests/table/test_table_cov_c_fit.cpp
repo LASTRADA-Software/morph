@@ -27,8 +27,10 @@ std::shared_ptr<VectorSource> threeColumns() {
 
 void replaceColumns(VectorSource& source, std::vector<ColumnInfo> columns) {
     std::vector<std::vector<Cell>> rows;
+    rows.reserve(2);
     for (std::int64_t at = 0; at < 2; ++at) {
         std::vector<Cell> row;
+        row.reserve(columns.size());
         for (auto const& column : columns) {
             row.push_back(column.kind == ColumnKind::Integer ? Cell{at} : Cell{std::string{"x"}});
         }

@@ -155,7 +155,7 @@ TEMPLATE_TEST_CASE("a keyed reply patches the rows it names and leaves the other
 TEMPLATE_TEST_CASE("a keyed reply that shows the rows moved invalidates the window instead of patching",
                    "[covf][table][window]", IntRows, CellRows) {
     struct Shape {
-        char const* name;
+        char const* name = nullptr;
         std::vector<Entry> entries;
         std::optional<std::int64_t> total;
     };
@@ -180,13 +180,15 @@ TEMPLATE_TEST_CASE("a keyed reply whose undecided count differs invalidates, and
     auto const fetch = rowsPlan(held.window, {key(5)});
     auto undecided = TestType::keyed({{5, true, 5}, {0, false, 0}}, 8);
     undecided.undecided = 2;
-    CHECK(held.window.patch(fetch, std::move(undecided)).empty());
+    auto const undecidedPatch = held.window.patch(fetch, std::move(undecided));
+    CHECK(undecidedPatch.empty());
     CHECK(held.window.revision() == 1);
 
     auto const ragged = rowsPlan(held.window, {key(5)});
     auto reply = TestType::keyed({{5, true, 5}, {0, false, 0}}, 8);
     reply.indices.pop_back();
-    CHECK(held.window.patch(ragged, std::move(reply)).empty());
+    auto const raggedPatch = held.window.patch(ragged, std::move(reply));
+    CHECK(raggedPatch.empty());
     CHECK(held.window.revision() == 2);
 }
 
@@ -241,7 +243,8 @@ TEMPLATE_TEST_CASE(
     reply.awaiting = {"slow"};
     reply.failed = {"broken"};
     reply.undecided = 3;
-    REQUIRE(waiting.accept(fetch[0], std::move(reply)));
+    auto const outcome = waiting.accept(fetch[0], std::move(reply));
+    REQUIRE(outcome);
     CHECK(waiting.awaiting().size() == 1);
     CHECK(waiting.failed().size() == 1);
     CHECK(waiting.undecided() == 3);
@@ -371,7 +374,8 @@ TEMPLATE_TEST_CASE("the levels a row still waits on are held with the row and re
     auto reply = TestType::page(0, 4, 8);
     reply.unloadedRows = {UnloadedRow{.index = 1, .levels = {"slow"}, .failed = {}},
                           UnloadedRow{.index = 3, .levels = {"a", "b"}, .failed = {"b"}}};
-    REQUIRE(window.accept(fetches[0], std::move(reply)));
+    auto const outcome = window.accept(fetches[0], std::move(reply));
+    REQUIRE(outcome);
     REQUIRE(window.accept(fetches[1], TestType::page(4, 4, 8)));
     CHECK(window.unloadedLevels(0).levels.empty());
     REQUIRE(window.unloadedLevels(1).levels.size() == 1);
@@ -383,7 +387,8 @@ TEMPLATE_TEST_CASE("the levels a row still waits on are held with the row and re
     auto const fetch = rowsPlan(window, {key(1)});
     auto patch = TestType::keyed({{1, true, 1}, {0, false, 0}}, 8);
     patch.unloadedRows = {UnloadedRow{.index = 0, .levels = {"later"}, .failed = {}}};
-    CHECK(window.patch(fetch, std::move(patch)) == std::vector<std::int64_t>{0, 1});
+    auto const patched = window.patch(fetch, std::move(patch));
+    CHECK(patched == std::vector<std::int64_t>{0, 1});
     CHECK(window.unloadedLevels(0).levels.empty());
     REQUIRE(window.unloadedLevels(1).levels.size() == 1);
     CHECK(window.unloadedLevels(1).levels[0] == "later");
@@ -413,7 +418,8 @@ TEST_CASE("a keyed reply whose keys and rows differ in number invalidates the wi
     auto const fetches = CellRows::visible(window, 0, 4);
     auto reply = CellRows::page(0, 4, 8);
     reply.keys.pop_back();
-    REQUIRE(window.accept(fetches[0], std::move(reply)));
+    auto const outcome = window.accept(fetches[0], std::move(reply));
+    REQUIRE(outcome);
     REQUIRE(window.error().has_value());
     CHECK(window.error()->code == TableErrorCode::InvalidValue);
     CHECK(window.revision() == 1);
@@ -439,7 +445,8 @@ TEST_CASE("a column reply is merged by key, and invalidates the window when the 
     }
     reply.unloadedRows = {UnloadedRow{.index = 2, .levels = {"slow"}, .failed = {}},
                           UnloadedRow{.index = 9, .levels = {"slow"}, .failed = {}}};
-    REQUIRE(window.accept(more[0], std::move(reply)));
+    auto const outcome = window.accept(more[0], std::move(reply));
+    REQUIRE(outcome);
     REQUIRE(window.cell(3, "b") != nullptr);
     CHECK(std::get<std::int64_t>(*window.cell(3, "b")) == 30);
     CHECK(window.cell(3, "zz") == nullptr);
@@ -455,6 +462,7 @@ TEST_CASE("a column reply is merged by key, and invalidates the window when the 
     for (int at = 0; at < 4; ++at) {
         other.rows.push_back({Cell{std::int64_t{at}}});
     }
-    REQUIRE(window.accept(wider[0], std::move(other)));
+    auto const widerOutcome = window.accept(wider[0], std::move(other));
+    REQUIRE(widerOutcome);
     CHECK(window.revision() == 1);
 }

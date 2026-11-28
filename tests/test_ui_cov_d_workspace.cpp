@@ -129,10 +129,7 @@ public:
     [[nodiscard]] morph::reactive::Computed<std::vector<HeadAction>> const& actions() const override {
         return _actions;
     }
-    bool run(std::string_view actionId) override {
-        ran.emplace_back(actionId);
-        return true;
-    }
+    bool run(std::string_view /*actionId*/) override { return true; }
     [[nodiscard]] morph::reactive::Computed<std::vector<HeadMenuEntry>> const* menu() const override {
         return variant().withMenu ? &_menu : nullptr;
     }
@@ -163,8 +160,6 @@ public:
     [[nodiscard]] morph::reactive::Computed<std::vector<HeadTool>> const* tools() const override {
         return variant().tools ? &_tools : nullptr;
     }
-
-    std::vector<std::string> ran;
 
 private:
     morph::reactive::Computed<std::string>& _subtitle;

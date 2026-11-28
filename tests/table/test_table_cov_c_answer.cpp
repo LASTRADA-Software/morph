@@ -30,6 +30,7 @@ TableColumn describedColumn(std::string const& id, ColumnKind kind, std::string 
 struct Slow {
     Slow() {
         std::vector<std::vector<Cell>> cells;
+        cells.reserve(3);
         for (std::int64_t row = 0; row < 3; ++row) {
             cells.push_back({Cell{row}, Cell{Unloaded{}}});
         }
