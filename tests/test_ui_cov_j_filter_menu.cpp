@@ -264,3 +264,53 @@ TEST_CASE("covj filter menu: a debounce of nothing applies a condition at once",
         REQUIRE(m.applied.size() == 1);
     }
 }
+
+TEST_CASE(
+    "covj filter menu: clearing a group that holds no filter applies the same filters, and clears a column's blanks "
+    "tick",
+    "[covj][ui][table][filter_menu]") {
+    SECTION("a group with no stored filter") {
+        Menu m;
+        m.rows.answer = pagesOf(letters(3));
+        m.openGroup("g1", {"a", "b", "c"});
+        m.menu.tick(0, true);
+        m.menu.clearFilter();
+        REQUIRE(m.applied.size() == 1);
+        CHECK(m.applied.back().groups.empty());
+        CHECK_FALSE(m.state().ticks.ticked);
+        CHECK_FALSE(m.menu.rows().front().checked);
+    }
+    SECTION("a column whose list has blanks") {
+        Menu m;
+        m.rows.answer = pagesOf(letters(3), 2);
+        m.open("x");
+        m.menu.tickBlanks(false);
+        m.menu.clearFilter();
+        REQUIRE(m.applied.size() == 1);
+        CHECK(m.applied.back().columns.empty());
+        CHECK(m.state().ticks.blanks == true);
+        CHECK(m.state().ticks.ticked);
+    }
+}
+
+TEST_CASE("covj filter menu: a select-all under a search may tick values past the page, so Apply stays on offer",
+          "[covj][ui][table][filter_menu]") {
+    Menu m;
+    m.host.maxLimit = 2;
+    m.menu.setHost(m.host);
+    m.rows.answer = pagesOf(letters(6));
+    m.open("x");
+    m.menu.tickAll(false);
+    SECTION("with no select-all under a search") {
+        m.menu.search("a");
+        m.settle();
+        CHECK_FALSE(m.menu.canApply());
+    }
+    SECTION("with one") {
+        m.menu.search("a");
+        m.settle();
+        m.menu.tickAll(true);
+        m.menu.tick(0, false);
+        CHECK(m.menu.canApply());
+    }
+}

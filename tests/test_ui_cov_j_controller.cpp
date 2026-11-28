@@ -685,3 +685,25 @@ TEST_CASE("covj custom controller: an update of a screen the server no longer ha
     CHECK(applied->status == CustomScreenCheckStatus::Refused);
     CHECK(applied->refusal.reason.contains("no such custom screen"));
 }
+
+TEST_CASE("covj custom controller: a save that answers after a newer draft replaced its own is told, not acted on",
+          "[covj][ui][custom-screens][controller]") {
+    morph::exec::ThreadPoolExecutor storePool{1};
+    auto const store = std::make_shared<custom_client::GatedStore>(storePool);
+    ControllerRig rig{store};
+    custom_client::GateGuard const guard{*store};
+    WorkspaceTabId const tab = rig.open("notes.edit", note(1));
+    REQUIRE(rig.preview(tab, ControllerRig::headed("First")).status == CustomScreenCheckStatus::Done);
+    store->hold();
+    rig.controller->saveAs(tab, "First", std::nullopt, {});
+    REQUIRE(rig.controller->saving(tab));
+    REQUIRE(rig.controller->proposeDraft(tab, "notes.edit", ControllerRig::headed("Second")));
+    store->release();
+    REQUIRE(rig.pump([&rig] { return !rig.outcomes.empty(); }));
+    CHECK(rig.outcomes.back().event == morph::ui::CustomScreenEvent::SavedDraftReplaced);
+    CHECK(rig.outcomes.back().title == "First");
+    CHECK(rig.screenOf(0) == "notes.edit");
+    CHECK(rig.controller->drafted(tab));
+    CHECK(rig.harness.text("heading") == "Second");
+    CHECK_FALSE(rig.controller->saving(tab));
+}
