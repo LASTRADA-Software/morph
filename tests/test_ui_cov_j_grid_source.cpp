@@ -4,15 +4,18 @@
 // values, which reaches its form and does nothing without one.
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <chrono>
 #include <cstdint>
 #include <memory>
 #include <morph/forms/derive.hpp>
 #include <morph/forms/engine/form_session.hpp>
 #include <morph/reactive/testing/manual_scheduler.hpp>
+#include <morph/table/query.hpp>
 #include <morph/ui/grid.hpp>
 #include <morph/ui/locale_table.hpp>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -96,4 +99,52 @@ TEST_CASE("covj fixed grid source: recalculate over no form does nothing", "[cov
     source.recalculate();
     source.committed();
     CHECK(source.text(ui::Key{std::string{"density"}}, "min") == "lo");
+}
+
+TEST_CASE("covj form grid source: a span that fits nowhere covers nothing and is not given", "[covj][ui][grid]") {
+    GridFixture f{3};
+    using Spans = std::vector<ui::CellSpan>;
+    auto const [name, spans] = GENERATE(
+        std::pair<std::string, Spans>{"no rows", Spans{{.column = "mass", .rows = 0, .columns = 1}}},
+        std::pair<std::string, Spans>{"a column the grid lacks", Spans{{.column = "nosuch", .rows = 2, .columns = 1}}},
+        std::pair<std::string, Spans>{"rows past the last", Spans{{.column = "mass", .rows = 4, .columns = 1}}});
+    CAPTURE(name);
+    f.source->setSpans([spans](morph::forms::RowState const& row) { return row.key() == 1 ? spans : Spans{}; });
+    CHECK(f.source->spans(ui::Key{std::int64_t{1}}).empty());
+    CHECK_FALSE(f.source->covered(ui::Key{std::int64_t{2}}, "mass"));
+    CHECK_FALSE(f.source->covered(ui::Key{std::int64_t{1}}, "volume"));
+}
+
+TEST_CASE("covj form grid source: a sorted grid gives and covers no spans", "[covj][ui][grid]") {
+    GridFixture f{3};
+    f.source->setSpans([](morph::forms::RowState const& row) {
+        std::vector<ui::CellSpan> spans;
+        if (row.key() == 1) {
+            spans.push_back({.column = "mass", .rows = 2, .columns = 1});
+        }
+        return spans;
+    });
+    REQUIRE(f.source->covered(ui::Key{std::int64_t{2}}, "mass"));
+    REQUIRE(f.source->view().setSort({morph::table::SortKey{.column = "mass"}}).has_value());
+    CHECK(f.source->spans(ui::Key{std::int64_t{1}}).empty());
+    CHECK_FALSE(f.source->covered(ui::Key{std::int64_t{2}}, "mass"));
+    REQUIRE(f.source->view().setSort({}).has_value());
+    CHECK(f.source->covered(ui::Key{std::int64_t{2}}, "mass"));
+}
+
+TEST_CASE("covj form grid source: derived cells are muted while a round runs, and the typed ones are not",
+          "[covj][ui][grid]") {
+    using namespace std::chrono_literals;
+    GridFixture f{2};
+    f.enableDerive();
+    f.grid->focusCell(morph::test::grid::at(1, "mass"));
+    f.grid->type("5");
+    f.grid->press("Enter");
+    f.scheduler.advance(150ms);
+    f.h.settle();
+    REQUIRE(f.form->deriveState() == morph::forms::DeriveState::Running);
+    CHECK(f.source->marks(ui::Key{std::int64_t{1}}, "limit").muted);
+    CHECK_FALSE(f.source->marks(ui::Key{std::int64_t{1}}, "limit").stale);
+    CHECK_FALSE(f.source->marks(ui::Key{std::int64_t{1}}, "mass").muted);
+    CHECK_FALSE(f.source->marks(ui::Key{std::int64_t{1}}, "note").muted);
 }
