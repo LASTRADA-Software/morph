@@ -8,6 +8,7 @@
 #include <morph/ui/custom_screen_chrome.hpp>
 #include <morph/ui/custom_screens.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 
 #include "ui_custom_client_support.hpp"
@@ -41,4 +42,71 @@ TEST_CASE("covj custom screen source: a dropped document the server no longer ha
     CHECK(rig.notices.back().contains("Mine"));
     CHECK_FALSE(rig.find("TextInput", "source_text").has_value());
     CHECK(rig.sync->documents().entry(id) == nullptr);
+}
+
+TEST_CASE("covj custom screen chrome: options it cannot work without are refused at construction",
+          "[covj][ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    auto options = rig.chromeOptions();
+    SECTION("no runtime") { options.runtime = nullptr; }
+    SECTION("no backend") { options.backend = nullptr; }
+    SECTION("no host") { options.host = nullptr; }
+    SECTION("no sync") { options.sync = nullptr; }
+    SECTION("no documents") { options.documents = nullptr; }
+    SECTION("no sourceOf") { options.sourceOf = nullptr; }
+    SECTION("no catalog") { options.catalog = nullptr; }
+    SECTION("no openTab") { options.openTab = nullptr; }
+    CHECK_THROWS_AS(morph::ui::CustomScreenChrome{std::move(options)}, std::invalid_argument);
+}
+
+TEST_CASE("covj custom screen chrome: a refusal at a place the text lacks is named by its pointer",
+          "[covj][ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    rig.click("source_button_notes.edit");
+    std::string const withoutParams =
+        screens_test::replaced(std::string{kEdit}, R"("params":{"noteId":"int"},"identity":{"ref":"noteId"},)", "");
+    rig.type("source_text", withoutParams);
+    rig.click("source_preview");
+    REQUIRE(rig.pump([&rig] { return rig.shown("Button", "source_refusal"); }));
+    CHECK(rig.harness.backend.prop(*rig.find("Button", "source_refusal"), "label").starts_with("At /params: "));
+    CHECK(rig.text("heading") == "Edit note");
+}
+
+TEST_CASE(
+    "covj custom screen chrome: the stored source of my screen that the server refuses stays open with the refusal",
+    "[covj][ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    std::string const id = rig.saveOnServer("Mine", "notes.edit", std::string{kEdit});
+    rig.chrome->showStoredSource(id);
+    REQUIRE(rig.pump([&rig] { return rig.find("Dialog", "source_dialog").has_value(); }));
+    std::string const printing =
+        screens_test::replaced(screens_test::replaced(std::string{kEdit}, "\"notes.edit\"", "\"" + id + "\""),
+                               R"({"set":"content","value":"changed"})", R"({"host":"print"})");
+    rig.type("source_text", morph::ui::prettyJson(printing));
+    rig.click("source_save");
+    REQUIRE(rig.pump([&rig] { return rig.shown("Button", "source_refusal"); }));
+    CHECK(rig.find("Dialog", "source_dialog").has_value());
+    CHECK(rig.sync->documents().find(id) == nullptr);
+}
+
+TEST_CASE("covj custom screen chrome: Save as and Remove of a tab that closed, or with nothing to ask, do nothing",
+          "[covj][ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    morph::ui::WorkspaceTabId const tab = rig.tabAt(0);
+    std::optional<bool> closed;
+    rig.workspace->close(0, [&closed](bool outcome) { closed = outcome; });
+    REQUIRE(rig.pump([&closed] { return closed.has_value(); }));
+    rig.chrome->askSaveAs(tab, false);
+    rig.chrome->askRemove(tab);
+    rig.chrome->confirmSaveAs();
+    rig.chrome->confirmRemove();
+    rig.chrome->save(tab);
+    rig.chrome->discard(tab);
+    rig.chrome->openAs(tab, "notes.home");
+    rig.harness.settle();
+    CHECK_FALSE(rig.find("Dialog", "save_as_dialog").has_value());
+    CHECK_FALSE(rig.find("Dialog", "remove_dialog").has_value());
+    CHECK(rig.notices.empty());
 }
