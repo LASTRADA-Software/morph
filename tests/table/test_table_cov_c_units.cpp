@@ -37,15 +37,15 @@ TEST_CASE("a unit is refused for each way its id, factor or dimension is unusabl
     auto zeroDenominator = unit("zero", "mass");
     zeroDenominator.toBase.denominator = 0;
     std::vector<Refusal> const refusals{
-        {unit("", "mass"), "has an id of 0 bytes, not 1 to 32"},
-        {unit(std::string(33, 'x'), "mass"), "has an id of 33 bytes"},
-        {unit("a b", "mass"), "has white space in its id"},
-        {unit("1kg", "mass"), "begins like a number"},
-        {unit("-kg", "mass"), "begins like a number"},
-        {unit(".kg", "mass"), "begins like a number"},
-        {negative, "has a factor that is not positive"},
-        {zeroDenominator, "has a factor that is not positive"},
-        {unit("nodim", ""), "names no dimension"},
+        {.unit = unit("", "mass"), .message = "has an id of 0 bytes, not 1 to 32"},
+        {.unit = unit(std::string(33, 'x'), "mass"), .message = "has an id of 33 bytes"},
+        {.unit = unit("a b", "mass"), .message = "has white space in its id"},
+        {.unit = unit("1kg", "mass"), .message = "begins like a number"},
+        {.unit = unit("-kg", "mass"), .message = "begins like a number"},
+        {.unit = unit(".kg", "mass"), .message = "begins like a number"},
+        {.unit = negative, .message = "has a factor that is not positive"},
+        {.unit = zeroDenominator, .message = "has a factor that is not positive"},
+        {.unit = unit("nodim", ""), .message = "names no dimension"},
     };
     for (auto const& refusal : refusals) {
         CAPTURE(refusal.unit.id);

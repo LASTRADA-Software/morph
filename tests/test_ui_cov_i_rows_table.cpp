@@ -46,10 +46,10 @@ TEST_CASE("covi rows table: persist says whether and under what name the arrange
         std::string qualifier;
     };
     for (Case const& item : std::vector<Case>{
-             {"by default, under the screen's id", "", true, "samples"},
-             {"persist true", R"(,"persist":true)", true, "samples"},
-             {"persist false", R"(,"persist":false)", false, ""},
-             {"persist under a name", R"(,"persist":"mine")", true, "mine"},
+             {.what = "by default, under the screen's id", .extra = "", .kept = true, .qualifier = "samples"},
+             {.what = "persist true", .extra = R"(,"persist":true)", .kept = true, .qualifier = "samples"},
+             {.what = "persist false", .extra = R"(,"persist":false)", .kept = false, .qualifier = ""},
+             {.what = "persist under a name", .extra = R"(,"persist":"mine")", .kept = true, .qualifier = "mine"},
          }) {
         INFO(item.what);
         auto const store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");

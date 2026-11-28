@@ -21,7 +21,7 @@ using namespace morph;
 std::string boundedSchema() {
     std::string schema{morph::test::grid::kSpecimens};
     auto const replaceOnce = [&schema](std::string const& from, std::string const& to) {
-        REQUIRE(schema.find(from) != std::string::npos);
+        REQUIRE(schema.contains(from));
         schema.replace(schema.find(from), from.size(), to);
     };
     replaceOnce(R"("minItems":0,"maxItems":5)", R"("minItems":1,"maxItems":2)");

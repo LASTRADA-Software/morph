@@ -186,7 +186,7 @@ TEST_CASE("fitting a state reports what it carries and what it drops, key by key
                   {"id":"u1","label":"One","columns":["name","alias"]},{"id":"u2","label":"Two","columns":["id","name"]}]},
                 "filters":{"groups":[{"columns":["id","name"],"include":[{}]}]}})");
         CHECK(fitted.filters->groups.empty());
-        CHECK(report.dropped.size() >= 1);
+        CHECK_FALSE(report.dropped.empty());
     }
     SECTION("a column filter that does not compile is dropped, and one that does is kept") {
         auto const [fitted, report] = fit(

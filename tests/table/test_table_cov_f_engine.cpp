@@ -87,11 +87,11 @@ TEST_CASE("a sort over a measure column is refused while the engine has no units
     measure.dimensions = {"mass"};
     auto const source = tabletest::makeSource({measure}, Rows{{Cell{}}});
     Engine engine{source};
-    auto const refused = engine.setSort({{"m", SortDirection::Ascending}});
+    auto const refused = engine.setSort({{.column = "m", .dir = SortDirection::Ascending}});
     REQUIRE_FALSE(refused.has_value());
     CHECK(refused.error().code == TableErrorCode::SourceContract);
     CHECK(engine.sort().empty());
-    auto const unknown = engine.setSort({{"zz", SortDirection::Ascending}});
+    auto const unknown = engine.setSort({{.column = "zz", .dir = SortDirection::Ascending}});
     REQUIRE_FALSE(unknown.has_value());
     CHECK(unknown.error().code == TableErrorCode::UnknownColumn);
 }

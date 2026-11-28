@@ -127,7 +127,7 @@ TEST_CASE("cov filter dialog: a measure's unit starts unchosen and each choice i
     auto const screen = mountDescribed(h, kindsDescription());
     int const table = h.backend.all("Table").front();
     clickFilter(h, table, 6);
-    CHECK(propOf(h, "Select", "table_filter_unit_1", "selected") != "");
+    CHECK_FALSE(propOf(h, "Select", "table_filter_unit_1", "selected").empty());
     chooseOption(h, "table_filter_op_1", "=");
     typeInto(h, "table_filter_operand_1", "2");
     chooseOption(h, "table_filter_unit_1", "kg");

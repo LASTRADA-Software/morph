@@ -47,8 +47,9 @@ TEST_CASE("covi derived columns: a place that names none is reported once for th
         std::string columns;
     };
     for (Case const& item : std::vector<Case>{
-             {"a name that is no place", R"([{"id":"id","align":"sideways"},{"id":"name","valign":"up"}])"},
-             {"a place that is no text", R"([{"id":"id","align":5},{"id":"name","align":7}])"},
+             {.what = "a name that is no place",
+              .columns = R"([{"id":"id","align":"sideways"},{"id":"name","valign":"up"}])"},
+             {.what = "a place that is no text", .columns = R"([{"id":"id","align":5},{"id":"name","align":7}])"},
          }) {
         INFO(item.what);
         TableHarness h;

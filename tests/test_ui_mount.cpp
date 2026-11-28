@@ -2467,12 +2467,18 @@ TEST_CASE("table highlight: the marked row follows the operations of a view chan
     };
     // The marked row is at view index 20.
     std::vector<Case> const cases{
-        {{op(Kind::Removed, 5, 2)}, "18"},    {{op(Kind::Removed, 25, 2)}, "20"},
-        {{op(Kind::Removed, 19, 3)}, "none"}, {{op(Kind::Inserted, 10, 3)}, "23"},
-        {{op(Kind::Inserted, 20, 1)}, "21"},  {{op(Kind::Inserted, 25, 4)}, "20"},
-        {{op(Kind::Moved, 20, 1, 3)}, "3"},   {{op(Kind::Moved, 2, 1, 30)}, "19"},
-        {{op(Kind::Moved, 40, 1, 10)}, "21"}, {{op(Kind::Moved, 40, 1, 25)}, "20"},
-        {{op(Kind::Changed, 20, 1)}, "20"},   {{op(Kind::Removed, 0, 1), op(Kind::Inserted, 0, 3)}, "22"},
+        {.ops = {op(Kind::Removed, 5, 2)}, .highlighted = "18"},
+        {.ops = {op(Kind::Removed, 25, 2)}, .highlighted = "20"},
+        {.ops = {op(Kind::Removed, 19, 3)}, .highlighted = "none"},
+        {.ops = {op(Kind::Inserted, 10, 3)}, .highlighted = "23"},
+        {.ops = {op(Kind::Inserted, 20, 1)}, .highlighted = "21"},
+        {.ops = {op(Kind::Inserted, 25, 4)}, .highlighted = "20"},
+        {.ops = {op(Kind::Moved, 20, 1, 3)}, .highlighted = "3"},
+        {.ops = {op(Kind::Moved, 2, 1, 30)}, .highlighted = "19"},
+        {.ops = {op(Kind::Moved, 40, 1, 10)}, .highlighted = "21"},
+        {.ops = {op(Kind::Moved, 40, 1, 25)}, .highlighted = "20"},
+        {.ops = {op(Kind::Changed, 20, 1)}, .highlighted = "20"},
+        {.ops = {op(Kind::Removed, 0, 1), op(Kind::Inserted, 0, 3)}, .highlighted = "22"},
     };
     for (Case const& item : cases) {
         WindowFixture f{50, 4, {.pinned = 0}};

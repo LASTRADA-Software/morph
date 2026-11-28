@@ -104,6 +104,7 @@ Variant& variant() {
 }
 
 // A native screen whose head gives a subtitle, a badge, an action and a menu, and the optional parts a `Variant` asks.
+// NOLINTNEXTLINE(misc-multiple-inheritance): a native screen that also gives a head, as a real one does.
 class Bare final : public Plain, public ScreenHead {
 public:
     Bare(morph::reactive::Runtime& runtime, std::unique_ptr<morph::ui::Widget> content)

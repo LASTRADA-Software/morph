@@ -39,11 +39,13 @@ TEST_CASE("cov lowering: a computed sizing that is no sizing is reported and low
         std::string_view reported;  // empty when nothing is reported
     };
     for (Case const& item : std::vector<Case>{
-             {R"({"kind":"text","text":"x","testId":"a","sizing":{"ref":"bad"}})", R"(sizing is "wat")"},
-             {R"({"kind":"text","text":"x","testId":"a","sizing":{"obj":{"width":{"ref":"bad"}}}})",
-              R"(sizing is {"width":"wat"})"},
-             {R"({"kind":"text","text":"x","testId":"a","sizing":{"obj":{"height":{"obj":{"fixed":3}}}}})", ""},
-             {R"({"kind":"text","text":"x","testId":"a","sizing":{"obj":{"fixed":3}}})", ""},
+             {.child = R"({"kind":"text","text":"x","testId":"a","sizing":{"ref":"bad"}})",
+              .reported = R"(sizing is "wat")"},
+             {.child = R"({"kind":"text","text":"x","testId":"a","sizing":{"obj":{"width":{"ref":"bad"}}}})",
+              .reported = R"(sizing is {"width":"wat"})"},
+             {.child = R"({"kind":"text","text":"x","testId":"a","sizing":{"obj":{"height":{"obj":{"fixed":3}}}}})",
+              .reported = ""},
+             {.child = R"({"kind":"text","text":"x","testId":"a","sizing":{"obj":{"fixed":3}}})", .reported = ""},
          }) {
         INFO(item.child);
         ui::testing::Harness h;
@@ -61,10 +63,10 @@ TEST_CASE("cov lowering: a progress shows a number it is given and nothing else"
         std::string_view value;
         std::string_view shown;
     };
-    for (Case const& item : std::vector<Case>{{R"({"ref":"num"})", "3"},
-                                              {R"({"fn":"div","args":[1,4]})", "0.25"},
-                                              {R"({"ref":"none"})", "none"},
-                                              {R"({"ref":"bad"})", "none"}}) {
+    for (Case const& item : std::vector<Case>{{.value = R"({"ref":"num"})", .shown = "3"},
+                                              {.value = R"({"fn":"div","args":[1,4]})", .shown = "0.25"},
+                                              {.value = R"({"ref":"none"})", .shown = "none"},
+                                              {.value = R"({"ref":"bad"})", .shown = "none"}}) {
         INFO(item.value);
         ui::testing::Harness h;
         auto const screen = h.mount(

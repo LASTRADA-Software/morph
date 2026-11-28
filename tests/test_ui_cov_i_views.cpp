@@ -163,24 +163,26 @@ TEST_CASE("covi views: a load that fails says why, the first failing part's word
         std::string expected;
     };
     for (Case const& item : std::vector<Case>{
-             {"a store failure with a reason",
-              false,
-              std::make_exception_ptr(std::runtime_error{"disk gone"}),
-              {},
-              "The saved views could not be loaded: disk gone"},
-             {"a failure that carries no words",
-              false,
-              std::make_exception_ptr(7),
-              {},
-              "The saved views could not be loaded"},
-             {"both parts failing keep the first", true, std::make_exception_ptr(std::runtime_error{"own gone"}),
-              std::make_exception_ptr(std::runtime_error{"shared gone"}),
-              "The saved views could not be loaded: own gone"},
-             {"only the shared part failing",
-              true,
-              {},
-              std::make_exception_ptr(std::runtime_error{"shared gone"}),
-              "The saved views could not be loaded: shared gone"},
+             {.what = "a store failure with a reason",
+              .sharing = false,
+              .own = std::make_exception_ptr(std::runtime_error{"disk gone"}),
+              .shared = {},
+              .expected = "The saved views could not be loaded: disk gone"},
+             {.what = "a failure that carries no words",
+              .sharing = false,
+              .own = std::make_exception_ptr(7),
+              .shared = {},
+              .expected = "The saved views could not be loaded"},
+             {.what = "both parts failing keep the first",
+              .sharing = true,
+              .own = std::make_exception_ptr(std::runtime_error{"own gone"}),
+              .shared = std::make_exception_ptr(std::runtime_error{"shared gone"}),
+              .expected = "The saved views could not be loaded: own gone"},
+             {.what = "only the shared part failing",
+              .sharing = true,
+              .own = {},
+              .shared = std::make_exception_ptr(std::runtime_error{"shared gone"}),
+              .expected = "The saved views could not be loaded: shared gone"},
          }) {
         INFO(item.what);
         Window w{item.sharing};
@@ -211,10 +213,19 @@ TEST_CASE("covi views: a save the store refuses says so, with its reason when it
         std::string expected;
     };
     for (Case const& item : std::vector<Case>{
-             {"own, no reason", false, "", "Views could not be saved"},
-             {"own, a reason", false, "quota", "Views could not be saved: quota"},
-             {"shared, no reason", true, "", "This view could not be published"},
-             {"shared, a reason", true, "quota", "This view could not be published: quota"},
+             {.what = "own, no reason", .shared = false, .reason = "", .expected = "Views could not be saved"},
+             {.what = "own, a reason",
+              .shared = false,
+              .reason = "quota",
+              .expected = "Views could not be saved: quota"},
+             {.what = "shared, no reason",
+              .shared = true,
+              .reason = "",
+              .expected = "This view could not be published"},
+             {.what = "shared, a reason",
+              .shared = true,
+              .reason = "quota",
+              .expected = "This view could not be published: quota"},
          }) {
         INFO(item.what);
         Window w{true};
@@ -272,10 +283,11 @@ TEST_CASE("covi views: a reload after a conflict that finds the stored views unr
         bool shared;
         std::string expected;
     };
-    for (Case const& item : std::vector<Case>{{false, "The saved views could not be read: "},
-                                              {true,
-                                               "This view could not be published: The saved views could not be "
-                                               "read: "}}) {
+    for (Case const& item :
+         std::vector<Case>{{.shared = false, .expected = "The saved views could not be read: "},
+                           {.shared = true,
+                            .expected = "This view could not be published: The saved views could not be "
+                                        "read: "}}) {
         INFO(item.shared);
         Window w{true};
         REQUIRE(w.settle(w.views.load()).has_value());

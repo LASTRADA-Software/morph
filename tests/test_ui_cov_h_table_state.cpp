@@ -148,17 +148,17 @@ TEST_CASE("cov h state client: a load that cannot be read rejects every key it a
         std::string message;
     };
     for (Case const& item : std::vector<Case>{
-             {"an answer for fewer keys", loadedJson({}), "answered 0 entries for 1 keys"},
-             {"an answer that is no load", "not json", ""},
-             {"a call that fails", "", "it failed"},
-             {"a key the server refused",
-              loadedJson({ui::TableStateHead{.found = false,
-                                             .revision = {},
-                                             .size = 0,
-                                             .text = {},
-                                             .error = "key out of bounds",
-                                             .deferred = false}}),
-              "key out of bounds"},
+             {.what = "an answer for fewer keys", .reply = loadedJson({}), .message = "answered 0 entries for 1 keys"},
+             {.what = "an answer that is no load", .reply = "not json", .message = ""},
+             {.what = "a call that fails", .reply = "", .message = "it failed"},
+             {.what = "a key the server refused",
+              .reply = loadedJson({ui::TableStateHead{.found = false,
+                                                      .revision = {},
+                                                      .size = 0,
+                                                      .text = {},
+                                                      .error = "key out of bounds",
+                                                      .deferred = false}}),
+              .message = "key out of bounds"},
          }) {
         INFO(item.what);
         RowsFixture h;

@@ -129,7 +129,7 @@ struct Held {
         REQUIRE(window.accept(fetches[1], Rows::page(4, 4, 8)));
     }
 
-    typename Rows::Window window;
+    Rows::Window window;
 };
 
 template <typename Window>

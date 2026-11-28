@@ -92,13 +92,18 @@ struct Case {
 
 TEST_CASE("cov h expression: the environment's row, refusals and the paths of a get", "[covh][ui][expr]") {
     for (Case const& item : std::vector<Case>{
-             {R"({"get":{"row":"a"},"path":"b"})", R"({"$row":{"a":{"b":7}}})", "7"},
-             {R"({"get":{"row":"a"},"path":"z"})", R"({"$row":{"a":{"b":7}}})", "null"},
-             {R"({"get":{"row":""},"path":"a"})", R"({"$row":{"a":3}})", "3"},
-             {R"({"refusal":"save"})", R"({"$refusals":{"save":{"code":"x.y"}}})", R"({"code":"x.y"})"},
-             {R"({"refusal":"other"})", R"({"$refusals":{"save":{"code":"x.y"}}})", "null"},
-             {R"({"fn":"refusalText","args":[{"ref":"r"}]})", R"({"r":{"code":"a.b"}})",
-              R"("This was refused." | the catalogue has no message for the refusal code `a.b`)"},
+             {.expr = R"({"get":{"row":"a"},"path":"b"})", .names = R"({"$row":{"a":{"b":7}}})", .expected = "7"},
+             {.expr = R"({"get":{"row":"a"},"path":"z"})", .names = R"({"$row":{"a":{"b":7}}})", .expected = "null"},
+             {.expr = R"({"get":{"row":""},"path":"a"})", .names = R"({"$row":{"a":3}})", .expected = "3"},
+             {.expr = R"({"refusal":"save"})",
+              .names = R"({"$refusals":{"save":{"code":"x.y"}}})",
+              .expected = R"({"code":"x.y"})"},
+             {.expr = R"({"refusal":"other"})",
+              .names = R"({"$refusals":{"save":{"code":"x.y"}}})",
+              .expected = "null"},
+             {.expr = R"({"fn":"refusalText","args":[{"ref":"r"}]})",
+              .names = R"({"r":{"code":"a.b"}})",
+              .expected = R"("This was refused." | the catalogue has no message for the refusal code `a.b`)"},
          }) {
         INFO(item.expr << " with " << item.names);
         CHECK(run(item.expr, item.names) == item.expected);
@@ -126,15 +131,27 @@ TEST_CASE("cov h expression: a date a text only nearly spells is not a date", "[
 TEST_CASE("cov h expression: a comprehension over what is not a list says so, and sorts by direction",
           "[covh][ui][expr]") {
     for (Case const& item : std::vector<Case>{
-             {R"({"runs":{"ref":"x"},"as":"i","by":{"ref":"i"}})", R"({"x":5})", "null | `runs` runs over a list"},
-             {R"({"runs":{"ref":"x"},"as":"i","by":{"ref":"i"}})", R"({"x":null})", "null"},
-             {R"({"sort":{"lit":[2,1,3]},"as":"x","by":{"ref":"x"},"order":"asc"})", "{}", "[1,2,3]"},
-             {R"({"sort":{"lit":[2,1,3]},"as":"x","by":{"ref":"x"},"order":"desc"})", "{}", "[3,2,1]"},
-             {R"({"sort":{"lit":[2,1,3]},"as":"x","by":{"ref":"x"},"order":"up"})", "{}",
-              R"(null | the `order` of `sort` is "asc" or "desc")"},
-             {R"({"sort":{"lit":[2,1,3]},"as":"x","by":{"ref":"x"},"order":5})", "{}",
-              R"(null | the `order` of `sort` is "asc" or "desc")"},
-             {R"({"sort":{"lit":[2,1,3]},"as":"x","by":{"ref":"x"},"order":null})", "{}", "[1,2,3]"},
+             {.expr = R"({"runs":{"ref":"x"},"as":"i","by":{"ref":"i"}})",
+              .names = R"({"x":5})",
+              .expected = "null | `runs` runs over a list"},
+             {.expr = R"({"runs":{"ref":"x"},"as":"i","by":{"ref":"i"}})",
+              .names = R"({"x":null})",
+              .expected = "null"},
+             {.expr = R"({"sort":{"lit":[2,1,3]},"as":"x","by":{"ref":"x"},"order":"asc"})",
+              .names = "{}",
+              .expected = "[1,2,3]"},
+             {.expr = R"({"sort":{"lit":[2,1,3]},"as":"x","by":{"ref":"x"},"order":"desc"})",
+              .names = "{}",
+              .expected = "[3,2,1]"},
+             {.expr = R"({"sort":{"lit":[2,1,3]},"as":"x","by":{"ref":"x"},"order":"up"})",
+              .names = "{}",
+              .expected = R"(null | the `order` of `sort` is "asc" or "desc")"},
+             {.expr = R"({"sort":{"lit":[2,1,3]},"as":"x","by":{"ref":"x"},"order":5})",
+              .names = "{}",
+              .expected = R"(null | the `order` of `sort` is "asc" or "desc")"},
+             {.expr = R"({"sort":{"lit":[2,1,3]},"as":"x","by":{"ref":"x"},"order":null})",
+              .names = "{}",
+              .expected = "[1,2,3]"},
          }) {
         INFO(item.expr << " with " << item.names);
         CHECK(run(item.expr, item.names) == item.expected);
@@ -152,19 +169,19 @@ TEST_CASE("cov h expression: the type of a checked expression follows its argume
         std::string_view expected;
     };
     for (Typing const& item : std::vector<Typing>{
-             {R"({"sort":{"ref":"ints"},"as":"x","by":{"ref":"x"}})", "list<int>"},
-             {R"({"sort":{"ref":"ints"},"as":"x","by":{"ref":"x"},"order":"asc"})", "list<int>"},
-             {R"({"sort":{"ref":"ints"},"as":"x","by":{"ref":"x"},"order":{"ref":"n"}})",
-              "refused: the `order` of `sort` is int; expected string"},
-             {R"({"fn":"slice","args":[{"ref":"anything"},0,1]})", "list<any>?"},
-             {R"({"fn":"slice","args":[{"ref":"ints"},0,1]})", "list<int>?"},
-             {R"({"fn":"dateAdd","args":["2026-01-01",1,"days"]})", "string?"},
-             {R"({"fn":"dateAdd","args":[{"ref":"text"},1,"days"]})", "string?"},
-             {R"({"fn":"dateAdd","args":[{"ref":"at"},1,"hours"]})", "timestamp?"},
-             {R"({"fn":"dateAdd","args":["2026-01-01",1,"fortnights"]})",
-              "refused: the unit is `days`, `weeks`, `months`, `years`, `hours` or `minutes`"},
-             {R"({"fn":"concatLists","args":[{"ref":"anything"},{"ref":"ints"}]})", "list<int>?"},
-             {R"({"fn":"concatLists","args":[{"ref":"ints"},{"lit":["a"]}]})", "list<int>?"},
+             {.expr = R"({"sort":{"ref":"ints"},"as":"x","by":{"ref":"x"}})", .expected = "list<int>"},
+             {.expr = R"({"sort":{"ref":"ints"},"as":"x","by":{"ref":"x"},"order":"asc"})", .expected = "list<int>"},
+             {.expr = R"({"sort":{"ref":"ints"},"as":"x","by":{"ref":"x"},"order":{"ref":"n"}})",
+              .expected = "refused: the `order` of `sort` is int; expected string"},
+             {.expr = R"({"fn":"slice","args":[{"ref":"anything"},0,1]})", .expected = "list<any>?"},
+             {.expr = R"({"fn":"slice","args":[{"ref":"ints"},0,1]})", .expected = "list<int>?"},
+             {.expr = R"({"fn":"dateAdd","args":["2026-01-01",1,"days"]})", .expected = "string?"},
+             {.expr = R"({"fn":"dateAdd","args":[{"ref":"text"},1,"days"]})", .expected = "string?"},
+             {.expr = R"({"fn":"dateAdd","args":[{"ref":"at"},1,"hours"]})", .expected = "timestamp?"},
+             {.expr = R"({"fn":"dateAdd","args":["2026-01-01",1,"fortnights"]})",
+              .expected = "refused: the unit is `days`, `weeks`, `months`, `years`, `hours` or `minutes`"},
+             {.expr = R"({"fn":"concatLists","args":[{"ref":"anything"},{"ref":"ints"}]})", .expected = "list<int>?"},
+             {.expr = R"({"fn":"concatLists","args":[{"ref":"ints"},{"lit":["a"]}]})", .expected = "list<int>?"},
          }) {
         INFO(item.expr);
         CHECK(checked(item.expr, names) == item.expected);

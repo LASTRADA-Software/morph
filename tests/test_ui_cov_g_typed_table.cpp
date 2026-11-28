@@ -33,8 +33,9 @@ struct Rig {
     morph::testing::StepExecutor owner;
     Runtime runtime{owner};
     RecordingBackend backend;
-    Signal<std::vector<Item>> items{runtime,
-                                    std::vector<Item>{{1, "one", false}, {2, "two", false}, {3, "head", true}}};
+    Signal<std::vector<Item>> items{runtime, std::vector<Item>{{.id = 1, .name = "one", .heading = false},
+                                                               {.id = 2, .name = "two", .heading = false},
+                                                               {.id = 3, .name = "head", .heading = true}}};
     Signal<std::string> label{runtime, std::string{"Everything"}};
     std::vector<std::string> events;
     std::unique_ptr<ui::Mounted> view;
@@ -114,7 +115,9 @@ TEST_CASE("covg typed table: a row's tone, label, spans and heading reach the ba
     CHECK(rig.backend.prop(first, "rowSpans") == "0:2");
     CHECK(rig.backend.prop(head, "heading") == "true");
     CHECK(rig.backend.prop(first, "heading") != "true");
-    rig.items.set(std::vector<Item>{{1, "uno", false}, {2, "two", false}, {3, "head", true}});
+    rig.items.set(std::vector<Item>{{.id = 1, .name = "uno", .heading = false},
+                                    {.id = 2, .name = "two", .heading = false},
+                                    {.id = 3, .name = "head", .heading = true}});
     rig.owner.runAll();
     CHECK(rig.backend.prop(rowWith(rig.backend, rig.table, "1"), "label") == "Item uno");
 }

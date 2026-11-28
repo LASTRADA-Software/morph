@@ -327,9 +327,9 @@ TEST_CASE("covi cell menu: a level that failed is named by its first letter capi
         char const* level;
         char const* state;
     };
-    for (Case const& item : std::vector<Case>{{"recipe", "Recipe data could not be loaded."},
-                                              {"Assay", "Assay data could not be loaded."},
-                                              {"~raw", "~raw data could not be loaded."}}) {
+    for (Case const& item : std::vector<Case>{{.level = "recipe", .state = "Recipe data could not be loaded."},
+                                              {.level = "Assay", .state = "Assay data could not be loaded."},
+                                              {.level = "~raw", .state = "~raw data could not be loaded."}}) {
         INFO(item.level);
         TableHarness h;
         auto const screen =

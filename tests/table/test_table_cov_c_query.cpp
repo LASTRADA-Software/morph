@@ -49,208 +49,324 @@ struct Refusal {
 std::vector<Refusal> refusals() {
     using Code = TableErrorCode;
     return {
-        {"offset below zero", [](TableQuery& q, QueryLimits&) { q.page.offset = -1; }, Code::LimitExceeded, "",
-         "page.offset out of range"},
-        {"offset past the cap",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxOffset = 5;
-             q.page.offset = 6;
-         },
-         Code::LimitExceeded, "", "page.offset out of range"},
-        {"negative limit", [](TableQuery& q, QueryLimits&) { q.page.limit = -1; }, Code::LimitExceeded, "",
-         "page.limit is negative"},
-        {"too many sort keys",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxSortKeys = 1;
-             q.sort = {SortKey{.column = "a"}, SortKey{.column = "b"}};
-         },
-         Code::LimitExceeded, "", "too many sort keys"},
-        {"unknown sort column", [](TableQuery& q, QueryLimits&) { q.sort = {SortKey{.column = "zz"}}; },
-         Code::UnknownColumn, "zz", ""},
-        {"too many filtered columns",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxFilterColumns = 1;
-             q.filters.columns["a"] = {};
-             q.filters.columns["b"] = {};
-         },
-         Code::LimitExceeded, "", "too many filtered columns"},
-        {"unknown filter column", [](TableQuery& q, QueryLimits&) { q.filters.columns["zz"] = {}; },
-         Code::UnknownColumn, "zz", ""},
-        {"too many entries in a column filter",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxEntries = 1;
-             q.filters.columns["a"].include = {text("x")};
-             q.filters.columns["a"].exclude = {text("y")};
-         },
-         Code::LimitExceeded, "a", "too many filter entries"},
-        {"a column include value too long",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxTextLength = 3;
-             q.filters.columns["a"].include = {text("long")};
-         },
-         Code::LimitExceeded, "a", "filter value too long"},
-        {"a column exclude value too long",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxTextLength = 3;
-             q.filters.columns["a"].exclude = {text("long")};
-         },
-         Code::LimitExceeded, "a", "filter value too long"},
-        {"a column include set too large",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxSetValues = 1;
-             q.filters.columns["a"].include = {oneOfValues({"x", "y"})};
-         },
-         Code::LimitExceeded, "a", "too many values in one set"},
-        {"a column exclude set too large",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxSetValues = 1;
-             q.filters.columns["a"].exclude = {oneOfValues({"x", "y"})};
-         },
-         Code::LimitExceeded, "a", "too many values in one set"},
-        {"too many filter groups",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxGroups = 1;
-             q.filters.groups = {GroupFilter{.columns = {"a"}}, GroupFilter{.columns = {"b"}}};
-         },
-         Code::LimitExceeded, "", "too many filter groups"},
-        {"a filter group with too many columns",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxGroupColumns = 1;
-             q.filters.groups = {GroupFilter{.columns = {"a", "b"}}};
-         },
-         Code::LimitExceeded, "", "filter group too large"},
-        {"a filter group with too many entries",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxEntries = 1;
-             q.filters.groups = {GroupFilter{.columns = {"a"}, .include = {text("x")}, .exclude = {text("y")}}};
-         },
-         Code::LimitExceeded, "", "filter group too large"},
-        {"a filter group naming a group nobody declared",
-         [](TableQuery& q, QueryLimits&) { q.filters.groups = {GroupFilter{.group = "nope"}}; }, Code::UnknownColumn,
-         "nope", "no column group nope"},
-        {"a filter group naming an unknown column",
-         [](TableQuery& q, QueryLimits&) { q.filters.groups = {GroupFilter{.columns = {"a", "zz"}}}; },
-         Code::UnknownColumn, "zz", ""},
-        {"a filter group's include value too long",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxTextLength = 3;
-             q.filters.groups = {GroupFilter{.columns = {"a"}, .include = {text("long")}}};
-         },
-         Code::LimitExceeded, "", "filter value too long"},
-        {"a filter group's exclude value too long",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxTextLength = 3;
-             q.filters.groups = {GroupFilter{.columns = {"a"}, .exclude = {text("long")}}};
-         },
-         Code::LimitExceeded, "", "filter value too long"},
-        {"a filter group's include set too large",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxSetValues = 1;
-             q.filters.groups = {GroupFilter{.columns = {"a"}, .include = {oneOfValues({"x", "y"})}}};
-         },
-         Code::LimitExceeded, "", "too many values in one set"},
-        {"a filter group's exclude set too large",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxSetValues = 1;
-             q.filters.groups = {GroupFilter{.columns = {"a"}, .exclude = {oneOfValues({"x", "y"})}}};
-         },
-         Code::LimitExceeded, "", "too many values in one set"},
-        {"too many set values in one query",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxQuerySetValues = 3;
-             q.filters.columns["a"].include = {oneOfValues({"x", "y"})};
-             q.filters.columns["c"].include = {oneOfValues({"x", "y"})};
-         },
-         Code::LimitExceeded, "", "too many set values in one query"},
-        {"set values too long in one query",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxQuerySetBytes = 3;
-             q.filters.columns["a"].include = {oneOfValues({"xx", "yy"})};
-         },
-         Code::LimitExceeded, "", "set values too long in one query"},
-        {"too many columns",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxColumns = 1;
-             q.columns = std::vector<std::string>{"a", "b"};
-         },
-         Code::LimitExceeded, "", "too many columns"},
-        {"an unknown asked column", [](TableQuery& q, QueryLimits&) { q.columns = std::vector<std::string>{"zz"}; },
-         Code::UnknownColumn, "zz", ""},
-        {"a keyed query with an offset",
-         [](TableQuery& q, QueryLimits&) {
-             q.keys = std::vector<RowId>{RowId{std::int64_t{1}}};
-             q.page.offset = 1;
-         },
-         Code::InvalidSpec, "", "a keyed query has no page"},
-        {"too many keys",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxKeys = 1;
-             q.keys = std::vector<RowId>{RowId{std::int64_t{1}}, RowId{std::int64_t{2}}};
-         },
-         Code::LimitExceeded, "", "too many keys"},
-        {"a key too long",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxTextLength = 3;
-             q.keys = std::vector<RowId>{RowId{std::int64_t{1}}, RowId{std::string{"long"}}};
-         },
-         Code::LimitExceeded, "", "key too long"},
-        {"too many retained rows",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxRetained = 1;
-             q.retain = {RowId{std::int64_t{1}}, RowId{std::int64_t{2}}};
-         },
-         Code::LimitExceeded, "", "too many retained rows"},
-        {"a retained key too long",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxTextLength = 3;
-             q.retain = {RowId{std::int64_t{1}}, RowId{std::string{"long"}}};
-         },
-         Code::LimitExceeded, "", "retained key too long"},
-        {"keys and distinct together",
-         [](TableQuery& q, QueryLimits&) {
-             q.keys = std::vector<RowId>{};
-             q.distinct = DistinctRequest{.column = "a"};
-         },
-         Code::InvalidSpec, "", "a query is keyed or distinct"},
-        {"distinct naming neither column nor group",
-         [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{}; }, Code::InvalidSpec, "",
-         "a distinct request names a column or a group"},
-        {"distinct naming both",
-         [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.column = "a", .group = "ab"}; },
-         Code::InvalidSpec, "", "a distinct request names a column or a group"},
-        {"distinct naming a group nobody declared",
-         [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.group = "nope"}; }, Code::UnknownColumn,
-         "nope", "no column group nope"},
-        {"distinct naming a group with no columns",
-         [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.group = "none"}; }, Code::InvalidSpec, "",
-         "column group none has no columns"},
-        {"distinct on an unknown column",
-         [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.column = "zz"}; }, Code::UnknownColumn, "zz",
-         ""},
-        {"distinct search too long",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxTextLength = 3;
-             q.distinct = DistinctRequest{.column = "a", .search = "long"};
-         },
-         Code::LimitExceeded, "", "distinct search too long"},
-        {"distinct offset below zero",
-         [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.column = "a", .offset = -1}; },
-         Code::LimitExceeded, "", "distinct offset out of range"},
-        {"distinct offset past the cap",
-         [](TableQuery& q, QueryLimits& l) {
-             l.maxOffset = 5;
-             q.distinct = DistinctRequest{.column = "a", .offset = 6};
-         },
-         Code::LimitExceeded, "", "distinct offset out of range"},
-        {"distinct limit below zero",
-         [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.column = "a", .limit = -1}; },
-         Code::LimitExceeded, "", "distinct limit is negative"},
-        {"distinct on a custom column",
-         [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.column = "cu"}; }, Code::UnsupportedOperator,
-         "cu", "column cu has no values to list"},
-        {"a date bucket on text",
-         [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.column = "a", .bucket = DateBucket::Month}; },
-         Code::InvalidSpec, "", "a date bucket on column a, which holds no dates"},
+        {.name = "offset below zero",
+         .shape = [](TableQuery& q, QueryLimits&) { q.page.offset = -1; },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "page.offset out of range"},
+        {.name = "offset past the cap",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxOffset = 5;
+                 q.page.offset = 6;
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "page.offset out of range"},
+        {.name = "negative limit",
+         .shape = [](TableQuery& q, QueryLimits&) { q.page.limit = -1; },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "page.limit is negative"},
+        {.name = "too many sort keys",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxSortKeys = 1;
+                 q.sort = {SortKey{.column = "a"}, SortKey{.column = "b"}};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "too many sort keys"},
+        {.name = "unknown sort column",
+         .shape = [](TableQuery& q, QueryLimits&) { q.sort = {SortKey{.column = "zz"}}; },
+         .code = Code::UnknownColumn,
+         .column = "zz",
+         .message = ""},
+        {.name = "too many filtered columns",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxFilterColumns = 1;
+                 q.filters.columns["a"] = {};
+                 q.filters.columns["b"] = {};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "too many filtered columns"},
+        {.name = "unknown filter column",
+         .shape = [](TableQuery& q, QueryLimits&) { q.filters.columns["zz"] = {}; },
+         .code = Code::UnknownColumn,
+         .column = "zz",
+         .message = ""},
+        {.name = "too many entries in a column filter",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxEntries = 1;
+                 q.filters.columns["a"].include = {text("x")};
+                 q.filters.columns["a"].exclude = {text("y")};
+             },
+         .code = Code::LimitExceeded,
+         .column = "a",
+         .message = "too many filter entries"},
+        {.name = "a column include value too long",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxTextLength = 3;
+                 q.filters.columns["a"].include = {text("long")};
+             },
+         .code = Code::LimitExceeded,
+         .column = "a",
+         .message = "filter value too long"},
+        {.name = "a column exclude value too long",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxTextLength = 3;
+                 q.filters.columns["a"].exclude = {text("long")};
+             },
+         .code = Code::LimitExceeded,
+         .column = "a",
+         .message = "filter value too long"},
+        {.name = "a column include set too large",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxSetValues = 1;
+                 q.filters.columns["a"].include = {oneOfValues({"x", "y"})};
+             },
+         .code = Code::LimitExceeded,
+         .column = "a",
+         .message = "too many values in one set"},
+        {.name = "a column exclude set too large",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxSetValues = 1;
+                 q.filters.columns["a"].exclude = {oneOfValues({"x", "y"})};
+             },
+         .code = Code::LimitExceeded,
+         .column = "a",
+         .message = "too many values in one set"},
+        {.name = "too many filter groups",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxGroups = 1;
+                 q.filters.groups = {GroupFilter{.columns = {"a"}}, GroupFilter{.columns = {"b"}}};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "too many filter groups"},
+        {.name = "a filter group with too many columns",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxGroupColumns = 1;
+                 q.filters.groups = {GroupFilter{.columns = {"a", "b"}}};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "filter group too large"},
+        {.name = "a filter group with too many entries",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxEntries = 1;
+                 q.filters.groups = {GroupFilter{.columns = {"a"}, .include = {text("x")}, .exclude = {text("y")}}};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "filter group too large"},
+        {.name = "a filter group naming a group nobody declared",
+         .shape = [](TableQuery& q, QueryLimits&) { q.filters.groups = {GroupFilter{.group = "nope"}}; },
+         .code = Code::UnknownColumn,
+         .column = "nope",
+         .message = "no column group nope"},
+        {.name = "a filter group naming an unknown column",
+         .shape = [](TableQuery& q, QueryLimits&) { q.filters.groups = {GroupFilter{.columns = {"a", "zz"}}}; },
+         .code = Code::UnknownColumn,
+         .column = "zz",
+         .message = ""},
+        {.name = "a filter group's include value too long",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxTextLength = 3;
+                 q.filters.groups = {GroupFilter{.columns = {"a"}, .include = {text("long")}}};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "filter value too long"},
+        {.name = "a filter group's exclude value too long",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxTextLength = 3;
+                 q.filters.groups = {GroupFilter{.columns = {"a"}, .exclude = {text("long")}}};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "filter value too long"},
+        {.name = "a filter group's include set too large",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxSetValues = 1;
+                 q.filters.groups = {GroupFilter{.columns = {"a"}, .include = {oneOfValues({"x", "y"})}}};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "too many values in one set"},
+        {.name = "a filter group's exclude set too large",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxSetValues = 1;
+                 q.filters.groups = {GroupFilter{.columns = {"a"}, .exclude = {oneOfValues({"x", "y"})}}};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "too many values in one set"},
+        {.name = "too many set values in one query",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxQuerySetValues = 3;
+                 q.filters.columns["a"].include = {oneOfValues({"x", "y"})};
+                 q.filters.columns["c"].include = {oneOfValues({"x", "y"})};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "too many set values in one query"},
+        {.name = "set values too long in one query",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxQuerySetBytes = 3;
+                 q.filters.columns["a"].include = {oneOfValues({"xx", "yy"})};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "set values too long in one query"},
+        {.name = "too many columns",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxColumns = 1;
+                 q.columns = std::vector<std::string>{"a", "b"};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "too many columns"},
+        {.name = "an unknown asked column",
+         .shape = [](TableQuery& q, QueryLimits&) { q.columns = std::vector<std::string>{"zz"}; },
+         .code = Code::UnknownColumn,
+         .column = "zz",
+         .message = ""},
+        {.name = "a keyed query with an offset",
+         .shape =
+             [](TableQuery& q, QueryLimits&) {
+                 q.keys = std::vector<RowId>{RowId{std::int64_t{1}}};
+                 q.page.offset = 1;
+             },
+         .code = Code::InvalidSpec,
+         .column = "",
+         .message = "a keyed query has no page"},
+        {.name = "too many keys",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxKeys = 1;
+                 q.keys = std::vector<RowId>{RowId{std::int64_t{1}}, RowId{std::int64_t{2}}};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "too many keys"},
+        {.name = "a key too long",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxTextLength = 3;
+                 q.keys = std::vector<RowId>{RowId{std::int64_t{1}}, RowId{std::string{"long"}}};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "key too long"},
+        {.name = "too many retained rows",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxRetained = 1;
+                 q.retain = {RowId{std::int64_t{1}}, RowId{std::int64_t{2}}};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "too many retained rows"},
+        {.name = "a retained key too long",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxTextLength = 3;
+                 q.retain = {RowId{std::int64_t{1}}, RowId{std::string{"long"}}};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "retained key too long"},
+        {.name = "keys and distinct together",
+         .shape =
+             [](TableQuery& q, QueryLimits&) {
+                 q.keys = std::vector<RowId>{};
+                 q.distinct = DistinctRequest{.column = "a"};
+             },
+         .code = Code::InvalidSpec,
+         .column = "",
+         .message = "a query is keyed or distinct"},
+        {.name = "distinct naming neither column nor group",
+         .shape = [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{}; },
+         .code = Code::InvalidSpec,
+         .column = "",
+         .message = "a distinct request names a column or a group"},
+        {.name = "distinct naming both",
+         .shape = [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.column = "a", .group = "ab"}; },
+         .code = Code::InvalidSpec,
+         .column = "",
+         .message = "a distinct request names a column or a group"},
+        {.name = "distinct naming a group nobody declared",
+         .shape = [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.group = "nope"}; },
+         .code = Code::UnknownColumn,
+         .column = "nope",
+         .message = "no column group nope"},
+        {.name = "distinct naming a group with no columns",
+         .shape = [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.group = "none"}; },
+         .code = Code::InvalidSpec,
+         .column = "",
+         .message = "column group none has no columns"},
+        {.name = "distinct on an unknown column",
+         .shape = [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.column = "zz"}; },
+         .code = Code::UnknownColumn,
+         .column = "zz",
+         .message = ""},
+        {.name = "distinct search too long",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxTextLength = 3;
+                 q.distinct = DistinctRequest{.column = "a", .search = "long"};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "distinct search too long"},
+        {.name = "distinct offset below zero",
+         .shape = [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.column = "a", .offset = -1}; },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "distinct offset out of range"},
+        {.name = "distinct offset past the cap",
+         .shape =
+             [](TableQuery& q, QueryLimits& l) {
+                 l.maxOffset = 5;
+                 q.distinct = DistinctRequest{.column = "a", .offset = 6};
+             },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "distinct offset out of range"},
+        {.name = "distinct limit below zero",
+         .shape = [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.column = "a", .limit = -1}; },
+         .code = Code::LimitExceeded,
+         .column = "",
+         .message = "distinct limit is negative"},
+        {.name = "distinct on a custom column",
+         .shape = [](TableQuery& q, QueryLimits&) { q.distinct = DistinctRequest{.column = "cu"}; },
+         .code = Code::UnsupportedOperator,
+         .column = "cu",
+         .message = "column cu has no values to list"},
+        {.name = "a date bucket on text",
+         .shape = [](TableQuery& q,
+                     QueryLimits&) { q.distinct = DistinctRequest{.column = "a", .bucket = DateBucket::Month}; },
+         .code = Code::InvalidSpec,
+         .column = "",
+         .message = "a date bucket on column a, which holds no dates"},
     };
 }
 

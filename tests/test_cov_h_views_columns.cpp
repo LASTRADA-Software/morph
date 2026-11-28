@@ -35,22 +35,24 @@ TEST_CASE("cov h views: a column's kind follows the property's measure, type, wi
         char const* kind;
     };
     for (Case const& item : std::vector<Case>{
-             {R"({"x-measure":true})", "measure"},
-             {R"({"x-measure":false,"type":"string"})", "text"},
-             {R"({"x-measure":"yes","type":"string"})", "text"},
-             {R"({"x-comparator":"natural","x-measure":true})", "custom"},
-             {R"({"type":"integer"})", "integer"},
-             {R"({"type":"integer","x-widget":"epochDays"})", "date"},
-             {R"({"type":"integer","x-widget":"epochSeconds"})", "dateTime"},
-             {R"({"type":"number"})", "number"},
-             {R"({"type":"boolean"})", "bool"},
-             {R"({"type":"string","format":"date"})", "date"},
-             {R"({"type":"string","format":"date-time"})", "dateTime"},
-             {R"({"type":"string"})", "text"},
-             {R"({})", "text"},
-             {R"({"type":"object","properties":{"num":{"type":"integer"},"den":{"type":"integer"}}})", "decimal"},
-             {R"({"type":"object","ExtUnits":{"unitAscii":"kg"},"properties":{"num":{},"den":{}}})", "quantity"},
-             {R"({"type":"object","properties":{"num":{"type":"integer"}}})", "text"},
+             {.property = R"({"x-measure":true})", .kind = "measure"},
+             {.property = R"({"x-measure":false,"type":"string"})", .kind = "text"},
+             {.property = R"({"x-measure":"yes","type":"string"})", .kind = "text"},
+             {.property = R"({"x-comparator":"natural","x-measure":true})", .kind = "custom"},
+             {.property = R"({"type":"integer"})", .kind = "integer"},
+             {.property = R"({"type":"integer","x-widget":"epochDays"})", .kind = "date"},
+             {.property = R"({"type":"integer","x-widget":"epochSeconds"})", .kind = "dateTime"},
+             {.property = R"({"type":"number"})", .kind = "number"},
+             {.property = R"({"type":"boolean"})", .kind = "bool"},
+             {.property = R"({"type":"string","format":"date"})", .kind = "date"},
+             {.property = R"({"type":"string","format":"date-time"})", .kind = "dateTime"},
+             {.property = R"({"type":"string"})", .kind = "text"},
+             {.property = R"({})", .kind = "text"},
+             {.property = R"({"type":"object","properties":{"num":{"type":"integer"},"den":{"type":"integer"}}})",
+              .kind = "decimal"},
+             {.property = R"({"type":"object","ExtUnits":{"unitAscii":"kg"},"properties":{"num":{},"den":{}}})",
+              .kind = "quantity"},
+             {.property = R"({"type":"object","properties":{"num":{"type":"integer"}}})", .kind = "text"},
          }) {
         std::string const schema = std::string{R"({"properties":{"p":)"} + item.property + "}}";
         INFO(schema);
@@ -67,16 +69,19 @@ TEST_CASE(
     };
     for (
         Case const& item : std::vector<Case>{
-            {R"({"properties":{"p":{"anyOf":[{"type":"null"},{"type":"integer"}]}}})", "integer"},
-            {R"({"properties":{"p":{"anyOf":[{"type":"integer"},{"type":"null"}]}}})", "integer"},
-            {R"({"properties":{"p":{"anyOf":[{"type":"null"}]}}})", "text"},
-            {R"({"properties":{"p":{"anyOf":[{"type":7},{"type":"boolean"}]}}})", "text"},
-            {R"({"properties":{"p":{"anyOf":[{"$ref":"#/$defs/n"},{"type":"null"}]}},"$defs":{"n":{"type":"number"}}})",
-             "number"},
-            {R"({"properties":{"p":{"$ref":"#/$defs/n"}},"$defs":{"n":{"type":"boolean"}}})", "bool"},
-            {R"({"properties":{"p":{"$ref":"#/$defs/missing"}},"$defs":{"n":{"type":"boolean"}}})", "text"},
-            {R"({"properties":{"p":{"$ref":"#/$defs/n"}}})", "text"},
-            {R"({"properties":{"p":{"$ref":5,"type":"integer"}}})", "integer"},
+            {.schema = R"({"properties":{"p":{"anyOf":[{"type":"null"},{"type":"integer"}]}}})", .kind = "integer"},
+            {.schema = R"({"properties":{"p":{"anyOf":[{"type":"integer"},{"type":"null"}]}}})", .kind = "integer"},
+            {.schema = R"({"properties":{"p":{"anyOf":[{"type":"null"}]}}})", .kind = "text"},
+            {.schema = R"({"properties":{"p":{"anyOf":[{"type":7},{"type":"boolean"}]}}})", .kind = "text"},
+            {.schema =
+                 R"({"properties":{"p":{"anyOf":[{"$ref":"#/$defs/n"},{"type":"null"}]}},"$defs":{"n":{"type":"number"}}})",
+             .kind = "number"},
+            {.schema = R"({"properties":{"p":{"$ref":"#/$defs/n"}},"$defs":{"n":{"type":"boolean"}}})",
+             .kind = "bool"},
+            {.schema = R"({"properties":{"p":{"$ref":"#/$defs/missing"}},"$defs":{"n":{"type":"boolean"}}})",
+             .kind = "text"},
+            {.schema = R"({"properties":{"p":{"$ref":"#/$defs/n"}}})", .kind = "text"},
+            {.schema = R"({"properties":{"p":{"$ref":5,"type":"integer"}}})", .kind = "integer"},
         }) {
         INFO(item.schema);
         CHECK(entryOf(item.schema).contains(std::string{R"("kind":")"} + item.kind + "\""));

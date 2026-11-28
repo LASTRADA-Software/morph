@@ -200,7 +200,7 @@ TEST_CASE("cov table states: a change to an unknown key starts its load, one to 
     auto const kept = keyOf("k");
     f.states.keep(kept, table::StoredTableState{.json = table::writeState(layoutOf({"z"})), .revision = "r9"});
     f.states.changed(kept, sortedBy("q"), StateParts::Sort);
-    CHECK(f.store->loads.size() == 0);
+    CHECK(f.store->loads.empty());
     REQUIRE(f.store->saved.size() == 2);
     auto const saved = read(f.store->saved.back());
     CHECK(saved.layout->order == std::vector<std::string>{"z"});
