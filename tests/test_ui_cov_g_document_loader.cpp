@@ -126,6 +126,81 @@ TEST_CASE("covg document loader: a literal that is the wrong shape is refused wh
          "/view/a11y: `a11y` is refused on a locale scope: it is not a widget; wrap it in a node that has one"},
         {"a dialog sized by content and a fixed height",
          document(R"({"kind": "dialog", "sizing": {"lit": {"width": "content", "height": {"fixed": 3}}}})"), "loads"},
+        {"an align of a template's row",
+         document(
+             R"({"kind": "forEach", "rows": {"lit": [1]}, "children": [{"kind": "text", "text": "x", "alignSelf": "start"}]})"),
+         "loads"},
+        {"an align of a table's empty line",
+         rowsTable(R"("empty": [{"kind": "text", "text": "x", "alignSelf": "start"}])"),
+         "/view/empty/0/alignSelf: `alignSelf` places a node in its row, column or grid"},
+        {"a sort change on a model table with no sortable column",
+         document(
+             R"({"kind": "table", "model": "sample", "action": "Lims_ListResults", "onSortChange": [{"notify": "x"}]})",
+             R"("models": {"sample": {"type": "Lims_SampleModel"}},)"),
+         "loads"},
+        {"an edit mode on a model table named by its action",
+         document(R"({"kind": "table", "model": "sample", "action": "Lims_ListResults", "editMode": "row"})",
+                  R"("models": {"sample": {"type": "Lims_SampleModel"}},)"),
+         "/view/editMode: `editMode` chooses how a model's table commits its cells; this table is not a model's "
+         "table"},
+        {"a literal filter on a table over rows", rowsTable(R"("filters": {"lit": {"columns": {}}})"),
+         "/view/filters: `filters` belongs to a model-backed table; filter `rows` with `filter`"},
+        {"a column of a percent width as a literal",
+         rowsTable("", R"(, {"id": "w", "label": "W", "width": {"lit": {"percent": 50}}})"),
+         "/view/columns/2/width: `percent` sizes a width along a row or a horizontal splitter; nothing here takes a "
+         "share"},
+        {"a percent width in a column",
+         document(
+             R"({"kind": "column", "children": [{"kind": "text", "text": "x", "sizing": {"lit": {"percent": 50}}}]})"),
+         "/view/children/0/sizing: `percent` sizes a width along a row or a horizontal splitter; nothing here takes a "
+         "share"},
+        {"a percent width as the width of a record",
+         document(
+             R"({"kind": "column", "children": [{"kind": "text", "text": "x", "sizing": {"lit": {"width": {"percent": 50}}}}]})"),
+         "/view/children/0/sizing: `percent` sizes a width along a row or a horizontal splitter; nothing here takes a "
+         "share"},
+        {"a percent width in a row",
+         document(
+             R"({"kind": "row", "children": [{"kind": "text", "text": "x", "sizing": {"lit": {"percent": 50}}}]})"),
+         "loads"},
+        {"a percent width in a wrapping row",
+         document(
+             R"({"kind": "row", "wrap": true, "children": [{"kind": "text", "text": "x", "sizing": {"lit": {"percent": 50}}}]})"),
+         "/view/children/0/sizing: `percent` sizes a width along a row or a horizontal splitter; nothing here takes a "
+         "share"},
+        {"a percent width in a vertical splitter",
+         document(
+             R"({"kind": "splitter", "orientation": "vertical", "children": [{"kind": "text", "text": "x", "sizing": {"lit": {"percent": 50}}}, {"kind": "text", "text": "y"}]})"),
+         "/view/children/0/sizing: `percent` sizes a width along a row or a horizontal splitter; nothing here takes a "
+         "share"},
+        {"a percent width in a horizontal splitter",
+         document(
+             R"({"kind": "splitter", "orientation": "horizontal", "children": [{"kind": "text", "text": "x", "sizing": {"lit": {"percent": 50}}}, {"kind": "text", "text": "y"}]})"),
+         "loads"},
+        {"a margin past the count a length holds",
+         document(R"({"kind": "page", "width": 210000, "height": 297000, "margins": {"lit": {"top": 3000000000}}})"),
+         "/view/margins: `margins` is a literal count of micrometres, or a record of `top`, `right`, `bottom` and "
+         "`left` counts"},
+        {"a margin below zero",
+         document(R"({"kind": "page", "width": 210000, "height": 297000, "margins": {"lit": {"top": -1}}})"),
+         "/view/margins: `margins` is a literal count of micrometres, or a record of `top`, `right`, `bottom` and "
+         "`left` counts"},
+        {"a margin of no side",
+         document(R"({"kind": "page", "width": 210000, "height": 297000, "margins": {"lit": {"middle": 1}}})"),
+         "/view/margins: `margins` is a literal count of micrometres, or a record of `top`, `right`, `bottom` and "
+         "`left` counts"},
+        {"a persist that names nothing", rowsTable(R"("persist": "")"),
+         "/view/persist: `persist` is a literal: true, false or a name"},
+        {"a literal filter object on a table over rows", rowsTable(R"("filters": {"columns": {}})"),
+         "/view/filters: `filters` belongs to a model-backed table; filter `rows` with `filter`"},
+        {"a literal filter of groups alone on a model table",
+         document(R"({"kind": "table", "model": "sample", "action": "Lims_ListResults", "filters": {"groups": []}})",
+                  R"("models": {"sample": {"type": "Lims_SampleModel"}},)"),
+         "loads"},
+        {"an empty filter object on a model table",
+         document(R"({"kind": "table", "model": "sample", "action": "Lims_ListResults", "filters": {}})",
+                  R"("models": {"sample": {"type": "Lims_SampleModel"}},)"),
+         "/view/filters: an empty object is not an expression; a constant record is {\"lit\": {}}"},
     }));
     CAPTURE(c.name);
     CHECK(refusal(c.text) == c.expected);
