@@ -255,6 +255,20 @@ TEST_CASE("covj filter menu: a debounce of nothing applies a condition at once",
         m.settle();
         REQUIRE(m.applied.size() == 1);
     }
+    SECTION("a condition cleared before the debounce ends applies nothing") {
+        m.menu.setOperand(0, "ab");
+        m.menu.setOperand(0, "");
+        m.scheduler.advance(std::chrono::milliseconds{250});
+        m.settle();
+        CHECK(m.applied.empty());
+    }
+    SECTION("a menu closed before the debounce ends applies nothing") {
+        m.menu.setOperand(0, "ab");
+        m.menu.close();
+        m.scheduler.advance(std::chrono::milliseconds{250});
+        m.settle();
+        CHECK(m.applied.empty());
+    }
     SECTION("a debounce that waits") {
         m.menu.setOperand(0, "ab");
         m.settle();
