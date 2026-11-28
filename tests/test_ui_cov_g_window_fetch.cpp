@@ -7,6 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <expected>
+#include <limits>
 #include <memory>
 #include <morph/table/data_source.hpp>
 #include <morph/ui/table_rows.hpp>
@@ -110,4 +111,30 @@ TEST_CASE("covg window fetch: rows that go while a fetch is asked answer it as g
     REQUIRE(got.has_value());
     REQUIRE_FALSE(got->has_value());
     CHECK(got->error().message == "the rows are gone");
+}
+
+TEST_CASE("covg window fetch: a range off the view is refused and an empty one is empty", "[covg][ui][table]") {
+    RowsFixture h;
+    auto const rows = h.windowRows("samples");
+    using Keys = std::expected<std::vector<table::RowId>, table::TableError>;
+    std::vector<std::optional<Keys>> keys(3);
+    rows->keysOf(-1, 2).then([&keys](Keys const& result) { keys[0] = result; });
+    rows->keysOf(0, -2).then([&keys](Keys const& result) { keys[1] = result; });
+    rows->keysOf(4, std::numeric_limits<std::int64_t>::max()).then([&keys](Keys const& result) { keys[2] = result; });
+    std::vector<std::optional<Rows>> fetched(2);
+    rows->rowsOf(-1, 2, std::vector<std::string>{"id"}).then([&fetched](Rows const& result) { fetched[0] = result; });
+    rows->rowsOf(0, 0, std::vector<std::string>{"id"}).then([&fetched](Rows const& result) { fetched[1] = result; });
+    h.settle();
+    for (auto const& got : keys) {
+        REQUIRE(got.has_value());
+        REQUIRE_FALSE(got->has_value());
+        CHECK(got->error().code == table::TableErrorCode::InvalidSpec);
+    }
+    CHECK(keys[0]->error().message == "2 rows from view row -1 are not a range");
+    for (auto const& got : fetched) {
+        REQUIRE(got.has_value());
+        REQUIRE(got->has_value());
+        CHECK((*got)->empty());
+    }
+    CHECK(h.dispatcher.count("Table.samples") == 0);  // nothing was asked of the server
 }
