@@ -35,6 +35,7 @@ struct Mounted {
     TableHarness h;
     std::unique_ptr<morph::ui::Screen> screen;
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a test rig; the names say which text is which.
     Mounted(std::string_view view, std::string_view extra) {
         addAction(h, "Lims_ViewSamples", std::string{kQuery}, ActionInfo{.modelType = "Lims_SampleModel"});
         addView(h, "Lims_ViewSamples", std::string{view});

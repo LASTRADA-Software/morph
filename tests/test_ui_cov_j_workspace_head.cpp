@@ -223,7 +223,12 @@ TEST_CASE("covj workspace: the active tab's head reads as its parts say, and as 
     Harness h;
     Host host{h};
     ScreenHostRegistry hosts;
-    auto const shell = expected.plain ? workspaceOf<Plain>(h, host, hosts) : workspaceOf<Bare>(h, host, hosts);
+    std::unique_ptr<Workspace> shell;
+    if (expected.plain) {
+        shell = workspaceOf<Plain>(h, host, hosts);
+    } else {
+        shell = workspaceOf<Bare>(h, host, hosts);
+    }
     REQUIRE(shell->open("native", {}).has_value());
     h.settle();
     CHECK(shell->activeLeadPlacement() == expected.placement);

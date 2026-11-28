@@ -339,7 +339,7 @@ TEST_CASE("cov filter menu: states differ by each field and a target finds its g
     CHECK(differs([](ui::FilterMenuState& s) { s.ticks.ticked = false; }));
     CHECK(differs([](ui::FilterMenuState& s) { s.ticks.blanks = true; }));
     CHECK(differs([](ui::FilterMenuState& s) { s.ticks.ops.emplace_back(); }));
-    CHECK(differs([](ui::FilterMenuState& s) { s.dates.push_back("x"); }));
+    CHECK(differs([](ui::FilterMenuState& s) { s.dates.emplace_back("x"); }));
     CHECK(differs([](ui::FilterMenuState& s) { s.conditions.at(1).operand = "x"; }));
     CHECK(differs([](ui::FilterMenuState& s) { s.matchCase = true; }));
     CHECK(differs([](ui::FilterMenuState& s) { s.combine = table::Combine::All; }));

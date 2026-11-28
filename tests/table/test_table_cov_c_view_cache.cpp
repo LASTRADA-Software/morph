@@ -11,6 +11,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -80,7 +81,7 @@ TEST_CASE("a failed computation is returned and not cached, and a throwing one r
     CHECK(computed == 2);
 
     auto const throwing = []() -> std::expected<ViewComputation, TableError> { throw std::runtime_error{"boom"}; };
-    CHECK_THROWS_AS(cache.find(keyOf("q"), snapshot, {}, throwing), std::runtime_error);
+    CHECK_THROWS_AS(std::ignore = cache.find(keyOf("q"), snapshot, {}, throwing), std::runtime_error);
     CHECK(
         cache.find(keyOf("q"), snapshot, {}, [] { return std::expected<ViewComputation, TableError>{viewOf({0})}; }));
 }

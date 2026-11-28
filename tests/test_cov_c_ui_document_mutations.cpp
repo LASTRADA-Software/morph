@@ -97,7 +97,7 @@ Json* nodeAt(Json& root, Path const& path, std::size_t steps) {
     Json* node = &root;
     for (std::size_t at = 0; at < steps; ++at) {
         if (auto* const object = std::get_if<Json::object_t>(&node->data)) {
-            Json::object_t::iterator const found = object->find(path.at(at));
+            auto* const found = object->find(path.at(at));
             if (found == object->end()) {
                 return nullptr;
             }
