@@ -20,7 +20,8 @@ namespace ui = morph::ui;
 std::vector<ui::LayoutColumn> columnsOf(std::vector<std::string> ids) {
     std::vector<ui::LayoutColumn> out;
     for (auto& id : ids) {
-        out.push_back(ui::LayoutColumn{.id = id, .label = "Label " + id, .locked = false, .kind = table::ColumnKind::Text});
+        out.push_back(
+            ui::LayoutColumn{.id = id, .label = "Label " + id, .locked = false, .kind = table::ColumnKind::Text});
     }
     return out;
 }
@@ -57,19 +58,34 @@ TEST_CASE("cov h dialogs: the chooser offers what the layout and the capabilitie
         std::vector<std::string> expected;
     };
     for (Case const& item : std::vector<Case>{
-             {"every capability", ui::Configure::All, 0, {}, false,
+             {"every capability",
+              ui::Configure::All,
+              0,
+              {},
+              false,
               {"shown toggles down", "shown toggles up down", "shown toggles up"}},
              {"reordering alone", ui::Configure::Reorder, 0, {}, false, {"shown down", "shown up down", "shown up"}},
              {"hiding alone", ui::Configure::Hide, 0, {}, false, {"shown toggles", "shown toggles", "shown toggles"}},
              {"pinning alone", ui::Configure::Pin, 0, {}, false, {"shown", "shown", "shown"}},
-             {"a pin after the first column", ui::Configure::All, 1, {}, false,
+             {"a pin after the first column",
+              ui::Configure::All,
+              1,
+              {},
+              false,
               {"shown toggles", "shown toggles down", "shown toggles up"}},
-             {"a pin between the last two", ui::Configure::All, 2, {}, false,
+             {"a pin between the last two",
+              ui::Configure::All,
+              2,
+              {},
+              false,
               {"shown toggles down", "shown toggles up", "shown toggles"}},
-             {"a hidden column", ui::Configure::All, 0, {"b"}, false,
+             {"a hidden column",
+              ui::Configure::All,
+              0,
+              {"b"},
+              false,
               {"shown toggles down", "toggles", "shown toggles up"}},
-             {"a locked column", ui::Configure::All, 0, {}, true,
-              {"shown toggles down", "shown", "shown toggles up"}},
+             {"a locked column", ui::Configure::All, 0, {}, true, {"shown toggles down", "shown", "shown toggles up"}},
          }) {
         INFO(item.what);
         table::ColumnLayout layout{{"a", "b", "c"}, item.hidden};
@@ -145,10 +161,9 @@ TEST_CASE("cov h dialogs: the sort dialog's edits change a chain or leave it", "
     CHECK(bound.refusal.has_value());
 
     // An index past the chain changes nothing, whatever the edit.
-    for (ui::SortEdit const& past : std::vector<ui::SortEdit>{ui::SetSortColumn{.index = 2, .column = "c"},
-                                                              ui::SetSortDirection{.index = 2, .direction = kDown},
-                                                              ui::MoveSortKey{.index = 2, .by = -1},
-                                                              ui::RemoveSortKey{.index = 2}}) {
+    for (ui::SortEdit const& past : std::vector<ui::SortEdit>{
+             ui::SetSortColumn{.index = 2, .column = "c"}, ui::SetSortDirection{.index = 2, .direction = kDown},
+             ui::MoveSortKey{.index = 2, .by = -1}, ui::RemoveSortKey{.index = 2}}) {
         CHECK(edit(twoKeys, past).chain == twoKeys);
     }
 
@@ -173,13 +188,13 @@ TEST_CASE("cov h dialogs: the sort dialog's edits change a chain or leave it", "
           std::vector<std::string>{"a", "c"});
     CHECK(columnsIn(edit(twoKeys, ui::SetSortColumn{.index = 1, .column = "b"}).chain) ==
           std::vector<std::string>{"a", "b"});
-    CHECK(edit(twoKeys, ui::SetSortColumn{.index = 1, .column = "a"}).chain == twoKeys);  // another key holds it
+    CHECK(edit(twoKeys, ui::SetSortColumn{.index = 1, .column = "a"}).chain == twoKeys);   // another key holds it
     CHECK(edit(twoKeys, ui::SetSortColumn{.index = 1, .column = "zz"}).chain == twoKeys);  // does not sort
 }
 
 TEST_CASE("cov h dialogs: each key of the chain offers the columns no other key holds", "[covh][ui][table]") {
-    std::vector<ui::SortColumnOption> const sortable{{.id = "a", .label = "A"}, {.id = "b", .label = "B"},
-                                                     {.id = "c", .label = "C"}};
+    std::vector<ui::SortColumnOption> const sortable{
+        {.id = "a", .label = "A"}, {.id = "b", .label = "B"}, {.id = "c", .label = "C"}};
     auto const keys = ui::sortDialogKeys(chainOf({{"a", kUp}, {"c", kDown}}), sortable);
     REQUIRE(keys.size() == 2);
     CHECK_FALSE(keys.at(0).up);

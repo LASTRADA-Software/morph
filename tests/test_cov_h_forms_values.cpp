@@ -43,7 +43,8 @@ std::string shown(Encoding const& encoding) {
 
 }  // namespace
 
-TEST_CASE("cov h values: a decimal draft is held to a step, a scale and units a host built", "[covh][forms-engine][values]") {
+TEST_CASE("cov h values: a decimal draft is held to a step, a scale and units a host built",
+          "[covh][forms-engine][values]") {
     ValueContext const context{};
     struct Case {
         char const* what;
@@ -91,7 +92,8 @@ TEST_CASE("cov h values: a decimal draft is held to a step, a scale and units a 
     }
 }
 
-TEST_CASE("cov h values: a bound or step that is no number refuses what it cannot compare", "[covh][forms-engine][values]") {
+TEST_CASE("cov h values: a bound or step that is no number refuses what it cannot compare",
+          "[covh][forms-engine][values]") {
     ValueContext const context{};
     FieldSpec spec = decimalSpec(2);
     spec.multipleOf = "bogus";
@@ -136,9 +138,9 @@ TEST_CASE("cov h values: a nested object has no draft and no placeholder", "[cov
         CHECK(morph::forms::decodeScalar(spec, *engine::parseJson("{\"a\":1}"), context).empty());
         CHECK(morph::forms::defaultPlaceholder(spec).empty());
     }
-    for (FieldKind const kind : {FieldKind::Text, FieldKind::Multiline, FieldKind::Boolean, FieldKind::Enum,
-                                 FieldKind::Choice, FieldKind::DateTime, FieldKind::Date, FieldKind::EpochDateTime,
-                                 FieldKind::EpochDate}) {
+    for (FieldKind const kind :
+         {FieldKind::Text, FieldKind::Multiline, FieldKind::Boolean, FieldKind::Enum, FieldKind::Choice,
+          FieldKind::DateTime, FieldKind::Date, FieldKind::EpochDateTime, FieldKind::EpochDate}) {
         FieldSpec spec;
         spec.name = "f";
         spec.kind = kind;

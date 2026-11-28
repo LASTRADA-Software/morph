@@ -137,8 +137,7 @@ TEST_CASE("cov h theme: a token of the wrong type or an unknown name leaves the 
         auto const& group = item.group == "strokes" ? values.strokes : values.keywords;
         auto const& base = item.group == "strokes" ? defaults.strokes : defaults.keywords;
         REQUIRE(group.contains(item.path));
-        CHECK(group.at(std::string{item.path}) ==
-              (item.expected ? *item.expected : base.at(std::string{item.path})));
+        CHECK(group.at(std::string{item.path}) == (item.expected ? *item.expected : base.at(std::string{item.path})));
     }
     ui::ThemeValues const other = ui::themeValues(tokensOf(R"({"font":{"family":{"$type":"number","$value":3}}})"));
     CHECK(other.families.at("font.family") == defaults.families.at("font.family"));
@@ -162,8 +161,9 @@ TEST_CASE("cov h theme: opacity, stroke and keyword tokens are checked where the
               "opacity.stale: must be between 0 and 1", std::nullopt},
              {"opacity above one", R"({"opacity":{"muted":{"$type":"number","$value":1.5}}})",
               "opacity.muted: must be between 0 and 1", std::nullopt},
-             {"opacity of another type", R"({"opacity":{"stale":{"$type":"dimension","$value":{"value":-3,"unit":"px"}}}})",
-              std::nullopt, std::nullopt},
+             {"opacity of another type",
+              R"({"opacity":{"stale":{"$type":"dimension","$value":{"value":-3,"unit":"px"}}}})", std::nullopt,
+              std::nullopt},
              {"a solid stroke", R"({"border":{"style":{"$type":"strokeStyle","$value":"solid"}}})", std::nullopt,
               std::nullopt},
              {"a dashed stroke", R"({"border":{"style":{"$type":"strokeStyle","$value":"dashed"}}})", std::nullopt,
@@ -196,7 +196,8 @@ TEST_CASE("cov h theme: a shadow needs a colour and four lengths", "[covh][ui][t
         std::string lengths;
         for (std::string_view const each : {"offsetX", "offsetY", "blur", "spread"}) {
             if (each != name) {
-                lengths += (lengths.empty() ? "" : ",") + std::string{"\""} + std::string{each} + "\":{\"value\":1,\"unit\":\"px\"}";
+                lengths += (lengths.empty() ? "" : ",") + std::string{"\""} + std::string{each} +
+                           "\":{\"value\":1,\"unit\":\"px\"}";
             }
         }
         return lengths;
@@ -222,7 +223,10 @@ TEST_CASE("cov h theme: the tokens nothing reads are found across the files that
     index.variants.emplace("dark", "base");  // a variant that is the base's own file
     index.densities.emplace("compact", "missing");
     std::map<std::string, TokenSet, std::less<>> files;
-    files.emplace("base", tokensOf(R"({"stray":{"$type":"number","$value":3},"color":{"$type":"color","accent":{"$value":"#112233"}}})"));
+    files.emplace(
+        "base",
+        tokensOf(
+            R"({"stray":{"$type":"number","$value":3},"color":{"$type":"color","accent":{"$value":"#112233"}}})"));
     ui::TokenFileLookup const lookup = [&files](std::string_view id) -> TokenSet const* {
         auto const found = files.find(id);
         return found == files.end() ? nullptr : &found->second;
@@ -238,8 +242,8 @@ TEST_CASE("cov h theme: the tokens nothing reads are found across the files that
 TEST_CASE("cov h theme: contrast is measured from black to white and flagged where text sinks into its fill",
           "[covh][ui][theme]") {
     CHECK(ui::detail::luminance(Rgba{.r = 0, .g = 0, .b = 0, .a = 255}) == 0.0);
-    CHECK(ui::detail::contrastRatio(Rgba{.r = 0, .g = 0, .b = 0, .a = 255}, Rgba{.r = 255, .g = 255, .b = 255, .a = 255}) >
-          20.9);
+    CHECK(ui::detail::contrastRatio(Rgba{.r = 0, .g = 0, .b = 0, .a = 255},
+                                    Rgba{.r = 255, .g = 255, .b = 255, .a = 255}) > 20.9);
     ui::ThemeValues values;
     values.colors["color.surface"] = Rgba{.r = 255, .g = 255, .b = 255, .a = 255};
     values.colors["color.text"] = Rgba{.r = 250, .g = 250, .b = 250, .a = 255};
@@ -270,9 +274,10 @@ TEST_CASE("cov h theme: a theme's problems are those of each layer that resolves
     };
     auto const problems = ui::themeProblems(index, lookup);
     CHECK(std::ranges::none_of(problems, [](std::string const& each) { return each.starts_with("base: "); }));
-    CHECK(std::ranges::count_if(problems, [](std::string const& each) { return each.starts_with("surface faded: "); }) >=
-          1);
-    CHECK(std::ranges::none_of(problems, [](std::string const& each) { return each.starts_with("surface broken: "); }));
+    CHECK(std::ranges::count_if(problems,
+                                [](std::string const& each) { return each.starts_with("surface faded: "); }) >= 1);
+    CHECK(
+        std::ranges::none_of(problems, [](std::string const& each) { return each.starts_with("surface broken: "); }));
     files.insert_or_assign("base", tokensOf(R"({"color":{"$type":"color","surface":{"$value":"#ffffff"},
         "text":{"$value":"#fafafa"},"hover":{"$value":"#ffffff"}}})"));
     auto const worse = ui::themeProblems(index, lookup);

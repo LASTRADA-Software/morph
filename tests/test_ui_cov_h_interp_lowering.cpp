@@ -34,9 +34,9 @@ TEST_CASE("cov h lowering: a group without a description or gap is a legend and 
 TEST_CASE("cov h lowering: a group shows the errors a document hands it, one line each, and keeps the role it names",
           "[covh][ui][interpreter]") {
     ui::testing::Harness h;
-    auto const screen = h.mount(documentOf(
-        R"({"kind":"group","testId":"g","label":"Legend","description":"About","gap":2,)"
-        R"("errors":{"lit":["first","second"]},"a11y":{"role":"region","name":"Named"},"children":[]})"));
+    auto const screen = h.mount(
+        documentOf(R"({"kind":"group","testId":"g","label":"Legend","description":"About","gap":2,)"
+                   R"("errors":{"lit":["first","second"]},"a11y":{"role":"region","name":"Named"},"children":[]})"));
     int const group = h.byTestId("Column", "g");
     std::vector<int> const lines = h.backend.children(group);
     REQUIRE(lines.size() == 3);

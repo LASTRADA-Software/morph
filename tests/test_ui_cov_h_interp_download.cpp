@@ -31,11 +31,12 @@ bool reported(ui::testing::Harness const& h, std::string_view text) {
 
 }  // namespace
 
-TEST_CASE("cov h download: inline bytes are base64 text or a list of bytes, and nothing else", "[covh][ui][interpreter]") {
+TEST_CASE("cov h download: inline bytes are base64 text or a list of bytes, and nothing else",
+          "[covh][ui][interpreter]") {
     struct Case {
         char const* what;
-        std::string value;  // the command's value, as JSON
-        char const* saved;  // the bytes the host saved; empty when none
+        std::string value;   // the command's value, as JSON
+        char const* saved;   // the bytes the host saved; empty when none
         char const* report;  // empty when nothing is reported
     };
     std::string const text = R"("YWJj")";
@@ -56,8 +57,8 @@ TEST_CASE("cov h download: inline bytes are base64 text or a list of bytes, and 
          }) {
         INFO(item.what);
         ui::testing::Harness h;
-        auto const screen = h.mount(documentOf(R"({"download":)" + item.value +
-                                               R"(,"from":"bytes","save":"dialog","name":"a.bin"})"));
+        auto const screen =
+            h.mount(documentOf(R"({"download":)" + item.value + R"(,"from":"bytes","save":"dialog","name":"a.bin"})"));
         h.backend.click(h.byTestId("Button", "go"));
         h.settle();
         if (std::string_view{item.saved}.empty()) {
@@ -75,10 +76,12 @@ TEST_CASE("cov h download: inline bytes are base64 text or a list of bytes, and 
     }
 }
 
-TEST_CASE("cov h download: bytes over the inline cap are refused before the host is asked", "[covh][ui][interpreter]") {
+TEST_CASE("cov h download: bytes over the inline cap are refused before the host is asked",
+          "[covh][ui][interpreter]") {
     std::string const huge(1'500'000, 'A');
     ui::testing::Harness text;
-    auto const first = text.mount(documentOf(R"({"download":")" + huge + R"(","from":"bytes","save":"dialog","name":"a.bin"})"));
+    auto const first =
+        text.mount(documentOf(R"({"download":")" + huge + R"(","from":"bytes","save":"dialog","name":"a.bin"})"));
     text.backend.click(text.byTestId("Button", "go"));
     text.settle();
     CHECK(text.host.saved.empty());
@@ -91,7 +94,8 @@ TEST_CASE("cov h download: bytes over the inline cap are refused before the host
     }
     bytes += "]";
     ui::testing::Harness list;
-    auto const second = list.mount(documentOf(R"({"download":{"lit":)" + bytes + R"(},"from":"bytes","save":"dialog","name":"a.bin"})"));
+    auto const second = list.mount(
+        documentOf(R"({"download":{"lit":)" + bytes + R"(},"from":"bytes","save":"dialog","name":"a.bin"})"));
     list.backend.click(list.byTestId("Button", "go"));
     list.settle();
     CHECK(list.host.saved.empty());
@@ -99,11 +103,11 @@ TEST_CASE("cov h download: bytes over the inline cap are refused before the host
     CHECK(reported(list, "1 MiB"));
 }
 
-TEST_CASE("cov h download: a host that refuses inline files reports the command as unsupported", "[covh][ui][interpreter]") {
+TEST_CASE("cov h download: a host that refuses inline files reports the command as unsupported",
+          "[covh][ui][interpreter]") {
     ui::testing::Harness h;
     h.host.refuseTransfers = true;
-    auto const screen =
-        h.mount(documentOf(R"({"download":"YWJj","from":"bytes","save":"dialog","name":"a.bin"})"));
+    auto const screen = h.mount(documentOf(R"({"download":"YWJj","from":"bytes","save":"dialog","name":"a.bin"})"));
     h.backend.click(h.byTestId("Button", "go"));
     h.settle();
     CHECK(h.host.saved.empty());

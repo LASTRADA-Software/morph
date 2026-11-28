@@ -42,7 +42,7 @@ CatalogEntry entry(std::string id, std::string module, std::string group, bool a
 // Module A holds two groups and an entry that cannot be opened, B and C one entry each.
 std::vector<CatalogEntry> catalog() {
     return {entry("a.one", "A", "First"), entry("a.two", "A", "First"), entry("a.three", "A", "Second", false),
-            entry("b.only", "B", ""),     entry("c.only", "C", "")};
+            entry("b.only", "B", ""), entry("c.only", "C", "")};
 }
 
 struct Fixture {
@@ -98,7 +98,8 @@ TEST_CASE("cov h navigator: stored pins keep the known, once each, up to the mos
     CHECK_FALSE(h.backend.find("Button", "testId", "pin_a.two").has_value());
 }
 
-TEST_CASE("cov h navigator: a pin is refused for an unknown screen, a repeat and a full row", "[covh][ui][navigator]") {
+TEST_CASE("cov h navigator: a pin is refused for an unknown screen, a repeat and a full row",
+          "[covh][ui][navigator]") {
     Fixture h{{"a.one"}, 2};
     CHECK_FALSE(h.navigator->pin("nowhere"));
     CHECK_FALSE(h.navigator->pin("a.one"));
@@ -119,8 +120,8 @@ TEST_CASE("cov h navigator: choosing in the menu opens only an available screen 
     CHECK_FALSE(h.navigator->choose({}));
     CHECK_FALSE(h.navigator->choose({99}));
     CHECK_FALSE(h.navigator->choose({0, 5}));
-    CHECK_FALSE(h.navigator->choose({1}));  // the separator names no screen
-    CHECK_FALSE(h.navigator->choose(h.pathOf("First")));  // a submenu
+    CHECK_FALSE(h.navigator->choose({1}));                  // the separator names no screen
+    CHECK_FALSE(h.navigator->choose(h.pathOf("First")));    // a submenu
     CHECK_FALSE(h.navigator->choose(h.pathOf("a.three")));  // not available
     CHECK(h.opened.empty());
     CHECK(h.navigator->choose({0}));  // the pin
@@ -168,7 +169,7 @@ TEST_CASE("cov h navigator: the current screen moves between screens and custom 
     h.navigator->setCurrent("a.one");
     CHECK(h.backend.prop(h.widget("Button", "nav_custom:bb"), "selected") == "false");
     CHECK(h.backend.prop(h.widget("Button", "nav_a.one"), "selected") == "true");
-    h.navigator->setCurrent("a.one");  // no change
+    h.navigator->setCurrent("a.one");      // no change
     h.navigator->setCurrent("custom:zz");  // not listed yet: the current screen is none
     CHECK(h.navigator->current().empty());
     h.navigator->setCurrent("custom:bb");
@@ -282,7 +283,8 @@ TEST_CASE("cov h navigator: with no handlers set, choosing, hovering and pinning
     CHECK(navigator.custom().size() == 1);
 }
 
-TEST_CASE("cov h navigator: a custom screen pending, current or replaced when the list changes", "[covh][ui][navigator]") {
+TEST_CASE("cov h navigator: a custom screen pending, current or replaced when the list changes",
+          "[covh][ui][navigator]") {
     Fixture h;
     h.navigator->setCurrent("custom:zz");
     h.navigator->setCurrent("custom:zz");  // still waiting for its list

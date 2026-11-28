@@ -58,24 +58,26 @@ TEST_CASE("cov h views: a column's kind follows the property's measure, type, wi
     }
 }
 
-TEST_CASE("cov h views: a nullable property reads through its non-null alternative and a reference through its definition",
-          "[covh][views]") {
+TEST_CASE(
+    "cov h views: a nullable property reads through its non-null alternative and a reference through its definition",
+    "[covh][views]") {
     struct Case {
         char const* schema;
         char const* kind;
     };
-    for (Case const& item : std::vector<Case>{
-             {R"({"properties":{"p":{"anyOf":[{"type":"null"},{"type":"integer"}]}}})", "integer"},
-             {R"({"properties":{"p":{"anyOf":[{"type":"integer"},{"type":"null"}]}}})", "integer"},
-             {R"({"properties":{"p":{"anyOf":[{"type":"null"}]}}})", "text"},
-             {R"({"properties":{"p":{"anyOf":[{"type":7},{"type":"boolean"}]}}})", "text"},
-             {R"({"properties":{"p":{"anyOf":[{"$ref":"#/$defs/n"},{"type":"null"}]}},"$defs":{"n":{"type":"number"}}})",
-              "number"},
-             {R"({"properties":{"p":{"$ref":"#/$defs/n"}},"$defs":{"n":{"type":"boolean"}}})", "bool"},
-             {R"({"properties":{"p":{"$ref":"#/$defs/missing"}},"$defs":{"n":{"type":"boolean"}}})", "text"},
-             {R"({"properties":{"p":{"$ref":"#/$defs/n"}}})", "text"},
-             {R"({"properties":{"p":{"$ref":5,"type":"integer"}}})", "integer"},
-         }) {
+    for (
+        Case const& item : std::vector<Case>{
+            {R"({"properties":{"p":{"anyOf":[{"type":"null"},{"type":"integer"}]}}})", "integer"},
+            {R"({"properties":{"p":{"anyOf":[{"type":"integer"},{"type":"null"}]}}})", "integer"},
+            {R"({"properties":{"p":{"anyOf":[{"type":"null"}]}}})", "text"},
+            {R"({"properties":{"p":{"anyOf":[{"type":7},{"type":"boolean"}]}}})", "text"},
+            {R"({"properties":{"p":{"anyOf":[{"$ref":"#/$defs/n"},{"type":"null"}]}},"$defs":{"n":{"type":"number"}}})",
+             "number"},
+            {R"({"properties":{"p":{"$ref":"#/$defs/n"}},"$defs":{"n":{"type":"boolean"}}})", "bool"},
+            {R"({"properties":{"p":{"$ref":"#/$defs/missing"}},"$defs":{"n":{"type":"boolean"}}})", "text"},
+            {R"({"properties":{"p":{"$ref":"#/$defs/n"}}})", "text"},
+            {R"({"properties":{"p":{"$ref":5,"type":"integer"}}})", "integer"},
+        }) {
         INFO(item.schema);
         CHECK(entryOf(item.schema).contains(std::string{R"("kind":")"} + item.kind + "\""));
     }
@@ -89,7 +91,8 @@ TEST_CASE("cov h views: a column carries the closed set and the units its schema
     CHECK_FALSE(entryOf(R"({"properties":{"p":{"oneOf":3}}})").contains("enum"));
     CHECK(entryOf(R"({"properties":{"p":{"$ref":"#/$defs/e"}},"$defs":{"e":{"enum":[1,2]}}})")
               .contains(R"("enum":[1,2])"));
-    CHECK(entryOf(R"({"properties":{"p":{"ExtUnits":{"unitAscii":"kg"}}}})").contains(R"("ExtUnits":{"unitAscii":"kg"})"));
+    CHECK(entryOf(R"({"properties":{"p":{"ExtUnits":{"unitAscii":"kg"}}}})")
+              .contains(R"("ExtUnits":{"unitAscii":"kg"})"));
     CHECK(entryOf(R"({"properties":{"p":{"$ref":"#/$defs/q"}},"$defs":{"q":{"ExtUnits":{"unitAscii":"g"}}}})")
               .contains(R"("ExtUnits":{"unitAscii":"g"})"));
     CHECK(entryOf(R"({"properties":{"p":{"x-decimalPlaces":3,"title":"Mass","x-level":"detail"}}})")

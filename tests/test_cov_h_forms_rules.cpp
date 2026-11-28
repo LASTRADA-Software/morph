@@ -81,8 +81,9 @@ TEST_CASE("cov h rules: the negation of an undecided verdict is undecided", "[co
     CHECK(morph::forms::triNot(Tri::False) == Tri::True);
 }
 
-TEST_CASE("cov h rules: a condition no rule translation holds is undecided, and a literal no value spells is undecided",
-          "[covh][forms-engine][rules]") {
+TEST_CASE(
+    "cov h rules: a condition no rule translation holds is undecided, and a literal no value spells is undecided",
+    "[covh][forms-engine][rules]") {
     struct Case {
         char const* what;
         char const* json;

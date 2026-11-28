@@ -125,8 +125,7 @@ TEST_CASE("cov h expression: a date a text only nearly spells is not a date", "[
 TEST_CASE("cov h expression: a comprehension over what is not a list says so, and sorts by direction",
           "[covh][ui][expr]") {
     for (Case const& item : std::vector<Case>{
-             {R"({"runs":{"ref":"x"},"as":"i","by":{"ref":"i"}})", R"({"x":5})",
-              "null | `runs` runs over a list"},
+             {R"({"runs":{"ref":"x"},"as":"i","by":{"ref":"i"}})", R"({"x":5})", "null | `runs` runs over a list"},
              {R"({"runs":{"ref":"x"},"as":"i","by":{"ref":"i"}})", R"({"x":null})", "null"},
              {R"({"sort":{"lit":[2,1,3]},"as":"x","by":{"ref":"x"},"order":"asc"})", "{}", "[1,2,3]"},
              {R"({"sort":{"lit":[2,1,3]},"as":"x","by":{"ref":"x"},"order":"desc"})", "{}", "[3,2,1]"},
@@ -174,8 +173,7 @@ TEST_CASE("cov h expression: the type of a checked expression follows its argume
 TEST_CASE("cov h expression: statistics whose exact sums leave 64 bits are refused", "[covh][ui][expr]") {
     constexpr std::string_view kOverflow = "null | the statistics overflow";
     // Two decimals whose denominators have no common factor, so that their least common multiple passes int64.
-    std::string const coprime =
-        R"({"lit":[{"num":1,"den":3037000500,"dp":18},{"num":1,"den":3037000501,"dp":18}]})";
+    std::string const coprime = R"({"lit":[{"num":1,"den":3037000500,"dp":18},{"num":1,"den":3037000501,"dp":18}]})";
     // A value of 9e18 beside one of a thousandth: the common scale makes its square wider than 128 bits.
     std::string const wide = R"({"lit":[9000000000000000000,{"num":1,"den":1000,"dp":3}]})";
     for (char const* const function : {"stdev", "rsd"}) {

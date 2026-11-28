@@ -60,7 +60,8 @@ Outcome<T> watch(RowsFixture& h, morph::async::Completion<T> completion) {
 }
 
 std::string loadedJson(std::vector<ui::TableStateHead> entries) {
-    return morph::model::ActionTraits<ui::TableStateLoad>::resultToJson(ui::TableStateLoaded{.entries = std::move(entries)});
+    return morph::model::ActionTraits<ui::TableStateLoad>::resultToJson(
+        ui::TableStateLoaded{.entries = std::move(entries)});
 }
 
 std::string chunkJson(std::string revision, std::string text) {
@@ -74,8 +75,12 @@ std::string savedJson(table::SaveOutcome outcome, std::string reason = {}) {
 }
 
 ui::TableStateHead found(std::string revision, std::uint64_t size, std::string text) {
-    return ui::TableStateHead{
-        .found = true, .revision = std::move(revision), .size = size, .text = std::move(text), .error = {}, .deferred = false};
+    return ui::TableStateHead{.found = true,
+                              .revision = std::move(revision),
+                              .size = size,
+                              .text = std::move(text),
+                              .error = {},
+                              .deferred = false};
 }
 
 // A store whose loads and saves a test settles.
@@ -107,8 +112,8 @@ public:
     }
 
     [[nodiscard]] morph::async::Completion<table::SaveResult> publish(table::TableStateKey const& /*key*/,
-                                                                       table::ViewOperation const& /*operation*/,
-                                                                       std::string /*expected*/) override {
+                                                                      table::ViewOperation const& /*operation*/,
+                                                                      std::string /*expected*/) override {
         return refusePublish(*_owner);
     }
 
@@ -122,7 +127,8 @@ private:
 
 table::StateDocument sortedBy(std::string column) {
     table::StateDocument document;
-    document.sort = table::SortChain{table::SortKey{.column = std::move(column), .dir = table::SortDirection::Ascending}};
+    document.sort =
+        table::SortChain{table::SortKey{.column = std::move(column), .dir = table::SortDirection::Ascending}};
     return document;
 }
 
@@ -142,12 +148,13 @@ TEST_CASE("cov h state client: a load that cannot be read rejects every key it a
              {"an answer for fewer keys", loadedJson({}), "answered 0 entries for 1 keys"},
              {"an answer that is no load", "not json", ""},
              {"a call that fails", "", "it failed"},
-             {"a key the server refused", loadedJson({ui::TableStateHead{.found = false,
-                                                                         .revision = {},
-                                                                         .size = 0,
-                                                                         .text = {},
-                                                                         .error = "key out of bounds",
-                                                                         .deferred = false}}),
+             {"a key the server refused",
+              loadedJson({ui::TableStateHead{.found = false,
+                                             .revision = {},
+                                             .size = 0,
+                                             .text = {},
+                                             .error = "key out of bounds",
+                                             .deferred = false}}),
               "key out of bounds"},
          }) {
         INFO(item.what);
@@ -226,7 +233,8 @@ TEST_CASE("cov h state client: a store that is always busy is asked until the bo
         h.settle();
         if (h.dispatcher.count("save") > sent) {
             sent = h.dispatcher.count("save");
-            h.dispatcher.reply(h.dispatcher.last("save"), savedJson(table::SaveOutcome::Refused, std::string{ui::kTableStateUploadsBusy}));
+            h.dispatcher.reply(h.dispatcher.last("save"),
+                               savedJson(table::SaveOutcome::Refused, std::string{ui::kTableStateUploadsBusy}));
         }
     }
     auto const outcome = watch(h, std::move(completion));
@@ -269,7 +277,8 @@ TEST_CASE("cov h state session: a load that fails and is asked again settles fro
     CHECK(store->saved.front().contains("\"name\""));  // the base is what the second load found
 }
 
-TEST_CASE("cov h state session: a load that fails again, or while changes wait, still saves them", "[covh][ui][state]") {
+TEST_CASE("cov h state session: a load that fails again, or while changes wait, still saves them",
+          "[covh][ui][state]") {
     RowsFixture h;
     auto store = std::make_shared<ScriptedStore>(h.owner);
     TableStates states{store, h.owner, nullptr, 500ms};
@@ -281,7 +290,8 @@ TEST_CASE("cov h state session: a load that fails again, or while changes wait, 
     h.settle();
     REQUIRE(store->saved.size() == 1);  // the held change is saved over nothing
     CHECK(store->saved.front().contains("\"name\""));
-    store->saves.at(0).resolve(table::SaveResult{.outcome = table::SaveOutcome::Refused, .revision = {}, .reason = "no"});
+    store->saves.at(0).resolve(
+        table::SaveResult{.outcome = table::SaveOutcome::Refused, .revision = {}, .reason = "no"});
     h.settle();
     auto again = states.load(kKey);  // the entry is still not known: asks again
     h.settle();
@@ -301,8 +311,9 @@ TEST_CASE("cov h state session: keeping a state during its load, and starting on
     h.settle();
     REQUIRE(store->loads.size() == 1);
     states.start(kKey, sortedBy("c3"));  // not settled: nothing to start
-    states.start(table::TableStateKey{.application = "lims", .model = "m", .table = "other", .qualifier = "q", .part = "state"},
-                 sortedBy("c3"));
+    states.start(
+        table::TableStateKey{.application = "lims", .model = "m", .table = "other", .qualifier = "q", .part = "state"},
+        sortedBy("c3"));
     states.keep(kKey, storedSortedBy("name"));  // the load is still out
     CHECK(states.kept(kKey).has_value());
     store->loads.at(0).resolve(storedSortedBy("id"));
@@ -312,8 +323,9 @@ TEST_CASE("cov h state session: keeping a state during its load, and starting on
     CHECK((*outcome.value)->json.contains("\"name\""));  // what was kept stays
 }
 
-TEST_CASE("cov h state session: flushing a clean state saves nothing, and a refused save with no handler is kept quiet",
-          "[covh][ui][state]") {
+TEST_CASE(
+    "cov h state session: flushing a clean state saves nothing, and a refused save with no handler is kept quiet",
+    "[covh][ui][state]") {
     RowsFixture h;
     auto store = std::make_shared<ScriptedStore>(h.owner);
     TableStates states{store, h.owner, nullptr, 500ms};
@@ -325,7 +337,8 @@ TEST_CASE("cov h state session: flushing a clean state saves nothing, and a refu
     states.changed(kKey, sortedBy("id"), StateParts::Sort);
     h.settle();
     REQUIRE(store->saved.size() == 1);
-    store->saves.at(0).resolve(table::SaveResult{.outcome = table::SaveOutcome::Refused, .revision = {}, .reason = "no"});
+    store->saves.at(0).resolve(
+        table::SaveResult{.outcome = table::SaveOutcome::Refused, .revision = {}, .reason = "no"});
     h.settle();
     CHECK(states.kept(kKey)->json.contains("\"name\""));  // the refused save leaves the kept copy
     states.flush(kKey);

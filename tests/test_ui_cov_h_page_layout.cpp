@@ -82,7 +82,8 @@ TEST_CASE("cov h page layout: a page is refused for a side, a margin or a box th
     }
 }
 
-TEST_CASE("cov h page layout: a region is refused for an offset, a size or a place off the sheet", "[covh][ui][page]") {
+TEST_CASE("cov h page layout: a region is refused for an offset, a size or a place off the sheet",
+          "[covh][ui][page]") {
     struct Case {
         char const* what;
         RegionGeometry region;
@@ -90,19 +91,26 @@ TEST_CASE("cov h page layout: a region is refused for an offset, a size or a pla
     };
     PageGeometry const page = a4();
     for (Case const& item : std::vector<Case>{
-             {"a pinned region", {.anchor = PageAnchor::Top, .x = {}, .y = {}, .width = {}, .height = Mm{30}},
+             {"a pinned region",
+              {.anchor = PageAnchor::Top, .x = {}, .y = {}, .width = {}, .height = Mm{30}},
               std::nullopt},
-             {"a negative x", {.anchor = PageAnchor::Offset, .x = Mm{-1}, .y = {}, .width = {}, .height = {}},
+             {"a negative x",
+              {.anchor = PageAnchor::Offset, .x = Mm{-1}, .y = {}, .width = {}, .height = {}},
               "a page region's offset is not negative"},
-             {"a negative y", {.anchor = PageAnchor::Offset, .x = {}, .y = Mm{-1}, .width = {}, .height = {}},
+             {"a negative y",
+              {.anchor = PageAnchor::Offset, .x = {}, .y = Mm{-1}, .width = {}, .height = {}},
               "a page region's offset is not negative"},
-             {"an x on a pinned region", {.anchor = PageAnchor::Top, .x = Mm{1}, .y = {}, .width = {}, .height = {}},
+             {"an x on a pinned region",
+              {.anchor = PageAnchor::Top, .x = Mm{1}, .y = {}, .width = {}, .height = {}},
               "a pinned page region has no offset"},
-             {"a y on a pinned region", {.anchor = PageAnchor::Bottom, .x = {}, .y = Mm{1}, .width = {}, .height = {}},
+             {"a y on a pinned region",
+              {.anchor = PageAnchor::Bottom, .x = {}, .y = Mm{1}, .width = {}, .height = {}},
               "a pinned page region has no offset"},
-             {"a width of zero", {.anchor = PageAnchor::Top, .x = {}, .y = {}, .width = Mm{0}, .height = {}},
+             {"a width of zero",
+              {.anchor = PageAnchor::Top, .x = {}, .y = {}, .width = Mm{0}, .height = {}},
               "a page region's width and height are above zero"},
-             {"a height of zero", {.anchor = PageAnchor::Top, .x = {}, .y = {}, .width = {}, .height = Mm{0}},
+             {"a height of zero",
+              {.anchor = PageAnchor::Top, .x = {}, .y = {}, .width = {}, .height = Mm{0}},
               "a page region's width and height are above zero"},
              {"a width of zero beside a height",
               {.anchor = PageAnchor::Top, .x = {}, .y = {}, .width = Mm{0}, .height = Mm{5}},
@@ -111,7 +119,8 @@ TEST_CASE("cov h page layout: a region is refused for an offset, a size or a pla
               {.anchor = PageAnchor::Offset, .x = Mm{190}, .y = {}, .width = {}, .height = {}},
               "an offset page region with no width starts at or past the margin box's right edge"},
              {"an offset region with a width inside the margin box",
-              {.anchor = PageAnchor::Offset, .x = Mm{190}, .y = {}, .width = Mm{5}, .height = {}}, std::nullopt},
+              {.anchor = PageAnchor::Offset, .x = Mm{190}, .y = {}, .width = Mm{5}, .height = {}},
+              std::nullopt},
              {"a width leaving the sheet",
               {.anchor = PageAnchor::Offset, .x = Mm{190}, .y = {}, .width = Mm{30}, .height = {}},
               "a page region leaves the sheet's width"},
@@ -122,7 +131,8 @@ TEST_CASE("cov h page layout: a region is refused for an offset, a size or a pla
               {.anchor = PageAnchor::Offset, .x = {}, .y = Mm{290}, .width = {}, .height = Mm{10}},
               "a page region leaves the sheet's height"},
              {"an offset height inside the sheet",
-              {.anchor = PageAnchor::Offset, .x = {}, .y = Mm{280}, .width = {}, .height = Mm{10}}, std::nullopt},
+              {.anchor = PageAnchor::Offset, .x = {}, .y = Mm{280}, .width = {}, .height = Mm{10}},
+              std::nullopt},
              {"a top height leaving the sheet",
               {.anchor = PageAnchor::Top, .x = {}, .y = {}, .width = {}, .height = Mm{290}},
               "a page region leaves the sheet's height"},
@@ -130,7 +140,8 @@ TEST_CASE("cov h page layout: a region is refused for an offset, a size or a pla
               {.anchor = PageAnchor::Bottom, .x = {}, .y = {}, .width = {}, .height = Mm{300}},
               "a page region leaves the sheet's height"},
              {"a bottom height inside the sheet",
-              {.anchor = PageAnchor::Bottom, .x = {}, .y = {}, .width = {}, .height = Mm{30}}, std::nullopt},
+              {.anchor = PageAnchor::Bottom, .x = {}, .y = {}, .width = {}, .height = Mm{30}},
+              std::nullopt},
          }) {
         INFO(item.what);
         CHECK(item.region.problem(page) == item.expected);

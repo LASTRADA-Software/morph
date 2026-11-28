@@ -35,8 +35,11 @@ using morph::ui::testing::ProbePreferencesStore;
 constexpr char const* kPerson = "alice";
 
 table::TableStateKey keyOfPart(std::string part) {
-    return table::TableStateKey{
-        .application = "lims", .model = "Lims_SampleModel", .table = "samples", .qualifier = "samples", .part = std::move(part)};
+    return table::TableStateKey{.application = "lims",
+                                .model = "Lims_SampleModel",
+                                .table = "samples",
+                                .qualifier = "samples",
+                                .part = std::move(part)};
 }
 
 // A server whose every task runs on a step executor.
@@ -74,21 +77,18 @@ struct Harness {
     // Writes an entry as the store would hold it.
     void seed(table::TableStateKey const& key, std::string const& point, std::string text,
               std::string const& person = kPerson) {
-        auto const done = prefs->set(ui::PrefKey{.person = person,
-                                                 .app = key.application,
-                                                 .scope = ui::detail::tableStateScope(key),
-                                                 .point = point},
-                                     std::move(text));
+        auto const done = prefs->set(
+            ui::PrefKey{
+                .person = person, .app = key.application, .scope = ui::detail::tableStateScope(key), .point = point},
+            std::move(text));
         static_cast<void>(done);
         pool.runAll();
     }
 
     [[nodiscard]] ui::PrefKey pointOf(table::TableStateKey const& key, std::string const& point,
                                       std::string const& person = kPerson) const {
-        return ui::PrefKey{.person = person,
-                           .app = key.application,
-                           .scope = ui::detail::tableStateScope(key),
-                           .point = point};
+        return ui::PrefKey{
+            .person = person, .app = key.application, .scope = ui::detail::tableStateScope(key), .point = point};
     }
 
     [[nodiscard]] std::set<std::string> points(table::TableStateKey const& key) const {
@@ -289,7 +289,8 @@ TEST_CASE("cov h state model: removing a segmented document removes its segments
     REQUIRE(removed.kind == "ok");
     CHECK(morph::model::ActionTraits<ui::TableStateRemove>::resultFromJson(removed.body).removed);
     CHECK(h.points(key).empty());
-    CHECK(h.prefs->value(ui::PrefKey{.person = kPerson, .app = "morph.tableState", .scope = "morph.table", .point = "usage"}) ==
+    CHECK(h.prefs->value(
+              ui::PrefKey{.person = kPerson, .app = "morph.tableState", .scope = "morph.table", .point = "usage"}) ==
           R"({"bytes":0})");
     auto const again = h.call("remove", removeBody(key));
     REQUIRE(again.kind == "ok");
@@ -343,11 +344,12 @@ TEST_CASE("cov h state model: a usage entry that does not read counts as nothing
           table::SaveOutcome::Refused);
 }
 
-TEST_CASE("cov h state model: a publish over a shared document that does not read is refused, one that ends early fails",
-          "[covh][ui][state]") {
+TEST_CASE(
+    "cov h state model: a publish over a shared document that does not read is refused, one that ends early fails",
+    "[covh][ui][state]") {
     auto const shared = keyOfPart("shared");
-    std::string const operation = table::writeViewOperation(table::AddView{
-        table::SavedView{.name = "A", .layout = {}, .sort = {}, .filters = {}}});
+    std::string const operation = table::writeViewOperation(
+        table::AddView{table::SavedView{.name = "A", .layout = {}, .sort = {}, .filters = {}}});
     {
         Harness h;
         h.seed(shared, "shared", headJson(shared, "r1", R"(,"document":{"version":9})"), "");
