@@ -388,6 +388,13 @@ add_executable(morph_tests
     test_ui_cov_table_mount.cpp
     test_ui_cov_table_state_model.cpp
     test_ui_cov_h_table_state_model.cpp
+    test_ui_cov_i_views.cpp
+    test_ui_cov_i_cell_menu.cpp
+    test_ui_cov_i_rows_table.cpp
+    test_ui_cov_i_collection.cpp
+    test_ui_cov_i_rows_columns.cpp
+    test_ui_cov_i_stored_state.cpp
+    test_ui_cov_i_groups.cpp
     test_ui_table_config.cpp
     bench_interpreter.cpp
     bench_mount.cpp
