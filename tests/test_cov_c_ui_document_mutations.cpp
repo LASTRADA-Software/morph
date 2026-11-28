@@ -139,17 +139,18 @@ Json corrupted(Json root, Path const& path, Json const* value) {
 
 }  // namespace
 
-TEST_CASE("a corrupted document loads or is refused with a pointer, a reason and the same words twice",
-          "[covc][ui][document]") {
-    LoadOptions const options = catalogOptions();
-    std::vector<Json> replacements;
-    for (std::string_view const text : {"null", "-1", "2.5", "\"zz\"", "[]", "{}"}) {
-        auto parsed = morph::ui::parseJson(text);
-        REQUIRE(parsed.has_value());
-        replacements.push_back(*std::move(parsed));
-    }
+namespace {
+
+struct Outcomes {
     std::size_t loaded = 0;
     std::size_t refused = 0;
+};
+
+// Every node of every valid corpus document replaced by `replacement`, or removed when it is null: each result loads,
+// or is refused with a pointer and a reason, and refused again in the same words.
+Outcomes corruptEveryNode(Json const* replacement) {
+    LoadOptions const options = catalogOptions();
+    Outcomes outcomes;
     for (Json const& entry : std::get<Json::array_t>(member(corpus(), "valid").data)) {
         std::string const name = std::get<std::string>(member(entry, "name").data);
         CAPTURE(name);
@@ -158,32 +159,81 @@ TEST_CASE("a corrupted document loads or is refused with a pointer, a reason and
         Path here;
         collect(original, here, paths);
         for (Path const& path : paths) {
-            std::vector<Json const*> variants;
-            variants.reserve(replacements.size() + 1);
-            for (Json const& replacement : replacements) {
-                variants.push_back(&replacement);
+            if (replacement == nullptr && path.empty()) {
+                continue;  // the root cannot be removed
             }
-            if (!path.empty()) {
-                variants.push_back(nullptr);
+            Json const doc = corrupted(original, path, replacement);
+            auto const first = loadDocument(doc, options);
+            if (first) {
+                ++outcomes.loaded;
+                continue;
             }
-            for (Json const* const variant : variants) {
-                Json const doc = corrupted(original, path, variant);
-                auto const first = loadDocument(doc, options);
-                if (first) {
-                    ++loaded;
-                    continue;
-                }
-                ++refused;
-                auto const& refusal = first.error();
-                INFO(refusal.message());
-                REQUIRE((refusal.path.empty() || refusal.path.front() == '/'));
-                REQUIRE_FALSE(refusal.reason.empty());
-                auto const again = loadDocument(doc, options);
-                REQUIRE_FALSE(again.has_value());
-                REQUIRE(again.error() == refusal);
-            }
+            ++outcomes.refused;
+            auto const& refusal = first.error();
+            INFO(refusal.message());
+            REQUIRE((refusal.path.empty() || refusal.path.front() == '/'));
+            REQUIRE_FALSE(refusal.reason.empty());
+            auto const again = loadDocument(doc, options);
+            REQUIRE_FALSE(again.has_value());
+            REQUIRE(again.error() == refusal);
         }
     }
-    CHECK(refused > 5'000);
-    CHECK(loaded > 500);
+    return outcomes;
+}
+
+Outcomes corruptEveryNodeWith(std::string_view text) {
+    auto const parsed = morph::ui::parseJson(text);
+    REQUIRE(parsed.has_value());
+    return corruptEveryNode(&*parsed);
+}
+
+}  // namespace
+
+// One case per corruption, so that each stays inside the per-test time limit under a sanitizer.
+TEST_CASE("a corrupted document loads or is refused with a pointer and a reason: a node replaced by null",
+          "[covc][ui][document]") {
+    auto const outcomes = corruptEveryNodeWith("null");
+    CHECK(outcomes.refused > 900);
+    CHECK(outcomes.loaded > 300);
+}
+
+TEST_CASE("a corrupted document loads or is refused with a pointer and a reason: a node replaced by -1",
+          "[covc][ui][document]") {
+    auto const outcomes = corruptEveryNodeWith("-1");
+    CHECK(outcomes.refused > 900);
+    CHECK(outcomes.loaded > 300);
+}
+
+TEST_CASE("a corrupted document loads or is refused with a pointer and a reason: a node replaced by 2.5",
+          "[covc][ui][document]") {
+    auto const outcomes = corruptEveryNodeWith("2.5");
+    CHECK(outcomes.refused > 1200);
+}
+
+TEST_CASE("a corrupted document loads or is refused with a pointer and a reason: a node replaced by a text",
+          "[covc][ui][document]") {
+    auto const outcomes = corruptEveryNodeWith("\"zz\"");
+    CHECK(outcomes.refused > 900);
+    CHECK(outcomes.loaded > 300);
+}
+
+TEST_CASE("a corrupted document loads or is refused with a pointer and a reason: a node replaced by a list",
+          "[covc][ui][document]") {
+    auto const outcomes = corruptEveryNodeWith("[]");
+    CHECK(outcomes.refused > 1100);
+    CHECK(outcomes.loaded > 150);
+}
+
+TEST_CASE("a corrupted document loads or is refused with a pointer and a reason: a node replaced by an object",
+          "[covc][ui][document]") {
+    auto const outcomes = corruptEveryNodeWith("{}");
+    CHECK(outcomes.refused > 1100);
+    CHECK(outcomes.loaded > 100);
+}
+
+TEST_CASE("a corrupted document loads or is refused with a pointer and a reason: a node removed",
+          "[covc][ui][document]") {
+    auto const outcomes = corruptEveryNode(nullptr);
+    CHECK(outcomes.refused > 600);
+    CHECK(outcomes.loaded > 600);
 }
