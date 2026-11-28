@@ -150,6 +150,7 @@ add_executable(morph_tests
     test_ui_cov_interp_elements.cpp
     test_ui_cov_grid_unknown.cpp
     test_ui_cov_j_grid_source.cpp
+    test_ui_cov_j_explorer_search.cpp
     test_ui_cov_j_custom_checks.cpp
     test_ui_cov_j_workspace_head.cpp
     test_ui_cov_j_filter_menu.cpp
