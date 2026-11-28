@@ -219,8 +219,8 @@ public:
     }
     [[nodiscard]] std::optional<ui::testing::WidgetBounds> boundsOf(ui::Widget const& widget) override {
         std::optional<ui::testing::WidgetBounds> const real = _inner.boundsOf(widget);
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wswitch-enum"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch-enum"
         switch (_mode) {
             case Distort::BoundsNone:
                 return hit() ? std::nullopt : real;
@@ -261,7 +261,7 @@ public:
             default:
                 return real;
         }
-#pragma clang diagnostic pop
+#pragma GCC diagnostic pop
     }
     [[nodiscard]] std::optional<ui::testing::WidgetBounds> textExtentOf(ui::Widget const& widget) override {
         std::optional<ui::testing::WidgetBounds> extent = _inner.textExtentOf(widget);

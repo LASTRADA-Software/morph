@@ -103,7 +103,7 @@ Json* nodeAt(Json& root, Path const& path, std::size_t steps) {
             }
             node = &found->second;
         } else if (auto* const array = std::get_if<Json::array_t>(&node->data)) {
-            node = &array->at(static_cast<std::size_t>(std::stoul(path.at(at))));
+            node = &array->at(std::stoul(path.at(at)));
         } else {
             return nullptr;
         }
@@ -127,7 +127,7 @@ Json corrupted(Json root, Path const& path, Json const* value) {
             object->erase(path.back());
         }
     } else if (auto* const array = std::get_if<Json::array_t>(&parent->data)) {
-        auto const at = static_cast<std::size_t>(std::stoul(path.back()));
+        auto const at = std::stoul(path.back());
         if (value != nullptr) {
             array->at(at) = *value;
         } else {

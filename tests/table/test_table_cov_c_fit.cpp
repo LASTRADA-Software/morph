@@ -7,6 +7,7 @@
 #include <memory>
 #include <morph/table/engine.hpp>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "table/table_fixtures.hpp"
@@ -55,7 +56,7 @@ TEST_CASE("a source that drops columns takes their sort keys and filters with th
 
     source->setGroups({});
     replaceColumns(*source, {col("a", ColumnKind::Text), col("c", ColumnKind::Text)});
-    CHECK(engine.viewRowCount() >= 0);
+    CHECK_NOTHROW(std::ignore = engine.viewRowCount());
     CHECK(engine.sort() == SortChain{{.column = "a", .dir = SortDirection::Ascending}});
     CHECK(engine.filter().columns.size() == 1);
     CHECK(engine.filter().columns.contains("a"));
@@ -71,7 +72,7 @@ TEST_CASE("a filter that no longer compiles for a column's new kind is dropped w
     spec.columns["a"].include = {FilterEntry{.contains = "x"}};
     REQUIRE(engine.setFilter(spec));
     replaceColumns(*source, {col("a", ColumnKind::Integer), col("b", ColumnKind::Text)});
-    CHECK(engine.viewRowCount() >= 0);
+    CHECK_NOTHROW(std::ignore = engine.viewRowCount());
     CHECK(engine.filter().empty());
 }
 

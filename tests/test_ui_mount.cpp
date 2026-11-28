@@ -2555,8 +2555,10 @@ TEST_CASE("table menus: a header's menu adds the caller's entries after the buil
     bool headerOn = true;
     WindowFixture f{3, 3, {.tune = [&](ui::TableOptions& options) {
                         options.menu = [](std::optional<std::size_t> column) {
-                            return column ? std::vector<ui::MenuEntry>{ui::MenuEntry{.label = "Sort"}}
-                                          : std::vector<ui::MenuEntry>{ui::MenuEntry{.label = "Table"}};
+                            if (column) {
+                                return std::vector<ui::MenuEntry>{ui::MenuEntry{.label = "Sort"}};
+                            }
+                            return std::vector<ui::MenuEntry>{ui::MenuEntry{.label = "Table"}};
                         };
                         options.onMenu = [&builtIn](std::optional<std::size_t>, std::vector<std::size_t> path) {
                             builtIn.push_back(std::move(path));
