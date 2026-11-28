@@ -102,6 +102,10 @@ add_executable(morph_tests
     test_push_effects.cpp
     test_cov_c_effects.cpp
     test_cov_c_forms_values.cpp
+    test_cov_h_forms_rules.cpp
+    test_cov_h_forms_values.cpp
+    test_cov_h_rational.cpp
+    test_cov_h_views_columns.cpp
     test_cov_c_forms_session.cpp
     test_cov_f_forms_session.cpp
     test_cov_c_observability.cpp
@@ -134,6 +138,13 @@ add_executable(morph_tests
     test_ui_cov_grid_form_rows.cpp
     test_ui_cov_grid_keys.cpp
     test_ui_cov_expression.cpp
+    test_ui_cov_h_expression.cpp
+    test_ui_cov_h_theme.cpp
+    test_ui_cov_h_page_layout.cpp
+    test_ui_cov_h_navigator.cpp
+    test_ui_cov_h_table_dialogs.cpp
+    test_ui_cov_h_table_state.cpp
+    test_ui_cov_h_interp_download.cpp
     test_ui_cov_interp_lowering.cpp
     test_ui_cov_interp_elements.cpp
     test_ui_cov_grid_unknown.cpp
@@ -359,6 +370,7 @@ add_executable(morph_tests
     test_ui_cov_table_runs.cpp
     test_ui_cov_table_mount.cpp
     test_ui_cov_table_state_model.cpp
+    test_ui_cov_h_table_state_model.cpp
     test_ui_table_config.cpp
     bench_interpreter.cpp
     bench_mount.cpp
