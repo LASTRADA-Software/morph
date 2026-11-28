@@ -138,3 +138,33 @@ TEST_CASE(
     CHECK_FALSE(rig.find("Dialog", "remove_dialog").has_value());
     CHECK(rig.notices.empty());
 }
+
+TEST_CASE(
+    "covj custom screen chrome: Preview answers whether it drafted, and drafts nothing without a source it may check",
+    "[covj][ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    std::optional<bool> drafted;
+    SECTION("with no source view") {
+        rig.chrome->preview([&drafted](bool answer) { drafted = answer; });
+        REQUIRE(drafted.has_value());
+        CHECK_FALSE(*drafted);
+    }
+    SECTION("with the stored source of a screen") {
+        std::string const id = rig.saveOnServer("Mine", "notes.edit", std::string{kEdit});
+        rig.chrome->showStoredSource(id);
+        REQUIRE(rig.pump([&rig] { return rig.find("Dialog", "source_dialog").has_value(); }));
+        rig.chrome->preview([&drafted](bool answer) { drafted = answer; });
+        REQUIRE(drafted.has_value());
+        CHECK_FALSE(*drafted);
+        CHECK(rig.find("Dialog", "source_dialog").has_value());
+    }
+    SECTION("with a source of a tab that previews") {
+        rig.open("notes.edit", note(1));
+        rig.click("source_button_notes.edit");
+        rig.type("source_text", screens_test::replaced(rig.field("source_text"), "\"Edit note\"", "\"Previewed\""));
+        rig.chrome->preview([&drafted](bool answer) { drafted = answer; });
+        REQUIRE(rig.pump([&drafted] { return drafted.has_value(); }));
+        CHECK(*drafted);
+        CHECK(rig.text("heading") == "Previewed");
+    }
+}
