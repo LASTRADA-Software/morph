@@ -45,6 +45,7 @@ TEST_CASE("cov h download: inline bytes are base64 text or a list of bytes, and 
              {"a url-safe dash", R"("Pz8-")", "", "the text is not base64"},
              {"the plus and slash digits", R"("+/+/")", "\xFB\xFF\xBF", ""},
              {"a digit", R"("MDEy")", "012", ""},
+             {"a character past the lowercase letters", R"("YW{j")", "", "the text is not base64"},
              {"text of a stray length", R"("Y")", "", "the text is not base64"},
              {"text with a character outside the alphabet", R"("YW*j")", "", "the text is not base64"},
              {"a byte list", R"({"lit":[104,105]})", "hi", ""},

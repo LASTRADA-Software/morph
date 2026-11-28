@@ -264,3 +264,47 @@ TEST_CASE("cov h navigator: a custom list that did not change is not rebuilt", "
     h.backend.click(h.widget("Button", "nav_custom:aa"));
     CHECK(h.opened == std::vector<std::string>{"custom:aa"});
 }
+
+TEST_CASE("cov h navigator: with no handlers set, choosing, hovering and pinning only change the navigator",
+          "[covh][ui][navigator]") {
+    RecordingBackend backend;
+    NavigatorOptions options;
+    options.entries = {entry("a.one", "A", "First"), entry("a.two", "A", "First")};
+    Navigator navigator{backend, nullptr, std::move(options)};
+    int const button = *backend.find("Button", "testId", "nav_a.one");
+    backend.hover(button);
+    backend.click(button);
+    CHECK(navigator.choose({0, 0}));
+    CHECK(navigator.pin("a.one"));
+    CHECK(navigator.unpin("a.one"));
+    navigator.setCustom({NavigatorCustomEntry{.id = "custom:aa", .title = "Mine"}});
+    backend.click(*backend.find("Button", "testId", "nav_custom:aa"));
+    CHECK(navigator.custom().size() == 1);
+}
+
+TEST_CASE("cov h navigator: a custom screen pending, current or replaced when the list changes", "[covh][ui][navigator]") {
+    Fixture h;
+    h.navigator->setCurrent("custom:zz");
+    h.navigator->setCurrent("custom:zz");  // still waiting for its list
+    h.navigator->setCustom({NavigatorCustomEntry{.id = "custom:aa", .title = "Mine"}});
+    h.navigator->setCustom({NavigatorCustomEntry{.id = "custom:aa", .title = "Mine"},
+                            NavigatorCustomEntry{.id = "custom:zz", .title = "Late"}});
+    CHECK(h.navigator->current() == "custom:zz");
+    h.navigator->setCurrent("custom:aa");
+    // A list that is rebuilt marks the open custom screen again, and one that leaves a catalog screen open keeps it.
+    h.navigator->setCustom({NavigatorCustomEntry{.id = "custom:aa", .title = "Renamed"}});
+    CHECK(h.backend.prop(h.widget("Button", "nav_custom:aa"), "selected") == "true");
+    h.navigator->setCurrent("a.one");
+    h.navigator->setCustom({NavigatorCustomEntry{.id = "custom:bb", .title = "Other"}});
+    CHECK(h.navigator->current() == "a.one");
+}
+
+TEST_CASE("cov h navigator: a module and group with no name list their entries without a heading",
+          "[covh][ui][navigator]") {
+    Fixture h{{}, 12, {entry("x.one", "", ""), entry("x.two", "", "")}};
+    auto const menu = h.navigator->menuEntries();
+    REQUIRE(menu.size() == 2);
+    CHECK(menu[0].label == "x.one");
+    CHECK(h.navigator->choose({1}));
+    CHECK(h.opened == std::vector<std::string>{"x.two"});
+}

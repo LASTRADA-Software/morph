@@ -5,6 +5,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <expected>
+#include <limits>
 #include <morph/util/rational.hpp>
 #include <optional>
 #include <vector>
@@ -82,4 +84,44 @@ TEST_CASE("cov h rational: a rounding whose numerator does not fit is declined",
     REQUIRE(fits.has_value());
     CHECK(fits->numerator == 933);
     CHECK(fits->denominator == 100);
+}
+
+namespace {
+
+using Expected = std::expected<math::Rational, math::RationalError>;
+
+math::Rational const kOne{math::Numerator{1}, math::Denominator{1}, math::DecimalPlaces{2}};
+
+template <typename Op>
+void mixedOperandsFail(Op op) {
+    constexpr double kNan = std::numeric_limits<double>::quiet_NaN();
+    constexpr double kInf = std::numeric_limits<double>::infinity();
+    Expected const failed = std::unexpected(math::RationalError::Overflow);
+    // A float that is not a number, on either side, names it.
+    CHECK(op(kOne, kNan) == Expected{std::unexpected(math::RationalError::NotFinite)});
+    CHECK(op(kNan, kOne) == Expected{std::unexpected(math::RationalError::NotFinite)});
+    CHECK(op(kOne, kInf) == Expected{std::unexpected(math::RationalError::NotFinite)});
+    // A float beyond what the precision holds overflows.
+    CHECK(op(kOne, 1e30) == Expected{std::unexpected(math::RationalError::Overflow)});
+    CHECK(op(-1e30, kOne) == Expected{std::unexpected(math::RationalError::Overflow)});
+    // An expected that holds an error passes it on, whichever side it is on.
+    CHECK(op(failed, kOne) == failed);
+    CHECK(op(kOne, failed) == failed);
+    CHECK(op(failed, 1.5) == failed);
+    CHECK(op(1.5, failed) == failed);
+    CHECK(op(Expected{std::unexpected(math::RationalError::NotFinite)}, failed) ==
+          Expected{std::unexpected(math::RationalError::NotFinite)});
+    // One that holds a value works as the value does.
+    CHECK(op(Expected{kOne}, 1.0).has_value());
+    CHECK(op(1.0, Expected{kOne}).has_value());
+}
+
+}  // namespace
+
+TEST_CASE("cov h rational: a float operand that does not lift, or an expected that failed, fails the operator",
+          "[covh][rational]") {
+    mixedOperandsFail([](auto const& lhs, auto const& rhs) { return lhs + rhs; });
+    mixedOperandsFail([](auto const& lhs, auto const& rhs) { return lhs - rhs; });
+    mixedOperandsFail([](auto const& lhs, auto const& rhs) { return lhs * rhs; });
+    mixedOperandsFail([](auto const& lhs, auto const& rhs) { return lhs / rhs; });
 }

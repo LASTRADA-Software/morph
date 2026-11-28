@@ -145,6 +145,7 @@ add_executable(morph_tests
     test_ui_cov_h_table_dialogs.cpp
     test_ui_cov_h_table_state.cpp
     test_ui_cov_h_interp_download.cpp
+    test_ui_cov_h_interp_lowering.cpp
     test_ui_cov_interp_lowering.cpp
     test_ui_cov_interp_elements.cpp
     test_ui_cov_grid_unknown.cpp
