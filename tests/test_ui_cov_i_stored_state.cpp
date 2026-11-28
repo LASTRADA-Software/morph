@@ -134,3 +134,22 @@ TEST_CASE("covi stored state: a collection whose store fails or holds no state l
         CHECK(rowKeys(h, collection) == std::vector<std::string>{"1", "2", "3", "4"});
     }
 }
+
+TEST_CASE("covi stored state: a stored sort over many rows holds the rows back until the engine has ordered them",
+          "[covi][ui][table][state]") {
+    auto const store = std::make_shared<GatedTableStateStore>(
+        storeExecutor(), R"({"version":1,"sort":[{"column":"name","direction":"desc"}]})");
+    TableHarness h{store};
+    auto const screen = h.mount(morph::ui::testing::rowsDoc(morph::ui::testing::idRows(6000)));
+    int const table = h.byTestId("Table", "list");
+    store->release();
+    h.settle();
+    for (int round = 0; round < 20 && rowKeys(h, table).empty(); ++round) {
+        h.advance(20ms);
+    }
+    std::vector<std::string> const keys = rowKeys(h, table);
+    INFO("children " << h.backend.children(table).size());
+    REQUIRE_FALSE(keys.empty());
+    CHECK(keys.front() == "999");  // `n999` is the greatest name of the 6000
+    CHECK(elementValue(*screen, "list", "sort") == R"([{"column":"name","direction":"desc"}])");
+}

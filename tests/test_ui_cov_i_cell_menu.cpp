@@ -305,3 +305,17 @@ TEST_CASE("covi cell menu: a locked column is not hidden by its header menu and 
     m.h.settle();
     CHECK(elementValue(*m.screen, "t", "visibleColumns") == R"(["id"])");
 }
+
+TEST_CASE("covi cell menu: a bound filter is the document's, the gesture only tells it", "[covi][ui][table][menu]") {
+    TableHarness h;
+    std::string doc = cellDoc(R"("filters":{"ref":"f"},"onFiltersChange":[{"set":"seen","value":{"ref":"event"}}])");
+    doc.replace(doc.find(R"("state":{)") + 9, 0, R"("f":{"init":{"lit":{"columns":{}}}},"seen":{"init":{"lit":null}},)");
+    auto const screen = h.mount(doc);
+    replyDescribe(h, describeJson(cellDescription()));
+    replyPage(h, cellPageOf(lastQuery(h).columns.value_or(std::vector<std::string>{})));
+    int const table = h.byTestId("Table", "t");
+    h.backend.chooseCellMenu(table, keyOf(2), 1, {"Filter by this value"});
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref":"seen"})").contains(R"("mass")"));
+    CHECK(readJson(*screen, R"({"ref":"f"})") == R"({"columns":{}})");
+}
