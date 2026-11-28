@@ -28,7 +28,6 @@ namespace {
 
 namespace ui = morph::ui;
 namespace table = morph::table;
-namespace fm = morph::ui::detail::filtermenu;
 using DistinctReply = std::expected<table::DistinctValues, table::TableError>;
 using Pending = morph::async::Completion<DistinctReply>::Promise;
 

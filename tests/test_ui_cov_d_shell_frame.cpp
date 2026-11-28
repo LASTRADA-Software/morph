@@ -302,7 +302,7 @@ TEST_CASE("covd shell frame: every path of every menu is answered, and a path th
         }
         for (std::size_t first = 0; first < 14; ++first) {
             r.backend.chooseMenuEntry(*menu, {first});
-            for (std::size_t second : {std::size_t{0}, std::size_t{1}, std::size_t{2}, std::size_t{99}}) {
+            for (std::size_t const second : {std::size_t{0}, std::size_t{1}, std::size_t{2}, std::size_t{99}}) {
                 r.backend.chooseMenuEntry(*menu, {first, second});
             }
             r.backend.chooseMenuEntry(*menu, {first, 0, 0});

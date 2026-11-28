@@ -68,7 +68,7 @@ TEST_CASE("covd rows state: a stored state that fits arranges the table", "[ui][
                       R"(["b"])"},
                  Case{R"({"version":1,"view":"mine"})", "1 2 3", R"(["a","b"])"}, Case{"", "1 2 3", R"(["a","b"])"});
     CAPTURE(stored);
-    Mounted m{std::string{stored}};
+    Mounted const m{std::string{stored}};
     CHECK(m.order() == order);
     CHECK(morph::ui::testing::elementValue(m.h, "t", "visibleColumns") == morph::ui::testing::value(visible));
     CHECK_FALSE(m.reported("could not be loaded"));
@@ -80,12 +80,12 @@ TEST_CASE(
     "it is",
     "[ui][table][state][covd]") {
     {
-        Mounted m{"{not json"};
+        Mounted const m{"{not json"};
         CHECK(m.reported("the stored state of table `t` is not used"));
         CHECK(m.order() == "1 2 3");
     }
     {
-        Mounted m{"", true};
+        Mounted const m{"", true};
         CHECK(m.reported("the stored state of table `t` could not be loaded"));
         CHECK(m.order() == "1 2 3");
     }
@@ -93,7 +93,7 @@ TEST_CASE(
 
 TEST_CASE("covd rows state: a stored sort and filter on a column the table lacks are dropped",
           "[ui][table][state][covd]") {
-    Mounted m{R"({"version":1,"sort":[{"column":"gone","direction":"asc"}],)"
-              R"("filters":{"columns":{"gone":{"include":[{"eq":"x"}]}}}})"};
+    Mounted const m{R"({"version":1,"sort":[{"column":"gone","direction":"asc"}],)"
+                    R"("filters":{"columns":{"gone":{"include":[{"eq":"x"}]}}}})"};
     CHECK(m.order() == "1 2 3");
 }

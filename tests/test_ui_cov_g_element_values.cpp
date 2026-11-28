@@ -170,7 +170,7 @@ TEST_CASE("covg element values: a form grid answers its edits and its selection"
 
 TEST_CASE("covg element values: a selection of rows and the busy rows of a table are counted", "[covg][ui][table]") {
     TableHarness h;
-    std::string text = rowsDoc(kThree, R"(,"selectionMode":"multiple")");
+    std::string const text = rowsDoc(kThree, R"(,"selectionMode":"multiple")");
     auto screen = h.mount(text);
     int const table = h.backend.all("Table").front();
     h.backend.clickRow(table, ui::Key{std::string{"a"}});

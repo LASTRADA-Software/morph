@@ -164,7 +164,7 @@ TEST_CASE("cov h state model: a call out of bounds is refused with its reason", 
         std::string message;
     };
     auto const key = keyOfPart("state");
-    std::vector<table::TableStateKey> many(257, key);
+    std::vector<table::TableStateKey> const many(257, key);
     ui::TableStateOptions small;
     small.partBytes = 16;
     std::vector<Case> const cases{
@@ -304,8 +304,9 @@ TEST_CASE("cov h state model: the next save clears what a stopped save's intent 
         bool damaged;       // the intent does not read
         bool keptRevision;  // the intent names the revision the head keeps
     };
-    for (Case const item : {Case{"names strays", false, false}, Case{"names the kept revision", false, true},
-                            Case{"does not read", true, false}}) {
+    for (Case const item : {Case{.what = "names strays", .damaged = false, .keptRevision = false},
+                            Case{.what = "names the kept revision", .damaged = false, .keptRevision = true},
+                            Case{.what = "does not read", .damaged = true, .keptRevision = false}}) {
         INFO(item.what);
         Harness h;
         auto const key = keyOfPart("state");

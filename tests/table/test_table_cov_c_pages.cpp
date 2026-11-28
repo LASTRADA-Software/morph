@@ -60,15 +60,15 @@ TEST_CASE("a measure column reads its unit id against the description's units", 
         description);
     REQUIRE(read);
     auto const& rows = read->rows;
-    auto const* const known = std::get_if<Measure>(&rows[0][0]);
+    auto const* const known = std::get_if<Measure>(rows[0].data());
     REQUIRE(known != nullptr);
     CHECK(known->amount.numerator == 3);
     CHECK(known->amount.denominator == 2);
     CHECK(read->units.at(known->unit) == "kg");
-    auto const* const unitless = std::get_if<Measure>(&rows[1][0]);
+    auto const* const unitless = std::get_if<Measure>(rows[1].data());
     REQUIRE(unitless != nullptr);
     CHECK(unitless->unit == kUnknownUnit);
-    auto const* const unknown = std::get_if<Measure>(&rows[2][0]);
+    auto const* const unknown = std::get_if<Measure>(rows[2].data());
     REQUIRE(unknown != nullptr);
     CHECK(unknown->unit == kUnknownUnit);
     CHECK(std::holds_alternative<std::string>(rows[3][0]));

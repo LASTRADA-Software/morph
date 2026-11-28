@@ -98,7 +98,7 @@ TEST_CASE("a state with only carried parts still writes the parts it carried", "
     StateDocument onlyGroupFilter;
     onlyGroupFilter.carried.groupFilters = {GroupFilter{.columns = {"a", "b"}}};
     CHECK(readState(writeState(onlyGroupFilter))->filters->groups.size() == 1);
-    StateDocument nothing;
+    StateDocument const nothing;
     auto const empty = readState(writeState(nothing));
     REQUIRE(empty);
     CHECK_FALSE(empty->layout);

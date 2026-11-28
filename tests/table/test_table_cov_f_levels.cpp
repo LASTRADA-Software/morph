@@ -73,7 +73,7 @@ using Access = detail::LevelCacheAccess;
 }  // namespace
 
 TEST_CASE("a key the cache never held has no lease and is not kept", "[covf][table][levels]") {
-    Rig rig;
+    Rig const rig;
     CHECK(Access::leaseEnd(rig.cache, RowId{std::int64_t{9}}) == 0);
     CHECK_FALSE(Access::kept(rig.cache, RowId{std::int64_t{9}}));
     CHECK_FALSE(Access::leasePending(rig.cache, RowId{std::int64_t{9}}));

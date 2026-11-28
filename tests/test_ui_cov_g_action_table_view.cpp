@@ -147,7 +147,7 @@ TEST_CASE("view document units: what a unit declares wrongly is left out or defa
 
 TEST_CASE("view document units: a unit two columns declare differently is said once and the first is kept",
           "[covg][ui][table]") {
-    Mounted m{
+    Mounted const m{
         R"({"v-columns":[)"
         R"({"field":"a","kind":"quantity","ExtUnits":{"unitAscii":"kg"},"x-unitAlternatives":[{"id":"g","num":1,"den":1000}]},)"
         R"({"field":"b","kind":"quantity","ExtUnits":{"unitAscii":"kg"},"x-unitAlternatives":[{"id":"g","num":1,"den":100}]}]})",

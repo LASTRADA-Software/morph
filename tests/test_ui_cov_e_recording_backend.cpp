@@ -134,11 +134,11 @@ struct DrivenTable {
         table->setOnGroupFilter([this](std::size_t) { ++calls; });
         table->setOnCopy([this] { ++calls; });
         table->setOnSelectAll([this] { ++calls; });
-        table->setOnStatusEntry([this](std::string) { ++calls; });
+        table->setOnStatusEntry([this](const std::string&) { ++calls; });
         table->setOnRetry([this] { ++calls; });
-        table->setOnText([this](std::string) { ++calls; });
+        table->setOnText([this](const std::string&) { ++calls; });
         table->setOnCellClick([this](std::size_t, std::size_t, bool) { ++calls; });
-        table->setOnSelectionChange([this](std::vector<ui::Key>, ui::SelectionChange) { ++calls; });
+        table->setOnSelectionChange([this](const std::vector<ui::Key>&, ui::SelectionChange) { ++calls; });
     }
 };
 
@@ -297,7 +297,7 @@ TEST_CASE("cove: a focused table takes Ctrl+A only when it selects many, and Ent
           "[ui][cove]") {
     DrivenTable fixture;
     RecordingBackend& backend = fixture.backend;
-    fixture.table->setOnActivate([&fixture](ui::Key) { fixture.calls += 100; });
+    fixture.table->setOnActivate([&fixture](const ui::Key&) { fixture.calls += 100; });
     CHECK(backend.press(1, "Enter"));
     CHECK(fixture.calls == 0);
     backend.selectRows(1, {intKey(2)});
@@ -433,8 +433,9 @@ TEST_CASE("cove: a segmented select steps only from an offered option and stops 
 
 // Mutation: drop the collapsed-panel or the closed-collapsible check of `shownInStore`, or let a closed section's
 // header count as content.
-TEST_CASE("cove: a widget under a collapsed panel or a closed section takes no input unless it is the section's header",
-          "[ui][cove]") {
+TEST_CASE(
+    "cove: a widget under a collapsed panel or a closed section takes no input unless it is the section's header",
+    "[ui][cove]") {
     RecordingBackend backend;
     int clicks = 0;
     auto panel = backend.createPanel(nullptr);
@@ -525,7 +526,8 @@ TEST_CASE("cove: a heading row takes no selection and a row with no recorded loo
 TEST_CASE("cove: a status entry is chosen when the table shows it and has a handler for it", "[ui][cove]") {
     RecordingBackend backend;
     auto table = backend.createTable(nullptr);
-    table->setStatus({.entries = {{.id = "more", .label = "More"}}, .standingEntries = {{.id = "stay", .label = "Stay"}}});
+    table->setStatus(
+        {.entries = {{.id = "more", .label = "More"}}, .standingEntries = {{.id = "stay", .label = "Stay"}}});
     CHECK_THROWS_AS(backend.chooseStatusEntry(1, "stay"), std::logic_error);  // no handler yet
     std::vector<std::string> chosen;
     table->setOnStatusEntry([&chosen](std::string entry) { chosen.push_back(std::move(entry)); });
@@ -547,7 +549,7 @@ TEST_CASE("cove: a menu chosen with no labels, or by a disabled or heading entry
         [](std::optional<std::size_t>) {
             return std::vector<ui::MenuEntry>{{.label = "Off", .enabled = false}, {.label = "On"}};
         },
-        [&chosen](std::optional<std::size_t>, std::vector<std::size_t>) { ++chosen; });
+        [&chosen](std::optional<std::size_t>, const std::vector<std::size_t>&) { ++chosen; });
     table->setCellMenu(
         [](ui::Key const&, std::size_t) {
             return std::vector<ui::MenuEntry>{{.label = "Title", .heading = true}, {.label = "Off", .enabled = false}};
@@ -576,8 +578,8 @@ TEST_CASE("cove: a table with no cell menu, or no handler for its chosen entry, 
     CHECK(backend.rightClickCell(1, intKey(1), 0).empty());  // the row is the selection already
     CHECK(backend.cellMenuAsks(1) == 0);
     table->setCellMenuKeys({"Ctrl+K"});
-    table->setCellMenu([](ui::Key const&, std::size_t) { return std::vector<ui::MenuEntry>{{.label = "Go", .keys = "Ctrl+K"}}; },
-                       {});
+    table->setCellMenu(
+        [](ui::Key const&, std::size_t) { return std::vector<ui::MenuEntry>{{.label = "Go", .keys = "Ctrl+K"}}; }, {});
     table->setFocusCell(0, 0);
     CHECK_FALSE(backend.press(1, "Ctrl+K"));
     row->setVisible(false);

@@ -205,11 +205,11 @@ TEST_CASE("cov rows pure: sameCell and sameObject tell a change from a copy", "[
     CHECK_FALSE(ui::detail::sameCell(Cell{one}, Cell{padded}));
 
     Value const list{ui::ValueList{Value{std::int64_t{1}}}};
-    Value const copy = list;
+    Value const& copy = list;
     CHECK(ui::detail::sameObject(list, copy));
     CHECK_FALSE(ui::detail::sameObject(list, Value{ui::ValueList{Value{std::int64_t{1}}}}));
     Value const fields = record({{"a", Value{std::int64_t{1}}}});
-    Value const same = fields;
+    Value const& same = fields;
     CHECK(ui::detail::sameObject(fields, same));
     CHECK_FALSE(ui::detail::sameObject(fields, record({{"a", Value{std::int64_t{1}}}})));
     CHECK_FALSE(ui::detail::sameObject(fields, list));

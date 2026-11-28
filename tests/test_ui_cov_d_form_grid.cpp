@@ -67,7 +67,7 @@ std::string massColumn(std::string_view overlay) {
 
 TEST_CASE("covd form grid: overlays that read to no usable value leave the schema's mass places and unit",
           "[ui][grid][interpreter][covd]") {
-    Mounted baseline{massColumn(R"("label":"Mass")")};
+    Mounted const baseline{massColumn(R"("label":"Mass")")};
     forms::FieldState& plain = baseline.form->field("rows[0].mass");
     std::optional<std::uint32_t> const schemaPlaces = plain.places().peek();
     std::size_t const schemaUnit = plain.unit().peek();
@@ -81,7 +81,7 @@ TEST_CASE("covd form grid: overlays that read to no usable value leave the schem
                  Case{R"("unit":{"ref":"v"})", "null"}, Case{R"("decimals":{"ref":"v"})", R"("x")"},
                  Case{R"("decimals":{"ref":"v"})", "-1"}, Case{R"("decimals":{"ref":"v"})", "null"});
     CAPTURE(overlay, state);
-    Mounted m{massColumn(overlay), R"({"rows":[{},{}]})", state};
+    Mounted const m{massColumn(overlay), R"({"rows":[{},{}]})", state};
     forms::FieldState& mass = m.form->field("rows[0].mass");
     CHECK(mass.places().peek() == schemaPlaces);
     CHECK(mass.unit().peek() == schemaUnit);
@@ -89,7 +89,7 @@ TEST_CASE("covd form grid: overlays that read to no usable value leave the schem
 
 TEST_CASE("covd form grid: a decimals overlay and a unit expression set the row's places and unit",
           "[ui][grid][interpreter][covd]") {
-    Mounted m{massColumn(R"("decimals":1,"unit":"g")")};
+    Mounted const m{massColumn(R"("decimals":1,"unit":"g")")};
     forms::FieldState& mass = m.form->field("rows[0].mass");
     CHECK(mass.places().peek() == std::optional<std::uint32_t>{1});
     CHECK(mass.spec().units.at(mass.unit().peek()).id == "g");
@@ -117,7 +117,7 @@ TEST_CASE("covd form grid: a readonly overlay freezes a cell only when it reads 
 }
 
 TEST_CASE("covd form grid: a placeholder overlay is read per row", "[ui][grid][interpreter][covd]") {
-    Mounted m{
+    Mounted const m{
         R"("columns":[{"id":"note","field":"note","placeholder":{"fn":"coalesce","args":[{"ref":"row.note"},"none"]}}])",
         R"({"rows":[{"note":"kept"},{}]})"};
     CHECK(m.form->field("rows[0].note").placeholder() == "kept");

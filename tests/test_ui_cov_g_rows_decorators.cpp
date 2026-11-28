@@ -49,7 +49,7 @@ TEST_CASE("covg summary rows: the data rows must be given", "[covg][ui][grid][su
 }
 
 TEST_CASE("covg summary rows: an index off the mounted rows names nothing", "[covg][ui][grid][summary]") {
-    Over o{3, {{.key = "t", .top = true}, {.key = "b", .top = false}}};
+    Over const o{3, {{.key = "t", .top = true}, {.key = "b", .top = false}}};
     CHECK(o.rows->mountedTotal().rows == 5);
     CHECK_FALSE(o.rows->row(-1).has_value());
     CHECK_FALSE(o.rows->row(5).has_value());
@@ -75,7 +75,7 @@ TEST_CASE("covg summary rows: an index off the mounted rows names nothing", "[co
 }
 
 TEST_CASE("covg summary rows: with no data row a summary line has none beside it", "[covg][ui][grid][summary]") {
-    Over o{0, {{.key = "t", .top = true}, {.key = "b", .top = false}}};
+    Over const o{0, {{.key = "t", .top = true}, {.key = "b", .top = false}}};
     CHECK(o.rows->mountedTotal().rows == 2);
     CHECK_FALSE(o.rows->data(0).has_value());
     CHECK_FALSE(o.rows->data(1).has_value());
@@ -89,9 +89,12 @@ TEST_CASE("covg summary rows: a window of mounted rows is the data rows in it", 
         std::int64_t from;
         std::int64_t rows;
     };
-    Over o{3, {{.key = "t", .top = true}, {.key = "b", .top = false}}};
-    for (Window const& w : {Window{1, 2, 0, 2}, Window{0, 1, 0, 0}, Window{4, 1, 3, 0}, Window{-3, 2, 0, 0},
-                            Window{2, -5, 1, 0}, Window{1, 40, 0, 3}}) {
+    Over const o{3, {{.key = "t", .top = true}, {.key = "b", .top = false}}};
+    for (Window const& w :
+         {Window{.first = 1, .count = 2, .from = 0, .rows = 2}, Window{.first = 0, .count = 1, .from = 0, .rows = 0},
+          Window{.first = 4, .count = 1, .from = 3, .rows = 0}, Window{.first = -3, .count = 2, .from = 0, .rows = 0},
+          Window{.first = 2, .count = -5, .from = 1, .rows = 0},
+          Window{.first = 1, .count = 40, .from = 0, .rows = 3}}) {
         CAPTURE(w.first, w.count);
         o.rows->visible(w.first, w.count, {});
         CHECK(o.fake->lastVisible.first == w.from);
@@ -117,7 +120,7 @@ TEST_CASE("covg summary rows: a row located among the data rows is told at its m
 
 TEST_CASE("covg summary rows: a change told before anyone listens is taken in without telling",
           "[covg][ui][grid][summary]") {
-    Over o{3, {{.key = "t", .top = true}}};
+    Over const o{3, {{.key = "t", .top = true}}};
     o.fake->setTotal(5, table::TotalKind::Exact);
     CHECK(o.rows->mountedTotal().rows == 6);
 }
@@ -125,7 +128,7 @@ TEST_CASE("covg summary rows: a change told before anyone listens is taken in wi
 TEST_CASE("covg summary rows: a change that keeps the layout is told in mounted indices and one that does not resets",
           "[covg][ui][grid][summary]") {
     std::vector<std::pair<std::int64_t, std::int64_t>> runs{{0, 2}, {2, 1}};
-    Over o{3, {{.key = "t", .top = true}}, {{.key = "r", .top = false}}, [&runs] { return runs; }};
+    Over const o{3, {{.key = "t", .top = true}}, {{.key = "r", .top = false}}, [&runs] { return runs; }};
     // top summary, run 0 (data 0, 1) and its summary, run 1 (data 2) and its summary.
     CHECK(o.rows->mountedTotal().rows == 6);
     std::vector<table::ViewChange> told;
@@ -158,7 +161,7 @@ TEST_CASE("covg summary rows: a change that keeps the layout is told in mounted 
 
 TEST_CASE("covg summary rows: an ungrouped change moves down by the summaries drawn above",
           "[covg][ui][grid][summary]") {
-    Over o{3, {{.key = "t", .top = true}, {.key = "b", .top = false}}};
+    Over const o{3, {{.key = "t", .top = true}, {.key = "b", .top = false}}};
     std::vector<table::ViewChange> told;
     o.rows->onChange([&told](table::ViewChange const& change) { told.push_back(change); });
     using Kind = table::ViewOp::Kind;
@@ -186,7 +189,8 @@ TEST_CASE("covg grid rows: an index or a range off the rows names nothing", "[co
         std::int64_t count;
         bool ok;
     };
-    for (Range const& r : {Range{-1, 1, false}, Range{0, -1, false}, Range{2, 5, false}, Range{1, 2, true}}) {
+    for (Range const& r : {Range{.first = -1, .count = 1, .ok = false}, Range{.first = 0, .count = -1, .ok = false},
+                           Range{.first = 2, .count = 5, .ok = false}, Range{.first = 1, .count = 2, .ok = true}}) {
         CAPTURE(r.first, r.count);
         std::optional<std::expected<std::vector<table::RowId>, table::TableError>> got;
         rows.keysOf(r.first, r.count).then([&got](auto const& keys) { got = keys; });

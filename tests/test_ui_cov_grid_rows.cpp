@@ -107,7 +107,7 @@ TEST_CASE("cov grid rows: deleting the last row moves focus to the one before, a
 TEST_CASE("cov grid rows: deleting the rows of a selection drops the selection and names the count",
           "[ui][grid][cov]") {
     GridFixture f{4};
-    for (std::int64_t key : {2, 3}) {
+    for (std::int64_t const key : {2, 3}) {
         f.grid->focusCell(at(key, "note"));
         f.grid->type("kept");
         f.grid->press("Enter");

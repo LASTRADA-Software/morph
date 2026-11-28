@@ -140,7 +140,7 @@ TEST_CASE("a rest-of-page reply drops the cells of a column the page does not ho
         page.columns = std::move(shown);
         for (std::int64_t at = 0; at < count; ++at) {
             page.keys.emplace_back(first + at);
-            page.rows.push_back(GenericRow(page.columns.size(), Cell{first + at}));
+            page.rows.emplace_back(page.columns.size(), Cell{first + at});
         }
         return page;
     };

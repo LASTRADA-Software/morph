@@ -109,7 +109,7 @@ TEST_CASE("cov h expression: a date a text only nearly spells is not a date", "[
     std::vector<std::string> unreadable;
     for (std::string_view const text : {"2026-10x20", "abcd-10-20", "2026-ab-20", "2026-10-ab", "2026-10-2x",
                                         "2026/10/20", "2026-13-01", "2026-02-30"}) {
-        unreadable.push_back(std::string{text});
+        unreadable.emplace_back(text);
     }
     for (std::string const& text : unreadable) {
         INFO(text);

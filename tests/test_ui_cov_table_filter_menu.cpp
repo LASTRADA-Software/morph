@@ -103,7 +103,7 @@ std::function<DistinctReply(table::DistinctRequest const&)> pagesOf(std::vector<
                 matching.push_back(value);
             }
         }
-        for (std::size_t at = static_cast<std::size_t>(request.offset);
+        for (auto at = static_cast<std::size_t>(request.offset);
              at < matching.size() && std::cmp_less(out.values.size(), request.limit); ++at) {
             out.values.push_back(matching.at(at));
         }
@@ -143,7 +143,7 @@ struct Menu {
     void settle() { owner.runAll(); }
     ui::FilterMenuState const& state() const { return menu.state(); }
 
-    void open(std::string column, ColumnKind kind = ColumnKind::Text) {
+    void open(const std::string& column, ColumnKind kind = ColumnKind::Text) {
         ui::FilterTarget target;
         target.column = column;
         target.label = column;
@@ -151,7 +151,7 @@ struct Menu {
         menu.open(std::move(target));
         settle();
     }
-    void openGroup(std::string group, std::vector<std::string> columns, bool formed = false) {
+    void openGroup(const std::string& group, std::vector<std::string> columns, bool formed = false) {
         ui::FilterTarget target;
         target.group = group;
         target.columns = std::move(columns);
@@ -372,7 +372,7 @@ TEST_CASE("cov filter menu: states differ by each field and a target finds its g
     CHECK(ui::groupFilterIndex(spec, formed) == 1);
     formed.columns = {"a"};
     CHECK_FALSE(ui::groupFilterIndex(spec, formed).has_value());
-    ui::FilterTarget unnamed;
+    ui::FilterTarget const unnamed;
     CHECK_FALSE(ui::groupFilterIndex(spec, unnamed).has_value());
     named.group = "other";
     CHECK_FALSE(ui::groupFilterIndex(spec, named).has_value());
@@ -862,7 +862,7 @@ struct BareMenu {
         host.format = morph::ui::testing::formatFor("en");
         menu.setHost(host);
     }
-    void open(std::string column, ColumnKind kind = ColumnKind::Text) {
+    void open(const std::string& column, ColumnKind kind = ColumnKind::Text) {
         ui::FilterTarget target;
         target.column = column;
         target.shown = table::TableColumn{.info = {.id = column, .kind = kind}, .label = column};

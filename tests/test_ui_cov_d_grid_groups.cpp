@@ -52,7 +52,7 @@ struct Mounted {
         table = h.byTestId("Table", "grid");
     }
 
-    std::string dump() {
+    std::string dump() const {
         std::string out;
         for (int const row : h.backend.children(table)) {
             out += h.backend.prop(row, "heading") == "true" ? "H" : "R";

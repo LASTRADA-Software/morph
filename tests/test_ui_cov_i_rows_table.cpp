@@ -17,7 +17,6 @@
 
 namespace {
 
-namespace table = morph::table;
 using namespace std::chrono_literals;
 using morph::ui::Key;
 using morph::ui::MenuEntry;

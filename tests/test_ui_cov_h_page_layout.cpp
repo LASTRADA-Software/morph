@@ -165,42 +165,42 @@ TEST_CASE("cov h page layout: a region lays out into its box and overflows where
              {"a header as high as its content",
               {.geometry = {.anchor = PageAnchor::Top, .x = {}, .y = {}, .width = {}, .height = {}},
                .contentHeight = Mm{10}},
-              {Mm{20}, Mm{20}, Mm{170}, Mm{10}},
+              {.x = Mm{20}, .y = Mm{20}, .width = Mm{170}, .height = Mm{10}},
               false},
              {"a footer pinned to the bottom margin",
               {.geometry = {.anchor = PageAnchor::Bottom, .x = {}, .y = {}, .width = {}, .height = {}},
                .contentHeight = Mm{10}},
-              {Mm{20}, Mm{267}, Mm{170}, Mm{10}},
+              {.x = Mm{20}, .y = Mm{267}, .width = Mm{170}, .height = Mm{10}},
               false},
              {"a fixed height the content outgrows",
               {.geometry = {.anchor = PageAnchor::Top, .x = {}, .y = {}, .width = Mm{100}, .height = Mm{10}},
                .contentHeight = Mm{12}},
-              {Mm{20}, Mm{20}, Mm{100}, Mm{10}},
+              {.x = Mm{20}, .y = Mm{20}, .width = Mm{100}, .height = Mm{10}},
               true},
              {"a fixed height the content fits",
               {.geometry = {.anchor = PageAnchor::Top, .x = {}, .y = {}, .width = {}, .height = Mm{10}},
                .contentHeight = Mm{10}},
-              {Mm{20}, Mm{20}, Mm{170}, Mm{10}},
+              {.x = Mm{20}, .y = Mm{20}, .width = Mm{170}, .height = Mm{10}},
               false},
              {"an offset region to the margin box's edge",
               {.geometry = {.anchor = PageAnchor::Offset, .x = Mm{50}, .y = Mm{40}, .width = {}, .height = {}},
                .contentHeight = Mm{5}},
-              {Mm{50}, Mm{40}, Mm{140}, Mm{5}},
+              {.x = Mm{50}, .y = Mm{40}, .width = Mm{140}, .height = Mm{5}},
               false},
              {"an offset region past the margin box has no width",
               {.geometry = {.anchor = PageAnchor::Offset, .x = Mm{195}, .y = Mm{40}, .width = {}, .height = {}},
                .contentHeight = Mm{5}},
-              {Mm{195}, Mm{40}, Mm{0}, Mm{5}},
+              {.x = Mm{195}, .y = Mm{40}, .width = Mm{0}, .height = Mm{5}},
               false},
              {"content hanging below the sheet",
               {.geometry = {.anchor = PageAnchor::Offset, .x = Mm{20}, .y = Mm{290}, .width = {}, .height = {}},
                .contentHeight = Mm{20}},
-              {Mm{20}, Mm{290}, Mm{170}, Mm{20}},
+              {.x = Mm{20}, .y = Mm{290}, .width = Mm{170}, .height = Mm{20}},
               true},
              {"a footer taller than the page starts above it",
               {.geometry = {.anchor = PageAnchor::Bottom, .x = {}, .y = {}, .width = {}, .height = {}},
                .contentHeight = Mm{290}},
-              {Mm{20}, Mm{-13}, Mm{170}, Mm{290}},
+              {.x = Mm{20}, .y = Mm{-13}, .width = Mm{170}, .height = Mm{290}},
               true},
          }) {
         INFO(item.what);
@@ -225,7 +225,7 @@ TEST_CASE("cov h page layout: lengths round to the nearest cell, before and afte
     CHECK(morph::ui::columnsOf(Mm{1.2}, pitch) == 0);
     CHECK(morph::ui::rowsOf(Mm{25.4}, pitch) == 6);
     CHECK(morph::ui::rowsOf(Mm{-12.7}, pitch) == -3);
-    PageRect const rect{Mm{-25.4}, Mm{25.4}, Mm{50.8}, Mm{25.4}};
+    PageRect const rect{.x = Mm{-25.4}, .y = Mm{25.4}, .width = Mm{50.8}, .height = Mm{25.4}};
     auto const cells = morph::ui::toCells(rect, pitch);
     CHECK(cells == morph::ui::CellRect{.column = -10, .row = 6, .width = 20, .height = 6});
     for (PageAnchor const anchor : {PageAnchor::Top, PageAnchor::Offset}) {

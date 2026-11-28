@@ -322,7 +322,7 @@ struct Searched {
         r.reply("Lims_ClientSearchBilling", R"({"hits":[{"screen":"c","title":"C"}]})");
     }
 
-    [[nodiscard]] bool selected(std::string_view hit) { return r.prop("Button", hit, "selected") == "true"; }
+    [[nodiscard]] bool selected(std::string_view hit) const { return r.prop("Button", hit, "selected") == "true"; }
 };
 
 }  // namespace
@@ -435,7 +435,7 @@ TEST_CASE(
             R"({"screen":"c","title":"C","params":{"id":1}}]})");
     r.reply("Lims_ClientSearchBilling", R"({"hits":"none"})");
     r.h.settle();
-    ui::ShellPartsModel& model = r.binding->model();
+    ui::ShellPartsModel const& model = r.binding->model();
     std::vector<ui::ShellPartsModel::Target> const all = model.allHits();
     REQUIRE(all.size() == 2);
     CHECK(all.at(0).screen == "b");
@@ -625,7 +625,7 @@ TEST_CASE("covd shell parts: a shell that declares only some parts draws only th
     enum class Keep : unsigned char { Nothing, Modules, Search, Inbox, Principal, Context };
     auto const keep =
         GENERATE(Keep::Nothing, Keep::Modules, Keep::Search, Keep::Inbox, Keep::Principal, Keep::Context);
-    ui::ShellParts all = fullParts();
+    ui::ShellParts const all = fullParts();
     ui::ShellParts parts;
     parts.searchHint = "";
     switch (keep) {

@@ -14,7 +14,6 @@
 
 namespace {
 
-namespace table = morph::table;
 using namespace table_model_support;
 using morph::ui::testing::elementValue;
 using morph::ui::testing::GatedTableStateStore;
@@ -52,17 +51,17 @@ struct Mounted {
 TEST_CASE("cov table mount: a literal sort and filters are the defaults a table opens with",
           "[ui][table][cov][covr4]") {
     SECTION("a literal sort") {
-        Mounted m{"", R"("sort":{"lit":[{"column":"name","direction":"desc"}]})"};
+        Mounted const m{"", R"("sort":{"lit":[{"column":"name","direction":"desc"}]})"};
         REQUIRE(lastQuery(m.h).sort.size() == 1);
         CHECK(lastQuery(m.h).sort.front().column == "name");
         CHECK(lastQuery(m.h).sort.front().dir == table::SortDirection::Descending);
     }
     SECTION("a literal sort that is null sets none") {
-        Mounted m{"", R"("sort":{"lit":null})"};
+        Mounted const m{"", R"("sort":{"lit":null})"};
         CHECK(lastQuery(m.h).sort.empty());
     }
     SECTION("a literal filter") {
-        Mounted m{"", R"("filters":{"lit":{"columns":{"name":{"include":[{"eq":"x"}]}}}})"};
+        Mounted const m{"", R"("filters":{"lit":{"columns":{"name":{"include":[{"eq":"x"}]}}}})"};
         REQUIRE(lastQuery(m.h).filters.columns.contains("name"));
         CHECK(lastQuery(m.h).filters.columns.at("name").include.front().eq == "x");
     }
@@ -78,24 +77,24 @@ TEST_CASE("cov table mount: filters bound to state are read, refused or ignored"
         static_cast<void>(json);
     };
     static_cast<void>(set);
-    Mounted m{"", {}, kBound};
+    Mounted const m{"", {}, kBound};
     CHECK(lastQuery(m.h).filters.columns.empty());
     CHECK(elementValue(*m.screen, "t", "filters") == R"({"columns":{},"groups":[]})");
 }
 
 TEST_CASE("cov table mount: persist names a store, or none", "[ui][table][cov][covr4]") {
     SECTION("persist false loads nothing") {
-        Mounted m{R"({"version":1,"sort":[{"column":"name","direction":"desc"}]})", R"("persist":false)"};
+        Mounted const m{R"({"version":1,"sort":[{"column":"name","direction":"desc"}]})", R"("persist":false)"};
         CHECK(m.store->loads() == 0);
         CHECK(lastQuery(m.h).sort.empty());
     }
     SECTION("persist by name keys the store by it") {
-        Mounted m{"", R"("persist":"shared-samples")"};
+        Mounted const m{"", R"("persist":"shared-samples")"};
         CHECK(m.store->loads() >= 1);
         CHECK(m.store->lastLoadKey().qualifier == "shared-samples");
     }
     SECTION("persist true keys it by the table") {
-        Mounted m{"", R"("persist":true)"};
+        Mounted const m{"", R"("persist":true)"};
         CHECK(m.store->loads() >= 1);
         CHECK(m.store->lastLoadKey().qualifier != "shared-samples");
     }
@@ -104,21 +103,21 @@ TEST_CASE("cov table mount: persist names a store, or none", "[ui][table][cov][c
 TEST_CASE("cov table mount: a stored state that names what the table lacks is fitted and reported",
           "[ui][table][cov][covr4]") {
     SECTION("a sort on a missing column is dropped") {
-        Mounted m{R"({"version":1,"sort":[{"column":"gone","direction":"asc"}]})"};
+        Mounted const m{R"({"version":1,"sort":[{"column":"gone","direction":"asc"}]})"};
         CHECK(lastQuery(m.h).sort.empty());
     }
     SECTION("a filter on a missing column is dropped and said so") {
-        Mounted m{R"({"version":1,"filters":{"columns":{"gone":{"include":[{"eq":"x"}]}}}})"};
+        Mounted const m{R"({"version":1,"filters":{"columns":{"gone":{"include":[{"eq":"x"}]}}}})"};
         CHECK_FALSE(lastQuery(m.h).filters.columns.contains("gone"));
     }
     SECTION("a stored filter and sort that fit are applied") {
-        Mounted m{R"({"version":1,"sort":[{"column":"name","direction":"desc"}],)"
-                  R"("filters":{"columns":{"name":{"include":[{"contains":"a"}]}}}})"};
+        Mounted const m{R"({"version":1,"sort":[{"column":"name","direction":"desc"}],)"
+                        R"("filters":{"columns":{"name":{"include":[{"contains":"a"}]}}}})"};
         REQUIRE(lastQuery(m.h).sort.size() == 1);
         CHECK(lastQuery(m.h).filters.columns.contains("name"));
     }
     SECTION("a stored view name is carried") {
-        Mounted m{R"({"version":1,"view":"mine"})"};
+        Mounted const m{R"({"version":1,"view":"mine"})"};
         CHECK(m.store->loads() >= 1);
     }
 }

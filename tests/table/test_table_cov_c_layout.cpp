@@ -117,6 +117,6 @@ TEST_CASE("a stored layout is fitted to the columns now declared", "[covc][table
     CHECK(layout.order().size() == 2);
     layout.reset();
     CHECK(Ids(layout.order().begin(), layout.order().end()) == Ids{"c", "z"});
-    ColumnLayout none{Ids{}};
+    ColumnLayout const none{Ids{}};
     CHECK(none.order().empty());
 }

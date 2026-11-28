@@ -367,7 +367,7 @@ TEST_CASE("covj custom controller: a check answered after the asker went is drop
     bool checked = false;
     Checked result;
     {
-        ServerHold hold{rig};
+        ServerHold const hold{rig};
         rig.controller->checkAndSave(
             stored.id, stored.text, [&checked] { checked = true; },
             [&result](morph::ui::CustomScreenCheckResult answer) { result = std::move(answer); });
@@ -387,7 +387,7 @@ TEST_CASE("covj custom controller: a refused save whose asker went is told as an
     bool answered = false;
     rig.controller->checkAndSave(
         stored.id, stored.text, [&rig] { rig.controller->dropSourceAnswers(); },
-        [&answered](morph::ui::CustomScreenCheckResult /*answer*/) { answered = true; });
+        [&answered](const morph::ui::CustomScreenCheckResult& /*answer*/) { answered = true; });
     REQUIRE(rig.pump([&rig] { return !rig.outcomes.empty(); }));
     CHECK(rig.outcomes.back().event == morph::ui::CustomScreenEvent::SaveRefused);
     CHECK(rig.outcomes.back().title == "Mine");
@@ -512,7 +512,7 @@ TEST_CASE("covj custom controller: every question about a tab that closed has th
     CHECK_FALSE(rig.controller->screenOf(tab).has_value());
 
     bool called = false;
-    rig.controller->source(tab, [&called](morph::ui::CustomScreenSource /*shown*/) { called = true; });
+    rig.controller->source(tab, [&called](const morph::ui::CustomScreenSource& /*shown*/) { called = true; });
     CHECK_FALSE(called);
 
     Checked previewed;

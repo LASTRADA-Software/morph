@@ -114,7 +114,7 @@ TEST_CASE("a failed key waits out a delay that doubles, up to a ceiling, unless 
 }
 
 TEST_CASE("a cache asked about a key it does not hold reports it as not loaded", "[covc][table][levels]") {
-    Rig rig;
+    Rig const rig;
     CHECK(rig.stateOf(7) != LevelRead::Loaded);
     CHECK(rig.cache.stats().loaderCalls == 0);
 }

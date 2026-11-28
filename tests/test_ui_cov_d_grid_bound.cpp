@@ -47,7 +47,7 @@ struct Mounted {
         table = h.byTestId("Table", "grid");
     }
 
-    std::vector<std::string> order() { return ui::testing::rowKeys(h, table); }
+    std::vector<std::string> order() const { return ui::testing::rowKeys(h, table); }
 };
 
 }  // namespace

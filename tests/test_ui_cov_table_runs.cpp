@@ -17,7 +17,6 @@
 
 namespace {
 
-namespace table = morph::table;
 using namespace table_model_support;
 using morph::ui::Value;
 using morph::ui::testing::addAction;

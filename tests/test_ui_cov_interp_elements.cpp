@@ -43,7 +43,7 @@ TEST_CASE("cov elements: each element answers for the properties it has", "[ui][
     ui::testing::Harness h;
     auto const screen = h.mount(kElementsDocument);
     auto const read = [&screen](std::string_view ref) {
-        return ui::testing::readJson(*screen, "{\"ref\": \"" + std::string{ref} + "\"}");
+        return ui::testing::readJson(*screen, R"({"ref": ")" + std::string{ref} + "\"}");
     };
     SECTION("before anything happens") {
         for (auto const& [ref, expected] : std::vector<std::pair<std::string_view, std::string_view>>{

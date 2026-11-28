@@ -50,15 +50,22 @@ TEST_CASE("cov h rules: a rule's when clause and conditions are those of its kin
     constexpr char const* kEngaged = R"({"kind":"engaged","fields":["a"]})";
     std::string const when = std::string{R"("when":)"} + kEngaged;
     std::vector<std::pair<std::string, Case>> const cases{
-        {R"({"kind":"requiredWhen","fields":["a"],)" + when + "}", {"", true, 0, true}},
-        {R"({"kind":"visibleWhen","fields":["a"],)" + when + "}", {"", true, 0, false}},
-        {R"({"kind":"readonlyWhen","fields":["a"],)" + when + "}", {"", true, 0, false}},
-        {R"({"kind":"engaged","fields":["a"]})", {"", false, 0, true}},
-        {R"({"kind":"exactlyOneOf","fields":["a","b"]})", {"", false, 0, true}},
-        {R"({"kind":"not","condition":)" + std::string{kEngaged} + "}", {"", false, 1, true}},
-        {R"({"kind":"or","conditions":[)" + std::string{kEngaged} + "," + kEngaged + "]}", {"", false, 2, true}},
-        {R"({"kind":"and","conditions":[]})", {"", false, 0, true}},
-        {R"({"kind":"quantumEntangled","fields":["a"]})", {"", false, 0, true}},
+        {R"({"kind":"requiredWhen","fields":["a"],)" + when + "}",
+         {.json = "", .hasWhen = true, .conditions = 0, .gates = true}},
+        {R"({"kind":"visibleWhen","fields":["a"],)" + when + "}",
+         {.json = "", .hasWhen = true, .conditions = 0, .gates = false}},
+        {R"({"kind":"readonlyWhen","fields":["a"],)" + when + "}",
+         {.json = "", .hasWhen = true, .conditions = 0, .gates = false}},
+        {R"({"kind":"engaged","fields":["a"]})", {.json = "", .hasWhen = false, .conditions = 0, .gates = true}},
+        {R"({"kind":"exactlyOneOf","fields":["a","b"]})",
+         {.json = "", .hasWhen = false, .conditions = 0, .gates = true}},
+        {R"({"kind":"not","condition":)" + std::string{kEngaged} + "}",
+         {.json = "", .hasWhen = false, .conditions = 1, .gates = true}},
+        {R"({"kind":"or","conditions":[)" + std::string{kEngaged} + "," + kEngaged + "]}",
+         {.json = "", .hasWhen = false, .conditions = 2, .gates = true}},
+        {R"({"kind":"and","conditions":[]})", {.json = "", .hasWhen = false, .conditions = 0, .gates = true}},
+        {R"({"kind":"quantumEntangled","fields":["a"]})",
+         {.json = "", .hasWhen = false, .conditions = 0, .gates = true}},
     };
     for (auto const& [json, item] : cases) {
         INFO(json);

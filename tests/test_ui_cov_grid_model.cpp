@@ -76,7 +76,7 @@ ViewOp op(ViewOp::Kind kind, std::size_t first, std::size_t count, std::size_t t
 
 // The view indices the grid reads after the model's rows announce @p ops.
 std::vector<std::int64_t> readAfter(std::vector<ViewOp> ops) {
-    ModelGridFixture f{{1, 2, 3, 4, 5, 6}};
+    ModelGridFixture const f{{1, 2, 3, 4, 5, 6}};
     f.rows->readIndices.clear();
     f.rows->announceChange(std::move(ops));
     std::vector<std::int64_t> read = f.rows->readIndices;

@@ -18,7 +18,7 @@ using namespace morph::table;
 using morph::table::detail::PlainSelection;
 
 TEST_CASE("a filter's compact text leaves out what is empty and what is the default", "[covc][table][selection]") {
-    FilterSpec empty;
+    FilterSpec const empty;
     auto const none = detail::compactFilterJson(empty);
     CHECK(none.contains("columns"));
     CHECK_FALSE(none.contains("groups"));
@@ -78,7 +78,7 @@ TEST_CASE("a selection by keys keeps the rows that exist and counts the rest as 
 }
 
 TEST_CASE("a selection is refused for a table that cannot serve it", "[covc][table][selection]") {
-    PlainSelection selection;
+    PlainSelection const selection;
     auto const noScope =
         detail::resolveSelection(served(numbered()), selection, SelectionPolicy::Exact, nullptr, {}, true);
     REQUIRE_FALSE(noScope);

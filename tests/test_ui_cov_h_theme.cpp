@@ -74,7 +74,7 @@ TEST_CASE("cov h theme: an icon name is a lowercase word of letters, digits, dot
 TEST_CASE("cov h theme: an index refuses an icon set it cannot hold", "[covh][ui][theme]") {
     std::string many = R"({"vocab":"ui-theme/1","base":"b","icons":{)";
     for (std::size_t at = 0; at <= ui::kMaxThemeIcons; ++at) {
-        many += (at == 0 ? "\"i" : ",\"i") + std::to_string(at) + "\":\"f\"";
+        many += (at == 0 ? "\"i" : ",\"i") + std::to_string(at) + R"(":"f")";
     }
     many += "}}";
     // The names of a long set are not icon names (digits first after the letter are, but the set is too long first).
@@ -197,7 +197,7 @@ TEST_CASE("cov h theme: a shadow needs a colour and four lengths", "[covh][ui][t
         for (std::string_view const each : {"offsetX", "offsetY", "blur", "spread"}) {
             if (each != name) {
                 lengths += (lengths.empty() ? "" : ",") + std::string{"\""} + std::string{each} +
-                           "\":{\"value\":1,\"unit\":\"px\"}";
+                           R"(":{"value":1,"unit":"px"})";
             }
         }
         return lengths;

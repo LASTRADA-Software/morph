@@ -17,7 +17,7 @@ namespace {
 namespace table = morph::table;
 namespace ui = morph::ui;
 
-std::vector<ui::LayoutColumn> columnsOf(std::vector<std::string> ids) {
+std::vector<ui::LayoutColumn> columnsOf(const std::vector<std::string>& ids) {
     std::vector<ui::LayoutColumn> out;
     for (auto& id : ids) {
         out.push_back(
@@ -111,7 +111,7 @@ TEST_CASE("cov h dialogs: the chooser offers what the layout and the capabilitie
 
 TEST_CASE("cov h dialogs: the last shown column cannot be hidden, and a layout column the table lacks is not listed",
           "[covh][ui][table]") {
-    table::ColumnLayout layout{{"a", "b", "z"}, {"b", "z"}};
+    table::ColumnLayout const layout{{"a", "b", "z"}, {"b", "z"}};
     auto const columns = columnsOf({"a", "b"});
     auto const state = ui::chooserState(layout, columns, ui::Configure::All);
     REQUIRE(state.columns.size() == 2);  // `z` is in no column of the table

@@ -68,7 +68,7 @@ TEST_CASE(
         Case{R"({"lit":[{"column":"id","direction":"asc"}]})", "1 2 3", true}, Case{R"({"lit":"a"})", "1 2 3", true},
         Case{R"({"lit":null})", "1 2 3", false}, Case{R"({"lit":[]})", "1 2 3", false});
     CAPTURE(sort);
-    Mounted m{sort, R"({"lit":[]})"};
+    Mounted const m{sort, R"({"lit":[]})"};
     CHECK(morph::ui::testing::rowOrder(m.h) == order);
     CHECK(m.reported("a table's sort is a list of") == reported);
 }
@@ -84,7 +84,7 @@ TEST_CASE("covd rows bound: a selection the document holds is a list of keys, an
         Case{R"({"lit":[1,3]})", "[1,3]", false}, Case{R"({"lit":[]})", "[]", false},
         Case{R"({"lit":null})", "[]", false}, Case{R"({"lit":7})", "[]", true}, Case{R"({"lit":"a"})", "[]", true});
     CAPTURE(selection);
-    Mounted m{R"({"lit":[]})", selection};
+    Mounted const m{R"({"lit":[]})", selection};
     CHECK(morph::ui::testing::elementValue(m.h, "t", "selection") == morph::ui::testing::value(value));
     CHECK(m.reported("a table's selection is a list of keys") == reported);
 }

@@ -93,7 +93,7 @@ std::function<DistinctReply(table::DistinctRequest const&)> pagesOf(std::vector<
                 matching.push_back(value);
             }
         }
-        for (std::size_t at = static_cast<std::size_t>(request.offset);
+        for (auto at = static_cast<std::size_t>(request.offset);
              at < matching.size() && std::cmp_less(out.values.size(), request.limit); ++at) {
             out.values.push_back(matching.at(at));
         }
@@ -134,7 +134,7 @@ struct Menu {
     void settle() { owner.runAll(); }
     ui::FilterMenuState const& state() const { return menu.state(); }
 
-    void open(std::string column, ColumnKind kind = ColumnKind::Text) {
+    void open(const std::string& column, ColumnKind kind = ColumnKind::Text) {
         ui::FilterTarget target;
         target.column = column;
         target.label = column;
@@ -142,7 +142,7 @@ struct Menu {
         menu.open(std::move(target));
         settle();
     }
-    void openGroup(std::string group, std::vector<std::string> columns, bool formed = false) {
+    void openGroup(const std::string& group, std::vector<std::string> columns, bool formed = false) {
         ui::FilterTarget target;
         target.group = group;
         target.columns = std::move(columns);

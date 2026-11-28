@@ -308,24 +308,24 @@ TEST_CASE("cov config: a value filter's plan picks the smaller side and gives up
     none.blanks = true;
     CHECK(ui::planValueFilter(10, none, 5).side == Side::Include);  // only the blanks
     CHECK(ui::planValueFilter(-3, none, 5).side == Side::All);      // no values at all, blanks ticked
-    ui::ResolvedTicks few{.ticked = false, .covered = {{"x", true}}, .blanks = std::nullopt};
+    ui::ResolvedTicks const few{.ticked = false, .covered = {{"x", true}}, .blanks = std::nullopt};
     auto const include = ui::planValueFilter(10, few, 5);
     CHECK(include.side == Side::Include);
     CHECK(include.members == 1);
     CHECK_FALSE(include.needsComplement);
-    ui::ResolvedTicks most{.ticked = true, .covered = {{"x", false}}, .blanks = std::nullopt};
+    ui::ResolvedTicks const most{.ticked = true, .covered = {{"x", false}}, .blanks = std::nullopt};
     auto const exclude = ui::planValueFilter(10, most, 5);
     CHECK(exclude.side == Side::Exclude);
     CHECK(exclude.members == 1);
     CHECK_FALSE(exclude.needsComplement);
     // Both sides over the bound: the list is disabled.
-    ui::ResolvedTicks both{
+    ui::ResolvedTicks const both{
         .ticked = false, .covered = {{"a", true}, {"b", true}, {"c", true}, {"d", true}}, .blanks = std::nullopt};
     auto const over = ui::planValueFilter(100, both, 3);
     CHECK(over.side == Side::Disabled);
     CHECK(over.members == 4);
     // The values the ticks do not name sit on the filtered side when that side holds the unnamed ones.
-    ui::ResolvedTicks complement{
+    ui::ResolvedTicks const complement{
         .ticked = true, .covered = {{"a", false}, {"b", false}, {"c", false}}, .blanks = std::nullopt};
     auto const needs = ui::planValueFilter(4, complement, 5);
     CHECK(needs.side == Side::Include);

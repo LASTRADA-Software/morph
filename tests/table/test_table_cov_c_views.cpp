@@ -60,15 +60,17 @@ TEST_CASE("a views operation that does not read is refused with its reason", "[c
         std::string_view json;
         std::string_view message;
     };
-    for (auto const& bad :
-         {Bad{"not json", "a views operation does not read"}, Bad{"{}", "exactly one member"},
-          Bad{R"({"add":{"name":"x"},"remove":"x"})", "exactly one member"},
-          Bad{R"({"add":[]})", "a saved view does not read"}, Bad{R"({"add":{"name":""}})", "a saved view has a name"},
-          Bad{R"({"replace":{"name":""}})", "a saved view has a name"},
-          Bad{R"({"rename":5})", "a rename does not read"}, Bad{R"({"remove":5})", "a remove does not read"},
-          Bad{R"({"default":5})", "a default does not read"},
-          Bad{R"({"defaultOnMount":"yes"})", "a defaultOnMount does not read"},
-          Bad{R"({"explode":1})", "`explode` is not one this framework knows"}}) {
+    for (auto const& bad : {Bad{.json = "not json", .message = "a views operation does not read"},
+                            Bad{.json = "{}", .message = "exactly one member"},
+                            Bad{.json = R"({"add":{"name":"x"},"remove":"x"})", .message = "exactly one member"},
+                            Bad{.json = R"({"add":[]})", .message = "a saved view does not read"},
+                            Bad{.json = R"({"add":{"name":""}})", .message = "a saved view has a name"},
+                            Bad{.json = R"({"replace":{"name":""}})", .message = "a saved view has a name"},
+                            Bad{.json = R"({"rename":5})", .message = "a rename does not read"},
+                            Bad{.json = R"({"remove":5})", .message = "a remove does not read"},
+                            Bad{.json = R"({"default":5})", .message = "a default does not read"},
+                            Bad{.json = R"({"defaultOnMount":"yes"})", .message = "a defaultOnMount does not read"},
+                            Bad{.json = R"({"explode":1})", .message = "`explode` is not one this framework knows"}}) {
         CAPTURE(bad.json);
         auto const read = readViewOperation(bad.json);
         REQUIRE_FALSE(read);

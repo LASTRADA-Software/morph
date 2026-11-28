@@ -23,7 +23,6 @@
 
 namespace {
 
-namespace ui = morph::ui;
 namespace table = morph::table;
 using namespace std::chrono_literals;
 using morph::ui::StateParts;
@@ -159,7 +158,7 @@ TEST_CASE("cov table states: loads of one key share a store call and later ones 
     CHECK(got.size() == 2);
     REQUIRE(f.states.kept(key).has_value());
     auto third = f.states.load(key);
-    third.then([&got](std::optional<table::StoredTableState> const&) { got.push_back("third"); });
+    third.then([&got](std::optional<table::StoredTableState> const&) { got.emplace_back("third"); });
     f.h.settle();
     CHECK(f.store->loads.empty());
     CHECK(got.back() == "third");

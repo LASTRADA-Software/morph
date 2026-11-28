@@ -60,7 +60,7 @@ TEST_CASE("covj page mount: a page is on paper unless a surface was given, liter
     auto const surfaceOf = [&rig](ui::Common common) {
         ui::Mounted const mounted{
             rig.runtime, rig.backend,
-            ui::column({.children = {ui::page(ui::Page{.geometry = rig.a4, .common = common})}})};
+            ui::column({.children = {ui::page(ui::Page{.geometry = rig.a4, .common = std::move(common)})}})};
         auto const pages = rig.backend.all("Page");
         REQUIRE(pages.size() == 1);
         return rig.backend.prop(pages.front(), "surface");

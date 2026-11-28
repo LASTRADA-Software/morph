@@ -126,8 +126,8 @@ TEST_CASE("cov fixed source: a part that names no form, no field or no collectio
     auto const refusal = [](Parts parts, bool withForm) {
         FixedGridFixture f{R"({"limits":{}})", limits(), columns({"min", "max"})};
         try {
-            ui::FixedGridSource source{f.h.rt, withForm ? f.form.get() : nullptr, std::move(parts),
-                                       columns({"min", "max"}), ui::FormatContext{}};
+            ui::FixedGridSource const source{f.h.rt, withForm ? f.form.get() : nullptr, std::move(parts),
+                                             columns({"min", "max"}), ui::FormatContext{}};
         } catch (std::invalid_argument const& failure) {
             return std::string{failure.what()};
         }

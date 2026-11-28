@@ -14,7 +14,6 @@
 
 namespace {
 
-namespace table = morph::table;
 using namespace table_model_support;
 using morph::ui::testing::cellAccent;
 using morph::ui::testing::describeJson;

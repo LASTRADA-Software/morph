@@ -318,7 +318,7 @@ TEST_CASE("covj workspace: activating a place with no tab changes nothing, and a
     shell->activate(7);
     CHECK(shell->active() == std::optional<std::size_t>{1});
 
-    Plain stray{h.runtime, h.backend.createText(nullptr)};
+    Plain const stray{h.runtime, h.backend.createText(nullptr)};
     shell->screenClosed(stray);
     CHECK(shell->tabs().size() == 2);
 

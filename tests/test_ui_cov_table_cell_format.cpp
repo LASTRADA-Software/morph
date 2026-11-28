@@ -183,7 +183,7 @@ TEST_CASE("cov cell format: numberText follows the display for each numeric cell
 
 TEST_CASE("cov cell format: a measure converts to the chosen unit of its dimension only", "[ui][cell_format][cov]") {
     auto const units = makeUnits();
-    morph::ui::DisplayUnits plain{.units = units.registry.get(), .byDimension = {}};
+    morph::ui::DisplayUnits const plain{.units = units.registry.get(), .byDimension = {}};
     using morph::table::Measure;
     // No registry, or a unit the registry does not hold: nothing to show.
     CHECK_FALSE(cells::measureText(Measure{.amount = dec("1"), .unit = units.kg}, {}).has_value());

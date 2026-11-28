@@ -65,7 +65,7 @@ TEST_CASE("a dimension's place follows the column's list, else the registry's", 
     listed.dimensions = {"length", "mass"};
     CHECK(detail::dimensionPlace(listed, *registry, "mass") == 1);
     CHECK(detail::dimensionPlace(listed, *registry, "time") == -1);
-    ColumnInfo open;
+    ColumnInfo const open;
     CHECK(detail::dimensionPlace(open, *registry, "mass") >= 0);
     CHECK(detail::dimensionPlace(open, *registry, "time") == -1);
 }

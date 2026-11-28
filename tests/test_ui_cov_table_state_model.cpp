@@ -81,7 +81,7 @@ TEST_CASE("cov state model: the digests that name a scope and a revision", "[ui]
     CHECK(detail::sha256Hex("abc", 8) == "ba7816bf");
     CHECK(detail::sha256Hex("abc", 0).empty());
     CHECK(detail::sha256Hex("abc", 200).size() == 64);  // a digest has 64 hex digits and no more
-    morph::table::TableStateKey key{
+    morph::table::TableStateKey const key{
         .application = "app", .model = "M", .table = "t", .qualifier = "q", .part = "state"};
     auto const scope = detail::tableStateScope(key);
     CHECK(scope.size() == std::string{morph::ui::kTableStateScopePrefix}.size() + 1 + 32);

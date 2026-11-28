@@ -21,7 +21,7 @@ glz::generic_u64 domOf(std::string_view json) {
 }
 
 // The entry of the one property `p` of @p schema, as compact JSON.
-std::string entryOf(std::string_view schema, std::string label = "P", bool hidden = false) {
+std::string entryOf(std::string_view schema, const std::string& label = "P", bool hidden = false) {
     auto const dom = domOf(schema);
     auto const entry = views::buildColumnEntry(dom, "p", label, hidden);
     return glz::write_json(entry).value_or("");

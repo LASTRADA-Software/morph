@@ -221,7 +221,7 @@ TEST_CASE("cov form rows: a source is refused what does not match the form's col
 TEST_CASE("cov form rows: a grid is refused a collection it cannot edit or a member it lacks", "[r2][ui][grid][cov]") {
     using Catch::Matchers::ContainsSubstring;
     GridFixture f = membersFixture(R"({"rows":[{}]})");
-    auto const columnOf = [](std::string id, std::string field) {
+    auto const columnOf = [](const std::string& id, std::string field) {
         return ui::GridColumn{.id = id, .label = id, .field = std::move(field), .value = {}};
     };
     std::vector<ui::GridColumn> columns;
@@ -236,7 +236,7 @@ TEST_CASE("cov form rows: a grid is refused a collection it cannot edit or a mem
         ui::GridColumn{.id = "shown", .label = "shown", .field = {}, .value = [](forms::RowState const&) {
                            return std::string{"v"};
                        }});
-    ui::FormGridSource source{*f.form, "rows", columns, ui::FormatContext{}};
+    ui::FormGridSource const source{*f.form, "rows", columns, ui::FormatContext{}};
     ui::Key const first{std::int64_t{1}};
     CHECK(source.text(first, "shown") == "v");  // a display column shows what its reader gives
     CHECK(source.readOnly(first, "shown"));
