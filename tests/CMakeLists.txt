@@ -181,6 +181,7 @@ add_executable(morph_tests
     test_ui_cov_g_model_grid_values.cpp
     test_ui_cov_g_grid_controller.cpp
     test_ui_cov_g_form_grid_rows.cpp
+    test_ui_cov_g_fixed_grid_source.cpp
     test_ui_cov_d_rows_state.cpp
     test_ui_cov_d_chart.cpp
     test_ui_cov_d_grid_groups.cpp
