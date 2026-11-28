@@ -275,7 +275,9 @@ TEST_CASE("cov rows pure: jsonInteger and jsonDecimal read only what an exact nu
     REQUIRE(exact.has_value());
     CHECK(exact->amount == dec("2.5"));
     CHECK(exact->unit == nullptr);
-    auto const measure = detail::jsonDecimal(json(R"({"num":5,"den":2,"dp":1,"unit":"kg"})"));
+    // The unit points into the member read, so it outlives the parts.
+    auto const kilos = json(R"({"num":5,"den":2,"dp":1,"unit":"kg"})");
+    auto const measure = detail::jsonDecimal(kilos);
     REQUIRE(measure.has_value());
     CHECK(*measure->unit == "kg");
     CHECK_FALSE(detail::jsonDecimal(json("5")).has_value());
